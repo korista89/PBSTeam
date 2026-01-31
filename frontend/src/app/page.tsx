@@ -75,6 +75,29 @@ export default function Home() {
   if (error) return <div className={styles.error}>{error}</div>;
   if (!data) return null;
 
+  // Handle API error response (e.g., No data found)
+  if ('error' in data) {
+      return (
+          <div className={styles.container}>
+              <header className={styles.header}>
+                  <div>
+                      <h1 className={styles.title}>IBSD</h1>
+                      <p className={styles.subtitle}>지능형 행동 지원 대시보드</p>
+                  </div>
+              </header>
+              <main className={styles.main}>
+                  <div className={styles.card} style={{ textAlign: 'center', padding: '3rem' }}>
+                      <h2 style={{ color: '#6b7280' }}>데이터가 없습니다 텅! 📭</h2>
+                      <p style={{ marginTop: '1rem', color: '#374151' }}>
+                          구글 스프레드시트에 아직 데이터가 없거나, 읽어올 수 없습니다.<br/>
+                          스프레드시트에 데이터를 입력해주세요.
+                      </p>
+                  </div>
+              </main>
+          </div>
+      );
+  }
+
   const { summary, trends, big5, risk_list, functions, heatmap } = data;
 
   return (

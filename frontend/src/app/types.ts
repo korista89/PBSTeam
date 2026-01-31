@@ -31,6 +31,7 @@ export interface SafetyAlert {
 }
 
 export interface DashboardData {
+    error?: string;
     summary: {
         total_incidents: number;
         avg_intensity: number;
