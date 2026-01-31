@@ -5,3 +5,4 @@ oauth2client
 pandas
 pydantic
 python-dotenv
+pydantic-settings
