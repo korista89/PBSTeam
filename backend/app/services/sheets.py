@@ -2,20 +2,34 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from app.core.config import settings
 import os
+import json
 
 def get_sheets_client():
     """
     Auhtenticates with Google Sheets API and returns the client.
-    Requires 'service_account.json' to be present in the root or specified path.
+    Prioritizes 'GOOGLE_SERVICE_ACCOUNT_JSON' env var (for Production/Render).
+    Fallbacks to 'service_account.json' file (for Local Dev).
     """
-    if not os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
-        print(f"Warning: Credentials file not found at {settings.GOOGLE_CREDENTIALS_FILE}")
-        return None
-
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
-    client = gspread.authorize(creds)
-    return client
+    
+    # 1. Try Environment Variable (Production)
+    env_creds = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+    if env_creds:
+        try:
+            creds_dict = json.loads(env_creds)
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            return gspread.authorize(creds)
+        except Exception as e:
+            print(f"Error loading credentials from env: {e}")
+            return None
+
+    # 2. Try Local File (Development)
+    if os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
+        creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
+        return gspread.authorize(creds)
+        
+    print(f"Warning: Credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
+    return None
 
 def get_main_worksheet():
     client = get_sheets_client()
