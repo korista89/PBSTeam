@@ -46,6 +46,9 @@ export default function Home() {
   // Date State
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  // Query State (Triggers fetch only on button click)
+  const [queryStartDate, setQueryStartDate] = useState("");
+  const [queryEndDate, setQueryEndDate] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -53,8 +56,8 @@ export default function Home() {
         setLoading(true);
         let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
         const params = new URLSearchParams();
-        if (startDate) params.append("start_date", startDate);
-        if (endDate) params.append("end_date", endDate);
+        if (queryStartDate) params.append("start_date", queryStartDate);
+        if (queryEndDate) params.append("end_date", queryEndDate);
         
         if (params.toString()) url += `?${params.toString()}`;
 
@@ -69,13 +72,17 @@ export default function Home() {
     };
 
     fetchData();
-  }, [startDate, endDate]);
+  }, [queryStartDate, queryEndDate]);
 
-  if (loading) return <div className={styles.loading}>데이터 분석 중... 🧠</div>;
+  // Removed early return for loading to prevent UI unmount
+  
   if (error) return <div className={styles.error}>{error}</div>;
+
+  // Initial data check (first load)
+  if (!data && loading) return <div className={styles.loading}>데이터 분석 중... 🧠</div>;
   if (!data) return null;
 
-  // Handle API error response (e.g., No data found)
+  // Handle API error response
   if ('error' in data) {
       return (
           <div className={styles.container}>
@@ -84,6 +91,29 @@ export default function Home() {
                       <h1 className={styles.title}>IBSD</h1>
                       <p className={styles.subtitle}>지능형 행동 지원 대시보드</p>
                   </div>
+                   <div className={styles.datePicker}>
+                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
+                        ~
+                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
+                        <button 
+                            onClick={() => {
+                                setQueryStartDate(startDate);
+                                setQueryEndDate(endDate);
+                            }}
+                            style={{
+                                padding: '5px 12px',
+                                marginLeft: '8px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                backgroundColor: '#4b5563',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            🔍 조회
+                        </button>
+                    </div>
               </header>
               <main className={styles.main}>
                   <div className={styles.card} style={{ textAlign: 'center', padding: '3rem' }}>
@@ -111,6 +141,24 @@ export default function Home() {
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
             ~
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
+            <button 
+                onClick={() => {
+                    setQueryStartDate(startDate);
+                    setQueryEndDate(endDate);
+                }}
+                style={{
+                    padding: '5px 12px',
+                    marginLeft: '8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#4b5563',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                }}
+            >
+                🔍 조회
+            </button>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button 
@@ -126,6 +174,7 @@ export default function Home() {
                 📄 Tier 1 리포트
             </button>
             <button 
+                onClick={() => window.location.href='/report/tier2'}
                 style={{ ...btnStyle, backgroundColor: '#f59e0b' }}
             >
                 📊 Tier 2 리포트
@@ -145,7 +194,35 @@ export default function Home() {
         </div>
       </header>
 
-      <main className={styles.main}>
+      <main className={styles.main} style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: loading ? 'none' : 'auto', position: 'relative' }}>
+        {loading && data && (
+            <div style={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '100%', 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                zIndex: 10,
+                backgroundColor: 'rgba(255,255,255,0.5)'
+            }}>
+                <div style={{ 
+                    background: 'white', 
+                    padding: '15px 25px', 
+                    borderRadius: '30px', 
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    fontWeight: 'bold',
+                    color: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                }}>
+                    🔄 데이터 분석 중...
+                </div>
+            </div>
+        )}
         {/* AI Insight Section */}
         {data.ai_comment && (
             <div className={styles.card} style={{ marginBottom: '2rem', borderLeft: '5px solid #8b5cf6', backgroundColor: '#f5f3ff' }}>

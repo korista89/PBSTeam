@@ -30,7 +30,8 @@ export default function StudentDetail() {
 
     const fetchData = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/v1/students/${encodeURIComponent(studentName)}`);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}`);
         setData(response.data);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {

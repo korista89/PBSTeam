@@ -21,7 +21,7 @@ export default function MonthlyReport() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        let url = "http://localhost:8000/api/v1/analytics/dashboard";
+        let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
         const params = new URLSearchParams();
         if (startDate) params.append("start_date", startDate);
         if (endDate) params.append("end_date", endDate);

@@ -60,7 +60,8 @@ export default function MeetingPage() {
         alert("협의록 초안이 복사되었습니다!");
     };
 
-    if (loading) return <div className={styles.loading}>데이터 분석 중...</div>;
+    // Only show full loading screen on initial load
+    if (loading && !data) return <div className={styles.loading}>데이터 분석 중...</div>;
     if (!data) return <div className={styles.loading}>데이터를 불러올 수 없습니다.</div>;
 
     return (
