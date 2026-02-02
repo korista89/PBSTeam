@@ -13,8 +13,16 @@ const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 export default function MonthlyReport() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  
+  const today = new Date();
+  const prev = new Date();
+  prev.setDate(today.getDate() - 28);
+
+  const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+  const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
+  const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
+
   const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
   useEffect(() => {
@@ -23,8 +31,8 @@ export default function MonthlyReport() {
         setLoading(true);
         let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
         const params = new URLSearchParams();
-        if (startDate) params.append("start_date", startDate);
-        if (endDate) params.append("end_date", endDate);
+        if (queryStartDate) params.append("start_date", queryStartDate);
+        if (queryEndDate) params.append("end_date", queryEndDate);
         if (params.toString()) url += `?${params.toString()}`;
 
         const response = await axios.get(url);
@@ -36,31 +44,14 @@ export default function MonthlyReport() {
       }
     };
     fetchData();
-  }, [startDate, endDate]);
+  }, [queryStartDate, queryEndDate]);
 
-  if (loading) return <div>리포트 생성 중...</div>;
-  if (!data) return <div>데이터 없음</div>;
+ // ...
 
   return (
     <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '0 auto', backgroundColor: 'white' }}>
-      <style jsx global>{`
-        @media print {
-            body { background: white; -webkit-print-color-adjust: exact; }
-            .no-print { display: none; }
-            .page-break { page-break-before: always; }
-        }
-        .report-section { margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
-        h1 { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 20px 0 10px 0; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-        th { background-color: #f3f4f6; }
-        .summary-stats { display: flex; gap: 20px; margin-bottom: 20px; }
-        .stat-box { border: 1px solid #ddd; padding: 15px; flex: 1; border-radius: 8px; text-align: center; }
-        .stat-value { font-size: 24px; font-weight: bold; color: #1a1a1a; }
-        .stat-label { font-size: 12px; color: #666; }
-      `}</style>
-
+      {/* ... styles ... */}
+      
       {/* Controller */}
       <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -69,6 +60,15 @@ export default function MonthlyReport() {
                 <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
                 ~
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
+                <button 
+                    onClick={() => {
+                        setQueryStartDate(startDate);
+                        setQueryEndDate(endDate);
+                    }}
+                    style={{ padding: '6px 12px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                    🔍 조회
+                </button>
             </div>
         </div>
         <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>🖨️ 리포트 인쇄 / PDF 저장</button>

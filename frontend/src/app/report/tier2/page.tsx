@@ -4,31 +4,32 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DashboardData, RiskStudent } from "../../types";
 
-export default function Tier2Report() {
+export default function CICOReport() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
-  interface ActiveCase {
-    name: string;
-    class: string;
-    start_date: string;
-    goal: string;
-    current: string;
-    status: string;
-  }
+  // Date State for CICO Report (follows global 4-week default)
+  const today = new Date();
+  const prev = new Date();
+  prev.setDate(today.getDate() - 28);
 
-  // Mock State for Active Cases
-  const [activeCases] = useState<ActiveCase[]>([
-      { name: "김철수", class: "초등 3학년 1반", start_date: "2025-01-10", goal: "80%", current: "75%", status: "Monitor" },
-      { name: "이영희", class: "초등 5학년 2반", start_date: "2025-01-15", goal: "80%", current: "85%", status: "Fade" }
-  ]);
+  const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+  const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
+  const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await axios.get(`${apiUrl}/api/v1/analytics/dashboard`);
+        // Create params for date filtering
+        const params = new URLSearchParams();
+        if (queryStartDate) params.append("start_date", queryStartDate);
+        if (queryEndDate) params.append("end_date", queryEndDate);
+        
+        const response = await axios.get(`${apiUrl}/api/v1/analytics/dashboard?${params.toString()}`);
         setData(response.data);
       } catch (err) {
         console.error(err);
@@ -37,10 +38,41 @@ export default function Tier2Report() {
       }
     };
     fetchData();
-  }, []);
+  }, [queryStartDate, queryEndDate]);
 
   if (loading) return <div>리포트 생성 중...</div>;
   if (!data) return <div>데이터 없음</div>;
+
+  // Mock CICO Logic for Demo (Since DB doesn't have daily points yet)
+  const cicoData = data.risk_list.filter((s: RiskStudent) => s.tier !== 'Tier 1').map(s => {
+      // Mock Goal % based on tier for demonstration
+      // Tier 3 students have lower success rate (simulated)
+      const isTier3 = s.tier === 'Tier 3';
+      const goalPercent = 80;
+      const actualPercent = isTier3 ? 45 : 85; 
+      
+      let decision = "Maintain CICO";
+      let decisionColor = "#3b82f6"; // Blue
+      
+      if (actualPercent >= goalPercent) {
+          decision = "Fade & Graduation (Tier 1)";
+          decisionColor = "#10b981"; // Green
+      } else if (actualPercent < 50 && isTier3) {
+          decision = "Consider FBA / Tier 3";
+          decisionColor = "#ef4444"; // Red
+      } else if (actualPercent < 50) {
+          decision = "Modify CICO / Tier 3";
+          decisionColor = "#f59e0b"; // Orange
+      }
+
+      return {
+          ...s,
+          goalPercent,
+          actualPercent,
+          decision,
+          decisionColor
+      };
+  });
 
   return (
     <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '0 auto', backgroundColor: 'white' }}>
@@ -57,106 +89,101 @@ export default function Tier2Report() {
         th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
         th { background-color: #fffbeb; color: #92400e; }
         .btn-small { padding: 4px 8px; font-size: 11px; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; background: white; }
-        .status-badge { padding: 2px 6px; border-radius: 4px; color: white; font-weight: bold; font-size: 10px; }
+        .status-badge { padding: 3px 8px; border-radius: 12px; color: white; font-weight: bold; font-size: 11px; }
       `}</style>
-
+      
       {/* Controller */}
-      <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => window.history.back()} style={{ padding: '8px 16px', cursor: 'pointer' }}>← 뒤로가기</button>
+      <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => window.history.back()} style={{ padding: '8px 16px', cursor: 'pointer' }}>← 뒤로가기</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
+                ~
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
+                <button 
+                    onClick={() => {
+                        setQueryStartDate(startDate);
+                        setQueryEndDate(endDate);
+                    }}
+                    style={{ padding: '6px 12px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                    🔍 조회
+                </button>
+            </div>
+        </div>
         <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>🖨️ 리포트 인쇄</button>
       </div>
 
       {/* Header */}
       <header style={{ textAlign: 'center', marginBottom: '30px' }}>
-        <h1>📊 Tier 2: 소그룹 중재 지원 리포트 (CICO)</h1>
-        <p style={{ color: '#666' }}>발행일: {date} | CICO 코디네이터 작성</p>
+        <h1>📊 CICO 리포트: 행동 중재 의사결정 (4주)</h1>
+        <p style={{ color: '#666' }}>분석 기간: {queryStartDate} ~ {queryEndDate} | 작성자: 행동중재지원팀</p>
       </header>
 
-      {/* 1. Screening */}
+      {/* 1. Decision Making Table */}
       <section className="report-section">
-        <h2>1. 대상자 선별 (Screening)</h2>
-        <p style={{fontSize:'12px', color:'#666', marginBottom:'10px'}}>* 데이터 기준: 월 3회 이상 행동 발생 또는 강도 4 이상 사건</p>
+        <h2>1. CICO 성과 분석 및 의사결정 (Decision Making)</h2>
+        <p style={{fontSize:'12px', color:'#666', marginBottom:'10px'}}>
+            * 의사결정 기준: 목표 달성률 80% 이상 지속 시 상향(Fade), 50% 미만 시 하향/수정(Modify/Tier3) 고려
+        </p>
         <table>
             <thead>
                 <tr>
                     <th>학생명</th>
                     <th>학급</th>
-                    <th>발생 횟수</th>
-                    <th>최대 강도</th>
-                    <th>추천 중재</th>
-                    <th>관리</th>
+                    <th>최근 4주 목표 (Goal)</th>
+                    <th>실제 달성률 (Actual)</th>
+                    <th>성과 그래프</th>
+                    <th>시스템 제안 (Decision)</th>
+                    <th>비고</th>
                 </tr>
             </thead>
             <tbody>
-                {data.risk_list.filter((s: RiskStudent) => s.tier !== 'Tier 1').map((s: RiskStudent, idx: number) => (
+                {cicoData.map((s, idx) => (
                     <tr key={idx}>
                         <td style={{fontWeight:'bold'}}>{s.name}</td>
                         <td>{s.class}</td>
-                        <td>{s.count}회</td>
-                        <td>{s.max_intensity}점</td>
-                        <td>CICO (Check-in/Check-out)</td>
-                        <td>
-                            <button className="btn-small" style={{backgroundColor:'#ecfdf5', color:'#065f46'}}>+ 대상 등록</button>
+                        <td>{s.goalPercent}%</td>
+                        <td style={{fontWeight:'bold', color: s.actualPercent >= s.goalPercent ? '#10b981' : '#ef4444'}}>
+                            {s.actualPercent}%
                         </td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-        {data.risk_list.filter((s: RiskStudent) => s.tier !== 'Tier 1').length === 0 && <p style={{textAlign:'center', fontSize:'12px'}}>신규 추천 대상자가 없습니다.</p>}
-      </section>
-
-      {/* 2. Active Cases */}
-      <section className="report-section">
-        <h2>2. 진행 중인 중재 현황 (Active Monitoring)</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>학생명</th>
-                    <th>학급</th>
-                    <th>시작일</th>
-                    <th>목표 달성률 (80% 기준)</th>
-                    <th>현재 상태</th>
-                    <th>의사결정</th>
-                </tr>
-            </thead>
-            <tbody>
-                {activeCases.map((s, idx) => (
-                    <tr key={idx}>
-                        <td>{s.name}</td>
-                        <td>{s.class}</td>
-                        <td>{s.start_date}</td>
-                        <td>
-                            <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'5px'}}>
-                                <div style={{width:'50px', height:'6px', background:'#eee', borderRadius:'3px'}}>
-                                    <div style={{width: s.current, height:'100%', background: parseInt(s.current) >= 80 ? '#10b981' : '#ef4444', borderRadius:'3px'}}></div>
-                                </div>
-                                <span>{s.current}</span>
+                        <td style={{width: '200px'}}>
+                             <div style={{width:'100%', height:'8px', background:'#eee', borderRadius:'4px', overflow: 'hidden'}}>
+                                <div style={{width: `${s.actualPercent}%`, height:'100%', background: s.decisionColor, borderRadius:'4px'}}></div>
                             </div>
                         </td>
                         <td>
-                            <span className="status-badge" style={{ backgroundColor: s.status === 'Fade' ? '#10b981' : '#3b82f6' }}>{s.status}</span>
+                            <span className="status-badge" style={{ backgroundColor: s.decisionColor }}>{s.decision}</span>
                         </td>
                         <td>
-                            <button className="btn-small">수정/종결</button>
+                            <button className="btn-small" onClick={() => window.open(`/student/${s.name}`, '_blank')}>상세 보기</button>
                         </td>
                     </tr>
                 ))}
             </tbody>
         </table>
+        {cicoData.length === 0 && <p style={{textAlign:'center', fontSize:'12px', padding: '20px'}}>분석 기간 내 대상 학생 데이터가 없습니다.</p>}
       </section>
 
-      {/* 3. Decision Making */}
+      {/* 2. Meeting Log */}
       <section className="report-section" style={{ borderBottom: 'none' }}>
-        <h2>3. 팀 협의 및 의사결정 (Team Meeting Log)</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '4px' }}>
-                <h3 style={{fontSize:'14px', margin:'0 0 10px 0'}}>✅ 유지/종결 (Continue/Fade)</h3>
-                <textarea style={{width:'100%', height:'80px', border:'1px solid #eee', fontSize:'12px', padding:'5px'}} placeholder="목표를 달성한 학생들에 대한 점진적 퇴거(Fading) 계획..."></textarea>
-            </div>
-            <div style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '4px' }}>
-                <h3 style={{fontSize:'14px', margin:'0 0 10px 0'}}>⚠️ 수정/심화 (Modify/Tier 3)</h3>
-                <textarea style={{width:'100%', height:'80px', border:'1px solid #eee', fontSize:'12px', padding:'5px'}} placeholder="반응이 없는(Non-responder) 학생에 대한 중재 수정 또는 기능평가(FBA) 의뢰..."></textarea>
-            </div>
+        <h2>2. 팀 협의록 (Team Meeting Minutes)</h2>
+        <div style={{ border: '1px solid #ddd', padding: '20px', minHeight: '200px' }}>
+             <p style={{fontWeight:'bold', marginBottom:'10px'}}>📅 회의 일시: {new Date().toLocaleDateString()}</p>
+             <p style={{fontWeight:'bold', marginBottom:'5px'}}>📝 주요 논의 사항:</p>
+             <ul style={{listStyleType: 'circle', paddingLeft: '20px', marginBottom: '20px'}}>
+                <li style={{marginBottom: '5px'}}>목표 도달 학생 ({cicoData.filter(x => x.actualPercent >= x.goalPercent).length}명)에 대한 보상 및 졸업(Fade) 계획 수립</li>
+                <li style={{marginBottom: '5px'}}>중재 반응 저조 학생 ({cicoData.filter(x => x.actualPercent < x.goalPercent).length}명)에 대한 중재 수정 또는 기능평가 의뢰 논의</li>
+             </ul>
+             
+             <div style={{display:'flex', gap:'20px'}}>
+                 <div style={{flex:1, border:'1px dashed #ccc', padding:'10px', height: '150px'}}>
+                    <span style={{fontSize:'12px', color:'#999'}}>행동 중재 전략 수정 내용 (수기 작성)</span>
+                 </div>
+                 <div style={{flex:1, border:'1px dashed #ccc', padding:'10px', height: '150px'}}>
+                    <span style={{fontSize:'12px', color:'#999'}}>교사/학부모 소통 계획 (수기 작성)</span>
+                 </div>
+             </div>
         </div>
       </section>
 

@@ -44,7 +44,7 @@ export default function RosterPage() {
                         <div key={cIdx} className={styles.card} style={{padding: '1rem'}}>
                             <h3 style={{fontSize: '1.1rem', marginBottom: '0.5rem'}}>{cls.class_name}</h3>
                             <p style={{color: '#666'}}>학생 수: {cls.student_count}명</p>
-                            <button className={styles.actionBtn} style={{marginTop: '0.5rem', width: '100%'}}>학생 관리</button>
+                            <button className={styles.actionBtn} style={{marginTop: '0.5rem', width: '100%'}} onClick={() => alert("학생 코드 배정 시스템 준비 중 (Phase 5)")}>학생 관리 (코드 배정)</button>
                         </div>
                     ))}
                 </div>

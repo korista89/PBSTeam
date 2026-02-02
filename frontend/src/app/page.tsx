@@ -44,11 +44,15 @@ export default function Home() {
   const [error, setError] = useState("");
   
   // Date State
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const today = new Date();
+  const prev = new Date();
+  prev.setDate(today.getDate() - 28);
+  
+  const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
   // Query State (Triggers fetch only on button click)
-  const [queryStartDate, setQueryStartDate] = useState("");
-  const [queryEndDate, setQueryEndDate] = useState("");
+  const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
+  const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
 
   useEffect(() => {
     const fetchData = async () => {
