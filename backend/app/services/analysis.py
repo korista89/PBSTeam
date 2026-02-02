@@ -224,3 +224,109 @@ def get_student_analytics(student_name: str):
         "cico_trend": cico_trend
     }
 
+from datetime import timedelta, datetime
+
+def analyze_meeting_data(target_date: str = None):
+    # Default: Last 4 weeks from today (or target date)
+    if not target_date:
+        end_dt = datetime.now()
+    else:
+        end_dt = pd.to_datetime(target_date)
+    
+    start_dt = end_dt - timedelta(days=28) # 4 weeks
+    
+    raw_data = fetch_all_records()
+    if not raw_data:
+        return {"error": "No data found"}
+
+    df = pd.DataFrame(raw_data)
+    
+    # Preprocessing
+    if '행동발생 날짜' in df.columns:
+        df['date_obj'] = pd.to_datetime(df['행동발생 날짜'], errors='coerce')
+        # Filter for last 4 weeks
+        df = df[(df['date_obj'] >= start_dt) & (df['date_obj'] <= end_dt)]
+    
+    if '강도' in df.columns:
+        df['강도'] = pd.to_numeric(df['강도'], errors='coerce').fillna(0)
+
+    # --- Decision Algorithm ---
+    student_analysis = []
+    
+    if '학생명' in df.columns:
+        for name, group in df.groupby('학생명'):
+            # 1. Emergency Check (Red Line)
+            # Criteria: Intensity >= 5 OR Keywords in Type/Note (Restraint, Injury)
+            is_emergency = False
+            emergency_reason = []
+            
+            # Check Intensity
+            if (group['강도'] >= 5).any():
+                is_emergency = True
+                emergency_reason.append("강도 5 (고위험)")
+
+            # Check Keywords (Simulation: assuming '행동유형' or '비고' might contain them)
+            # Ideally user adds 'Physical Restraint' column. checking '행동유형' for now.
+            if '행동유형' in group.columns:
+                 restraint_mask = group['행동유형'].astype(str).str.contains('제지|상해', regex=True)
+                 if restraint_mask.any():
+                     is_emergency = True
+                     emergency_reason.append("신체 상해/물리적 제지 키워드 감지")
+            
+            # 2. Tier 2 Entry Check
+            # Criteria: 2 consecutive weeks with >= 2 incidents
+            is_tier2_candidate = False
+            
+            # Resample to weekly counts (W-MON: Weekly starting Monday)
+            group.set_index('date_obj', inplace=True)
+            weekly_counts = group.resample('W-MON').size()
+            
+            consecutive_weeks = 0
+            for count in weekly_counts:
+                if count >= 2:
+                    consecutive_weeks += 1
+                else:
+                    consecutive_weeks = 0
+                
+                if consecutive_weeks >= 2:
+                    is_tier2_candidate = True
+                    break
+            
+            # 3. Current Tier Status (Mock - need DB for real state)
+            # Default to Tier 1 unless we find a way to store state
+            current_tier = "Tier 1"
+            
+            # 4. Teacher Opinion (Placeholder - to be fetched from DB or Sheet)
+            teacher_opinion = ""
+
+            # 5. CICO Data (Placeholder)
+            cico_avg = 0 # Mock
+            
+            student_analysis.append({
+                "name": name,
+                "class": group['코드번호'].iloc[0] if '코드번호' in group.columns else "-",
+                "total_incidents": len(group),
+                "weekly_avg": round(len(group) / 4, 1),
+                "is_emergency": is_emergency,
+                "emergency_reason": ", ".join(emergency_reason),
+                "is_tier2_candidate": is_tier2_candidate,
+                "decision_recommendation": "Tier 3 (Immediate)" if is_emergency else ("Tier 2 (Entry)" if is_tier2_candidate else "Maintain Tier 1")
+            })
+
+    # Sort: Emergency -> Tier 2 Candidate -> Regular
+    # Custom sort key
+    def sort_key(x):
+        if x['is_emergency']: return 0
+        if x['is_tier2_candidate']: return 1
+        return 2
+
+    student_analysis.sort(key=sort_key)
+
+    return {
+        "period": f"{start_dt.strftime('%Y-%m-%d')} ~ {end_dt.strftime('%Y-%m-%d')}",
+        "students": student_analysis,
+        "summary": {
+            "emergency_count": sum(1 for x in student_analysis if x['is_emergency']),
+            "tier2_candidate_count": sum(1 for x in student_analysis if x['is_tier2_candidate'])
+        }
+    }

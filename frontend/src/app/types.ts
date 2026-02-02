@@ -64,3 +64,25 @@ export interface StudentData {
     functions: ChartData[];
     cico_trend: TrendData[];
 }
+
+export interface StudentMeetingData {
+    name: string;
+    class: string;
+    total_incidents: number;
+    weekly_avg: number;
+    is_emergency: boolean;
+    emergency_reason: string;
+    is_tier2_candidate: boolean;
+    decision_recommendation: string;
+}
+
+export interface MeetingAnalysisSummary {
+    emergency_count: number;
+    tier2_candidate_count: number;
+}
+
+export interface MeetingAnalysisResponse {
+    period: string;
+    students: StudentMeetingData[];
+    summary: MeetingAnalysisSummary;
+}

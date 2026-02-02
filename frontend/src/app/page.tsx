@@ -126,10 +126,21 @@ export default function Home() {
                 📄 Tier 1 리포트
             </button>
             <button 
-                onClick={() => window.location.href='/report/tier2'}
                 style={{ ...btnStyle, backgroundColor: '#f59e0b' }}
             >
                 📊 Tier 2 리포트
+            </button>
+            <button 
+                onClick={() => window.location.href='/protocol'}
+                style={{ ...btnStyle, backgroundColor: '#0ea5e9' }}
+            >
+                📜 프로토콜
+            </button>
+            <button 
+                onClick={() => window.location.href='/meeting'}
+                style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}
+            >
+                🤝 협의회
             </button>
         </div>
       </header>

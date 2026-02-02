@@ -1,0 +1,129 @@
+/* frontend/src/app/meeting/page.module.css */
+.container {
+  font-family: 'Noto Sans KR', sans-serif;
+  background-color: #f4f6f8;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: white;
+  padding: 15px 20px;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.title h1 { margin: 0; font-size: 1.25rem; color: #2c3e50; }
+.title p { margin: 0; font-size: 0.85rem; color: #666; }
+
+.mainLayout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 320px;
+  background: white;
+  border-right: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sidebarTitle {
+  padding: 15px;
+  font-weight: bold;
+  border-bottom: 1px solid #eee;
+  background: #f9fafb;
+}
+
+.studentList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.studentItem {
+  padding: 15px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.studentItem:hover { background: #f5f5f5; }
+.activeStudent { background: #e3f2fd; border-left: 4px solid #1565c0; }
+
+.studentName { font-weight: bold; font-size: 1rem; margin-bottom: 4px; display: block; }
+.studentMeta { font-size: 0.8rem; color: #666; display: flex; gap: 8px; }
+
+/* Status Badges */
+.badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: white; display: inline-block; }
+.badgeRed { background: #d32f2f; }
+.badgeOrange { background: #ef6c00; }
+.badgeGreen { background: #4caf50; }
+
+.contentArea {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.recommendationBox {
+  background: #fff3e0;
+  border: 1px solid #ffe0b2;
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.recommendationTitle { color: #e65100; font-weight: bold; margin-bottom: 5px; }
+
+.actionButtons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.btnPrimary { background: #1976d2; color: white; }
+.btnSecondary { background: #e0e0e0; color: #333; }
+
+.textarea {
+  width: 100%;
+  height: 100px;
+  padding: 10px;
+  margin-top: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.loading {
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  height: 100%; 
+  color: #666;
+}
