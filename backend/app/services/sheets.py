@@ -61,3 +61,67 @@ def fetch_all_records():
         print(f"Error fetching records: {e}")
         return []
 
+def get_student_codes_worksheet():
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return None
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        # Try to open "StudentCodes" tab, create if not exists
+        try:
+            return sheet.worksheet("StudentCodes")
+        except gspread.WorksheetNotFound:
+            print("Creating 'StudentCodes' worksheet...")
+            # Create with headers: Code, Name, Memo
+            ws = sheet.add_worksheet(title="StudentCodes", rows=300, cols=5)
+            ws.append_row(["Code", "Name", "Memo"]) 
+            return ws
+    except Exception as e:
+        print(f"Error accessing StudentCodes worksheet: {e}")
+        return None
+
+def fetch_student_codes():
+    ws = get_student_codes_worksheet()
+    if not ws:
+        return {}
+    
+    try:
+        records = ws.get_all_records()
+        # Return dict: {Name: Code} for fast masking
+        # Filter out empty names
+        code_map = {}
+        for r in records:
+            name = str(r.get('Name', '')).strip()
+            code = str(r.get('Code', '')).strip()
+            if name and code:
+                code_map[name] = code
+        return code_map
+    except Exception as e:
+        print(f"Error fetching codes: {e}")
+        return {}
+
+def update_student_codes(new_codes: list):
+    """
+    new_codes: list of dicts [{'Code': '...', 'Name': '...', 'Memo': '...'}]
+    Replaces the entire sheet content (simplest for now) or updates rows.
+    For simplicity and reliability, we'll clear and re-write if the list is full.
+    """
+    ws = get_student_codes_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        # Prepare data for upload
+        # Headers
+        data = [["Code", "Name", "Memo"]]
+        for item in new_codes:
+            data.append([item.get('Code'), item.get('Name'), item.get('Memo', '')])
+        
+        ws.clear()
+        ws.update(data)
+        return {"message": "Codes updated successfully"}
+    except Exception as e:
+        print(f"Error updating codes: {e}")
+        return {"error": str(e)}
+

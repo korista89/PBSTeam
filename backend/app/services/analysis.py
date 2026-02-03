@@ -1,4 +1,4 @@
-from app.services.sheets import fetch_all_records
+from app.services.sheets import fetch_all_records, fetch_student_codes
 from app.schemas import BehaviorRecord
 import pandas as pd
 from typing import List, Dict
@@ -10,6 +10,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
         return {"error": "No data found"}
 
     df = pd.DataFrame(raw_data)
+    
+    # --- Apply Masking (Phase 5) ---
+    code_map = fetch_student_codes() # Returns {Name: Code}
+    
+    if '학생명' in df.columns and code_map:
+        # replace names with codes if they exist in the map
+        df['학생명'] = df['학생명'].apply(lambda x: code_map.get(x, x))
     
     # Ensure numeric columns are actually numeric
     if '강도' in df.columns:
