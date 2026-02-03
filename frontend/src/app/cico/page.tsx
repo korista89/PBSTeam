@@ -48,17 +48,27 @@ export default function CICOInputPage() {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
             
-            // Filter to Tier 2 students only
-            interface StatusRecord { Code: string; Name?: string; Class?: string; CurrentTier: string; }
-            const tier2 = response.data.filter((s: StatusRecord) => s.CurrentTier === "Tier 2");
-            setTier2Students(tier2.map((s: StatusRecord) => ({
-                Code: s.Code,
-                Name: s.Name || s.Code,
-                Class: s.Class || ""
+            // New 5-tier structure: filter students where Tier2(CICO) = 'O'
+            interface TierStatusRecord { 
+                학생코드: string; 
+                학급: string; 
+                재학여부: string;
+                'Tier2(CICO)': string;
+            }
+            
+            const students = response.data.students || response.data || [];
+            const tier2Cico = students.filter((s: TierStatusRecord) => 
+                s.재학여부 === 'O' && s['Tier2(CICO)'] === 'O'
+            );
+            
+            setTier2Students(tier2Cico.map((s: TierStatusRecord) => ({
+                Code: s.학생코드,
+                Name: s.학생코드,  // Use code as name (no names displayed)
+                Class: s.학급 || ""
             })));
             
-            if (tier2.length > 0) {
-                setSelectedStudent(tier2[0].Code);
+            if (tier2Cico.length > 0) {
+                setSelectedStudent(tier2Cico[0].학생코드);
             }
         } catch (err) {
             console.error(err);

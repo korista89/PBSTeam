@@ -60,10 +60,12 @@ export default function MeetingPage() {
 3. 담임/팀 의견
 - ${opinion}
 
-4. 결정 사항
-- ( ) Tier 유지
-- ( ) Tier 상향 (⮕ ${selectedStudent.decision_recommendation.includes('Tier 3') ? 'Tier 3' : 'Tier 2'})
-- ( ) 외부 전문가 의뢰
+4. 결정 사항 (5-Tier 체계)
+- ( ) Tier1 유지 (보편적 지원)
+- ( ) Tier2(CICO) 지정 (선별적 지원 - CICO)
+- ( ) Tier2(SST) 지정 (선별적 지원 - SST)
+- ( ) Tier3 지정 (집중적 지원)
+- ( ) Tier3+ 지정 (외부연계)
         `.trim();
         
         navigator.clipboard.writeText(text);

@@ -28,7 +28,14 @@ import GlobalNav, { useDateRange } from "./components/GlobalNav";
 
 // Colors for charts
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658"];
-const TIER_COLORS: { [key: string]: string } = { "Tier 1": "#10B981", "Tier 2": "#F59E0B", "Tier 3": "#EF4444" };
+const TIER_COLORS: { [key: string]: string } = { 
+  "Tier 1": "#10B981", 
+  "Tier2(CICO)": "#F59E0B", 
+  "Tier2(SST)": "#1976d2",
+  "Tier 2": "#F59E0B",  // Legacy
+  "Tier 3": "#EF4444",
+  "Tier3+": "#4a148c"
+};
 
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
