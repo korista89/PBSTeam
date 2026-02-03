@@ -164,24 +164,42 @@ export default function Home() {
                 🔍 조회
             </button>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button 
+                onClick={() => window.location.href='/tier-status'}
+                style={{ ...btnStyle, backgroundColor: '#10b981' }}
+            >
+                📊 Tier별 현황
+            </button>
+            <button 
+                onClick={() => window.location.href='/cico'}
+                style={{ ...btnStyle, backgroundColor: '#f59e0b' }}
+            >
+                📝 CICO 입력
+            </button>
             <button 
                 onClick={() => window.location.href='/roster'}
                 style={{ ...btnStyle, backgroundColor: '#6366f1' }}
             >
-                👥 로스터 관리
+                👥 로스터
             </button>
             <button 
                 onClick={() => window.location.href='/report'}
                 style={{ ...btnStyle, backgroundColor: '#3b82f6' }}
             >
-                📄 Tier 1 리포트
+                📄 Tier1 리포트
             </button>
             <button 
                 onClick={() => window.location.href='/report/tier2'}
-                style={{ ...btnStyle, backgroundColor: '#f59e0b' }}
+                style={{ ...btnStyle, backgroundColor: '#ef4444' }}
             >
-                📊 Tier 2 리포트
+                📋 CICO 리포트
+            </button>
+            <button 
+                onClick={() => window.location.href='/meeting'}
+                style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}
+            >
+                🤝 협의회
             </button>
             <button 
                 onClick={() => window.location.href='/protocol'}
@@ -190,10 +208,10 @@ export default function Home() {
                 📜 프로토콜
             </button>
             <button 
-                onClick={() => window.location.href='/meeting'}
-                style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}
+                onClick={() => window.location.href='/admin'}
+                style={{ ...btnStyle, backgroundColor: '#4b5563' }}
             >
-                🤝 협의회
+                ⚙️ 관리자
             </button>
         </div>
       </header>

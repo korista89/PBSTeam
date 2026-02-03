@@ -11,15 +11,28 @@ export default function MeetingPage() {
     const [opinion, setOpinion] = useState("");
     const [loading, setLoading] = useState(true);
 
+    // Date State (4-week default)
+    const today = new Date();
+    const prev = new Date();
+    prev.setDate(today.getDate() - 28);
+
+    const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
+    const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+    const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
+    const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
+
     useEffect(() => {
         const fetchMeetingData = async () => {
             try {
-                // Use environment variable for API URL
+                setLoading(true);
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-                const response = await axios.get(`${apiUrl}/api/v1/analytics/meeting`);
+                const params = new URLSearchParams();
+                if (queryStartDate) params.append("start_date", queryStartDate);
+                if (queryEndDate) params.append("end_date", queryEndDate);
+                
+                const response = await axios.get(`${apiUrl}/api/v1/analytics/meeting?${params.toString()}`);
                 setData(response.data);
                 
-                // Select first student if available and special cases exist, otherwise first one
                 if (response.data.students && response.data.students.length > 0) {
                     setSelectedStudent(response.data.students[0]);
                 }
@@ -30,7 +43,7 @@ export default function MeetingPage() {
             }
         };
         fetchMeetingData();
-    }, []);
+    }, [queryStartDate, queryEndDate]);
 
     const handleCopyMinutes = () => {
         if (!selectedStudent) return;
@@ -69,7 +82,21 @@ export default function MeetingPage() {
             <header className={styles.header}>
                 <div className={styles.title}>
                     <h1>📅 학교행동중재지원팀 정기 협의회</h1>
-                    <p>분석 기간: {data.period} (최근 4주)</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간:</span>
+                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }} />
+                        ~
+                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }} />
+                        <button 
+                            onClick={() => {
+                                setQueryStartDate(startDate);
+                                setQueryEndDate(endDate);
+                            }}
+                            style={{ padding: '4px 12px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                            🔍 조회
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <span className={styles.badge} style={{background:'#d32f2f', marginRight: 10, fontSize: '0.9rem', padding: '5px 10px'}}>

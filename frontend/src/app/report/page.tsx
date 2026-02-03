@@ -50,7 +50,23 @@ export default function MonthlyReport() {
 
   return (
     <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '0 auto', backgroundColor: 'white' }}>
-      {/* ... styles ... */}
+      <style jsx global>{`
+        @media print {
+            body { background: white; -webkit-print-color-adjust: exact; }
+            .no-print { display: none; }
+            .page-break { page-break-before: always; }
+        }
+        .report-section { margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
+        h1 { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #1e3a8a; }
+        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 20px 0 10px 0; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #eff6ff; color: #1e40af; }
+        .summary-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-box { padding: 15px; border-radius: 8px; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); text-align: center; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #1e40af; }
+        .stat-label { font-size: 11px; color: #64748b; margin-top: 5px; }
+      `}</style>
       
       {/* Controller */}
       <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

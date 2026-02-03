@@ -16,10 +16,14 @@ app.add_middleware(
 from app.api.endpoints import analytics
 from app.api.endpoints import student
 from app.api.endpoints import roster
+from app.api.endpoints import auth
+from app.api.endpoints import tier
 
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(student.router, prefix="/api/v1/students", tags=["students"])
 app.include_router(roster.router, prefix="/api/v1/roster", tags=["roster"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(tier.router, prefix="/api/v1/tier", tags=["tier"])
 
 @app.get("/")
 async def root():
