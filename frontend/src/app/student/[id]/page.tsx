@@ -9,12 +9,19 @@ import {
 } from "recharts";
 import styles from "../../page.module.css"; 
 import { StudentData, ChartData } from "../../types";
+import { AuthCheck } from "../../components/AuthProvider";
+import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 
 // Reusing global styles for consistency
-// Ideally should separate student styles if divergent
-
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
-const TIER_COLORS: { [key: string]: string } = { "Tier 1": "#10B981", "Tier 2": "#F59E0B", "Tier 3": "#EF4444" };
+const TIER_COLORS: { [key: string]: string } = { 
+  "Tier 1": "#10B981", 
+  "Tier2(CICO)": "#F59E0B", 
+  "Tier2(SST)": "#1976d2",
+  "Tier 2": "#F59E0B",  // Legacy support
+  "Tier 3": "#EF4444",
+  "Tier3+": "#4a148c"
+};
 
 export default function StudentDetail() {
   const params = useParams();
@@ -45,31 +52,45 @@ export default function StudentDetail() {
     fetchData();
   }, [studentName]);
 
-  if (loading) return <div className={styles.loading}>학생 데이터 분석 중... 🔍</div>;
+  if (loading) return (
+    <AuthCheck>
+      <div className={styles.container}>
+        <GlobalNav currentPage="student" />
+        <div style={{ padding: '50px', textAlign: 'center' }}>학생 데이터 분석 중... 🔍</div>
+      </div>
+    </AuthCheck>
+  );
+  
   if (error) return (
-    <div className={styles.error}>
-        <p>{error}</p>
-        <button className={styles.actionBtn} onClick={() => router.push('/')} style={{marginTop: '1rem'}}>돌아가기</button>
-    </div>
+    <AuthCheck>
+      <div className={styles.container}>
+        <GlobalNav currentPage="student" />
+        <div style={{ padding: '50px', textAlign: 'center' }}>
+          <p>{error}</p>
+          <button className={styles.actionBtn} onClick={() => router.push('/')} style={{marginTop: '1rem'}}>돌아가기</button>
+        </div>
+      </div>
+    </AuthCheck>
   );
   if (!data) return null;
 
   const { profile, abc_data, functions, cico_trend } = data;
 
   return (
+    <AuthCheck>
     <div className={styles.container}>
-      <header className={styles.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button className={styles.actionBtn} onClick={() => router.back()}>← 뒤로</button>
-            <div>
-                <h1 className={styles.title}>{profile.name} 학생 상세 분석</h1>
-                <p className={styles.subtitle}>{profile.class} | 행동지원 등급: <span style={{color: TIER_COLORS[profile.tier], fontWeight:'bold'}}>{profile.tier}</span></p>
-            </div>
+      <GlobalNav currentPage="student" />
+      
+      <div style={{ padding: '20px' }}>
+        <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>📊 {profile.name} 학생 상세 분석</h2>
+            <p style={{ color: '#666', margin: '5px 0 0 0' }}>
+              {profile.class} | 행동지원 등급: <span style={{color: TIER_COLORS[profile.tier] || '#666', fontWeight:'bold'}}>{profile.tier}</span>
+            </p>
+          </div>
+          <button className={styles.actionBtn} onClick={() => router.back()}>← 뒤로</button>
         </div>
-        <div>
-             {/* Future: Print Report Button */}
-        </div>
-      </header>
 
       <main className={styles.main}>
         {/* Profile Stats */}
@@ -154,6 +175,8 @@ export default function StudentDetail() {
         </div>
 
       </main>
+      </div>
     </div>
+    </AuthCheck>
   );
 }

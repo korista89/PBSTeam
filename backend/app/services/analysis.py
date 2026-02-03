@@ -1,4 +1,4 @@
-from app.services.sheets import fetch_all_records, fetch_student_codes
+from app.services.sheets import fetch_all_records, fetch_student_codes, get_beable_code_mapping
 from app.schemas import BehaviorRecord
 import pandas as pd
 from typing import List, Dict
@@ -11,18 +11,28 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
 
     df = pd.DataFrame(raw_data)
     
-    # --- Apply Masking (Phase 5) ---
-    code_map = fetch_student_codes() # Returns {Name: Code}
+    # --- Get BeAble code mapping (only enrolled students with BeAble codes in TierStatus) ---
+    beable_mapping = get_beable_code_mapping()  # {beable_code: {'student_code': '1011', ...}}
     
-    if '학생명' in df.columns and code_map:
-        # replace names with codes if they exist in the map
-        df['학생명'] = df['학생명'].apply(lambda x: code_map.get(x, x))
+    # Create reverse lookup: BeAble code to 4-digit student code
+    beable_to_student_code = {k: v['student_code'] for k, v in beable_mapping.items()}
+    beable_codes_set = set(beable_mapping.keys())
+    
+    # --- Filter: Only include records where the student has a BeAble code in TierStatus ---
+    # Check if '학생명' matches a BeAble code (name = BeAble code in 시트1)
+    if '학생명' in df.columns:
+        # Only keep rows where 학생명 (BeAble code) is in our mapping
+        df = df[df['학생명'].astype(str).isin(beable_codes_set)]
+        # Replace BeAble code with 4-digit student code
+        df['학생코드'] = df['학생명'].astype(str).apply(lambda x: beable_to_student_code.get(x, x))
+    else:
+        df['학생코드'] = '-'
     
     # Ensure numeric columns are actually numeric
     if '강도' in df.columns:
         df['강도'] = pd.to_numeric(df['강도'], errors='coerce').fillna(0)
     if '발생빈도' in df.columns:
-        df['발생빈도'] = pd.to_numeric(df['발생빈도'], errors='coerce').fillna(1) # Default to 1 if missing
+        df['발생빈도'] = pd.to_numeric(df['발생빈도'], errors='coerce').fillna(1)
 
     # --- Date Filtering ---
     if '행동발생 날짜' in df.columns:
@@ -62,12 +72,12 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
 
     # --- Tier 2: Screening & Hot Spots ---
 
-    # 6. At Risk Students (Frequency >= 3 OR Intensity >= 5)
+    # 6. At Risk Students (Frequency >= 3 OR Intensity >= 5) - Use 학생코드
     at_risk_list = []
-    if '학생명' in df.columns:
-        # Group by Student
-        student_groups = df.groupby('학생명')
-        for name, group in student_groups:
+    if '학생코드' in df.columns:
+        # Group by Student Code (4-digit)
+        student_groups = df.groupby('학생코드')
+        for student_code, group in student_groups:
             count = len(group)
             max_intensity = group['강도'].max()
             
@@ -79,11 +89,11 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
             
             if tier != "Tier 1":
                 at_risk_list.append({
-                    "name": name,
+                    "name": str(student_code),  # 4-digit student code
                     "count": int(count),
                     "max_intensity": int(max_intensity),
                     "tier": tier,
-                    "class": group['코드번호'].iloc[0] if '코드번호' in group.columns else "-" # Proxied Class/Code
+                    "class": group['코드번호'].iloc[0] if '코드번호' in group.columns else "-"
                 })
     
     # Sort risk list by Tier (desc) then Count (desc)
@@ -121,7 +131,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
         for _, row in high_intensity_df.iterrows():
              safety_alerts.append({
                  "date": row.get('행동발생 날짜', '-'),
-                 "student": row.get('학생명', '-'),
+                 "student": row.get('학생코드', row.get('학생명', '-')),  # Use 4-digit student code
                  "location": row.get('장소', '-'),
                  "type": row.get('행동유형', '-'),
                  "intensity": int(row.get('강도', 5))

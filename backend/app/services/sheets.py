@@ -441,10 +441,23 @@ def get_beable_code_mapping():
             
             # Only include enrolled students with BeAble codes
             if beable and enrolled == 'O':
+                # Determine highest tier for this student
+                tiers = []
+                if r.get('Tier3+') == 'O': tiers.append('Tier3+')
+                if r.get('Tier3') == 'O': tiers.append('Tier3')
+                if r.get('Tier2(SST)') == 'O': tiers.append('Tier2(SST)')
+                if r.get('Tier2(CICO)') == 'O': tiers.append('Tier2(CICO)')
+                if r.get('Tier1') == 'O': tiers.append('Tier1')
+                
                 mapping[beable] = {
                     'student_code': student_code,
                     'class': r.get('학급', ''),
-                    'tier': r.get('현재Tier', 'Tier 1')
+                    'tiers': tiers,
+                    'tier1': r.get('Tier1', 'O'),
+                    'tier2_cico': r.get('Tier2(CICO)', 'X'),
+                    'tier2_sst': r.get('Tier2(SST)', 'X'),
+                    'tier3': r.get('Tier3', 'X'),
+                    'tier3_plus': r.get('Tier3+', 'X')
                 }
         return mapping
     except Exception as e:
