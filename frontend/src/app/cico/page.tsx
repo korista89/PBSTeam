@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
 import { AuthCheck } from "../components/AuthProvider";
+import GlobalNav from "../components/GlobalNav";
 
 interface CICOStudent {
     Code: string;
@@ -159,12 +160,14 @@ export default function CICOInputPage() {
     return (
         <AuthCheck>
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div>
-                    <h1 className={styles.title}>📝 CICO 일일 기록</h1>
-                    <p className={styles.subtitle}>Tier 2 학생 표적 행동 체크 (2개 표적행동)</p>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <GlobalNav currentPage="cico" />
+
+            <main className={styles.main} style={{ marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <div>
+                        <h2 style={{ margin: 0 }}>📝 CICO 일일 기록</h2>
+                        <p style={{ color: '#666', margin: '5px 0 0 0' }}>Tier 2 학생 표적 행동 체크 (2개 표적행동)</p>
+                    </div>
                     {todayCompleted && (
                         <span style={{ 
                             padding: '6px 12px', 
@@ -177,16 +180,7 @@ export default function CICOInputPage() {
                             ✓ 오늘 기록 완료
                         </span>
                     )}
-                    <button onClick={() => window.location.href='/tier-status'} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                        📊 Tier별 현황
-                    </button>
-                    <button onClick={() => window.location.href='/'} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                        ← 대시보드
-                    </button>
                 </div>
-            </header>
-
-            <main className={styles.main}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     {/* Input Form */}
                     <div className={styles.card}>

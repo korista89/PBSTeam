@@ -7,6 +7,8 @@ import {
   PieChart, Pie, Cell, Legend, ResponsiveContainer
 } from "recharts";
 import { DashboardData } from "../types";
+import { AuthCheck } from "../components/AuthProvider";
+import GlobalNav, { useDateRange } from "../components/GlobalNav";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
@@ -14,26 +16,22 @@ export default function MonthlyReport() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   
-  const today = new Date();
-  const prev = new Date();
-  prev.setDate(today.getDate() - 28);
-
-  const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
-  const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
-  const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
+  // Date State from GlobalNav (localStorage)
+  const { startDate, endDate } = useDateRange();
 
   const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
   useEffect(() => {
+    if (!startDate || !endDate) return;
+    
     const fetchData = async () => {
       try {
         setLoading(true);
         let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
         const params = new URLSearchParams();
-        if (queryStartDate) params.append("start_date", queryStartDate);
-        if (queryEndDate) params.append("end_date", queryEndDate);
-        if (params.toString()) url += `?${params.toString()}`;
+        params.append("start_date", startDate);
+        params.append("end_date", endDate);
+        url += `?${params.toString()}`;
 
         const response = await axios.get(url);
         setData(response.data);
@@ -44,18 +42,23 @@ export default function MonthlyReport() {
       }
     };
     fetchData();
-  }, [queryStartDate, queryEndDate]);
+  }, [startDate, endDate]);
 
   // Early return if no data
   if (!data) {
     return (
-      <div style={{ padding: '50px', textAlign: 'center' }}>
-        <p>📊 데이터를 불러오는 중...</p>
-      </div>
+      <AuthCheck>
+        <GlobalNav currentPage="report" />
+        <div style={{ padding: '50px', textAlign: 'center' }}>
+          <p>📊 데이터를 불러오는 중...</p>
+        </div>
+      </AuthCheck>
     );
   }
 
   return (
+    <AuthCheck>
+    <GlobalNav currentPage="report" />
     <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '0 auto', backgroundColor: 'white' }}>
       <style jsx global>{`
         @media print {
@@ -77,22 +80,8 @@ export default function MonthlyReport() {
       
       {/* Controller */}
       <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => window.history.back()} style={{ padding: '8px 16px', cursor: 'pointer' }}>← 뒤로가기</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
-                ~
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
-                <button 
-                    onClick={() => {
-                        setQueryStartDate(startDate);
-                        setQueryEndDate(endDate);
-                    }}
-                    style={{ padding: '6px 12px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                    🔍 조회
-                </button>
-            </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
         </div>
         <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>🖨️ 리포트 인쇄 / PDF 저장</button>
       </div>
@@ -258,5 +247,6 @@ export default function MonthlyReport() {
       </section>
 
     </div>
+    </AuthCheck>
   );
 }

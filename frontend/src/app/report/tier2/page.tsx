@@ -3,31 +3,27 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DashboardData, RiskStudent } from "../../types";
+import { AuthCheck } from "../../components/AuthProvider";
+import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 
 export default function CICOReport() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
-  // Date State for CICO Report (follows global 4-week default)
-  const today = new Date();
-  const prev = new Date();
-  prev.setDate(today.getDate() - 28);
-
-  const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
-  const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
-  const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
+  // Date State from GlobalNav (localStorage)
+  const { startDate, endDate } = useDateRange();
 
   useEffect(() => {
+    if (!startDate || !endDate) return;
+    
     const fetchData = async () => {
       try {
         setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        // Create params for date filtering
         const params = new URLSearchParams();
-        if (queryStartDate) params.append("start_date", queryStartDate);
-        if (queryEndDate) params.append("end_date", queryEndDate);
+        params.append("start_date", startDate);
+        params.append("end_date", endDate);
         
         const response = await axios.get(`${apiUrl}/api/v1/analytics/dashboard?${params.toString()}`);
         setData(response.data);
@@ -38,10 +34,20 @@ export default function CICOReport() {
       }
     };
     fetchData();
-  }, [queryStartDate, queryEndDate]);
+  }, [startDate, endDate]);
 
-  if (loading) return <div>리포트 생성 중...</div>;
-  if (!data) return <div>데이터 없음</div>;
+  if (loading) return (
+    <AuthCheck>
+      <GlobalNav currentPage="report-tier2" />
+      <div style={{ padding: '50px', textAlign: 'center' }}>리포트 생성 중...</div>
+    </AuthCheck>
+  );
+  if (!data) return (
+    <AuthCheck>
+      <GlobalNav currentPage="report-tier2" />
+      <div style={{ padding: '50px', textAlign: 'center' }}>데이터 없음</div>
+    </AuthCheck>
+  );
 
   // Mock CICO Logic for Demo (Since DB doesn't have daily points yet)
   const cicoData = data.risk_list.filter((s: RiskStudent) => s.tier !== 'Tier 1').map(s => {
@@ -94,22 +100,8 @@ export default function CICOReport() {
       
       {/* Controller */}
       <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => window.history.back()} style={{ padding: '8px 16px', cursor: 'pointer' }}>← 뒤로가기</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
-                ~
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
-                <button 
-                    onClick={() => {
-                        setQueryStartDate(startDate);
-                        setQueryEndDate(endDate);
-                    }}
-                    style={{ padding: '6px 12px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                    🔍 조회
-                </button>
-            </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
         </div>
         <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>🖨️ 리포트 인쇄</button>
       </div>
@@ -117,7 +109,7 @@ export default function CICOReport() {
       {/* Header */}
       <header style={{ textAlign: 'center', marginBottom: '30px' }}>
         <h1>📊 CICO 리포트: 행동 중재 의사결정 (4주)</h1>
-        <p style={{ color: '#666' }}>분석 기간: {queryStartDate} ~ {queryEndDate} | 작성자: 행동중재지원팀</p>
+        <p style={{ color: '#666' }}>분석 기간: {startDate} ~ {endDate} | 작성자: 행동중재지원팀</p>
       </header>
 
       {/* 1. Decision Making Table */}

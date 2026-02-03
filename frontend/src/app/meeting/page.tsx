@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import styles from './page.module.css';
 import axios from 'axios';
 import { MeetingAnalysisResponse, StudentMeetingData } from '../types';
+import { AuthCheck } from "../components/AuthProvider";
+import GlobalNav, { useDateRange } from "../components/GlobalNav";
 
 export default function MeetingPage() {
     const [data, setData] = useState<MeetingAnalysisResponse | null>(null);
@@ -11,24 +13,19 @@ export default function MeetingPage() {
     const [opinion, setOpinion] = useState("");
     const [loading, setLoading] = useState(true);
 
-    // Date State (4-week default)
-    const today = new Date();
-    const prev = new Date();
-    prev.setDate(today.getDate() - 28);
-
-    const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
-    const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
-    const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
+    // Date State from GlobalNav (localStorage)
+    const { startDate, endDate } = useDateRange();
 
     useEffect(() => {
+        if (!startDate || !endDate) return;
+        
         const fetchMeetingData = async () => {
             try {
                 setLoading(true);
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
                 const params = new URLSearchParams();
-                if (queryStartDate) params.append("start_date", queryStartDate);
-                if (queryEndDate) params.append("end_date", queryEndDate);
+                params.append("start_date", startDate);
+                params.append("end_date", endDate);
                 
                 const response = await axios.get(`${apiUrl}/api/v1/analytics/meeting?${params.toString()}`);
                 setData(response.data);
@@ -43,7 +40,7 @@ export default function MeetingPage() {
             }
         };
         fetchMeetingData();
-    }, [queryStartDate, queryEndDate]);
+    }, [startDate, endDate]);
 
     const handleCopyMinutes = () => {
         if (!selectedStudent) return;
@@ -74,30 +71,32 @@ export default function MeetingPage() {
     };
 
     // Only show full loading screen on initial load
-    if (loading && !data) return <div className={styles.loading}>데이터 분석 중...</div>;
-    if (!data) return <div className={styles.loading}>데이터를 불러올 수 없습니다.</div>;
+    if (loading && !data) return (
+        <AuthCheck>
+            <GlobalNav currentPage="meeting" />
+            <div className={styles.loading}>데이터 분석 중...</div>
+        </AuthCheck>
+    );
+    if (!data) return (
+        <AuthCheck>
+            <GlobalNav currentPage="meeting" />
+            <div className={styles.loading}>데이터를 불러올 수 없습니다.</div>
+        </AuthCheck>
+    );
 
     return (
+        <AuthCheck>
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div className={styles.title}>
-                    <h1>📅 학교행동중재지원팀 정기 협의회</h1>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
-                        <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간:</span>
-                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }} />
-                        ~
-                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: '4px', border: '1px solid #ddd', borderRadius: '4px' }} />
-                        <button 
-                            onClick={() => {
-                                setQueryStartDate(startDate);
-                                setQueryEndDate(endDate);
-                            }}
-                            style={{ padding: '4px 12px', backgroundColor: '#4b5563', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                        >
-                            🔍 조회
-                        </button>
+            <GlobalNav currentPage="meeting" />
+            <div style={{ padding: '20px' }}>
+                <header style={{ marginBottom: '20px' }}>
+                    <div className={styles.title}>
+                        <h1>📅 학교행동중재지원팀 정기 협의회</h1>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
+                            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
+                        </div>
                     </div>
-                </div>
+                </header>
                 <div>
                     <span className={styles.badge} style={{background:'#d32f2f', marginRight: 10, fontSize: '0.9rem', padding: '5px 10px'}}>
                         🚨 긴급 안건: {data.summary.emergency_count}명
@@ -188,6 +187,8 @@ export default function MeetingPage() {
                     )}
                 </main>
             </div>
+            </div>
         </div>
+        </AuthCheck>
     );
 }
