@@ -46,7 +46,14 @@ export default function MonthlyReport() {
     fetchData();
   }, [queryStartDate, queryEndDate]);
 
- // ...
+  // Early return if no data
+  if (!data) {
+    return (
+      <div style={{ padding: '50px', textAlign: 'center' }}>
+        <p>📊 데이터를 불러오는 중...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '0 auto', backgroundColor: 'white' }}>
