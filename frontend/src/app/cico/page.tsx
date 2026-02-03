@@ -3,11 +3,21 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
+import { AuthCheck } from "../components/AuthProvider";
 
 interface CICOStudent {
     Code: string;
     Name: string;
     Class: string;
+}
+
+interface CICORecord {
+    Date: string;
+    StudentCode: string;
+    TargetBehavior1: string;
+    TargetBehavior2: string;
+    AchievementRate: number;
+    TeacherMemo: string;
 }
 
 export default function CICOInputPage() {
@@ -19,7 +29,8 @@ export default function CICOInputPage() {
     const [memo, setMemo] = useState("");
     const [saving, setSaving] = useState(false);
     const [todayDate, setTodayDate] = useState(new Date().toISOString().split('T')[0]);
-    const [recentRecords, setRecentRecords] = useState<any[]>([]);
+    const [recentRecords, setRecentRecords] = useState<CICORecord[]>([]);
+    const [todayCompleted, setTodayCompleted] = useState(false);
 
     useEffect(() => {
         fetchTier2Students();
@@ -37,8 +48,9 @@ export default function CICOInputPage() {
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
             
             // Filter to Tier 2 students only
-            const tier2 = response.data.filter((s: any) => s.CurrentTier === "Tier 2");
-            setTier2Students(tier2.map((s: any) => ({
+            interface StatusRecord { Code: string; Name?: string; Class?: string; CurrentTier: string; }
+            const tier2 = response.data.filter((s: StatusRecord) => s.CurrentTier === "Tier 2");
+            setTier2Students(tier2.map((s: StatusRecord) => ({
                 Code: s.Code,
                 Name: s.Name || s.Code,
                 Class: s.Class || ""
@@ -58,7 +70,13 @@ export default function CICOInputPage() {
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
             const response = await axios.get(`${apiUrl}/api/v1/tier/cico?student_code=${code}`);
-            setRecentRecords(response.data.slice(-7)); // Last 7 records
+            const records = response.data.slice(-7) as CICORecord[]; // Last 7 records
+            setRecentRecords(records);
+            
+            // Check if today's entry exists for this student
+            const today = new Date().toISOString().split('T')[0];
+            const todayEntry = records.find((r: CICORecord) => r.Date === today);
+            setTodayCompleted(!!todayEntry);
         } catch (err) {
             console.error(err);
         }
@@ -139,13 +157,26 @@ export default function CICOInputPage() {
         : 0;
 
     return (
+        <AuthCheck>
         <div className={styles.container}>
             <header className={styles.header}>
                 <div>
                     <h1 className={styles.title}>📝 CICO 일일 기록</h1>
                     <p className={styles.subtitle}>Tier 2 학생 표적 행동 체크 (2개 표적행동)</p>
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    {todayCompleted && (
+                        <span style={{ 
+                            padding: '6px 12px', 
+                            backgroundColor: '#d1fae5', 
+                            color: '#059669',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem',
+                            fontWeight: 'bold'
+                        }}>
+                            ✓ 오늘 기록 완료
+                        </span>
+                    )}
                     <button onClick={() => window.location.href='/tier-status'} style={{ padding: '8px 16px', cursor: 'pointer' }}>
                         📊 Tier별 현황
                     </button>
@@ -159,7 +190,10 @@ export default function CICOInputPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     {/* Input Form */}
                     <div className={styles.card}>
-                        <h2 style={{ marginBottom: '20px' }}>오늘의 기록</h2>
+                        <h2 style={{ marginBottom: '20px' }}>
+                            오늘의 기록
+                            {todayCompleted && <span style={{ fontSize: '0.8rem', marginLeft: '10px', color: '#f59e0b' }}>(수정 시 기존 기록에 추가됨)</span>}
+                        </h2>
                         
                         <div style={{ marginBottom: '20px' }}>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>날짜</label>
@@ -352,5 +386,6 @@ export default function CICOInputPage() {
                 </div>
             </main>
         </div>
+        </AuthCheck>
     );
 }

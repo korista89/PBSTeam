@@ -23,6 +23,8 @@ import {
 } from "recharts";
 
 import { DashboardData, ChartData, RiskStudent, SafetyAlert } from "./types";
+import { AuthCheck } from "./components/AuthProvider";
+import UserHeader from "./components/UserHeader";
 
 // Colors for charts
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658"];
@@ -135,12 +137,14 @@ export default function Home() {
   const { summary, trends, big5, risk_list, functions, heatmap } = data;
 
   return (
+    <AuthCheck>
     <div className={styles.container}>
       <header className={styles.header}>
         <div>
-            <h1 className={styles.title}>IBSD</h1>
-            <p className={styles.subtitle}>지능형 행동 지원 대시보드 (Tier Based)</p>
+            <h1 className={styles.title}>🏫 특수학교 PBIS</h1>
+            <p className={styles.subtitle}>통합관리플랫폼 대시보드</p>
         </div>
+        <UserHeader />
         <div className={styles.datePicker}>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
             ~
@@ -245,6 +249,72 @@ export default function Home() {
                 </div>
             </div>
         )}
+
+        {/* Tier Status Quick Summary */}
+        <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(4, 1fr)', 
+            gap: '15px', 
+            marginBottom: '20px' 
+        }}>
+            <div 
+                onClick={() => window.location.href='/tier-status'}
+                style={{ 
+                    padding: '20px', 
+                    background: 'linear-gradient(135deg, #10b981, #059669)', 
+                    borderRadius: '12px', 
+                    color: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                }}
+            >
+                <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>Tier 1</div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>보편적 지원</div>
+            </div>
+            <div 
+                onClick={() => window.location.href='/cico'}
+                style={{ 
+                    padding: '20px', 
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)', 
+                    borderRadius: '12px', 
+                    color: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                }}
+            >
+                <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>Tier 2</div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>CICO 프로그램</div>
+            </div>
+            <div 
+                onClick={() => window.location.href='/tier-status?filter=Tier3'}
+                style={{ 
+                    padding: '20px', 
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)', 
+                    borderRadius: '12px', 
+                    color: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                }}
+            >
+                <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>Tier 3</div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>집중 지원</div>
+            </div>
+            <div 
+                onClick={() => window.location.href='/protocol'}
+                style={{ 
+                    padding: '20px', 
+                    background: 'linear-gradient(135deg, #6366f1, #4f46e5)', 
+                    borderRadius: '12px', 
+                    color: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                }}
+            >
+                <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>📜</div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>PBS 프로토콜</div>
+            </div>
+        </div>
+
         {/* AI Insight Section */}
         {data.ai_comment && (
             <div className={styles.card} style={{ marginBottom: '2rem', borderLeft: '5px solid #8b5cf6', backgroundColor: '#f5f3ff' }}>
@@ -478,5 +548,6 @@ export default function Home() {
 
       </main>
     </div>
+    </AuthCheck>
   );
 }
