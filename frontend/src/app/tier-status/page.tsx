@@ -34,6 +34,62 @@ export default function TierStatusPage() {
     const [editEnrolled, setEditEnrolled] = useState("");
     const [editBeAble, setEditBeAble] = useState("");
 
+    // 210 fixed student codes
+    const STUDENT_CODES = [
+        "1011", "1012", "1013", "1014", "1021", "1022", "1023", "1024",
+        "2111", "2112", "2113", "2114", "2115", "2116", "2121", "2122", "2123", "2124", "2125", "2126",
+        "2211", "2212", "2213", "2214", "2215", "2216", "2221", "2222", "2223", "2224", "2225", "2226",
+        "2311", "2312", "2313", "2314", "2315", "2316", "2411", "2412", "2413", "2414", "2415", "2416",
+        "2421", "2422", "2423", "2424", "2425", "2426", "2511", "2512", "2513", "2514", "2515", "2516",
+        "2521", "2522", "2523", "2524", "2525", "2526", "2611", "2612", "2613", "2614", "2615", "2616",
+        "2621", "2622", "2623", "2624", "2625", "2626",
+        "3111", "3112", "3113", "3114", "3115", "3116", "3121", "3122", "3123", "3124", "3125", "3126",
+        "3211", "3212", "3213", "3214", "3215", "3216", "3221", "3222", "3223", "3224", "3225", "3226",
+        "3311", "3312", "3313", "3314", "3315", "3316", "3321", "3322", "3323", "3324", "3325", "3326",
+        "3401", "3402", "3403", "3404", "3405",
+        "4111", "4112", "4113", "4114", "4115", "4116", "4117", "4121", "4122", "4123", "4124", "4125", "4126", "4127",
+        "4211", "4212", "4213", "4214", "4215", "4216", "4217", "4221", "4222", "4223", "4224", "4225", "4226", "4227",
+        "4311", "4312", "4313", "4314", "4315", "4316", "4317", "4321", "4322", "4323", "4324", "4325", "4326", "4327",
+        "4401", "4402", "4403", "4404", "4405",
+        "5111", "5112", "5113", "5114", "5115", "5116", "5117", "5121", "5122", "5123", "5124", "5125", "5126", "5127",
+        "5131", "5132", "5133", "5134", "5135", "5136", "5137",
+        "5211", "5212", "5213", "5214", "5215", "5216", "5217", "5221", "5222", "5223", "5224", "5225", "5226", "5227",
+        "5231", "5232", "5233", "5234", "5235", "5236", "5237",
+        "6001", "6002", "6003", "6004", "6005"
+    ];
+
+    // Convert code to class name
+    const codeToClassName = (code: string): string => {
+        if (code.length !== 4) return "";
+        const course = code[0];
+        const grade = code[1];
+        const cls = code[2];
+        
+        const courseNames: {[key: string]: string} = {
+            "1": "유치원", "2": "초등", "3": "중학교", "4": "고등", "5": "전공과", "6": "예비"
+        };
+        
+        if (code.substring(0,2) === "34") return "중학교 순회학급";
+        if (code.substring(0,2) === "44") return "고등 순회학급";
+        if (code[0] === "6") return "예비";
+        
+        return `${courseNames[course] || ""} ${grade}학년 ${cls}반`;
+    };
+
+    // Generate default 210 students
+    const generateDefaultStudents = (): StudentStatus[] => {
+        return STUDENT_CODES.map((code, idx) => ({
+            번호: idx + 1,
+            학급: codeToClassName(code),
+            학생코드: code,
+            재학여부: "O",
+            'BeAble코드': "",
+            현재Tier: "Tier 1",
+            변경일: "",
+            메모: ""
+        }));
+    };
+
     useEffect(() => {
         fetchStatus();
     }, []);
@@ -44,10 +100,23 @@ export default function TierStatusPage() {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
             
-            setStudents(response.data.students || []);
-            setEnrolledCount(response.data.enrolled_count || 0);
+            const fetchedStudents = response.data.students || response.data || [];
+            
+            // If API returns empty or no data, use default 210 students
+            if (fetchedStudents.length === 0) {
+                const defaults = generateDefaultStudents();
+                setStudents(defaults);
+                setEnrolledCount(defaults.length);
+            } else {
+                setStudents(fetchedStudents);
+                setEnrolledCount(response.data.enrolled_count || fetchedStudents.filter((s: StudentStatus) => s.재학여부 === "O").length);
+            }
         } catch (error) {
             console.error("Failed to fetch tier status:", error);
+            // On error, use default 210 students
+            const defaults = generateDefaultStudents();
+            setStudents(defaults);
+            setEnrolledCount(defaults.length);
         } finally {
             setLoading(false);
         }
