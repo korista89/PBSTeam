@@ -97,7 +97,7 @@ export default function MonthlyReport() {
       </header>
 
       {/* 0. AI Insight */}
-      {data.ai_comment && (
+      {data?.ai_comment && (
           <section className="report-section" style={{ backgroundColor: '#f5f3ff', padding: '15px', borderRadius: '8px', border: '1px solid #ddd' }}>
             <h2 style={{ marginTop: 0, borderLeft: 'none', paddingLeft: 0, color: '#6d28d9' }}>🤖 AI 행동 분석 요약</h2>
             <div style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: '1.5' }}>
