@@ -225,7 +225,7 @@ STUDENT_CODES = [
     "5131", "5132", "5133", "5134", "5135", "5136", "5137",
     "5211", "5212", "5213", "5214", "5215", "5216", "5217", "5221", "5222", "5223", "5224", "5225", "5226", "5227",
     "5231", "5232", "5233", "5234", "5235", "5236", "5237",
-    "6001", "6002", "6003", "6004", "6005"
+    "6001", "6002", "6003", "6004", "6005", "6006"
 ]
 
 def code_to_class_name(code: str) -> str:
@@ -280,6 +280,42 @@ def get_student_status_worksheet():
     except Exception as e:
         print(f"Error accessing TierStatus worksheet: {e}")
         return None
+
+
+def reset_tier_status_sheet():
+    """Delete and recreate TierStatus sheet with all 210 students"""
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Cannot access Google Sheets"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        
+        # Try to delete existing TierStatus sheet
+        try:
+            old_ws = sheet.worksheet("TierStatus")
+            sheet.del_worksheet(old_ws)
+            print("Deleted old TierStatus worksheet")
+        except gspread.WorksheetNotFound:
+            print("No existing TierStatus worksheet to delete")
+        
+        # Create new sheet with 210 students
+        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students...")
+        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=8)
+        
+        # Prepare all data at once for batch update (faster than append_row)
+        all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "현재Tier", "변경일", "메모"]]
+        for idx, code in enumerate(STUDENT_CODES):
+            class_name = code_to_class_name(code)
+            all_data.append([idx + 1, class_name, code, "O", "", "Tier 1", "", ""])
+        
+        # Batch update all rows at once
+        ws.update(all_data, 'A1')
+        
+        return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students", "count": len(STUDENT_CODES)}
+    except Exception as e:
+        print(f"Error resetting TierStatus sheet: {e}")
+        return {"error": str(e)}
 
 
 def fetch_student_status():

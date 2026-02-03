@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from app.services.sheets import (
     fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
-    update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping
+    update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
+    reset_tier_status_sheet
 )
 from pydantic import BaseModel
 from typing import Optional, List
@@ -67,6 +68,14 @@ async def get_beable_mapping():
     """Get BeAble code to student code mapping for data analysis"""
     mapping = get_beable_code_mapping()
     return mapping
+
+@router.post("/reset-sheet")
+async def reset_sheet():
+    """Reset TierStatus sheet with all 210 students (Admin only)"""
+    result = reset_tier_status_sheet()
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
 
 
 # =============================
