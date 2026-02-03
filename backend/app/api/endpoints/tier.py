@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException
-from app.services.sheets import fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily
+from app.services.sheets import (
+    fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
+    update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping
+)
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -14,11 +17,24 @@ class TierUpdateRequest(BaseModel):
     tier: str
     memo: Optional[str] = ""
 
+class EnrollmentUpdateRequest(BaseModel):
+    code: str
+    enrolled: str  # O or X
+
+class BeAbleCodeUpdateRequest(BaseModel):
+    code: str
+    beable_code: str
+
 @router.get("/status")
 async def get_all_status():
-    """Get all students' tier status"""
+    """Get all students' tier status with enrollment count"""
     status = fetch_student_status()
-    return status
+    enrolled_count = get_enrolled_student_count()
+    return {
+        "students": status,
+        "enrolled_count": enrolled_count,
+        "total_count": len(status)
+    }
 
 @router.put("/status")
 async def update_tier(request: TierUpdateRequest):
@@ -27,6 +43,30 @@ async def update_tier(request: TierUpdateRequest):
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
+
+@router.put("/enrollment")
+async def update_enrollment(request: EnrollmentUpdateRequest):
+    """Update a student's enrollment status (O/X)"""
+    if request.enrolled not in ["O", "X"]:
+        raise HTTPException(status_code=400, detail="Enrolled must be O or X")
+    result = update_student_enrollment(request.code, request.enrolled)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+@router.put("/beable")
+async def update_beable(request: BeAbleCodeUpdateRequest):
+    """Update a student's BeAble code for data linking"""
+    result = update_student_beable_code(request.code, request.beable_code)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+@router.get("/beable-mapping")
+async def get_beable_mapping():
+    """Get BeAble code to student code mapping for data analysis"""
+    mapping = get_beable_code_mapping()
+    return mapping
 
 
 # =============================
