@@ -268,22 +268,25 @@ def get_student_status_worksheet():
         try:
             return sheet.worksheet("TierStatus")
         except gspread.WorksheetNotFound:
-            print("Creating 'TierStatus' worksheet with 210 students...")
-            ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=8)
-            # Header row
-            ws.append_row(["번호", "학급", "학생코드", "재학여부", "BeAble코드", "현재Tier", "변경일", "메모"])
-            # Initialize 210 students
+            print("Creating 'TierStatus' worksheet with 210 students (5 tier columns)...")
+            ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=12)
+            # Header row with 5 separate tier columns
+            # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 변경일, 메모
+            all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
             for idx, code in enumerate(STUDENT_CODES):
                 class_name = code_to_class_name(code)
-                ws.append_row([idx + 1, class_name, code, "O", "", "Tier 1", "", ""])
+                # Default: Tier1=O, all others=X
+                all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", "", ""])
+            ws.update(all_data, 'A1')
             return ws
     except Exception as e:
         print(f"Error accessing TierStatus worksheet: {e}")
         return None
 
 
+
 def reset_tier_status_sheet():
-    """Delete and recreate TierStatus sheet with all 210 students"""
+    """Delete and recreate TierStatus sheet with all 210 students (5 tier columns)"""
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Cannot access Google Sheets"}
@@ -299,20 +302,22 @@ def reset_tier_status_sheet():
         except gspread.WorksheetNotFound:
             print("No existing TierStatus worksheet to delete")
         
-        # Create new sheet with 210 students
-        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students...")
-        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=8)
+        # Create new sheet with 210 students and 12 columns
+        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students (5 tier columns)...")
+        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=12)
         
-        # Prepare all data at once for batch update (faster than append_row)
-        all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "현재Tier", "변경일", "메모"]]
+        # Prepare all data at once for batch update
+        # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 변경일, 메모
+        all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
         for idx, code in enumerate(STUDENT_CODES):
             class_name = code_to_class_name(code)
-            all_data.append([idx + 1, class_name, code, "O", "", "Tier 1", "", ""])
+            # Default: Tier1=O, all others=X
+            all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", "", ""])
         
         # Batch update all rows at once
         ws.update(all_data, 'A1')
         
-        return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students", "count": len(STUDENT_CODES)}
+        return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students (5 tier columns)", "count": len(STUDENT_CODES)}
     except Exception as e:
         print(f"Error resetting TierStatus sheet: {e}")
         return {"error": str(e)}
@@ -335,8 +340,12 @@ def fetch_student_status():
         return []
 
 
-def update_student_tier(code: str, new_tier: str, memo: str = ""):
-    """Update a student's tier status"""
+def update_student_tier(code: str, tier_values: dict, memo: str = ""):
+    """
+    Update a student's tier status with 5 separate O/X columns.
+    tier_values: dict with keys 'Tier1', 'Tier2(CICO)', 'Tier2(SST)', 'Tier3', 'Tier3+'
+    Each value should be 'O' or 'X'
+    """
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
@@ -346,14 +355,33 @@ def update_student_tier(code: str, new_tier: str, memo: str = ""):
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         
+        # Column mapping (1-indexed)
+        tier_columns = {
+            'Tier1': 6,
+            'Tier2(CICO)': 7,
+            'Tier2(SST)': 8,
+            'Tier3': 9,
+            'Tier3+': 10,
+        }
+        
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2  # +2 for header and 1-indexing
-                ws.update_cell(row_num, 6, new_tier)    # Column 6: 현재Tier
-                ws.update_cell(row_num, 7, today)       # Column 7: 변경일
+                
+                # Update each tier column
+                for tier_name, col_num in tier_columns.items():
+                    if tier_name in tier_values:
+                        value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
+                        ws.update_cell(row_num, col_num, value)
+                
+                # Update 변경일 (column 11)
+                ws.update_cell(row_num, 11, today)
+                
+                # Update 메모 (column 12)
                 if memo:
-                    ws.update_cell(row_num, 8, memo)    # Column 8: 메모
-                return {"message": f"Tier updated to {new_tier}", "code": code}
+                    ws.update_cell(row_num, 12, memo)
+                
+                return {"message": f"Tier updated for {code}", "code": code, "tiers": tier_values}
         
         return {"error": f"Student code {code} not found"}
     except Exception as e:

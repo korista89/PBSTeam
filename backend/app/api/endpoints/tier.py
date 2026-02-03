@@ -15,7 +15,11 @@ router = APIRouter()
 
 class TierUpdateRequest(BaseModel):
     code: str
-    tier: str
+    tier1: Optional[str] = None  # O or X
+    tier2_cico: Optional[str] = None  # O or X
+    tier2_sst: Optional[str] = None  # O or X
+    tier3: Optional[str] = None  # O or X
+    tier3_plus: Optional[str] = None  # O or X
     memo: Optional[str] = ""
 
 class EnrollmentUpdateRequest(BaseModel):
@@ -39,8 +43,20 @@ async def get_all_status():
 
 @router.put("/status")
 async def update_tier(request: TierUpdateRequest):
-    """Update a student's tier"""
-    result = update_student_tier(request.code, request.tier, request.memo)
+    """Update a student's tier status (5 separate O/X columns)"""
+    tier_values = {}
+    if request.tier1 is not None:
+        tier_values['Tier1'] = request.tier1
+    if request.tier2_cico is not None:
+        tier_values['Tier2(CICO)'] = request.tier2_cico
+    if request.tier2_sst is not None:
+        tier_values['Tier2(SST)'] = request.tier2_sst
+    if request.tier3 is not None:
+        tier_values['Tier3'] = request.tier3
+    if request.tier3_plus is not None:
+        tier_values['Tier3+'] = request.tier3_plus
+    
+    result = update_student_tier(request.code, tier_values, request.memo)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
