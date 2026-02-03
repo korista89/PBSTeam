@@ -96,16 +96,15 @@ export default function MeetingPage() {
                             <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
                         </div>
                     </div>
+                    <div style={{ marginTop: '10px' }}>
+                        <span className={styles.badge} style={{background:'#d32f2f', marginRight: 10, fontSize: '0.9rem', padding: '5px 10px'}}>
+                            🚨 긴급 안건: {data.summary.emergency_count}명
+                        </span>
+                        <span className={styles.badge} style={{background:'#ef6c00', fontSize: '0.9rem', padding: '5px 10px'}}>
+                            ⚠️ Tier 2 진입 대상: {data.summary.tier2_candidate_count}명
+                        </span>
+                    </div>
                 </header>
-                <div>
-                    <span className={styles.badge} style={{background:'#d32f2f', marginRight: 10, fontSize: '0.9rem', padding: '5px 10px'}}>
-                        🚨 긴급 안건: {data.summary.emergency_count}명
-                    </span>
-                    <span className={styles.badge} style={{background:'#ef6c00', fontSize: '0.9rem', padding: '5px 10px'}}>
-                        ⚠️ Tier 2 진입 대상: {data.summary.tier2_candidate_count}명
-                    </span>
-                </div>
-            </header>
 
             <div className={styles.mainLayout}>
                 {/* Sidebar List */}
