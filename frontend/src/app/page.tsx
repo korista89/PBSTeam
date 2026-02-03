@@ -24,48 +24,33 @@ import {
 
 import { DashboardData, ChartData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck } from "./components/AuthProvider";
-import UserHeader from "./components/UserHeader";
+import GlobalNav, { useDateRange } from "./components/GlobalNav";
 
 // Colors for charts
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658"];
 const TIER_COLORS: { [key: string]: string } = { "Tier 1": "#10B981", "Tier 2": "#F59E0B", "Tier 3": "#EF4444" };
-
-const btnStyle = {
-    padding: '0.5rem 1rem',
-    color: 'white',
-    border: 'none',
-    borderRadius: '0.5rem',
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '0.9rem'
-};
 
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   
-  // Date State
-  const today = new Date();
-  const prev = new Date();
-  prev.setDate(today.getDate() - 28);
-  
-  const [startDate, setStartDate] = useState(prev.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
-  // Query State (Triggers fetch only on button click)
-  const [queryStartDate, setQueryStartDate] = useState(prev.toISOString().split('T')[0]);
-  const [queryEndDate, setQueryEndDate] = useState(today.toISOString().split('T')[0]);
+  // Date State from GlobalNav (localStorage)
+  const { startDate, endDate } = useDateRange();
 
   useEffect(() => {
+    // Fetch data when dates are available
+    if (!startDate || !endDate) return;
+    
     const fetchData = async () => {
       try {
         setLoading(true);
         let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
         const params = new URLSearchParams();
-        if (queryStartDate) params.append("start_date", queryStartDate);
-        if (queryEndDate) params.append("end_date", queryEndDate);
+        params.append("start_date", startDate);
+        params.append("end_date", endDate);
         
-        if (params.toString()) url += `?${params.toString()}`;
+        url += `?${params.toString()}`;
 
         const response = await axios.get(url);
         setData(response.data);
@@ -78,7 +63,7 @@ export default function Home() {
     };
 
     fetchData();
-  }, [queryStartDate, queryEndDate]);
+  }, [startDate, endDate]);
 
   // Removed early return for loading to prevent UI unmount
   
@@ -91,37 +76,10 @@ export default function Home() {
   // Handle API error response
   if ('error' in data) {
       return (
+          <AuthCheck>
           <div className={styles.container}>
-              <header className={styles.header}>
-                  <div>
-                      <h1 className={styles.title}>IBSD</h1>
-                      <p className={styles.subtitle}>지능형 행동 지원 대시보드</p>
-                  </div>
-                   <div className={styles.datePicker}>
-                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
-                        ~
-                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
-                        <button 
-                            onClick={() => {
-                                setQueryStartDate(startDate);
-                                setQueryEndDate(endDate);
-                            }}
-                            style={{
-                                padding: '5px 12px',
-                                marginLeft: '8px',
-                                borderRadius: '4px',
-                                border: 'none',
-                                backgroundColor: '#4b5563',
-                                color: 'white',
-                                cursor: 'pointer',
-                                fontWeight: 'bold'
-                            }}
-                        >
-                            🔍 조회
-                        </button>
-                    </div>
-              </header>
-              <main className={styles.main}>
+              <GlobalNav currentPage="dashboard" />
+              <main className={styles.main} style={{ marginTop: '20px' }}>
                   <div className={styles.card} style={{ textAlign: 'center', padding: '3rem' }}>
                       <h2 style={{ color: '#6b7280' }}>데이터가 없습니다 텅! 📭</h2>
                       <p style={{ marginTop: '1rem', color: '#374151' }}>
@@ -131,6 +89,7 @@ export default function Home() {
                   </div>
               </main>
           </div>
+          </AuthCheck>
       );
   }
 
@@ -139,88 +98,9 @@ export default function Home() {
   return (
     <AuthCheck>
     <div className={styles.container}>
-      <header className={styles.header}>
-        <div>
-            <h1 className={styles.title}>🏫 특수학교 PBIS</h1>
-            <p className={styles.subtitle}>통합관리플랫폼 대시보드</p>
-        </div>
-        <UserHeader />
-        <div className={styles.datePicker}>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.dateInput} />
-            ~
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.dateInput} />
-            <button 
-                onClick={() => {
-                    setQueryStartDate(startDate);
-                    setQueryEndDate(endDate);
-                }}
-                style={{
-                    padding: '5px 12px',
-                    marginLeft: '8px',
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: '#4b5563',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                }}
-            >
-                🔍 조회
-            </button>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button 
-                onClick={() => window.location.href='/tier-status'}
-                style={{ ...btnStyle, backgroundColor: '#10b981' }}
-            >
-                📊 Tier별 현황
-            </button>
-            <button 
-                onClick={() => window.location.href='/cico'}
-                style={{ ...btnStyle, backgroundColor: '#f59e0b' }}
-            >
-                📝 CICO 입력
-            </button>
-            <button 
-                onClick={() => window.location.href='/roster'}
-                style={{ ...btnStyle, backgroundColor: '#6366f1' }}
-            >
-                👥 로스터
-            </button>
-            <button 
-                onClick={() => window.location.href='/report'}
-                style={{ ...btnStyle, backgroundColor: '#3b82f6' }}
-            >
-                📄 Tier1 리포트
-            </button>
-            <button 
-                onClick={() => window.location.href='/report/tier2'}
-                style={{ ...btnStyle, backgroundColor: '#ef4444' }}
-            >
-                📋 CICO 리포트
-            </button>
-            <button 
-                onClick={() => window.location.href='/meeting'}
-                style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}
-            >
-                🤝 협의회
-            </button>
-            <button 
-                onClick={() => window.location.href='/protocol'}
-                style={{ ...btnStyle, backgroundColor: '#0ea5e9' }}
-            >
-                📜 프로토콜
-            </button>
-            <button 
-                onClick={() => window.location.href='/admin'}
-                style={{ ...btnStyle, backgroundColor: '#4b5563' }}
-            >
-                ⚙️ 관리자
-            </button>
-        </div>
-      </header>
+      <GlobalNav currentPage="dashboard" />
 
-      <main className={styles.main} style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: loading ? 'none' : 'auto', position: 'relative' }}>
+      <main className={styles.main} style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: loading ? 'none' : 'auto', position: 'relative', marginTop: '20px' }}>
         {loading && data && (
             <div style={{ 
                 position: 'absolute', 

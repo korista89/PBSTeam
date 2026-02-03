@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
+import { AuthCheck, useAuth } from "../components/AuthProvider";
+import GlobalNav from "../components/GlobalNav";
 
 interface StudentStatus {
     Code: string;
@@ -14,6 +16,7 @@ interface StudentStatus {
 }
 
 export default function TierStatusPage() {
+    const { isAdmin } = useAuth();
     const [students, setStudents] = useState<StudentStatus[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState("all");
@@ -150,20 +153,22 @@ export default function TierStatusPage() {
     if (loading) return <div className={styles.loading}>로딩 중...</div>;
 
     return (
+        <AuthCheck>
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div>
-                    <h1 className={styles.title}>📊 Tier별 현황</h1>
-                    <p className={styles.subtitle}>전교생 {students.length}명의 행동지원 단계 관리</p>
+            <GlobalNav currentPage="tier-status" />
+            
+            <div style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <div>
+                        <h2 style={{ margin: 0 }}>📊 Tier별 현황</h2>
+                        <p style={{ color: '#666', margin: '5px 0 0 0' }}>전교생 {students.length}명의 행동지원 단계 관리</p>
+                    </div>
+                    {!isAdmin() && (
+                        <div style={{ padding: '8px 16px', backgroundColor: '#fef3c7', borderRadius: '8px', color: '#b45309', fontSize: '0.9rem' }}>
+                            🔒 조회 전용 (관리자만 편집 가능)
+                        </div>
+                    )}
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => window.location.href='/'} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                        ← 대시보드
-                    </button>
-                </div>
-            </header>
-
-            <main className={styles.main}>
                 {/* Summary Cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
                     <div 
@@ -234,7 +239,7 @@ export default function TierStatusPage() {
                                 <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>학급</th>
                                 <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>현재 Tier</th>
                                 <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb' }}>변경일</th>
-                                <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>관리</th>
+                                {isAdmin() && <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #e5e7eb' }}>관리</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -268,6 +273,7 @@ export default function TierStatusPage() {
                                         )}
                                     </td>
                                     <td style={{ padding: '10px', color: '#999', fontSize: '0.85rem' }}>{s.ChangedDate || '-'}</td>
+                                    {isAdmin() && (
                                     <td style={{ padding: '10px', textAlign: 'center' }}>
                                         {editingCode === s.Code ? (
                                             <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
@@ -298,12 +304,14 @@ export default function TierStatusPage() {
                                             </button>
                                         )}
                                     </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
-            </main>
+            </div>
         </div>
+        </AuthCheck>
     );
 }
