@@ -14,17 +14,25 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
     # --- Get BeAble code mapping (only enrolled students with BeAble codes in TierStatus) ---
     beable_mapping = get_beable_code_mapping()  # {beable_code: {'student_code': '1011', ...}}
     
-    # Create reverse lookup: BeAble code to 4-digit student code
-    beable_to_student_code = {k: v['student_code'] for k, v in beable_mapping.items()}
-    beable_codes_set = set(beable_mapping.keys())
+    # Create lookup of valid student codes (from TierStatus where BeAble exists)
+    valid_student_codes = set(v['student_code'] for v in beable_mapping.values())
     
-    # --- Filter: Only include records where the student has a BeAble code in TierStatus ---
-    # Check if '학생명' matches a BeAble code (name = BeAble code in 시트1)
-    if '학생명' in df.columns:
-        # Only keep rows where 학생명 (BeAble code) is in our mapping
-        df = df[df['학생명'].astype(str).isin(beable_codes_set)]
-        # Replace BeAble code with 4-digit student code
-        df['학생코드'] = df['학생명'].astype(str).apply(lambda x: beable_to_student_code.get(x, x))
+    # Also create BeAble to student code lookup
+    beable_to_student_code = {k: v['student_code'] for k, v in beable_mapping.items()}
+    
+    # --- Filter: Only include records where student is in TierStatus with BeAble code ---
+    # Check multiple possible column names for student identifier
+    student_id_column = None
+    for col in ['코드번호', '학생코드', '학생명']:
+        if col in df.columns:
+            student_id_column = col
+            break
+    
+    if student_id_column:
+        # Filter: keep only rows where student code is in valid_student_codes
+        df = df[df[student_id_column].astype(str).isin(valid_student_codes)]
+        # Create student code column for display
+        df['학생코드'] = df[student_id_column].astype(str)
     else:
         df['학생코드'] = '-'
     
