@@ -19,20 +19,32 @@ async def debug_data():
     raw_data = fetch_all_records()
     beable_mapping = get_beable_code_mapping()
     
-    # Get first 3 records and columns
-    sample_records = raw_data[:3] if raw_data else []
+    # Get columns
     columns = list(raw_data[0].keys()) if raw_data else []
     
-    # Check 코드번호 values
-    code_values = [str(r.get('코드번호', 'N/A')) for r in raw_data[:5]] if raw_data else []
+    # Check 코드번호 values (all unique)
+    all_code_values = list(set(str(r.get('코드번호', 'N/A')) for r in raw_data)) if raw_data else []
     
-    # Check BeAble mapping keys
-    beable_keys = list(beable_mapping.keys())[:5] if beable_mapping else []
+    # Check BeAble mapping keys (all)
+    all_beable_keys = list(beable_mapping.keys()) if beable_mapping else []
+    
+    # Check intersection (matching codes)
+    matching_codes = set(all_code_values) & set(all_beable_keys)
+    
+    # Count matched records
+    matched_records = [r for r in raw_data if str(r.get('코드번호', '')) in all_beable_keys]
+    
+    # Check date range
+    sample_dates = [str(r.get('행동발생 날짜', 'N/A')) for r in raw_data[:10]] if raw_data else []
     
     return {
         "시트1_total_records": len(raw_data),
         "시트1_columns": columns,
-        "시트1_sample_코드번호": code_values,
-        "TierStatus_BeAble_codes_sample": beable_keys,
-        "TierStatus_total_with_beable": len(beable_mapping)
+        "시트1_unique_코드번호_count": len(all_code_values),
+        "시트1_unique_코드번호": all_code_values[:20],
+        "TierStatus_BeAble_codes": all_beable_keys,
+        "TierStatus_total_with_beable": len(beable_mapping),
+        "matching_codes": list(matching_codes),
+        "matched_records_count": len(matched_records),
+        "sample_dates": sample_dates
     }
