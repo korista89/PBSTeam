@@ -34,17 +34,25 @@ async def debug_data():
     # Count matched records
     matched_records = [r for r in raw_data if str(r.get('코드번호', '')) in all_beable_keys]
     
-    # Check date range
-    sample_dates = [str(r.get('행동발생 날짜', 'N/A')) for r in raw_data[:10]] if raw_data else []
+    # Check March records specifically
+    march_records = [r for r in raw_data if str(r.get('행동발생 날짜', '')).startswith('2025-03')]
+    march_codes = list(set(str(r.get('코드번호', '')) for r in march_records))
+    march_matched = [c for c in march_codes if c in all_beable_keys]
+    march_unmatched = [c for c in march_codes if c not in all_beable_keys]
+    
+    # March matched records count
+    march_matched_records = [r for r in march_records if str(r.get('코드번호', '')) in all_beable_keys]
     
     return {
         "시트1_total_records": len(raw_data),
         "시트1_columns": columns,
         "시트1_unique_코드번호_count": len(all_code_values),
-        "시트1_unique_코드번호": all_code_values[:20],
-        "TierStatus_BeAble_codes": all_beable_keys,
         "TierStatus_total_with_beable": len(beable_mapping),
-        "matching_codes": list(matching_codes),
+        "matching_codes_count": len(matching_codes),
         "matched_records_count": len(matched_records),
-        "sample_dates": sample_dates
+        "march_총_records": len(march_records),
+        "march_코드번호": march_codes,
+        "march_TierStatus일치": march_matched,
+        "march_TierStatus불일치": march_unmatched,
+        "march_일치_records_count": len(march_matched_records)
     }
