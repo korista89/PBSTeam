@@ -6,10 +6,33 @@ from app.services.sheets import (
     update_monthly_cico_cells,
     update_student_cico_settings,
     toggle_tier2_status,
+    get_holidays_from_config,
+    get_business_days,
+    get_cico_report_data,
 )
 
 router = APIRouter()
 
+
+@router.get("/business-days")
+async def get_cico_business_days(month: int = 3, year: int = 2025):
+    """Get business days (weekdays excluding holidays) for a given month."""
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 1-12")
+    holidays = get_holidays_from_config()
+    days = get_business_days(year, month, holidays)
+    return {"month": month, "year": year, "business_days": days, "holidays": holidays}
+
+
+@router.get("/report")
+async def get_cico_report(month: int = 3):
+    """Get T2 CICO report data for decision making."""
+    if month < 3 or month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 3-12")
+    data = get_cico_report_data(month)
+    if "error" in data:
+        raise HTTPException(status_code=500, detail=data["error"])
+    return data
 
 @router.get("/monthly")
 async def get_cico_monthly(month: int = 3):

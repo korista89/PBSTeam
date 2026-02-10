@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.services.analysis import get_analytics_data
-from app.services.sheets import fetch_all_records, get_beable_code_mapping
+from app.services.sheets import fetch_all_records, get_beable_code_mapping, get_tier3_report_data
 
 router = APIRouter()
 
@@ -12,6 +12,16 @@ async def get_dashboard_summary(start_date: str = None, end_date: str = None):
 async def get_meeting_analysis(target_date: str = None):
     from app.services.analysis import analyze_meeting_data
     return analyze_meeting_data(target_date)
+
+@router.get("/tier3-report")
+async def get_tier3_report(start_date: str = None, end_date: str = None):
+    """Get Tier3 report data for decision making."""
+    data = get_tier3_report_data(start_date, end_date)
+    if "error" in data:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=data["error"])
+    return data
+
 
 @router.get("/debug")
 async def debug_data():

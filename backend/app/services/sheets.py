@@ -550,26 +550,43 @@ def add_cico_daily(data: dict):
 # =============================
 
 def get_holidays_from_config():
-    """Get holidays list from 설정(Config) sheet"""
+    """Get holidays list from '날짜 관리' sheet (fallback to '설정(Config)')"""
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return []
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
+        
+        # Try '날짜 관리' sheet first
+        config_ws = None
         try:
-            config_ws = sheet.worksheet("설정(Config)")
+            config_ws = sheet.worksheet("날짜 관리")
         except gspread.WorksheetNotFound:
+            # Create '날짜 관리' sheet with instructions
+            try:
+                config_ws = sheet.add_worksheet(title="날짜 관리", rows=100, cols=3)
+                config_ws.update('A1', [
+                    ["공휴일 날짜 (YYYY-MM-DD)", "공휴일 이름", "비고"],
+                    ["※ 아래에 공휴일을 입력하세요", "", ""],
+                ])
+                print("Created '날짜 관리' sheet")
+            except Exception as create_err:
+                print(f"Error creating 날짜 관리 sheet: {create_err}")
+                # Fallback to 설정(Config)
+                try:
+                    config_ws = sheet.worksheet("설정(Config)")
+                except gspread.WorksheetNotFound:
+                    return []
+        
+        if not config_ws:
             return []
         
-        last_row = config_ws.row_count
-        if last_row < 3:
-            return []
-        
-        raw = config_ws.col_values(1)  # Column A = holidays
+        raw = config_ws.col_values(1)  # Column A = holiday dates
         holidays = []
         for val in raw[2:]:  # Skip header rows
-            if val:
-                holidays.append(str(val).strip())
+            val = str(val).strip()
+            if val and not val.startswith("※"):
+                holidays.append(val)
         return holidays
     except Exception as e:
         print(f"Error getting holidays: {e}")
@@ -582,7 +599,17 @@ def get_business_days(year: int, month: int, holidays: list = None):
     if holidays is None:
         holidays = []
     
-    holiday_set = set(holidays)
+    # Normalize holidays to support both YYYY-MM-DD and MM-DD formats
+    holiday_full = set()
+    holiday_short = set()
+    for h in holidays:
+        h = h.strip()
+        if len(h) == 10:  # YYYY-MM-DD
+            holiday_full.add(h)
+            holiday_short.add(h[5:])  # MM-DD
+        elif len(h) == 5:  # MM-DD
+            holiday_short.add(h)
+    
     dates = []
     
     try:
@@ -595,7 +622,7 @@ def get_business_days(year: int, month: int, holidays: list = None):
         date_str = d.strftime("%Y-%m-%d")
         short_date = d.strftime("%m-%d")
         
-        if day_of_week < 5 and date_str not in holiday_set:
+        if day_of_week < 5 and date_str not in holiday_full and short_date not in holiday_short:
             dates.append(short_date)
         
         d += datetime.timedelta(days=1)
@@ -915,6 +942,330 @@ def get_student_dashboard_analysis(student_code: str):
     except Exception as e:
         print(f"Error fetching dashboard analysis: {e}")
         return {"error": str(e)}
+
+
+def get_cico_report_data(month: int):
+    """
+    Get T2 CICO report data for decision making.
+    Returns per-student data with monthly trends and system recommendations.
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        
+        # Get current month data
+        try:
+            ws = sheet.worksheet(month_name)
+        except gspread.WorksheetNotFound:
+            return {"error": f"'{month_name}' 시트가 없습니다."}
+        
+        all_values = ws.get_all_values()
+        if not all_values or len(all_values) < 2:
+            return {"students": [], "summary": {}}
+        
+        headers = all_values[0]
+        
+        # Column indices
+        col_idx = {}
+        for name in ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도",
+                      "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "팀 협의 내용"]:
+            if name in headers:
+                col_idx[name] = headers.index(name)
+        
+        # Get multi-month trends (last 3 months including current)
+        months_list = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
+        month_idx = months_list.index(month_name) if month_name in months_list else -1
+        
+        # Collect rates from previous months
+        prev_rates = {}  # {code: [rate_list]}
+        if month_idx >= 0:
+            start_m = max(0, month_idx - 2)
+            for mi in range(start_m, month_idx):
+                m_name = months_list[mi]
+                try:
+                    m_ws = sheet.worksheet(m_name)
+                    m_rows = m_ws.get_all_values()
+                    if len(m_rows) < 2:
+                        continue
+                    m_headers = m_rows[0]
+                    m_tier_idx = m_headers.index("Tier2") if "Tier2" in m_headers else -1
+                    m_code_idx = m_headers.index("학생코드") if "학생코드" in m_headers else -1
+                    m_rate_idx = m_headers.index("수행/발생률") if "수행/발생률" in m_headers else -1
+                    
+                    if m_tier_idx >= 0 and m_code_idx >= 0 and m_rate_idx >= 0:
+                        for row in m_rows[1:]:
+                            if len(row) > max(m_tier_idx, m_code_idx, m_rate_idx):
+                                if row[m_tier_idx] == "O":
+                                    code = str(row[m_code_idx]).strip()
+                                    rate = row[m_rate_idx]
+                                    if code not in prev_rates:
+                                        prev_rates[code] = []
+                                    prev_rates[code].append({"month": m_name, "rate": rate})
+                except gspread.WorksheetNotFound:
+                    continue
+        
+        # Build student report data
+        tier2_idx = col_idx.get("Tier2", -1)
+        students = []
+        total_rate_sum = 0
+        total_rate_count = 0
+        achieved_count = 0
+        
+        for row in all_values[1:]:
+            if tier2_idx < 0 or len(row) <= tier2_idx:
+                continue
+            if str(row[tier2_idx]).strip() != "O":
+                continue
+            
+            code = str(row[col_idx.get("학생코드", 2)]).strip() if col_idx.get("학생코드", 2) < len(row) else ""
+            rate_str = row[col_idx["수행/발생률"]] if "수행/발생률" in col_idx and col_idx["수행/발생률"] < len(row) else ""
+            achieved = row[col_idx["목표 달성 여부"]] if "목표 달성 여부" in col_idx and col_idx["목표 달성 여부"] < len(row) else ""
+            goal_str = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else ""
+            team_talk = row[col_idx["팀 협의 내용"]] if "팀 협의 내용" in col_idx and col_idx["팀 협의 내용"] < len(row) else ""
+            
+            # Parse rate
+            rate_num = None
+            if rate_str and rate_str != "-":
+                try:
+                    r = float(rate_str.replace("%", ""))
+                    if r <= 1:
+                        rate_num = r * 100
+                    else:
+                        rate_num = r
+                except ValueError:
+                    pass
+            
+            if rate_num is not None:
+                total_rate_sum += rate_num
+                total_rate_count += 1
+            
+            if achieved == "O":
+                achieved_count += 1
+            
+            # Monthly trend (prev months + current)
+            trend = list(prev_rates.get(code, []))
+            trend.append({"month": month_name, "rate": rate_str})
+            
+            # Decision recommendation
+            decision = "CICO 유지"
+            decision_color = "#3b82f6"
+            
+            if rate_num is not None:
+                # Check consecutive months of high performance
+                all_rates = []
+                for t in trend:
+                    try:
+                        r = float(t["rate"].replace("%", ""))
+                        if r <= 1:
+                            r = r * 100
+                        all_rates.append(r)
+                    except (ValueError, AttributeError):
+                        all_rates.append(None)
+                
+                recent_high = all(r is not None and r >= 80 for r in all_rates[-2:]) if len(all_rates) >= 2 else False
+                
+                if recent_high:
+                    decision = "Tier1 하향 권장"
+                    decision_color = "#10b981"
+                elif rate_num >= 80:
+                    decision = "CICO 유지 (양호)"
+                    decision_color = "#3b82f6"
+                elif rate_num >= 50:
+                    decision = "CICO 수정 검토"
+                    decision_color = "#f59e0b"
+                elif rate_num < 50:
+                    decision = "Tier3 상향 검토"
+                    decision_color = "#ef4444"
+            
+            students.append({
+                "code": code,
+                "class": row[col_idx.get("학급", 1)] if col_idx.get("학급", 1) < len(row) else "",
+                "target_behavior": row[col_idx.get("목표행동", 4)] if col_idx.get("목표행동", 4) < len(row) else "",
+                "behavior_type": row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else "",
+                "scale": row[col_idx.get("척도", 6)] if col_idx.get("척도", 6) < len(row) else "",
+                "goal_criteria": goal_str,
+                "rate": rate_str,
+                "rate_num": rate_num,
+                "achieved": achieved,
+                "trend": trend,
+                "decision": decision,
+                "decision_color": decision_color,
+                "team_talk": team_talk,
+            })
+        
+        avg_rate = round(total_rate_sum / total_rate_count, 1) if total_rate_count > 0 else 0
+        
+        return {
+            "month": month_name,
+            "students": students,
+            "summary": {
+                "total_students": len(students),
+                "avg_rate": avg_rate,
+                "achieved_count": achieved_count,
+                "not_achieved_count": len(students) - achieved_count,
+            }
+        }
+    
+    except Exception as e:
+        print(f"Error getting CICO report data: {e}")
+        return {"error": str(e)}
+
+
+def get_tier3_report_data(start_date: str = None, end_date: str = None):
+    """
+    Get Tier3 report data for decision making.
+    Returns Tier3 student list with crisis behavior stats.
+    """
+    # 1. Get Tier3 students from TierStatus
+    ws = get_student_status_worksheet()
+    if not ws:
+        return {"error": "TierStatus sheet not accessible"}
+    
+    try:
+        records = ws.get_all_records()
+    except Exception as e:
+        return {"error": str(e)}
+    
+    tier3_students = []
+    for r in records:
+        if str(r.get("Tier3", "X")).strip() == "O" or str(r.get("Tier3+", "X")).strip() == "O":
+            is_tier3_plus = str(r.get("Tier3+", "X")).strip() == "O"
+            tier3_students.append({
+                "code": str(r.get("학생코드", "")),
+                "class": str(r.get("학급", "")),
+                "tier": "Tier3+" if is_tier3_plus else "Tier3",
+                "beable_code": str(r.get("BeAble코드", "")),
+                "memo": str(r.get("메모", "")),
+            })
+    
+    if not tier3_students:
+        return {
+            "students": [],
+            "summary": {"total_students": 0, "total_incidents": 0, "avg_intensity": 0},
+        }
+    
+    # 2. Get behavior data from main sheet
+    import pandas as pd
+    raw_data = fetch_all_records()
+    if not raw_data:
+        # Return students without behavior data
+        for s in tier3_students:
+            s.update({"incidents": 0, "max_intensity": 0, "avg_intensity": 0,
+                      "behavior_types": [], "decision": "Tier3 유지", "decision_color": "#ef4444"})
+        return {
+            "students": tier3_students,
+            "summary": {"total_students": len(tier3_students), "total_incidents": 0, "avg_intensity": 0},
+        }
+    
+    df = pd.DataFrame(raw_data)
+    
+    # Date filtering
+    if '행동발생 날짜' in df.columns:
+        df['date_obj'] = pd.to_datetime(df['행동발생 날짜'], errors='coerce')
+        if start_date:
+            df = df[df['date_obj'] >= pd.to_datetime(start_date)]
+        if end_date:
+            df = df[df['date_obj'] <= pd.to_datetime(end_date)]
+    
+    if '강도' in df.columns:
+        df['강도'] = pd.to_numeric(df['강도'], errors='coerce').fillna(0)
+    
+    # Map BeAble codes to student codes
+    beable_mapping = get_beable_code_mapping()
+    beable_to_code = {k: v['student_code'] for k, v in beable_mapping.items()}
+    
+    # Build code set for Tier3 students
+    tier3_codes = {s["code"] for s in tier3_students}
+    tier3_beable = {b for b, info in beable_mapping.items() if info['student_code'] in tier3_codes}
+    
+    total_incidents = 0
+    total_intensity_sum = 0
+    total_intensity_count = 0
+    
+    for student in tier3_students:
+        code = student["code"]
+        beable = student["beable_code"]
+        
+        # Filter behavior data for this student
+        if '코드번호' in df.columns and beable:
+            s_df = df[df['코드번호'].astype(str) == beable]
+        else:
+            s_df = pd.DataFrame()
+        
+        incidents = len(s_df)
+        max_intensity = int(s_df['강도'].max()) if not s_df.empty and '강도' in s_df.columns else 0
+        avg_intensity = round(float(s_df['강도'].mean()), 1) if not s_df.empty and '강도' in s_df.columns else 0
+        
+        # Behavior type breakdown
+        behavior_types = []
+        if not s_df.empty and '행동유형' in s_df.columns:
+            bt_counts = s_df['행동유형'].value_counts()
+            behavior_types = [{"name": k, "value": int(v)} for k, v in bt_counts.items()]
+        
+        # Weekly trend
+        weekly_trend = []
+        if not s_df.empty and 'date_obj' in s_df.columns:
+            s_df_copy = s_df.copy()
+            s_df_copy['week'] = s_df_copy['date_obj'].dt.isocalendar().week.astype(int)
+            s_df_copy['year'] = s_df_copy['date_obj'].dt.year
+            w_counts = s_df_copy.groupby(['year', 'week']).size().reset_index(name='count')
+            for _, row in w_counts.iterrows():
+                weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
+        
+        total_incidents += incidents
+        if incidents > 0:
+            total_intensity_sum += avg_intensity * incidents
+            total_intensity_count += incidents
+        
+        # Decision logic
+        decision = "Tier3 유지"
+        decision_color = "#ef4444"
+        
+        if incidents == 0:
+            decision = "Tier2(CICO) 하향 검토"
+            decision_color = "#10b981"
+        elif max_intensity >= 5 or incidents >= 10:
+            if student["tier"] == "Tier3+":
+                decision = "Tier3+ 유지 (위기)"
+                decision_color = "#7c3aed"
+            else:
+                decision = "Tier3+ 상향 검토"
+                decision_color = "#7c3aed"
+        elif incidents <= 2 and max_intensity < 3:
+            decision = "Tier2(CICO) 하향 검토"
+            decision_color = "#10b981"
+        elif incidents <= 4:
+            decision = "Tier3 유지 (관찰)"
+            decision_color = "#f59e0b"
+        
+        student.update({
+            "incidents": incidents,
+            "max_intensity": max_intensity,
+            "avg_intensity": avg_intensity,
+            "behavior_types": behavior_types,
+            "weekly_trend": weekly_trend,
+            "decision": decision,
+            "decision_color": decision_color,
+        })
+    
+    # Sort: Tier3+ first, then by incidents desc
+    tier3_students.sort(key=lambda x: (0 if x["tier"] == "Tier3+" else 1, -x["incidents"]))
+    
+    overall_avg = round(total_intensity_sum / total_intensity_count, 1) if total_intensity_count > 0 else 0
+    
+    return {
+        "students": tier3_students,
+        "summary": {
+            "total_students": len(tier3_students),
+            "total_incidents": total_incidents,
+            "avg_intensity": overall_avg,
+        },
+    }
+
 
 def initialize_dashboard_if_missing():
     """

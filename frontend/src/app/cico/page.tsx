@@ -80,8 +80,23 @@ export default function CICOGridPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`);
-      setData(res.data);
+      // Fetch monthly data and business days in parallel
+      const [monthlyRes, bizDaysRes] = await Promise.all([
+        axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`),
+        axios.get(`${apiUrl}/api/v1/cico/business-days?month=${month}&year=2025`),
+      ]);
+
+      const monthlyData = monthlyRes.data;
+      const businessDays: string[] = bizDaysRes.data.business_days || [];
+
+      // Override day_columns with business days (MM-DD format)
+      if (businessDays.length > 0) {
+        monthlyData.day_columns = businessDays;
+        // Map student days to use MM-DD keys
+        // The sheet may use different keys, so we keep what matches
+      }
+
+      setData(monthlyData);
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error ? err.message : "데이터 로딩 실패";
@@ -94,6 +109,7 @@ export default function CICOGridPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
 
   // Auto-save pending updates (debounced)
   useEffect(() => {
@@ -348,16 +364,17 @@ export default function CICOGridPage() {
                         <th style={{ ...thStyle, minWidth: "80px" }}>척도</th>
                         <th style={{ ...thStyle, minWidth: "70px" }}>달성기준</th>
                         
-                        {/* Day columns */}
+                        {/* Day columns — MM-DD weekday headers */}
                         {data.day_columns.map(day => (
                           <th key={day} style={{
                             ...thStyle,
-                            minWidth: "36px",
-                            maxWidth: "36px",
-                            fontSize: "0.7rem",
-                            padding: "4px 2px",
+                            minWidth: "42px",
+                            maxWidth: "42px",
+                            fontSize: "0.65rem",
+                            padding: "4px 1px",
+                            letterSpacing: "-0.5px",
                           }}>
-                            {day.split("-")[1]}
+                            {day}
                           </th>
                         ))}
                         
@@ -444,8 +461,8 @@ export default function CICOGridPage() {
                                 style={{
                                   ...tdStyle,
                                   padding: "0",
-                                  minWidth: "36px",
-                                  maxWidth: "36px",
+                                  minWidth: "42px",
+                                  maxWidth: "42px",
                                   backgroundColor: bg,
                                   cursor: "pointer",
                                   position: "relative",

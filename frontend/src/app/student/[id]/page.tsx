@@ -10,7 +10,7 @@ import {
 import styles from "../../page.module.css"; 
 import { StudentData, ChartData } from "../../types";
 import { AuthCheck } from "../../components/AuthProvider";
-import GlobalNav from "../../components/GlobalNav";
+import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 
 // Reusing global styles for consistency
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
@@ -27,6 +27,7 @@ export default function StudentDetail() {
   const params = useParams();
   const router = useRouter();
   const studentName = decodeURIComponent(params.id as string);
+  const { startDate, endDate } = useDateRange();
   
   const [data, setData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,12 +38,16 @@ export default function StudentDetail() {
   const [analysisLoading, setAnalysisLoading] = useState(true);
 
   useEffect(() => {
-    if (!studentName) return;
+    if (!studentName || !startDate || !endDate) return;
 
     const fetchData = async () => {
       try {
+        setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}`);
+        const params = new URLSearchParams();
+        params.append("start_date", startDate);
+        params.append("end_date", endDate);
+        const response = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}?${params.toString()}`);
         setData(response.data);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
@@ -54,7 +59,7 @@ export default function StudentDetail() {
     };
 
     fetchData();
-  }, [studentName]);
+  }, [studentName, startDate, endDate]);
 
   useEffect(() => {
      if (!data?.profile?.student_code) return;
