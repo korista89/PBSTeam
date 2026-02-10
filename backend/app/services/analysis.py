@@ -173,7 +173,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
     }
 
 
-def get_student_analytics(student_name: str):
+def get_student_analytics(student_name: str, start_date: str = None, end_date: str = None):
     raw_data = fetch_all_records()
     if not raw_data:
         return {"error": "No data found"}
@@ -188,10 +188,8 @@ def get_student_analytics(student_name: str):
     resolved_code = "-"
     
     # Strategy 2: If name not found, the input might be a student code (e.g. "2611")
-    # Reverse-lookup: student_code → BeAble code → search 시트1 by 코드번호
     if student_df.empty and '코드번호' in df.columns:
         beable_mapping = get_beable_code_mapping()
-        # Build reverse map: student_code → beable_code
         reverse_map = {}
         for beable_code, info in beable_mapping.items():
             sc = info.get('student_code', '')
@@ -205,70 +203,149 @@ def get_student_analytics(student_name: str):
             if not student_df.empty:
                 resolved_name = student_df['학생명'].iloc[0]
     
-    # Strategy 3: Try partial match (in case of encoding issues)
+    # Strategy 3: Try partial match
     if student_df.empty:
         student_df = df[df['학생명'].str.contains(student_name, na=False)].copy()
         if not student_df.empty:
             resolved_name = student_df['학생명'].iloc[0]
     
+    empty_result = {
+        "profile": {
+            "name": student_name, "student_code": student_name,
+            "class": "-", "tier": "Tier 1", "total_incidents": 0, "avg_intensity": 0
+        },
+        "abc_data": [], "functions": [], "cico_trend": [], "weekly_trend": [],
+        "behavior_types": [], "location_stats": [], "time_stats": [],
+        "weekday_dist": [], "monthly_trend": [], "daily_intensity": [],
+        "separation_stats": [], "daily_report_freq": [], "monthly_report_freq": []
+    }
+    
     if student_df.empty:
-        # Return minimal profile — student exists in TierStatus but has no behavior records
-        return {
-            "profile": {
-                "name": student_name,
-                "student_code": student_name,
-                "class": "-",
-                "tier": "Tier 1",
-                "total_incidents": 0,
-                "avg_intensity": 0
-            },
-            "abc_data": [],
-            "functions": [],
-            "cico_trend": []
-        }
+        return empty_result
 
     # Numeric conversion
     if '강도' in student_df.columns:
         student_df['강도'] = pd.to_numeric(student_df['강도'], errors='coerce').fillna(0)
     
+    # Date parsing & filtering
+    if '행동발생 날짜' in student_df.columns:
+        student_df['date_obj'] = pd.to_datetime(student_df['행동발생 날짜'], errors='coerce')
+        if start_date:
+            student_df = student_df[student_df['date_obj'] >= pd.to_datetime(start_date)]
+        if end_date:
+            student_df = student_df[student_df['date_obj'] <= pd.to_datetime(end_date)]
+    
+    if student_df.empty:
+        empty_result["profile"]["name"] = resolved_name
+        empty_result["profile"]["student_code"] = resolved_code if resolved_code != "-" else student_name
+        return empty_result
+
     # -- Profile Info --
     total_incidents = len(student_df)
     avg_intensity = float(student_df['강도'].mean()) if not student_df.empty else 0
     student_class = student_df['코드번호'].iloc[0] if '코드번호' in student_df.columns else "-"
     
-    # Tier Calculation
     tier = "Tier 1"
     if total_incidents >= 6 or student_df['강도'].max() >= 5:
         tier = "Tier 3"
     elif total_incidents >= 3:
         tier = "Tier 2"
 
-    # -- ABC Analysis (Scatter Plot: Time vs Location vs Antecedent) --
-    # Simplified ABC: X=Time, Y=Location, Size=Intensity, Color=Function (Proxy for Antecedent/Consequence)
+    # -- ABC Analysis --
     abc_data = []
     if '시간대' in student_df.columns and '장소' in student_df.columns:
         for _, row in student_df.iterrows():
             abc_data.append({
                 "x": row.get('시간대', 'Unknown'),
                 "y": row.get('장소', 'Unknown'),
-                "z": int(row.get('강도', 1)), # Size
+                "z": int(row.get('강도', 1)),
                 "function": row.get('기능', 'Unknown')
             })
             
-    # -- Function Pie --
+    # -- Function Stats --
     function_stats = []
     if '기능' in student_df.columns:
         f_counts = student_df['기능'].value_counts()
         function_stats = [{"name": k, "value": int(v)} for k, v in f_counts.items()]
 
-    # -- CICO Trend (Daily Counts) --
+    # -- Daily CICO Trend --
     cico_trend = []
     if '행동발생 날짜' in student_df.columns:
         d_counts = student_df['행동발생 날짜'].value_counts().sort_index()
         cico_trend = [{"date": k, "count": int(v)} for k, v in d_counts.items()]
 
-    # -- Get Student Code (Map from BeAble Code) --
-    # Use already-resolved code if available, otherwise look it up
+    # -- Weekly Trend --
+    weekly_trend = []
+    if 'date_obj' in student_df.columns:
+        student_df['week'] = student_df['date_obj'].dt.isocalendar().week.astype(int)
+        student_df['year'] = student_df['date_obj'].dt.year
+        w_counts = student_df.groupby(['year', 'week']).size().reset_index(name='count')
+        for _, row in w_counts.iterrows():
+            weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
+
+    # -- Behavior Type Stats --
+    behavior_types = []
+    if '행동유형' in student_df.columns:
+        b_counts = student_df['행동유형'].value_counts()
+        behavior_types = [{"name": k, "value": int(v)} for k, v in b_counts.items()]
+
+    # -- Location Stats --
+    location_stats = []
+    if '장소' in student_df.columns:
+        l_counts = student_df['장소'].value_counts()
+        location_stats = [{"name": k, "value": int(v)} for k, v in l_counts.items()]
+
+    # -- Time Distribution --
+    time_stats = []
+    if '시간대' in student_df.columns:
+        t_counts = student_df['시간대'].value_counts()
+        time_stats = [{"name": k, "value": int(v)} for k, v in t_counts.items()]
+
+    # -- Weekday Distribution --
+    weekday_dist = []
+    weekday_names = ['월', '화', '수', '목', '금', '토', '일']
+    if 'date_obj' in student_df.columns:
+        student_df['weekday'] = student_df['date_obj'].dt.dayofweek
+        wd_counts = student_df['weekday'].value_counts().sort_index()
+        for wd, cnt in wd_counts.items():
+            weekday_dist.append({"name": weekday_names[int(wd)] if int(wd) < 7 else str(wd), "value": int(cnt)})
+
+    # -- Monthly Trend --
+    monthly_trend = []
+    if 'date_obj' in student_df.columns:
+        student_df['month_label'] = student_df['date_obj'].dt.strftime('%Y-%m')
+        m_counts = student_df.groupby('month_label').size().reset_index(name='count')
+        monthly_trend = [{"month": row['month_label'], "count": int(row['count'])} for _, row in m_counts.iterrows()]
+
+    # -- Daily Intensity --
+    daily_intensity = []
+    if '행동발생 날짜' in student_df.columns and '강도' in student_df.columns:
+        d_intensity = student_df.groupby('행동발생 날짜')['강도'].mean().sort_index()
+        daily_intensity = [{"date": k, "intensity": round(float(v), 1)} for k, v in d_intensity.items()]
+
+    # -- Separation (분리지도) Stats --
+    separation_stats = []
+    if '분리지도 여부' in student_df.columns and 'date_obj' in student_df.columns:
+        student_df['sep_month'] = student_df['date_obj'].dt.strftime('%Y-%m')
+        sep_df = student_df[student_df['분리지도 여부'] == 'O']
+        if not sep_df.empty:
+            s_counts = sep_df.groupby('sep_month').size().reset_index(name='count')
+            separation_stats = [{"month": row['sep_month'], "count": int(row['count'])} for _, row in s_counts.iterrows()]
+
+    # -- Daily Report Frequency (일별 행동발생 보고 빈도) --
+    daily_report_freq = []
+    if '입력일' in student_df.columns:
+        r_counts = student_df['입력일'].value_counts().sort_index()
+        daily_report_freq = [{"date": k, "count": int(v)} for k, v in r_counts.items()]
+
+    # -- Monthly Report Frequency (월별 행동발생 보고 빈도) --
+    monthly_report_freq = []
+    if 'date_obj' in student_df.columns:
+        student_df['report_month'] = student_df['date_obj'].dt.strftime('%Y-%m')
+        mr_counts = student_df.groupby('report_month').size().reset_index(name='count')
+        monthly_report_freq = [{"month": row['report_month'], "count": int(row['count'])} for _, row in mr_counts.iterrows()]
+
+    # -- Get Student Code --
     student_code_val = resolved_code if resolved_code != "-" else "-"
     if student_code_val == "-" and '코드번호' in student_df.columns:
         beable_mapping = get_beable_code_mapping()
@@ -287,7 +364,17 @@ def get_student_analytics(student_name: str):
         },
         "abc_data": abc_data,
         "functions": function_stats,
-        "cico_trend": cico_trend
+        "cico_trend": cico_trend,
+        "weekly_trend": weekly_trend,
+        "behavior_types": behavior_types,
+        "location_stats": location_stats,
+        "time_stats": time_stats,
+        "weekday_dist": weekday_dist,
+        "monthly_trend": monthly_trend,
+        "daily_intensity": daily_intensity,
+        "separation_stats": separation_stats,
+        "daily_report_freq": daily_report_freq,
+        "monthly_report_freq": monthly_report_freq
     }
 
 from datetime import timedelta, datetime

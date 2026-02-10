@@ -1,14 +1,17 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.services.analysis import get_student_analytics
 from typing import Optional
 
 router = APIRouter()
 
 @router.get("/{student_name}")
-async def get_student_detail(student_name: str):
-    data = get_student_analytics(student_name)
+async def get_student_detail(
+    student_name: str,
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+):
+    data = get_student_analytics(student_name, start_date=start_date, end_date=end_date)
     if "error" in data:
-        # If student not found, 404
         if data["error"] == "Student not found":
             raise HTTPException(status_code=404, detail="Student not found")
         raise HTTPException(status_code=500, detail=data["error"])

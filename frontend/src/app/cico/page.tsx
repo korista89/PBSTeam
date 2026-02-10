@@ -53,7 +53,7 @@ export default function CICOGridPage() {
   const [month, setMonth] = useState(3);
   const [data, setData] = useState<MonthlyData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
   const [pendingUpdates, setPendingUpdates] = useState<
     { row: number; col: number; value: string }[]
@@ -101,7 +101,7 @@ export default function CICOGridPage() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     
     saveTimerRef.current = setTimeout(async () => {
-      setSaving(true);
+
       setSaveStatus("저장 중...");
       try {
         await axios.post(`${apiUrl}/api/v1/cico/monthly/update`, {
@@ -115,7 +115,7 @@ export default function CICOGridPage() {
         console.error("Save failed:", err);
         setSaveStatus("⚠ 저장 실패");
       } finally {
-        setSaving(false);
+
       }
     }, 1500);
     // eslint-disable-next-line react-hooks/exhaustive-deps

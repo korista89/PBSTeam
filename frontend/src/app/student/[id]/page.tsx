@@ -10,7 +10,7 @@ import {
 import styles from "../../page.module.css"; 
 import { StudentData, ChartData } from "../../types";
 import { AuthCheck } from "../../components/AuthProvider";
-import GlobalNav, { useDateRange } from "../../components/GlobalNav";
+import GlobalNav from "../../components/GlobalNav";
 
 // Reusing global styles for consistency
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
@@ -33,7 +33,7 @@ export default function StudentDetail() {
   const [error, setError] = useState("");
 
   // New State for Analysis Data
-  const [analysisData, setAnalysisData] = useState<{ history: any[], team_talk: string } | null>(null);
+  const [analysisData, setAnalysisData] = useState<{ history: { month: string; rate: string }[], team_talk: string } | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
 
   useEffect(() => {
