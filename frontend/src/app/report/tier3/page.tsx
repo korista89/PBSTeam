@@ -60,14 +60,19 @@ export default function Tier3Report() {
       : "http://localhost:8000";
 
   const fetchData = useCallback(async () => {
-    if (!startDate || !endDate) return;
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
-      params.append("start_date", startDate);
-      params.append("end_date", endDate);
-      const res = await axios.get(`${apiUrl}/api/v1/analytics/tier3-report?${params.toString()}`);
+      if (startDate && endDate) {
+        params.append("start_date", startDate);
+        params.append("end_date", endDate);
+      }
+      const queryString = params.toString();
+      const url = queryString 
+        ? `${apiUrl}/api/v1/analytics/tier3-report?${queryString}`
+        : `${apiUrl}/api/v1/analytics/tier3-report`;
+      const res = await axios.get(url);
       setData(res.data);
     } catch (err: unknown) {
       console.error(err);

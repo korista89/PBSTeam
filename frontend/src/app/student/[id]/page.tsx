@@ -38,16 +38,22 @@ export default function StudentDetail() {
   const [analysisLoading, setAnalysisLoading] = useState(true);
 
   useEffect(() => {
-    if (!studentName || !startDate || !endDate) return;
+    if (!studentName) return;
 
     const fetchData = async () => {
       try {
         setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const params = new URLSearchParams();
-        params.append("start_date", startDate);
-        params.append("end_date", endDate);
-        const response = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}?${params.toString()}`);
+        if (startDate && endDate) {
+          params.append("start_date", startDate);
+          params.append("end_date", endDate);
+        }
+        const queryString = params.toString();
+        const url = queryString 
+          ? `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}?${queryString}`
+          : `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}`;
+        const response = await axios.get(url);
         setData(response.data);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
