@@ -1,395 +1,602 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
 import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav from "../components/GlobalNav";
 
+interface DayValue {
+  [day: string]: string;
+}
+
 interface CICOStudent {
-    Code: string;
-    Name: string;
-    Class: string;
+  row: number;
+  번호: string;
+  학급: string;
+  학생코드: string;
+  Tier2: string;
+  목표행동: string;
+  "목표행동 유형": string;
+  척도: string;
+  "입력 기준": string;
+  "목표 달성 기준": string;
+  수행_발생률: string;
+  목표_달성_여부: string;
+  days: DayValue;
 }
 
-interface CICORecord {
-    Date: string;
-    StudentCode: string;
-    TargetBehavior1: string;
-    TargetBehavior2: string;
-    AchievementRate: number;
-    TeacherMemo: string;
+interface MonthlyData {
+  month: string;
+  day_columns: string[];
+  students: CICOStudent[];
+  col_map: { [key: string]: number };
 }
 
-export default function CICOInputPage() {
-    const [tier2Students, setTier2Students] = useState<CICOStudent[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedStudent, setSelectedStudent] = useState<string>("");
-    const [target1, setTarget1] = useState<string>("");
-    const [target2, setTarget2] = useState<string>("");
-    const [memo, setMemo] = useState("");
-    const [saving, setSaving] = useState(false);
-    const [todayDate, setTodayDate] = useState(new Date().toISOString().split('T')[0]);
-    const [recentRecords, setRecentRecords] = useState<CICORecord[]>([]);
-    const [todayCompleted, setTodayCompleted] = useState(false);
+// Scale options from Apps Script
+const SCALE_OPTIONS = ["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "1~100회", "1~100분"];
+const TYPE_OPTIONS = ["증가 목표행동", "감소 목표행동"];
+const CRITERIA_INCREASE = ["90% 이상", "80% 이상", "70% 이상", "60% 이상", "50% 이상"];
+const CRITERIA_DECREASE = ["10% 이하", "20% 이하", "30% 이하", "40% 이하", "50% 이하"];
 
-    useEffect(() => {
-        fetchTier2Students();
-    }, []);
+function getInputOptions(scale: string): string[] {
+  switch (scale) {
+    case "O/X(발생)": return ["O", "X"];
+    case "0점/1점/2점": return ["0", "1", "2"];
+    case "0~5": return ["0", "1", "2", "3", "4", "5"];
+    case "0~7교시": return ["0", "1", "2", "3", "4", "5", "6", "7"];
+    default: return []; // Free input for 회/분
+  }
+}
 
-    useEffect(() => {
-        if (selectedStudent) {
-            fetchRecentRecords(selectedStudent);
-        }
-    }, [selectedStudent]);
+export default function CICOGridPage() {
+  const [month, setMonth] = useState(3);
+  const [data, setData] = useState<MonthlyData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [pendingUpdates, setPendingUpdates] = useState<
+    { row: number; col: number; value: string }[]
+  >([]);
+  const [editingCell, setEditingCell] = useState<{ row: number; day: string } | null>(null);
+  const [editingSettings, setEditingSettings] = useState<{ row: number; field: string } | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveStatus, setSaveStatus] = useState<string>("");
 
-    const fetchTier2Students = async () => {
-        try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
-            
-            // New 5-tier structure: filter students where Tier2(CICO) = 'O'
-            interface TierStatusRecord { 
-                학생코드: string; 
-                학급: string; 
-                재학여부: string;
-                'Tier2(CICO)': string;
-            }
-            
-            const students = response.data.students || response.data || [];
-            const tier2Cico = students.filter((s: TierStatusRecord) => 
-                s.재학여부 === 'O' && s['Tier2(CICO)'] === 'O'
-            );
-            
-            setTier2Students(tier2Cico.map((s: TierStatusRecord) => ({
-                Code: s.학생코드,
-                Name: s.학생코드,  // Use code as name (no names displayed)
-                Class: s.학급 || ""
-            })));
-            
-            if (tier2Cico.length > 0) {
-                setSelectedStudent(tier2Cico[0].학생코드);
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const apiUrl = typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+    : "http://localhost:8000";
 
-    const fetchRecentRecords = async (code: string) => {
-        try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            const response = await axios.get(`${apiUrl}/api/v1/tier/cico?student_code=${code}`);
-            const records = response.data.slice(-7) as CICORecord[]; // Last 7 records
-            setRecentRecords(records);
-            
-            // Check if today's entry exists for this student
-            const today = new Date().toISOString().split('T')[0];
-            const todayEntry = records.find((r: CICORecord) => r.Date === today);
-            setTodayCompleted(!!todayEntry);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleSubmit = async () => {
-        if (!selectedStudent || !target1 || !target2) {
-            alert("모든 항목을 입력해주세요.");
-            return;
-        }
-
-        try {
-            setSaving(true);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            
-            const user = localStorage.getItem("user");
-            const enteredBy = user ? JSON.parse(user).id : "";
-
-            await axios.post(`${apiUrl}/api/v1/tier/cico`, {
-                date: todayDate,
-                student_code: selectedStudent,
-                target1: target1,
-                target2: target2,
-                memo: memo,
-                entered_by: enteredBy
-            });
-
-            alert("CICO 기록이 저장되었습니다!");
-            setTarget1("");
-            setTarget2("");
-            setMemo("");
-            fetchRecentRecords(selectedStudent);
-        } catch (err) {
-            console.error(err);
-            alert("저장 실패");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    if (loading) return <div className={styles.loading}>로딩 중...</div>;
-
-    if (tier2Students.length === 0) {
-        return (
-            <div className={styles.container}>
-                <header className={styles.header}>
-                    <div>
-                        <h1 className={styles.title}>📝 CICO 일일 기록</h1>
-                        <p className={styles.subtitle}>Tier 2 학생 표적 행동 체크</p>
-                    </div>
-                    <button onClick={() => window.location.href='/'} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                        ← 대시보드
-                    </button>
-                </header>
-                <main className={styles.main}>
-                    <div className={styles.card} style={{ textAlign: 'center', padding: '40px' }}>
-                        <p style={{ fontSize: '1.2rem', color: '#666' }}>
-                            현재 Tier 2 대상 학생이 없습니다.
-                        </p>
-                        <p style={{ color: '#999', marginTop: '10px' }}>
-                            Tier별 현황 페이지에서 학생을 Tier 2로 변경해주세요.
-                        </p>
-                        <button 
-                            onClick={() => window.location.href='/tier-status'}
-                            style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                        >
-                            Tier별 현황 가기
-                        </button>
-                    </div>
-                </main>
-            </div>
-        );
+  // Determine current month on load based on today's date
+  useEffect(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    if (currentMonth >= 3 && currentMonth <= 12) {
+      setMonth(currentMonth);
     }
+  }, []);
 
-    const currentStudent = tier2Students.find(s => s.Code === selectedStudent);
-    const achievementRate = recentRecords.length > 0 
-        ? Math.round(recentRecords.reduce((sum, r) => sum + (r.AchievementRate || 0), 0) / recentRecords.length)
-        : 0;
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`);
+      setData(res.data);
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : "데이터 로딩 실패";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [month, apiUrl]);
 
-    return (
-        <AuthCheck>
-        <div className={styles.container}>
-            <GlobalNav currentPage="cico" />
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-            <main className={styles.main} style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <div>
-                        <h2 style={{ margin: 0 }}>📝 CICO 일일 기록</h2>
-                        <p style={{ color: '#666', margin: '5px 0 0 0' }}>Tier 2 학생 표적 행동 체크 (2개 표적행동)</p>
-                    </div>
-                    {todayCompleted && (
-                        <span style={{ 
-                            padding: '6px 12px', 
-                            backgroundColor: '#d1fae5', 
-                            color: '#059669',
-                            borderRadius: '20px',
-                            fontSize: '0.85rem',
-                            fontWeight: 'bold'
-                        }}>
-                            ✓ 오늘 기록 완료
-                        </span>
-                    )}
+  // Auto-save pending updates (debounced)
+  useEffect(() => {
+    if (pendingUpdates.length === 0) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    
+    saveTimerRef.current = setTimeout(async () => {
+      setSaving(true);
+      setSaveStatus("저장 중...");
+      try {
+        await axios.post(`${apiUrl}/api/v1/cico/monthly/update`, {
+          month,
+          updates: pendingUpdates,
+        });
+        setPendingUpdates([]);
+        setSaveStatus("✓ 저장 완료");
+        setTimeout(() => setSaveStatus(""), 2000);
+      } catch (err) {
+        console.error("Save failed:", err);
+        setSaveStatus("⚠ 저장 실패");
+      } finally {
+        setSaving(false);
+      }
+    }, 1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingUpdates]);
+
+  // Handle cell value change
+  const handleCellChange = (student: CICOStudent, dayLabel: string, value: string) => {
+    if (!data) return;
+    
+    // Find column index from col_map and day_columns
+    const goalCriteriaIdx = data.col_map["목표 달성 기준"] ?? 8;
+    const dayIndex = data.day_columns.indexOf(dayLabel);
+    if (dayIndex === -1) return;
+    
+    const colIdx = goalCriteriaIdx + 1 + dayIndex + 1; // +1 for 0-to-1-based conversion
+    
+    // Update local state
+    setData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        students: prev.students.map(s =>
+          s.row === student.row
+            ? { ...s, days: { ...s.days, [dayLabel]: value } }
+            : s
+        ),
+      };
+    });
+    
+    // Queue the update
+    setPendingUpdates(prev => [
+      ...prev.filter(u => !(u.row === student.row && u.col === colIdx)),
+      { row: student.row, col: colIdx, value },
+    ]);
+    
+    setEditingCell(null);
+  };
+
+  // Handle settings change (목표행동, 유형, 척도, etc.)
+  const handleSettingsChange = async (studentCode: string, field: string, value: string) => {
+    try {
+      await axios.post(`${apiUrl}/api/v1/cico/settings`, {
+        month,
+        student_code: studentCode,
+        settings: { [field]: value },
+      });
+      
+      // Update local state
+      setData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          students: prev.students.map(s =>
+            s.학생코드 === studentCode
+              ? { ...s, [field]: value }
+              : s
+          ),
+        };
+      });
+      
+      setSaveStatus("✓ 설정 저장 완료");
+      setTimeout(() => setSaveStatus(""), 2000);
+    } catch (err) {
+      console.error("Settings save failed:", err);
+      setSaveStatus("⚠ 설정 저장 실패");
+    }
+    setEditingSettings(null);
+  };
+
+  // Get cell background color based on value and type
+  const getCellColor = (value: string, type: string): string => {
+    if (!value) return "transparent";
+    
+    if (type === "증가 목표행동") {
+      if (value === "O" || value === "2") return "#d1fae5"; // Green
+      if (value === "X" || value === "0") return "#fee2e2"; // Red
+      if (value === "1") return "#fef3c7"; // Yellow
+    } else if (type === "감소 목표행동") {
+      if (value === "X" || value === "0") return "#d1fae5"; // Green (opposite)
+      if (value === "O") return "#fee2e2"; // Red
+      if (value === "1") return "#fef3c7"; // Yellow
+    }
+    return "#f3f4f6";
+  };
+
+  // Rate color
+  const getRateColor = (rate: string, achieved: string): string => {
+    if (achieved === "O") return "#059669";
+    if (achieved === "X") return "#dc2626";
+    return "#666";
+  };
+
+  // Format rate
+  const formatRate = (rate: string): string => {
+    if (!rate || rate === "-") return "-";
+    const num = parseFloat(rate);
+    if (isNaN(num)) return rate;
+    if (num <= 1) return `${Math.round(num * 100)}%`;
+    return `${Math.round(num)}%`;
+  };
+
+  return (
+    <AuthCheck>
+      <div className={styles.container}>
+        <GlobalNav currentPage="cico" />
+
+        <main className={styles.main} style={{ marginTop: "10px", maxWidth: "100%", padding: "0 10px" }}>
+          {/* Header */}
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "15px",
+            flexWrap: "wrap",
+            gap: "10px",
+          }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>📋 CICO 월별 입력</h2>
+              <p style={{ color: "#666", margin: "3px 0 0", fontSize: "0.85rem" }}>
+                Tier2 학생 목표행동 일일 기록 (월별 시트)
+              </p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {/* Month Selector */}
+              <label style={{ fontWeight: "bold", fontSize: "0.9rem" }}>월 선택:</label>
+              <select
+                value={month}
+                onChange={e => setMonth(Number(e.target.value))}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "2px solid #6366f1",
+                  fontWeight: "bold",
+                  fontSize: "0.95rem",
+                  backgroundColor: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                  <option key={m} value={m}>{m}월</option>
+                ))}
+              </select>
+
+              {/* Save Status */}
+              {saveStatus && (
+                <span style={{
+                  padding: "5px 12px",
+                  borderRadius: "15px",
+                  fontSize: "0.8rem",
+                  fontWeight: "bold",
+                  backgroundColor: saveStatus.includes("완료") ? "#d1fae5" : saveStatus.includes("실패") ? "#fee2e2" : "#fef3c7",
+                  color: saveStatus.includes("완료") ? "#059669" : saveStatus.includes("실패") ? "#dc2626" : "#b45309",
+                }}>
+                  {saveStatus}
+                </span>
+              )}
+
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  backgroundColor: "#6366f1",
+                  color: "white",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                }}
+              >
+                🔄 새로고침
+              </button>
+            </div>
+          </div>
+
+          {/* Loading / Error */}
+          {loading && (
+            <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>
+              📊 {month}월 데이터 로딩 중...
+            </div>
+          )}
+
+          {error && (
+            <div style={{ textAlign: "center", padding: "50px", color: "#dc2626" }}>
+              ⚠ {error}
+            </div>
+          )}
+
+          {/* Grid Table */}
+          {!loading && !error && data && (
+            <>
+              {data.students.length === 0 ? (
+                <div style={{
+                  textAlign: "center",
+                  padding: "50px",
+                  backgroundColor: "white",
+                  borderRadius: "12px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                }}>
+                  <p style={{ fontSize: "1.1rem", color: "#666" }}>
+                    {month}월에 Tier2(CICO) 대상 학생이 없습니다.
+                  </p>
+                  <p style={{ color: "#999", marginTop: "8px", fontSize: "0.9rem" }}>
+                    월별 시트에서 Tier2 열을 &quot;O&quot;로 변경하거나,<br/>
+                    대시보드에서 학생코드를 등록해주세요.
+                  </p>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                    {/* Input Form */}
-                    <div className={styles.card}>
-                        <h2 style={{ marginBottom: '20px' }}>
-                            오늘의 기록
-                            {todayCompleted && <span style={{ fontSize: '0.8rem', marginLeft: '10px', color: '#f59e0b' }}>(수정 시 기존 기록에 추가됨)</span>}
-                        </h2>
+              ) : (
+                <div style={{
+                  overflowX: "auto",
+                  borderRadius: "12px",
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
+                  backgroundColor: "white",
+                }}>
+                  <table style={{
+                    borderCollapse: "collapse",
+                    width: "max-content",
+                    minWidth: "100%",
+                    fontSize: "0.8rem",
+                  }}>
+                    <thead>
+                      <tr>
+                        {/* Fixed columns */}
+                        <th style={thStyle}>번호</th>
+                        <th style={{ ...thStyle, minWidth: "100px" }}>학급</th>
+                        <th style={thStyle}>코드</th>
+                        <th style={{ ...thStyle, minWidth: "120px" }}>목표행동</th>
+                        <th style={{ ...thStyle, minWidth: "90px" }}>유형</th>
+                        <th style={{ ...thStyle, minWidth: "80px" }}>척도</th>
+                        <th style={{ ...thStyle, minWidth: "70px" }}>달성기준</th>
                         
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>날짜</label>
-                            <input 
-                                type="date" 
-                                value={todayDate}
-                                onChange={(e) => setTodayDate(e.target.value)}
-                                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd', width: '100%' }}
-                            />
-                        </div>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>대상 학생</label>
-                            <select 
-                                value={selectedStudent}
-                                onChange={(e) => setSelectedStudent(e.target.value)}
-                                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd', width: '100%' }}
-                            >
-                                {tier2Students.map(s => (
-                                    <option key={s.Code} value={s.Code}>
-                                        {s.Code} - {s.Name} ({s.Class})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>표적 행동 1</label>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button 
-                                    onClick={() => setTarget1('O')}
-                                    style={{ 
-                                        flex: 1, 
-                                        padding: '15px', 
-                                        backgroundColor: target1 === 'O' ? '#10b981' : '#f3f4f6',
-                                        color: target1 === 'O' ? 'white' : '#333',
-                                        border: 'none', 
-                                        borderRadius: '8px', 
-                                        fontSize: '1.2rem',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    ⭕ 달성
-                                </button>
-                                <button 
-                                    onClick={() => setTarget1('X')}
-                                    style={{ 
-                                        flex: 1, 
-                                        padding: '15px', 
-                                        backgroundColor: target1 === 'X' ? '#ef4444' : '#f3f4f6',
-                                        color: target1 === 'X' ? 'white' : '#333',
-                                        border: 'none', 
-                                        borderRadius: '8px', 
-                                        fontSize: '1.2rem',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    ❌ 미달성
-                                </button>
-                            </div>
-                        </div>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>표적 행동 2</label>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button 
-                                    onClick={() => setTarget2('O')}
-                                    style={{ 
-                                        flex: 1, 
-                                        padding: '15px', 
-                                        backgroundColor: target2 === 'O' ? '#10b981' : '#f3f4f6',
-                                        color: target2 === 'O' ? 'white' : '#333',
-                                        border: 'none', 
-                                        borderRadius: '8px', 
-                                        fontSize: '1.2rem',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    ⭕ 달성
-                                </button>
-                                <button 
-                                    onClick={() => setTarget2('X')}
-                                    style={{ 
-                                        flex: 1, 
-                                        padding: '15px', 
-                                        backgroundColor: target2 === 'X' ? '#ef4444' : '#f3f4f6',
-                                        color: target2 === 'X' ? 'white' : '#333',
-                                        border: 'none', 
-                                        borderRadius: '8px', 
-                                        fontSize: '1.2rem',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    ❌ 미달성
-                                </button>
-                            </div>
-                        </div>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>메모 (선택)</label>
-                            <textarea 
-                                value={memo}
-                                onChange={(e) => setMemo(e.target.value)}
-                                placeholder="특이사항이 있으면 입력하세요..."
-                                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd', width: '100%', minHeight: '80px', resize: 'vertical' }}
-                            />
-                        </div>
-
-                        <button 
-                            onClick={handleSubmit}
-                            disabled={saving}
-                            style={{ 
-                                width: '100%', 
-                                padding: '15px', 
-                                backgroundColor: saving ? '#9ca3af' : '#6366f1',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                cursor: saving ? 'not-allowed' : 'pointer'
-                            }}
-                        >
-                            {saving ? "저장 중..." : "💾 기록 저장"}
-                        </button>
-                    </div>
-
-                    {/* Recent Records & Stats */}
-                    <div>
-                        {/* Student Stats */}
-                        <div className={styles.card} style={{ marginBottom: '20px' }}>
-                            <h2 style={{ marginBottom: '15px' }}>
-                                {currentStudent?.Name || selectedStudent} 학생 현황
-                            </h2>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                <div style={{ textAlign: 'center', padding: '15px', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
-                                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#6366f1' }}>{recentRecords.length}</div>
-                                    <div style={{ color: '#666', fontSize: '0.9rem' }}>총 기록 수</div>
-                                </div>
-                                <div style={{ textAlign: 'center', padding: '15px', backgroundColor: achievementRate >= 80 ? '#d1fae5' : achievementRate >= 50 ? '#fef3c7' : '#fee2e2', borderRadius: '8px' }}>
-                                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: achievementRate >= 80 ? '#059669' : achievementRate >= 50 ? '#b45309' : '#dc2626' }}>{achievementRate}%</div>
-                                    <div style={{ color: '#666', fontSize: '0.9rem' }}>평균 달성률</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Recent Records */}
-                        <div className={styles.card}>
-                            <h2 style={{ marginBottom: '15px' }}>최근 기록</h2>
-                            {recentRecords.length === 0 ? (
-                                <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>아직 기록이 없습니다.</p>
+                        {/* Day columns */}
+                        {data.day_columns.map(day => (
+                          <th key={day} style={{
+                            ...thStyle,
+                            minWidth: "36px",
+                            maxWidth: "36px",
+                            fontSize: "0.7rem",
+                            padding: "4px 2px",
+                          }}>
+                            {day.split("-")[1]}
+                          </th>
+                        ))}
+                        
+                        {/* Summary columns */}
+                        <th style={{ ...thStyle, minWidth: "60px", backgroundColor: "#e0e7ff" }}>수행률</th>
+                        <th style={{ ...thStyle, minWidth: "50px", backgroundColor: "#e0e7ff" }}>달성</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.students.map(student => (
+                        <tr key={student.학생코드} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                          {/* Fixed info cells */}
+                          <td style={tdStyle}>{student.번호}</td>
+                          <td style={{ ...tdStyle, fontSize: "0.75rem", textAlign: "left" }}>{student.학급}</td>
+                          <td style={{ ...tdStyle, fontWeight: "bold", color: "#6366f1" }}>{student.학생코드}</td>
+                          
+                          {/* Editable: 목표행동 */}
+                          <td
+                            style={{ ...tdStyle, cursor: "pointer", textAlign: "left" }}
+                            onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}
+                          >
+                            {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
+                              <input
+                                autoFocus
+                                defaultValue={student.목표행동}
+                                onBlur={e => handleSettingsChange(student.학생코드, "목표행동", e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                style={{ width: "100%", padding: "2px 4px", border: "1px solid #6366f1", borderRadius: "4px", fontSize: "0.8rem" }}
+                              />
                             ) : (
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr style={{ backgroundColor: '#f9fafb' }}>
-                                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>날짜</th>
-                                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>행동1</th>
-                                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>행동2</th>
-                                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>달성률</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {recentRecords.map((r, idx) => (
-                                            <tr key={idx}>
-                                                <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{r.Date}</td>
-                                                <td style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
-                                                    <span style={{ color: r.TargetBehavior1 === 'O' ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                                                        {r.TargetBehavior1 === 'O' ? '⭕' : '❌'}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
-                                                    <span style={{ color: r.TargetBehavior2 === 'O' ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                                                        {r.TargetBehavior2 === 'O' ? '⭕' : '❌'}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #f3f4f6', fontWeight: 'bold' }}>
-                                                    {r.AchievementRate}%
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                              student.목표행동 || <span style={{ color: "#ccc" }}>클릭하여 입력</span>
                             )}
-                        </div>
-                    </div>
+                          </td>
+                          
+                          {/* Editable: 유형 */}
+                          <td style={{ ...tdStyle, cursor: "pointer" }}>
+                            <select
+                              value={student["목표행동 유형"]}
+                              onChange={e => handleSettingsChange(student.학생코드, "목표행동 유형", e.target.value)}
+                              style={{ border: "none", background: "transparent", fontSize: "0.75rem", cursor: "pointer", width: "100%" }}
+                            >
+                              {TYPE_OPTIONS.map(opt => (
+                                <option key={opt} value={opt}>{opt.replace("목표행동", "")}</option>
+                              ))}
+                            </select>
+                          </td>
+                          
+                          {/* Editable: 척도 */}
+                          <td style={{ ...tdStyle, cursor: "pointer" }}>
+                            <select
+                              value={student.척도}
+                              onChange={e => handleSettingsChange(student.학생코드, "척도", e.target.value)}
+                              style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
+                            >
+                              {SCALE_OPTIONS.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </td>
+                          
+                          {/* Editable: 달성기준 */}
+                          <td style={{ ...tdStyle, cursor: "pointer" }}>
+                            <select
+                              value={student["목표 달성 기준"]}
+                              onChange={e => handleSettingsChange(student.학생코드, "목표 달성 기준", e.target.value)}
+                              style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
+                            >
+                              {(student["목표행동 유형"] === "감소 목표행동" ? CRITERIA_DECREASE : CRITERIA_INCREASE).map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </td>
+                          
+                          {/* Day cells */}
+                          {data.day_columns.map(day => {
+                            const val = student.days[day] || "";
+                            const isEditing = editingCell?.row === student.row && editingCell?.day === day;
+                            const options = getInputOptions(student.척도);
+                            const bg = getCellColor(val, student["목표행동 유형"]);
+                            
+                            return (
+                              <td
+                                key={day}
+                                style={{
+                                  ...tdStyle,
+                                  padding: "0",
+                                  minWidth: "36px",
+                                  maxWidth: "36px",
+                                  backgroundColor: bg,
+                                  cursor: "pointer",
+                                  position: "relative",
+                                }}
+                                onClick={() => {
+                                  if (options.length > 0 && !isEditing) {
+                                    // For fixed options, cycle through values
+                                    if (options.length <= 3) {
+                                      const currentIdx = options.indexOf(val);
+                                      const nextVal = currentIdx === -1 ? options[0]
+                                        : currentIdx === options.length - 1 ? "" : options[currentIdx + 1];
+                                      handleCellChange(student, day, nextVal);
+                                    } else {
+                                      setEditingCell({ row: student.row, day });
+                                    }
+                                  } else if (options.length === 0) {
+                                    setEditingCell({ row: student.row, day });
+                                  }
+                                }}
+                              >
+                                {isEditing ? (
+                                  options.length > 0 ? (
+                                    <select
+                                      autoFocus
+                                      value={val}
+                                      onChange={e => handleCellChange(student, day, e.target.value)}
+                                      onBlur={() => setEditingCell(null)}
+                                      style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        border: "2px solid #6366f1",
+                                        fontSize: "0.75rem",
+                                        textAlign: "center",
+                                      }}
+                                    >
+                                      <option value="">-</option>
+                                      {options.map(o => (
+                                        <option key={o} value={o}>{o}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      autoFocus
+                                      type="number"
+                                      defaultValue={val}
+                                      onBlur={e => handleCellChange(student, day, e.target.value)}
+                                      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                      style={{
+                                        width: "100%",
+                                        border: "2px solid #6366f1",
+                                        fontSize: "0.75rem",
+                                        textAlign: "center",
+                                        padding: "2px",
+                                      }}
+                                    />
+                                  )
+                                ) : (
+                                  <div style={{
+                                    padding: "4px 2px",
+                                    textAlign: "center",
+                                    fontWeight: val ? "bold" : "normal",
+                                    color: val ? "#333" : "#ccc",
+                                    fontSize: "0.75rem",
+                                    minHeight: "24px",
+                                    lineHeight: "24px",
+                                  }}>
+                                    {val || "·"}
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                          
+                          {/* Summary: 수행/발생률 */}
+                          <td style={{
+                            ...tdStyle,
+                            fontWeight: "bold",
+                            backgroundColor: "#f0f4ff",
+                            color: getRateColor(student.수행_발생률, student.목표_달성_여부),
+                          }}>
+                            {formatRate(student.수행_발생률)}
+                          </td>
+                          
+                          {/* Summary: 달성여부 */}
+                          <td style={{
+                            ...tdStyle,
+                            fontWeight: "bold",
+                            backgroundColor: student.목표_달성_여부 === "O" ? "#d1fae5" : student.목표_달성_여부 === "X" ? "#fee2e2" : "#f9fafb",
+                            color: student.목표_달성_여부 === "O" ? "#059669" : student.목표_달성_여부 === "X" ? "#dc2626" : "#999",
+                            fontSize: "1rem",
+                          }}>
+                            {student.목표_달성_여부 === "O" ? "✅" : student.목표_달성_여부 === "X" ? "❌" : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-            </main>
-        </div>
-        </AuthCheck>
-    );
+              )}
+
+              {/* Legend */}
+              <div style={{
+                marginTop: "15px",
+                display: "flex",
+                gap: "15px",
+                fontSize: "0.8rem",
+                color: "#666",
+                flexWrap: "wrap",
+              }}>
+                <span>
+                  <span style={{ display: "inline-block", width: "14px", height: "14px", backgroundColor: "#d1fae5", borderRadius: "3px", marginRight: "4px", verticalAlign: "middle" }}></span>
+                  성공
+                </span>
+                <span>
+                  <span style={{ display: "inline-block", width: "14px", height: "14px", backgroundColor: "#fee2e2", borderRadius: "3px", marginRight: "4px", verticalAlign: "middle" }}></span>
+                  미달성
+                </span>
+                <span>
+                  <span style={{ display: "inline-block", width: "14px", height: "14px", backgroundColor: "#fef3c7", borderRadius: "3px", marginRight: "4px", verticalAlign: "middle" }}></span>
+                  부분달성
+                </span>
+                <span style={{ marginLeft: "auto", color: "#999" }}>
+                  💡 날짜 셀을 클릭하면 입력/수정됩니다 | O/X 셀은 클릭으로 순환 전환
+                </span>
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+    </AuthCheck>
+  );
 }
+
+// Shared styles
+const thStyle: React.CSSProperties = {
+  padding: "8px 6px",
+  textAlign: "center",
+  backgroundColor: "#4338ca",
+  color: "white",
+  fontWeight: "bold",
+  fontSize: "0.75rem",
+  position: "sticky",
+  top: 0,
+  whiteSpace: "nowrap",
+  borderRight: "1px solid rgba(255,255,255,0.2)",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "4px 6px",
+  textAlign: "center",
+  borderRight: "1px solid #f0f0f0",
+  whiteSpace: "nowrap",
+  fontSize: "0.8rem",
+};

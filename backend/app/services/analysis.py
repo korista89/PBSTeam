@@ -187,7 +187,20 @@ def get_student_analytics(student_name: str):
     student_df = df[df['학생명'] == student_name].copy()
     
     if student_df.empty:
-        return {"error": "Student not found"}
+        # Return minimal profile instead of error — student exists but has no behavior records
+        return {
+            "profile": {
+                "name": student_name,
+                "student_code": "-",
+                "class": "-",
+                "tier": "Tier 1",
+                "total_incidents": 0,
+                "avg_intensity": 0
+            },
+            "abc_data": [],
+            "functions": [],
+            "cico_trend": []
+        }
 
     # Numeric conversion
     if '강도' in student_df.columns:

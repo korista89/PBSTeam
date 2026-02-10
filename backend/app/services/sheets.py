@@ -545,6 +545,301 @@ def add_cico_daily(data: dict):
         return {"error": str(e)}
 
 
+# =============================
+# CICO Monthly Grid APIs
+# =============================
+
+def get_holidays_from_config():
+    """Get holidays list from 설정(Config) sheet"""
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return []
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            config_ws = sheet.worksheet("설정(Config)")
+        except gspread.WorksheetNotFound:
+            return []
+        
+        last_row = config_ws.row_count
+        if last_row < 3:
+            return []
+        
+        raw = config_ws.col_values(1)  # Column A = holidays
+        holidays = []
+        for val in raw[2:]:  # Skip header rows
+            if val:
+                holidays.append(str(val).strip())
+        return holidays
+    except Exception as e:
+        print(f"Error getting holidays: {e}")
+        return []
+
+
+def get_business_days(year: int, month: int, holidays: list = None):
+    """Get list of business day strings (MM-DD) for a given month, excluding weekends and holidays."""
+    import datetime
+    if holidays is None:
+        holidays = []
+    
+    holiday_set = set(holidays)
+    dates = []
+    
+    try:
+        d = datetime.date(year, month, 1)
+    except ValueError:
+        return []
+    
+    while d.month == month:
+        day_of_week = d.weekday()  # 0=Mon, 5=Sat, 6=Sun
+        date_str = d.strftime("%Y-%m-%d")
+        short_date = d.strftime("%m-%d")
+        
+        if day_of_week < 5 and date_str not in holiday_set:
+            dates.append(short_date)
+        
+        d += datetime.timedelta(days=1)
+    
+    return dates
+
+
+def get_monthly_cico_data(month: int):
+    """
+    Get all student data from a monthly sheet for the CICO grid view.
+    Returns structured data with headers, students, and day columns.
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        
+        try:
+            ws = sheet.worksheet(month_name)
+        except gspread.WorksheetNotFound:
+            return {"error": f"'{month_name}' 시트가 없습니다."}
+        
+        all_values = ws.get_all_values()
+        if not all_values:
+            return {"error": "Empty sheet"}
+        
+        headers = all_values[0]
+        
+        # Find key column indices
+        col_map = {}
+        key_cols = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
+        for col_name in key_cols:
+            if col_name in headers:
+                col_map[col_name] = headers.index(col_name)
+        
+        # Find day columns (columns between "목표 달성 기준" and "수행/발생률")
+        goal_criteria_idx = col_map.get("목표 달성 기준", 8)
+        rate_idx = col_map.get("수행/발생률", -1)
+        
+        day_columns = []
+        if rate_idx > goal_criteria_idx + 1:
+            for i in range(goal_criteria_idx + 1, rate_idx):
+                day_columns.append({
+                    "index": i,
+                    "label": headers[i] if i < len(headers) else str(i)
+                })
+        
+        # Build student rows (only Tier2='O')
+        students = []
+        tier2_idx = col_map.get("Tier2", 3)
+        
+        for row_idx, row in enumerate(all_values[1:], start=2):  # row_idx = sheet row (1-based)
+            if len(row) <= tier2_idx:
+                continue
+            
+            is_tier2 = str(row[tier2_idx]).strip()
+            
+            student = {
+                "row": row_idx,
+                "번호": row[col_map.get("번호", 0)] if col_map.get("번호", 0) < len(row) else "",
+                "학급": row[col_map.get("학급", 1)] if col_map.get("학급", 1) < len(row) else "",
+                "학생코드": row[col_map.get("학생코드", 2)] if col_map.get("학생코드", 2) < len(row) else "",
+                "Tier2": is_tier2,
+                "목표행동": row[col_map.get("목표행동", 4)] if col_map.get("목표행동", 4) < len(row) else "",
+                "목표행동 유형": row[col_map.get("목표행동 유형", 5)] if col_map.get("목표행동 유형", 5) < len(row) else "",
+                "척도": row[col_map.get("척도", 6)] if col_map.get("척도", 6) < len(row) else "",
+                "입력 기준": row[col_map.get("입력 기준", 7)] if col_map.get("입력 기준", 7) < len(row) else "",
+                "목표 달성 기준": row[col_map.get("목표 달성 기준", 8)] if col_map.get("목표 달성 기준", 8) < len(row) else "",
+                "수행_발생률": row[col_map.get("수행/발생률", -1)] if col_map.get("수행/발생률", -1) >= 0 and col_map.get("수행/발생률", -1) < len(row) else "",
+                "목표_달성_여부": row[col_map.get("목표 달성 여부", -1)] if col_map.get("목표 달성 여부", -1) >= 0 and col_map.get("목표 달성 여부", -1) < len(row) else "",
+                "days": {}
+            }
+            
+            # Fill day values
+            for dc in day_columns:
+                idx = dc["index"]
+                val = row[idx] if idx < len(row) else ""
+                student["days"][dc["label"]] = val
+            
+            if is_tier2 == "O":
+                students.append(student)
+        
+        return {
+            "month": month_name,
+            "day_columns": [dc["label"] for dc in day_columns],
+            "students": students,
+            "col_map": {k: v for k, v in col_map.items()}
+        }
+    
+    except Exception as e:
+        print(f"Error getting monthly CICO data: {e}")
+        return {"error": str(e)}
+
+
+def update_monthly_cico_cells(month: int, updates: list):
+    """
+    Batch update cells in a monthly sheet.
+    updates = [{"row": 5, "col": 12, "value": "O"}, ...]
+    col can be a column index (1-based) or a header name.
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        
+        try:
+            ws = sheet.worksheet(month_name)
+        except gspread.WorksheetNotFound:
+            return {"error": f"'{month_name}' 시트가 없습니다."}
+        
+        headers = ws.row_values(1)
+        
+        # Build batch update
+        cells_to_update = []
+        for u in updates:
+            row = u.get("row")
+            col = u.get("col")
+            value = u.get("value", "")
+            
+            # If col is a string (header name), convert to column index
+            if isinstance(col, str):
+                if col in headers:
+                    col = headers.index(col) + 1  # Convert to 1-based
+                else:
+                    continue  # Skip unknown columns
+            
+            if row and col:
+                cells_to_update.append({
+                    "range": f"{_col_letter(col)}{row}",
+                    "values": [[value]]
+                })
+        
+        # Batch update using gspread
+        if cells_to_update:
+            ws.batch_update([{
+                "range": c["range"],
+                "values": c["values"]
+            } for c in cells_to_update])
+        
+        return {"message": f"{len(cells_to_update)} cells updated"}
+    
+    except Exception as e:
+        print(f"Error updating monthly CICO cells: {e}")
+        return {"error": str(e)}
+
+
+def update_student_cico_settings(month: int, student_code: str, settings_data: dict):
+    """
+    Update CICO settings for a student in a monthly sheet.
+    settings_data can include: 목표행동, 목표행동 유형, 척도, 입력 기준, 목표 달성 기준
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sh = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        
+        try:
+            ws = sh.worksheet(month_name)
+        except gspread.WorksheetNotFound:
+            return {"error": f"'{month_name}' 시트가 없습니다."}
+        
+        all_values = ws.get_all_values()
+        headers = all_values[0]
+        
+        # Find student row
+        code_idx = headers.index("학생코드") if "학생코드" in headers else 2
+        target_row = None
+        for i, row in enumerate(all_values[1:], start=2):
+            if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
+                target_row = i
+                break
+        
+        if not target_row:
+            return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
+        
+        # Update settings columns
+        updates = []
+        for key, value in settings_data.items():
+            if key in headers:
+                col = headers.index(key) + 1  # 1-based
+                updates.append({"range": f"{_col_letter(col)}{target_row}", "values": [[value]]})
+        
+        if updates:
+            ws.batch_update(updates)
+        
+        return {"message": f"Settings updated for {student_code}"}
+    
+    except Exception as e:
+        print(f"Error updating CICO settings: {e}")
+        return {"error": str(e)}
+
+
+def toggle_tier2_status(month: int, student_code: str, status: str):
+    """Toggle Tier2 status (O/X) for a student in a monthly sheet."""
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sh = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        
+        try:
+            ws = sh.worksheet(month_name)
+        except gspread.WorksheetNotFound:
+            return {"error": f"'{month_name}' 시트가 없습니다."}
+        
+        all_values = ws.get_all_values()
+        headers = all_values[0]
+        
+        code_idx = headers.index("학생코드") if "학생코드" in headers else 2
+        tier2_idx = headers.index("Tier2") if "Tier2" in headers else 3
+        
+        for i, row in enumerate(all_values[1:], start=2):
+            if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
+                ws.update_cell(i, tier2_idx + 1, status)  # 1-based column
+                return {"message": f"Tier2 status for {student_code} → {status}"}
+        
+        return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
+    
+    except Exception as e:
+        print(f"Error toggling Tier2: {e}")
+        return {"error": str(e)}
+
+
+def _col_letter(col_num: int) -> str:
+    """Convert 1-based column number to letter (1=A, 2=B, ..., 27=AA)."""
+    result = ""
+    while col_num > 0:
+        col_num, remainder = divmod(col_num - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+
 def get_student_dashboard_analysis(student_code: str):
     """
     Fetch monthly CICO analysis data from 'Tier2_대시보드' (Fast & Optimized).
