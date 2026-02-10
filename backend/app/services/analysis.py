@@ -179,19 +179,44 @@ def get_student_analytics(student_name: str):
         return {"error": "No data found"}
     
     df = pd.DataFrame(raw_data)
-    # Filter by student name
-    # Using simple filtering. In production, use ID preferably.
     if '학생명' not in df.columns:
         return {"error": "Student name column missing"}
-        
+    
+    # Strategy 1: Direct search by 학생명
     student_df = df[df['학생명'] == student_name].copy()
+    resolved_name = student_name
+    resolved_code = "-"
+    
+    # Strategy 2: If name not found, the input might be a student code (e.g. "2611")
+    # Reverse-lookup: student_code → BeAble code → search 시트1 by 코드번호
+    if student_df.empty and '코드번호' in df.columns:
+        beable_mapping = get_beable_code_mapping()
+        # Build reverse map: student_code → beable_code
+        reverse_map = {}
+        for beable_code, info in beable_mapping.items():
+            sc = info.get('student_code', '')
+            if sc:
+                reverse_map[str(sc).strip()] = beable_code
+        
+        beable_code = reverse_map.get(str(student_name).strip(), '')
+        if beable_code:
+            student_df = df[df['코드번호'] == beable_code].copy()
+            resolved_code = str(student_name).strip()
+            if not student_df.empty:
+                resolved_name = student_df['학생명'].iloc[0]
+    
+    # Strategy 3: Try partial match (in case of encoding issues)
+    if student_df.empty:
+        student_df = df[df['학생명'].str.contains(student_name, na=False)].copy()
+        if not student_df.empty:
+            resolved_name = student_df['학생명'].iloc[0]
     
     if student_df.empty:
-        # Return minimal profile instead of error — student exists but has no behavior records
+        # Return minimal profile — student exists in TierStatus but has no behavior records
         return {
             "profile": {
                 "name": student_name,
-                "student_code": "-",
+                "student_code": student_name,
                 "class": "-",
                 "tier": "Tier 1",
                 "total_incidents": 0,
@@ -243,16 +268,17 @@ def get_student_analytics(student_name: str):
         cico_trend = [{"date": k, "count": int(v)} for k, v in d_counts.items()]
 
     # -- Get Student Code (Map from BeAble Code) --
-    beable_mapping = get_beable_code_mapping()
-    student_code_val = "-"
-    if '코드번호' in student_df.columns:
+    # Use already-resolved code if available, otherwise look it up
+    student_code_val = resolved_code if resolved_code != "-" else "-"
+    if student_code_val == "-" and '코드번호' in student_df.columns:
+        beable_mapping = get_beable_code_mapping()
         beable_code = str(student_df['코드번호'].iloc[0]).strip()
         if beable_code in beable_mapping:
             student_code_val = beable_mapping[beable_code]['student_code']
     
     return {
         "profile": {
-            "name": student_name,
+            "name": resolved_name,
             "student_code": student_code_val,
             "class": student_class,
             "tier": tier,
