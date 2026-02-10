@@ -32,6 +32,10 @@ export default function StudentDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // New State for Analysis Data
+  const [analysisData, setAnalysisData] = useState<{ history: any[], team_talk: string } | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
+
   useEffect(() => {
     if (!studentName) return;
 
@@ -51,6 +55,22 @@ export default function StudentDetail() {
 
     fetchData();
   }, [studentName]);
+
+  useEffect(() => {
+     if (!data?.profile?.student_code) return;
+     const fetchAnalysis = async () => {
+         try {
+             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+             const res = await axios.get(`${apiUrl}/api/v1/students/${data.profile.student_code}/analysis`);
+             setAnalysisData(res.data);
+         } catch (e) {
+             console.error("Analysis fetch error", e);
+         } finally {
+             setAnalysisLoading(false);
+         }
+     };
+     fetchAnalysis();
+  }, [data]);
 
   if (loading) return (
     <AuthCheck>
@@ -75,6 +95,9 @@ export default function StudentDetail() {
   if (!data) return null;
 
   const { profile, abc_data, functions, cico_trend } = data;
+
+  // New State for Analysis Data
+
 
   return (
     <AuthCheck>
@@ -172,6 +195,58 @@ export default function StudentDetail() {
                     </LineChart>
                 </ResponsiveContainer>
             </div>
+        </div>
+
+        {/* New Row: Monthly Analysis (Optimized) */}
+        <div className={styles.chartSection} style={{ marginTop: '20px', borderTop: '2px solid #eee', paddingTop: '20px' }}>
+            <h3>📅 월별 상세 분석 (Monthly Trend)</h3>
+            {analysisLoading ? <p>데이터 로딩 중...</p> : analysisData ? (
+                <div>
+                    {analysisData.team_talk && (
+                        <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '4px' }}>
+                            <strong>🗣️ 팀 협의 내용:</strong> {analysisData.team_talk}
+                        </div>
+                    )}
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        {/* Table */}
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                    <th style={{ padding: '10px', border: '1px solid #e5e7eb' }}>월</th>
+                                    <th style={{ padding: '10px', border: '1px solid #e5e7eb' }}>수행률</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {analysisData.history.map((row, idx) => (
+                                    <tr key={idx}>
+                                        <td style={{ padding: '8px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.month}</td>
+                                        <td style={{ padding: '8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: row.rate !== '-' ? 'bold' : 'normal' }}>
+                                            {row.rate}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                         {/* Chart */}
+                         <div style={{ height: '300px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={analysisData.history.map(d => ({ 
+                                    month: d.month, 
+                                    rate: d.rate !== '-' ? parseInt(d.rate) : 0 
+                                }))}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="month" />
+                                    <YAxis domain={[0, 100]} />
+                                    <Tooltip formatter={(val) => `${val}%`} />
+                                    <Line type="monotone" dataKey="rate" stroke="#8884d8" name="수행률(%)" strokeWidth={2} dot={{r:4}} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                         </div>
+                    </div>
+                </div>
+            ) : <p>데이터가 없습니다.</p>}
         </div>
 
       </main>

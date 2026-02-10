@@ -51,6 +51,7 @@ export interface DashboardData {
 }
 
 export interface StudentProfile {
+    student_code: string;
     name: string;
     class: string;
     tier: string;

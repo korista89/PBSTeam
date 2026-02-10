@@ -229,9 +229,18 @@ def get_student_analytics(student_name: str):
         d_counts = student_df['행동발생 날짜'].value_counts().sort_index()
         cico_trend = [{"date": k, "count": int(v)} for k, v in d_counts.items()]
 
+    # -- Get Student Code (Map from BeAble Code) --
+    beable_mapping = get_beable_code_mapping()
+    student_code_val = "-"
+    if '코드번호' in student_df.columns:
+        beable_code = str(student_df['코드번호'].iloc[0]).strip()
+        if beable_code in beable_mapping:
+            student_code_val = beable_mapping[beable_code]['student_code']
+    
     return {
         "profile": {
             "name": student_name,
+            "student_code": student_code_val,
             "class": student_class,
             "tier": tier,
             "total_incidents": total_incidents,

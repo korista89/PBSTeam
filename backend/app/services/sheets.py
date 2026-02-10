@@ -544,3 +544,79 @@ def add_cico_daily(data: dict):
         print(f"Error adding CICO daily: {e}")
         return {"error": str(e)}
 
+
+def get_student_dashboard_analysis(student_code: str):
+    """
+    Fetch monthly CICO analysis data from 'Tier2_대시보드' (Fast & Optimized).
+    Returns a list of dicts: [{ "month": "3월", "rate": "80%" }, ...]
+    And current status/team talk.
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        # Fallback for dev - return empty if not connected
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        # Try to open "Tier2_대시보드"
+        try:
+            ws = sheet.worksheet("Tier2_대시보드")
+        except gspread.WorksheetNotFound:
+            return {"error": "Dashboard sheet not found"}
+            
+        # Fetch all values
+        # Headers are in Row 5, Data starts Row 6
+        rows = ws.get_all_values()
+        
+        # Find Student Row
+        # Column D (index 3) is Student Code
+        student_row = None
+        for r in rows:
+            if len(r) > 3 and str(r[3]).strip() == str(student_code).strip():
+                student_row = r
+                break
+        
+        if not student_row:
+            return {"error": "Student not found in dashboard"}
+            
+        # Extract Monthly Data (Columns J to S -> Indices 9 to 18)
+        months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
+        history = []
+        
+        for i, month_name in enumerate(months):
+            col_idx = 9 + i
+            val = student_row[col_idx] if col_idx < len(student_row) else ""
+            
+            # Format value
+            # It might be empty, "-", or a number (0.8 or "80%")
+            if not val or val == "":
+                formatted_rate = "-"
+            else:
+                formatted_rate = str(val)
+                # If it's a raw float like 0.8, convert to 80%
+                try:
+                    f_val = float(val)
+                    if 0 <= f_val <= 1:
+                        formatted_rate = f"{int(f_val * 100)}%"
+                    elif f_val > 1: # Already percent-like number e.g. 80
+                         formatted_rate = f"{int(f_val)}%"
+                except ValueError:
+                    pass
+            
+            history.append({
+                "month": month_name,
+                "rate": formatted_rate
+            })
+            
+        # Extract Text Data
+        # Team Talk: Column U (Index 20)
+        team_talk = student_row[20] if 20 < len(student_row) else ""
+        
+        return {
+            "history": history,
+            "team_talk": team_talk
+        }
+
+    except Exception as e:
+        print(f"Error fetching dashboard analysis: {e}")
+        return {"error": str(e)}
