@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def generate_ai_insight(summary: Dict, trends: list, risk_list: list) -> str:
+def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
     """
     Generate AI insight using OpenAI API.
     """
@@ -48,13 +48,13 @@ def generate_ai_insight(summary: Dict, trends: list, risk_list: list) -> str:
         return "AI 분석을 생성하는 도중 오류가 발생했습니다."
 
 def generate_meeting_agent_report(
-    summary: Dict,
+    summary: dict,
     trends: list,
     risk_list: list,
-    tier_stats: Optional[Dict] = None,
-    cico_summary: Optional[Dict] = None,
-    tier3_students: Optional[List] = None
-) -> Dict:
+    tier_stats: Optional[dict] = None,
+    cico_summary: Optional[dict] = None,
+    tier3_students: Optional[list] = None
+) -> dict:
     """
     Generate a comprehensive meeting agent report for the School Behavior Intervention Team.
     
