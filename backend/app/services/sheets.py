@@ -1259,7 +1259,7 @@ def get_monthly_cico_data(month: int):
         return {"error": str(e)}
 
 
-def update_monthly_cico_cells(month: int, updates: list):
+def update_monthly_cico_cells(month: int, updates: list, student_code_override: str = None):
     """
     Batch update cells in a monthly sheet.
     updates = [{"row": 5, "col": 12, "value": "O"}, ...]
@@ -1279,7 +1279,15 @@ def update_monthly_cico_cells(month: int, updates: list):
             return {"error": f"'{month_name}' 시트가 없습니다."}
         
         headers = ws.row_values(1)
-        all_values = ws.get_all_values() # Fix: Fetch all values for recalc
+        all_values = ws.get_all_values() 
+        
+        # Determine student_code column index for override lookup
+        # Look for "학생코드", "Student Code", "Code"
+        code_col_idx = -1
+        for idx, h in enumerate(headers):
+            if "학생코드" in str(h) or "Code" in str(h):
+                code_col_idx = idx # 0-based
+                break
         
         # Build batch update
         cells_to_update = []
@@ -1290,6 +1298,31 @@ def update_monthly_cico_cells(month: int, updates: list):
             col = u.get("col")
             value = u.get("value", "")
             
+            # If row is None, try to find by student_code_override
+            if row is None and student_code_override and code_col_idx != -1:
+                # Search for student code in the code column
+                found_row = -1
+                for r_idx, r_val in enumerate(all_values):
+                    # headers is r_idx 0 (row 1)
+                    if r_idx == 0: continue
+                    
+                    if len(r_val) > code_col_idx:
+                        # Compare stringified codes
+                        if str(r_val[code_col_idx]).strip() == str(student_code_override).strip():
+                            found_row = r_idx + 1 # 1-based row
+                            break
+                
+                if found_row != -1:
+                    row = found_row
+                    print(f"DEBUG: Found row {row} for student {student_code_override}")
+                else:
+                    print(f"DEBUG: Student code {student_code_override} not found in monthly sheet")
+                    continue
+            
+            if not row:
+                print("DEBUG: Row not specified and could not be resolved.")
+                continue
+
             # If col is a string (header name), convert to column index
             if isinstance(col, str):
                 col_idx = -1
