@@ -16,7 +16,7 @@ export default function AdminPage() {
     const [selectedUser, setSelectedUser] = useState<string>("");
     const [newPassword, setNewPassword] = useState("");
     const [message, setMessage] = useState("");
-    const [currentUser, setCurrentUser] = useState<{id: string, role: string} | null>(null);
+    const [currentUser, setCurrentUser] = useState<{ id: string, role: string } | null>(null);
 
     useEffect(() => {
         // Check if user is admin
@@ -33,7 +33,7 @@ export default function AdminPage() {
             window.location.href = "/login";
             return;
         }
-        
+
         fetchUsers();
     }, []);
 
@@ -79,13 +79,29 @@ export default function AdminPage() {
                     <p className={styles.subtitle}>사용자 계정 및 비밀번호 관리</p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    <button 
+                    <button
+                        onClick={async () => {
+                            if (!confirm("모든 월별 시트를 초기화/갱신하시겠습니까? 시간이 걸릴 수 있습니다.")) return;
+                            try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                                await axios.post(`${apiUrl}/api/v1/analytics/dashboard/refresh`);
+                                alert("데이터 갱신 완료!");
+                            } catch (e) {
+                                console.error(e);
+                                alert("갱신 실패");
+                            }
+                        }}
+                        style={{ padding: '8px 16px', cursor: 'pointer', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px' }}
+                    >
+                        🔄 데이터 갱신
+                    </button>
+                    <button
                         onClick={() => window.location.href = '/'}
                         style={{ padding: '8px 16px', cursor: 'pointer', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px' }}
                     >
                         🏠 대시보드로
                     </button>
-                    <button 
+                    <button
                         onClick={() => {
                             localStorage.removeItem("user");
                             window.location.href = '/login';
@@ -101,11 +117,11 @@ export default function AdminPage() {
                 {/* Password Change Section */}
                 <div className={styles.card} style={{ marginBottom: '20px' }}>
                     <h2 style={{ marginBottom: '20px' }}>🔑 비밀번호 변경</h2>
-                    
+
                     {message && (
-                        <div style={{ 
-                            padding: '10px', 
-                            marginBottom: '15px', 
+                        <div style={{
+                            padding: '10px',
+                            marginBottom: '15px',
                             backgroundColor: message.includes('실패') ? '#fee2e2' : '#d1fae5',
                             color: message.includes('실패') ? '#dc2626' : '#059669',
                             borderRadius: '8px'
@@ -117,7 +133,7 @@ export default function AdminPage() {
                     <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>대상 사용자</label>
-                            <select 
+                            <select
                                 value={selectedUser}
                                 onChange={(e) => setSelectedUser(e.target.value)}
                                 style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd', minWidth: '150px' }}
@@ -132,7 +148,7 @@ export default function AdminPage() {
                         </div>
                         <div>
                             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>새 비밀번호</label>
-                            <input 
+                            <input
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
@@ -140,13 +156,13 @@ export default function AdminPage() {
                                 style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd', minWidth: '200px' }}
                             />
                         </div>
-                        <button 
+                        <button
                             onClick={handlePasswordChange}
-                            style={{ 
-                                padding: '10px 20px', 
-                                backgroundColor: '#10b981', 
-                                color: 'white', 
-                                border: 'none', 
+                            style={{
+                                padding: '10px 20px',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
                                 borderRadius: '8px',
                                 fontWeight: 'bold',
                                 cursor: 'pointer'
@@ -162,7 +178,7 @@ export default function AdminPage() {
                     <h2 style={{ marginBottom: '20px' }}>👥 사용자 목록</h2>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
                         {users.map(u => (
-                            <div 
+                            <div
                                 key={u.ID}
                                 style={{
                                     padding: '10px',

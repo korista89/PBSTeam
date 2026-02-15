@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
-import { AuthCheck } from "../components/AuthProvider";
+import { AuthCheck, useAuth } from "../components/AuthProvider";
 import GlobalNav from "../components/GlobalNav";
 
 interface DayValue {
@@ -92,9 +92,12 @@ export default function CICOGridPage() {
       // Override day_columns with business days (MM-DD format)
       if (businessDays.length > 0) {
         monthlyData.day_columns = businessDays;
-        // Map student days to use MM-DD keys
-        // The sheet may use different keys, so we keep what matches
       }
+
+      // Filter students if user is a teacher (and not admin)
+      // We need to access user from useAuth, but this is inside useCallback.
+      // We'll filter in the render or effect, but filtering `data` state is better.
+      // However, `user` is available from hook.
 
       setData(monthlyData);
     } catch (err: unknown) {
@@ -106,6 +109,21 @@ export default function CICOGridPage() {
     }
   }, [month, apiUrl]);
 
+  // Auth context
+  const { user, isAdmin } = useAuth();
+
+  // Filtered data
+  const filteredData = React.useMemo(() => {
+    if (!data) return null;
+    if (isAdmin()) return data;
+    if (!user?.class_id) return data; // Should not happen for teachers
+
+    return {
+      ...data,
+      students: data.students.filter(s => s.학생코드.startsWith(user.class_id!))
+    };
+  }, [data, user, isAdmin]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -115,7 +133,7 @@ export default function CICOGridPage() {
   useEffect(() => {
     if (pendingUpdates.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    
+
     saveTimerRef.current = setTimeout(async () => {
 
       setSaveStatus("저장 중...");
@@ -140,14 +158,14 @@ export default function CICOGridPage() {
   // Handle cell value change
   const handleCellChange = (student: CICOStudent, dayLabel: string, value: string) => {
     if (!data) return;
-    
+
     // Find column index from col_map and day_columns
     const goalCriteriaIdx = data.col_map["목표 달성 기준"] ?? 8;
     const dayIndex = data.day_columns.indexOf(dayLabel);
     if (dayIndex === -1) return;
-    
+
     const colIdx = goalCriteriaIdx + 1 + dayIndex + 1; // +1 for 0-to-1-based conversion
-    
+
     // Update local state
     setData(prev => {
       if (!prev) return prev;
@@ -160,13 +178,13 @@ export default function CICOGridPage() {
         ),
       };
     });
-    
+
     // Queue the update
     setPendingUpdates(prev => [
       ...prev.filter(u => !(u.row === student.row && u.col === colIdx)),
       { row: student.row, col: colIdx, value },
     ]);
-    
+
     setEditingCell(null);
   };
 
@@ -178,7 +196,7 @@ export default function CICOGridPage() {
         student_code: studentCode,
         settings: { [field]: value },
       });
-      
+
       // Update local state
       setData(prev => {
         if (!prev) return prev;
@@ -191,7 +209,7 @@ export default function CICOGridPage() {
           ),
         };
       });
-      
+
       setSaveStatus("✓ 설정 저장 완료");
       setTimeout(() => setSaveStatus(""), 2000);
     } catch (err) {
@@ -204,7 +222,7 @@ export default function CICOGridPage() {
   // Get cell background color based on value and type
   const getCellColor = (value: string, type: string): string => {
     if (!value) return "transparent";
-    
+
     if (type === "증가 목표행동") {
       if (value === "O" || value === "2") return "#d1fae5"; // Green
       if (value === "X" || value === "0") return "#fee2e2"; // Red
@@ -233,6 +251,47 @@ export default function CICOGridPage() {
     return `${Math.round(num)}%`;
   };
 
+  // Meeting Notes State
+  const [showMeetNotes, setShowMeetNotes] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
+  const [savedNotes, setSavedNotes] = useState<any[]>([]);
+  const [noteLoading, setNoteLoading] = useState(false);
+
+  // Fetch notes on load
+  useEffect(() => {
+    fetchNotes();
+  }, []);
+
+  const fetchNotes = async () => {
+    try {
+      const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=tier2`);
+      setSavedNotes(res.data.notes || []);
+    } catch (e) {
+      console.error("Failed to fetch notes", e);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteContent.trim()) return;
+    setNoteLoading(true);
+    try {
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+        meeting_type: "tier2",
+        date: new Date().toISOString().split('T')[0],
+        content: noteContent,
+        author: "Teacher" // Should come from auth context in real app
+      });
+      setNoteContent("");
+      fetchNotes();
+      alert("회의록이 저장되었습니다.");
+    } catch (e) {
+      console.error("Failed to save note", e);
+      alert("저장 실패");
+    } finally {
+      setNoteLoading(false);
+    }
+  };
+
   return (
     <AuthCheck>
       <div className={styles.container}>
@@ -249,12 +308,32 @@ export default function CICOGridPage() {
             gap: "10px",
           }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>📋 CICO 월별 입력</h2>
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>📋 CICO 월별 리포트</h2>
               <p style={{ color: "#666", margin: "3px 0 0", fontSize: "0.85rem" }}>
-                Tier2 학생 목표행동 일일 기록 (월별 시트)
+                Tier2 학생 목표행동 일일 기록 및 회의록
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {/* Meeting Notes Toggle */}
+              <button
+                onClick={() => setShowMeetNotes(!showMeetNotes)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  backgroundColor: showMeetNotes ? "#e0e7ff" : "white",
+                  color: showMeetNotes ? "#4338ca" : "#374151",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                📝 회의록 {showMeetNotes ? "접기" : "열기"}
+              </button>
+
               {/* Month Selector */}
               <label style={{ fontWeight: "bold", fontSize: "0.9rem" }}>월 선택:</label>
               <select
@@ -308,6 +387,73 @@ export default function CICOGridPage() {
             </div>
           </div>
 
+          {/* Meeting Notes Section */}
+          {showMeetNotes && (
+            <div style={{
+              marginBottom: "20px",
+              padding: "20px",
+              backgroundColor: "#f9fafb",
+              borderRadius: "12px",
+              border: "1px solid #e5e7eb"
+            }}>
+              <h3 style={{ marginTop: 0, fontSize: "1.1rem", marginBottom: "15px" }}>📝 Tier 2 협의회 회의록</h3>
+
+              <div style={{ display: "flex", gap: "20px", flexDirection: "column" }}>
+                <div>
+                  <textarea
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    placeholder="회의 내용을 입력하세요... (예: 1011번 학생 CICO 목표 달성으로 졸업 논의)"
+                    style={{
+                      width: "100%",
+                      minHeight: "100px",
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      marginBottom: "10px",
+                      fontSize: "0.95rem"
+                    }}
+                  />
+                  <button
+                    onClick={handleSaveNote}
+                    disabled={noteLoading || !noteContent.trim()}
+                    style={{
+                      padding: "8px 20px",
+                      backgroundColor: "#4f46e5",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      opacity: noteLoading ? 0.7 : 1
+                    }}
+                  >
+                    {noteLoading ? "저장 중..." : "회의록 저장"}
+                  </button>
+                </div>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "15px" }}>
+                  <h4 style={{ margin: "0 0 10px 0", fontSize: "1rem", color: "#4b5563" }}>📋 최근 회의록</h4>
+                  {savedNotes.length === 0 ? (
+                    <p style={{ color: "#9ca3af", fontStyle: "italic" }}>저장된 회의록이 없습니다.</p>
+                  ) : (
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "200px", overflowY: "auto" }}>
+                      {savedNotes.map((note) => (
+                        <li key={note.id} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px dashed #e5e7eb" }}>
+                          <div style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: "4px" }}>
+                            {note.date} | {note.author || "Teacher"}
+                          </div>
+                          <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem", color: "#1f2937" }}>
+                            {note.content}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Loading / Error */}
           {loading && (
             <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>
@@ -322,9 +468,9 @@ export default function CICOGridPage() {
           )}
 
           {/* Grid Table */}
-          {!loading && !error && data && (
+          {!loading && !error && filteredData && (
             <>
-              {data.students.length === 0 ? (
+              {filteredData.students.length === 0 ? (
                 <div style={{
                   textAlign: "center",
                   padding: "50px",
@@ -333,10 +479,10 @@ export default function CICOGridPage() {
                   boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                 }}>
                   <p style={{ fontSize: "1.1rem", color: "#666" }}>
-                    {month}월에 Tier2(CICO) 대상 학생이 없습니다.
+                    {month}월에 해당 학급의 Tier2(CICO) 대상 학생이 없습니다.
                   </p>
                   <p style={{ color: "#999", marginTop: "8px", fontSize: "0.9rem" }}>
-                    월별 시트에서 Tier2 열을 &quot;O&quot;로 변경하거나,<br/>
+                    월별 시트에서 Tier2 열을 &quot;O&quot;로 변경하거나,<br />
                     대시보드에서 학생코드를 등록해주세요.
                   </p>
                 </div>
@@ -363,9 +509,9 @@ export default function CICOGridPage() {
                         <th style={{ ...thStyle, minWidth: "90px" }}>유형</th>
                         <th style={{ ...thStyle, minWidth: "80px" }}>척도</th>
                         <th style={{ ...thStyle, minWidth: "70px" }}>달성기준</th>
-                        
+
                         {/* Day columns — MM-DD weekday headers */}
-                        {data.day_columns.map(day => (
+                        {filteredData.day_columns.map(day => (
                           <th key={day} style={{
                             ...thStyle,
                             minWidth: "42px",
@@ -377,20 +523,20 @@ export default function CICOGridPage() {
                             {day}
                           </th>
                         ))}
-                        
+
                         {/* Summary columns */}
                         <th style={{ ...thStyle, minWidth: "60px", backgroundColor: "#e0e7ff" }}>수행률</th>
                         <th style={{ ...thStyle, minWidth: "50px", backgroundColor: "#e0e7ff" }}>달성</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.students.map(student => (
+                      {filteredData.students.map(student => (
                         <tr key={student.학생코드} style={{ borderBottom: "1px solid #e5e7eb" }}>
                           {/* Fixed info cells */}
                           <td style={tdStyle}>{student.번호}</td>
                           <td style={{ ...tdStyle, fontSize: "0.75rem", textAlign: "left" }}>{student.학급}</td>
                           <td style={{ ...tdStyle, fontWeight: "bold", color: "#6366f1" }}>{student.학생코드}</td>
-                          
+
                           {/* Editable: 목표행동 */}
                           <td
                             style={{ ...tdStyle, cursor: "pointer", textAlign: "left" }}
@@ -408,7 +554,7 @@ export default function CICOGridPage() {
                               student.목표행동 || <span style={{ color: "#ccc" }}>클릭하여 입력</span>
                             )}
                           </td>
-                          
+
                           {/* Editable: 유형 */}
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
@@ -421,7 +567,7 @@ export default function CICOGridPage() {
                               ))}
                             </select>
                           </td>
-                          
+
                           {/* Editable: 척도 */}
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
@@ -434,7 +580,7 @@ export default function CICOGridPage() {
                               ))}
                             </select>
                           </td>
-                          
+
                           {/* Editable: 달성기준 */}
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
@@ -447,14 +593,14 @@ export default function CICOGridPage() {
                               ))}
                             </select>
                           </td>
-                          
+
                           {/* Day cells */}
-                          {data.day_columns.map(day => {
+                          {filteredData.day_columns.map(day => {
                             const val = student.days[day] || "";
                             const isEditing = editingCell?.row === student.row && editingCell?.day === day;
                             const options = getInputOptions(student.척도);
                             const bg = getCellColor(val, student["목표행동 유형"]);
-                            
+
                             return (
                               <td
                                 key={day}
@@ -535,7 +681,7 @@ export default function CICOGridPage() {
                               </td>
                             );
                           })}
-                          
+
                           {/* Summary: 수행/발생률 */}
                           <td style={{
                             ...tdStyle,
@@ -545,7 +691,7 @@ export default function CICOGridPage() {
                           }}>
                             {formatRate(student.수행_발생률)}
                           </td>
-                          
+
                           {/* Summary: 달성여부 */}
                           <td style={{
                             ...tdStyle,

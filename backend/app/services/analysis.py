@@ -1,8 +1,8 @@
-from app.services.sheets import fetch_all_records, fetch_student_codes, get_beable_code_mapping
+from app.services.sheets import fetch_all_records, fetch_student_codes, get_beable_code_mapping, fetch_student_status, get_enrolled_student_count
 from app.schemas import BehaviorRecord
 import pandas as pd
 from typing import List, Dict
-from app.services.ai_insight import generate_ai_insight
+from app.services.ai_insight import generate_ai_insight, generate_meeting_agent_report
 
 def get_analytics_data(start_date: str = None, end_date: str = None):
     raw_data = fetch_all_records()
@@ -146,12 +146,39 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
     total_incidents = len(df)
     avg_intensity = float(df['강도'].mean()) if not df.empty and '강도' in df.columns else 0.0
 
-    # Generate AI Insight
-    ai_comment = generate_ai_insight(
+    # Generate AI Insight with enriched tier data
+    try:
+        all_status = fetch_student_status()
+        enrolled_count = get_enrolled_student_count()
+        enrolled_students = [s for s in all_status if s.get('재학여부') == 'O']
+        
+        t1_count = len([s for s in enrolled_students if s.get('Tier1') == 'O' and s.get('Tier2(CICO)') != 'O' and s.get('Tier2(SST)') != 'O' and s.get('Tier3') != 'O' and s.get('Tier3+') != 'O'])
+        t2c_count = len([s for s in enrolled_students if s.get('Tier2(CICO)') == 'O'])
+        t2c_pure = len([s for s in enrolled_students if s.get('Tier2(CICO)') == 'O' and s.get('Tier3') != 'O' and s.get('Tier3+') != 'O'])
+        t2s_count = len([s for s in enrolled_students if s.get('Tier2(SST)') == 'O'])
+        t3_count = len([s for s in enrolled_students if s.get('Tier3') == 'O'])
+        t3p_count = len([s for s in enrolled_students if s.get('Tier3+') == 'O'])
+        
+        pct = lambda c: round((c / enrolled_count * 100), 1) if enrolled_count > 0 else 0
+        
+        tier_stats = {
+            "enrolled": enrolled_count,
+            "tier1": {"count": t1_count, "pct": pct(t1_count)},
+            "tier2_cico": {"count": t2c_count, "pct": pct(t2c_count), "pure": t2c_pure},
+            "tier2_sst": {"count": t2s_count, "pct": pct(t2s_count)},
+            "tier3": {"count": t3_count, "pct": pct(t3_count)},
+            "tier3_plus": {"count": t3p_count, "pct": pct(t3p_count)},
+        }
+    except Exception:
+        tier_stats = None
+
+    ai_report = generate_meeting_agent_report(
         summary={"total_incidents": total_incidents, "risk_student_count": len(at_risk_list)},
-        trends=[], # Simplified for now
-        risk_list=at_risk_list
+        trends=[],
+        risk_list=at_risk_list,
+        tier_stats=tier_stats
     )
+    ai_comment = ai_report.get("briefing_text", "")
 
     return {
         "summary": {
@@ -169,7 +196,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
         "functions": function_stats,
         "heatmap": heatmap_data,
         "safety_alerts": safety_alerts,
-        "ai_comment": ai_comment
+        "ai_comment": ai_comment,
+        "ai_report": ai_report
     }
 
 

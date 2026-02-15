@@ -30,7 +30,7 @@ export default function TierStatusPage() {
     const [filter, setFilter] = useState("all");
     const [courseFilter, setCourseFilter] = useState("all");
     const [saving, setSaving] = useState(false);
-    
+
     // Editing states
     const [editingCode, setEditingCode] = useState<string | null>(null);
     const [editMemo, setEditMemo] = useState("");
@@ -73,11 +73,11 @@ export default function TierStatusPage() {
         const course = code[0];
         const grade = code[1];
         const cls = code[2];
-        const courseNames: {[key: string]: string} = {
+        const courseNames: { [key: string]: string } = {
             "1": "유치원", "2": "초등", "3": "중학교", "4": "고등", "5": "전공과", "6": "예비"
         };
-        if (code.substring(0,2) === "34") return "중학교 순회학급";
-        if (code.substring(0,2) === "44") return "고등 순회학급";
+        if (code.substring(0, 2) === "34") return "중학교 순회학급";
+        if (code.substring(0, 2) === "44") return "고등 순회학급";
         if (code[0] === "6") return "예비";
         return `${courseNames[course] || ""} ${grade}학년 ${cls}반`;
     };
@@ -108,9 +108,9 @@ export default function TierStatusPage() {
             setLoading(true);
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
-            
+
             const fetchedStudents = response.data.students || response.data || [];
-            
+
             if (fetchedStudents.length === 0) {
                 const defaults = generateDefaultStudents();
                 setStudents(defaults);
@@ -143,33 +143,23 @@ export default function TierStatusPage() {
         });
     };
 
+    // ===== Unified Save: single API call =====
     const handleSave = async () => {
         if (!editingCode) return;
-        
+
         setSaving(true);
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            
-            // Update tiers
-            await axios.put(`${apiUrl}/api/v1/tier/status`, {
+
+            await axios.put(`${apiUrl}/api/v1/tier/status/unified`, {
                 code: editingCode,
                 tier1: editTiers.tier1,
                 tier2_cico: editTiers.tier2_cico,
                 tier2_sst: editTiers.tier2_sst,
                 tier3: editTiers.tier3,
                 tier3_plus: editTiers.tier3_plus,
-                memo: editMemo
-            });
-
-            // Update enrollment
-            await axios.put(`${apiUrl}/api/v1/tier/enrollment`, {
-                code: editingCode,
-                enrolled: editEnrolled
-            });
-
-            // Update BeAble code
-            await axios.put(`${apiUrl}/api/v1/tier/beable`, {
-                code: editingCode,
+                memo: editMemo,
+                enrolled: editEnrolled,
                 beable_code: editBeAble
             });
 
@@ -190,7 +180,7 @@ export default function TierStatusPage() {
     const getCourse = (code: string) => {
         if (!code) return "";
         const first = code[0];
-        switch(first) {
+        switch (first) {
             case "1": return "유치원";
             case "2": return "초등";
             case "3": return "중학교";
@@ -218,13 +208,22 @@ export default function TierStatusPage() {
     });
 
     // Count by tier (enrolled only)
+    const enrolledStudents = students.filter(s => s.재학여부 === "O");
     const tierCounts = {
-        tier1: students.filter(s => s.재학여부 === "O" && s['Tier1'] === "O" && s['Tier2(CICO)'] === "X" && s['Tier2(SST)'] === "X" && s['Tier3'] === "X" && s['Tier3+'] === "X").length,
-        tier2_cico: students.filter(s => s.재학여부 === "O" && s['Tier2(CICO)'] === "O").length,
-        tier2_sst: students.filter(s => s.재학여부 === "O" && s['Tier2(SST)'] === "O").length,
-        tier3: students.filter(s => s.재학여부 === "O" && s['Tier3'] === "O").length,
-        tier3_plus: students.filter(s => s.재학여부 === "O" && s['Tier3+'] === "O").length,
+        tier1: enrolledStudents.filter(s => s['Tier1'] === "O" && s['Tier2(CICO)'] === "X" && s['Tier2(SST)'] === "X" && s['Tier3'] === "X" && s['Tier3+'] === "X").length,
+        tier2_cico: enrolledStudents.filter(s => s['Tier2(CICO)'] === "O").length,
+        tier2_sst: enrolledStudents.filter(s => s['Tier2(SST)'] === "O").length,
+        tier3: enrolledStudents.filter(s => s['Tier3'] === "O").length,
+        tier3_plus: enrolledStudents.filter(s => s['Tier3+'] === "O").length,
     };
+
+    // Tier2 CICO "pure" count (excluding Tier3/3+)
+    const tier2CicoPure = enrolledStudents.filter(s =>
+        s['Tier2(CICO)'] === "O" && s['Tier3'] === "X" && s['Tier3+'] === "X"
+    ).length;
+
+    // Percentage helper
+    const pct = (count: number) => enrolledCount > 0 ? ((count / enrolledCount) * 100).toFixed(1) : "0";
 
     if (loading) {
         return (
@@ -239,194 +238,202 @@ export default function TierStatusPage() {
 
     return (
         <AuthCheck>
-        <div className={styles.container}>
-            <GlobalNav currentPage="tier-status" />
-            
-            <div style={{ padding: '20px' }}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <div>
-                        <h2 style={{ margin: 0 }}>📊 Tier별 현황</h2>
-                        <p style={{ color: '#666', margin: '5px 0 0 0' }}>
-                            전교생 <strong>{enrolledCount}</strong>명 (재학생 기준) | 전체 {students.length}명
-                        </p>
-                    </div>
-                    {!isAdmin() && (
-                        <div style={{ padding: '8px 16px', backgroundColor: '#fef3c7', borderRadius: '8px', color: '#b45309', fontSize: '0.9rem' }}>
-                            🔒 조회 전용 (관리자만 편집 가능)
+            <div className={styles.container}>
+                <GlobalNav currentPage="tier-status" />
+
+                <div style={{ padding: '20px' }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <div>
+                            <h2 style={{ margin: 0 }}>📊 Tier별 현황</h2>
+                            <p style={{ color: '#666', margin: '5px 0 0 0' }}>
+                                전교생 <strong>{enrolledCount}</strong>명 (재학생 기준) | 전체 {students.length}명
+                            </p>
                         </div>
-                    )}
-                </div>
+                        {!isAdmin() && (
+                            <div style={{ padding: '8px 16px', backgroundColor: '#fef3c7', borderRadius: '8px', color: '#b45309', fontSize: '0.9rem' }}>
+                                🔒 조회 전용 (관리자만 편집 가능)
+                            </div>
+                        )}
+                    </div>
 
-                {/* Summary Cards - 5 Tier Types */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
-                    <div style={{ padding: '12px', backgroundColor: '#e8f5e9', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2e7d32' }}>{tierCounts.tier1}</div>
-                        <div style={{ color: '#666', fontSize: '0.85rem' }}>Tier 1</div>
+                    {/* Summary Cards - 5 Tier Types with % */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                        <div style={{ padding: '14px', backgroundColor: '#e8f5e9', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#2e7d32' }}>{tierCounts.tier1}</div>
+                            <div style={{ color: '#2e7d32', fontSize: '0.85rem', fontWeight: '600' }}>Tier 1</div>
+                            <div style={{ color: '#4caf50', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier1)}%</div>
+                        </div>
+                        <div style={{ padding: '14px', backgroundColor: '#fff3e0', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#f57c00' }}>{tierCounts.tier2_cico}</div>
+                            <div style={{ color: '#f57c00', fontSize: '0.85rem', fontWeight: '600' }}>Tier2(CICO)</div>
+                            <div style={{ color: '#fb8c00', fontSize: '0.75rem', marginTop: '2px' }}>
+                                {pct(tierCounts.tier2_cico)}%
+                                <span style={{ color: '#999', fontSize: '0.7rem' }}> (순수 {tier2CicoPure}명)</span>
+                            </div>
+                        </div>
+                        <div style={{ padding: '14px', backgroundColor: '#e3f2fd', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#1976d2' }}>{tierCounts.tier2_sst}</div>
+                            <div style={{ color: '#1976d2', fontSize: '0.85rem', fontWeight: '600' }}>Tier2(SST)</div>
+                            <div style={{ color: '#42a5f5', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier2_sst)}%</div>
+                        </div>
+                        <div style={{ padding: '14px', backgroundColor: '#ffebee', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#d32f2f' }}>{tierCounts.tier3}</div>
+                            <div style={{ color: '#d32f2f', fontSize: '0.85rem', fontWeight: '600' }}>Tier 3</div>
+                            <div style={{ color: '#ef5350', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier3)}%</div>
+                        </div>
+                        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #4a148c, #7b1fa2)', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'white' }}>{tierCounts.tier3_plus}</div>
+                            <div style={{ color: '#e1bee7', fontSize: '0.85rem', fontWeight: '600' }}>Tier 3+</div>
+                            <div style={{ color: '#ce93d8', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier3_plus)}%</div>
+                        </div>
                     </div>
-                    <div style={{ padding: '12px', backgroundColor: '#fff3e0', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f57c00' }}>{tierCounts.tier2_cico}</div>
-                        <div style={{ color: '#666', fontSize: '0.85rem' }}>Tier2(CICO)</div>
-                    </div>
-                    <div style={{ padding: '12px', backgroundColor: '#e3f2fd', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1976d2' }}>{tierCounts.tier2_sst}</div>
-                        <div style={{ color: '#666', fontSize: '0.85rem' }}>Tier2(SST)</div>
-                    </div>
-                    <div style={{ padding: '12px', backgroundColor: '#ffebee', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#d32f2f' }}>{tierCounts.tier3}</div>
-                        <div style={{ color: '#666', fontSize: '0.85rem' }}>Tier 3</div>
-                    </div>
-                    <div style={{ padding: '12px', backgroundColor: '#4a148c', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'white' }}>{tierCounts.tier3_plus}</div>
-                        <div style={{ color: '#ddd', fontSize: '0.85rem' }}>Tier 3+</div>
-                    </div>
-                </div>
 
-                {/* Filters */}
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-                    <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}>
-                        <option value="all">전체 Tier</option>
-                        <option value="Tier1">Tier 1</option>
-                        <option value="Tier2(CICO)">Tier2(CICO)</option>
-                        <option value="Tier2(SST)">Tier2(SST)</option>
-                        <option value="Tier3">Tier 3</option>
-                        <option value="Tier3+">Tier 3+</option>
-                    </select>
-                    <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}>
-                        <option value="all">전체 과정</option>
-                        <option value="유치원">유치원</option>
-                        <option value="초등">초등</option>
-                        <option value="중학교">중학교</option>
-                        <option value="고등">고등</option>
-                        <option value="전공과">전공과</option>
-                    </select>
-                    <span style={{ color: '#666', alignSelf: 'center' }}>표시: {filteredStudents.length}명</span>
-                </div>
+                    {/* Filters */}
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}>
+                            <option value="all">전체 Tier</option>
+                            <option value="Tier1">Tier 1</option>
+                            <option value="Tier2(CICO)">Tier2(CICO)</option>
+                            <option value="Tier2(SST)">Tier2(SST)</option>
+                            <option value="Tier3">Tier 3</option>
+                            <option value="Tier3+">Tier 3+</option>
+                        </select>
+                        <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}>
+                            <option value="all">전체 과정</option>
+                            <option value="유치원">유치원</option>
+                            <option value="초등">초등</option>
+                            <option value="중학교">중학교</option>
+                            <option value="고등">고등</option>
+                            <option value="전공과">전공과</option>
+                        </select>
+                        <span style={{ color: '#666', alignSelf: 'center' }}>표시: {filteredStudents.length}명</span>
+                    </div>
 
-                {/* Table */}
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                        <thead>
-                            <tr style={{ backgroundColor: '#f5f5f5' }}>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '40px' }}>번호</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '100px' }}>학급</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '70px' }}>학생코드</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>재학</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>BeAble</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e8f5e9' }}>T1</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#fff3e0' }}>T2-C</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e3f2fd' }}>T2-S</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>T3</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>T3+</th>
-                                <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>변경일</th>
-                                {isAdmin() && <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>관리</th>}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredStudents.map((s) => {
-                                const isEditing = editingCode === s.학생코드;
-                                const isInactive = s.재학여부 === "X";
-                                
-                                return (
-                                    <tr key={s.학생코드} style={{ backgroundColor: isInactive ? '#f9f9f9' : 'white', opacity: isInactive ? 0.5 : 1 }}>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>{s.번호}</td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', fontSize: '0.8rem' }}>{s.학급}</td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                            {isEditing ? (
-                                                <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} style={{ padding: '2px', width: '40px' }}>
-                                                    <option value="O">O</option>
-                                                    <option value="X">X</option>
-                                                </select>
-                                            ) : (
-                                                <span style={{ color: s.재학여부 === "O" ? '#2e7d32' : '#999', fontWeight: 'bold' }}>{s.재학여부}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                            {isEditing ? (
-                                                <input type="text" value={editBeAble} onChange={(e) => setEditBeAble(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="코드" />
-                                            ) : (
-                                                s['BeAble코드'] || '-'
-                                            )}
-                                        </td>
-                                        {/* 5 Tier columns with O/X */}
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f1f8e9' }}>
-                                            {isEditing ? (
-                                                <select value={editTiers.tier1} onChange={(e) => setEditTiers({...editTiers, tier1: e.target.value})} style={{ padding: '2px', width: '40px' }}>
-                                                    <option value="O">O</option>
-                                                    <option value="X">X</option>
-                                                </select>
-                                            ) : (
-                                                <span style={{ color: s['Tier1'] === "O" ? '#2e7d32' : '#ccc', fontWeight: 'bold' }}>{s['Tier1']}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#fff8e1' }}>
-                                            {isEditing ? (
-                                                <select value={editTiers.tier2_cico} onChange={(e) => setEditTiers({...editTiers, tier2_cico: e.target.value})} style={{ padding: '2px', width: '40px' }}>
-                                                    <option value="O">O</option>
-                                                    <option value="X">X</option>
-                                                </select>
-                                            ) : (
-                                                <span style={{ color: s['Tier2(CICO)'] === "O" ? '#f57c00' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(CICO)']}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#e3f2fd' }}>
-                                            {isEditing ? (
-                                                <select value={editTiers.tier2_sst} onChange={(e) => setEditTiers({...editTiers, tier2_sst: e.target.value})} style={{ padding: '2px', width: '40px' }}>
-                                                    <option value="O">O</option>
-                                                    <option value="X">X</option>
-                                                </select>
-                                            ) : (
-                                                <span style={{ color: s['Tier2(SST)'] === "O" ? '#1976d2' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(SST)']}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#ffebee' }}>
-                                            {isEditing ? (
-                                                <select value={editTiers.tier3} onChange={(e) => setEditTiers({...editTiers, tier3: e.target.value})} style={{ padding: '2px', width: '40px' }}>
-                                                    <option value="O">O</option>
-                                                    <option value="X">X</option>
-                                                </select>
-                                            ) : (
-                                                <span style={{ color: s['Tier3'] === "O" ? '#d32f2f' : '#ccc', fontWeight: 'bold' }}>{s['Tier3']}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#4a148c' }}>
-                                            {isEditing ? (
-                                                <select value={editTiers.tier3_plus} onChange={(e) => setEditTiers({...editTiers, tier3_plus: e.target.value})} style={{ padding: '2px', width: '40px', backgroundColor: '#4a148c', color: 'white' }}>
-                                                    <option value="O">O</option>
-                                                    <option value="X">X</option>
-                                                </select>
-                                            ) : (
-                                                <span style={{ color: s['Tier3+'] === "O" ? '#fff' : '#888', fontWeight: 'bold' }}>{s['Tier3+']}</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
-                                        {isAdmin() && (
+                    {/* Table */}
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '40px' }}>번호</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '100px' }}>학급</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '70px' }}>학생코드</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>재학</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>BeAble</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e8f5e9' }}>T1</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#fff3e0' }}>T2-C</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e3f2fd' }}>T2-S</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>T3</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>T3+</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>변경일</th>
+                                    {isAdmin() && <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>관리</th>}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredStudents.map((s) => {
+                                    const isEditing = editingCode === s.학생코드;
+                                    const isInactive = s.재학여부 === "X";
+
+                                    return (
+                                        <tr key={s.학생코드} style={{ backgroundColor: isInactive ? '#f9f9f9' : 'white', opacity: isInactive ? 0.5 : 1 }}>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>{s.번호}</td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', fontSize: '0.8rem' }}>{s.학급}</td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
                                             <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
                                                 {isEditing ? (
-                                                    <div style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
-                                                        <button onClick={handleSave} disabled={saving} style={{ padding: '2px 6px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
-                                                            {saving ? '...' : '저장'}
-                                                        </button>
-                                                        <button onClick={handleCancel} style={{ padding: '2px 6px', backgroundColor: '#9e9e9e', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
-                                                            취소
-                                                        </button>
-                                                    </div>
+                                                    <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} style={{ padding: '2px', width: '40px' }}>
+                                                        <option value="O">O</option>
+                                                        <option value="X">X</option>
+                                                    </select>
                                                 ) : (
-                                                    <button onClick={() => handleEdit(s)} style={{ padding: '2px 8px', backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
-                                                        편집
-                                                    </button>
+                                                    <span style={{ color: s.재학여부 === "O" ? '#2e7d32' : '#999', fontWeight: 'bold' }}>{s.재학여부}</span>
                                                 )}
                                             </td>
-                                        )}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                {isEditing ? (
+                                                    <input type="text" value={editBeAble} onChange={(e) => setEditBeAble(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="코드" />
+                                                ) : (
+                                                    s['BeAble코드'] || '-'
+                                                )}
+                                            </td>
+                                            {/* 5 Tier columns with O/X */}
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f1f8e9' }}>
+                                                {isEditing ? (
+                                                    <select value={editTiers.tier1} onChange={(e) => setEditTiers({ ...editTiers, tier1: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                        <option value="O">O</option>
+                                                        <option value="X">X</option>
+                                                    </select>
+                                                ) : (
+                                                    <span style={{ color: s['Tier1'] === "O" ? '#2e7d32' : '#ccc', fontWeight: 'bold' }}>{s['Tier1']}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#fff8e1' }}>
+                                                {isEditing ? (
+                                                    <select value={editTiers.tier2_cico} onChange={(e) => setEditTiers({ ...editTiers, tier2_cico: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                        <option value="O">O</option>
+                                                        <option value="X">X</option>
+                                                    </select>
+                                                ) : (
+                                                    <span style={{ color: s['Tier2(CICO)'] === "O" ? '#f57c00' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(CICO)']}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#e3f2fd' }}>
+                                                {isEditing ? (
+                                                    <select value={editTiers.tier2_sst} onChange={(e) => setEditTiers({ ...editTiers, tier2_sst: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                        <option value="O">O</option>
+                                                        <option value="X">X</option>
+                                                    </select>
+                                                ) : (
+                                                    <span style={{ color: s['Tier2(SST)'] === "O" ? '#1976d2' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(SST)']}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#ffebee' }}>
+                                                {isEditing ? (
+                                                    <select value={editTiers.tier3} onChange={(e) => setEditTiers({ ...editTiers, tier3: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                        <option value="O">O</option>
+                                                        <option value="X">X</option>
+                                                    </select>
+                                                ) : (
+                                                    <span style={{ color: s['Tier3'] === "O" ? '#d32f2f' : '#ccc', fontWeight: 'bold' }}>{s['Tier3']}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#4a148c' }}>
+                                                {isEditing ? (
+                                                    <select value={editTiers.tier3_plus} onChange={(e) => setEditTiers({ ...editTiers, tier3_plus: e.target.value })} style={{ padding: '2px', width: '40px', backgroundColor: '#4a148c', color: 'white' }}>
+                                                        <option value="O">O</option>
+                                                        <option value="X">X</option>
+                                                    </select>
+                                                ) : (
+                                                    <span style={{ color: s['Tier3+'] === "O" ? '#fff' : '#888', fontWeight: 'bold' }}>{s['Tier3+']}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
+                                            {isAdmin() && (
+                                                <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                    {isEditing ? (
+                                                        <div style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
+                                                            <button onClick={handleSave} disabled={saving} style={{ padding: '2px 6px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                                                {saving ? '...' : '저장'}
+                                                            </button>
+                                                            <button onClick={handleCancel} style={{ padding: '2px 6px', backgroundColor: '#9e9e9e', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                                                취소
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button onClick={() => handleEdit(s)} style={{ padding: '2px 8px', backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                                            편집
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
         </AuthCheck>
     );
 }

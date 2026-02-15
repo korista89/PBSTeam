@@ -9,7 +9,7 @@ interface GlobalNavProps {
 
 export default function GlobalNav({ currentPage }: GlobalNavProps) {
     const { user, logout, isAdmin } = useAuth();
-    
+
     // Date state with localStorage persistence
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
@@ -19,7 +19,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         // Load dates from localStorage on mount
         const savedStart = localStorage.getItem("pbis_start_date");
         const savedEnd = localStorage.getItem("pbis_end_date");
-        
+
         if (savedStart && savedEnd) {
             setStartDate(savedStart);
             setEndDate(savedEnd);
@@ -51,6 +51,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         { href: "/report/tier3", label: "🔴 T3리포트", key: "report-tier3" },
         { href: "/meeting", label: "🤝 협의회", key: "meeting" },
         { href: "/protocol", label: "📜 프로토콜", key: "protocol" },
+        { href: "/board", label: "📢 게시판", key: "board" },
     ];
 
     if (isAdmin()) {
@@ -61,8 +62,8 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
 
     const handleSearch = () => {
         // Dispatch custom event for date change
-        window.dispatchEvent(new CustomEvent('pbis-date-change', { 
-            detail: { startDate, endDate } 
+        window.dispatchEvent(new CustomEvent('pbis-date-change', {
+            detail: { startDate, endDate }
         }));
     };
 
@@ -111,15 +112,15 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
 
             {/* Date Picker */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input 
-                    type="date" 
+                <input
+                    type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     style={{ padding: '5px 8px', borderRadius: '4px', border: 'none', fontSize: '0.85rem' }}
                 />
                 <span style={{ color: 'white' }}>~</span>
-                <input 
-                    type="date" 
+                <input
+                    type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     style={{ padding: '5px 8px', borderRadius: '4px', border: 'none', fontSize: '0.85rem' }}
@@ -177,7 +178,7 @@ export function useDateRange() {
         const loadDates = () => {
             const savedStart = localStorage.getItem("pbis_start_date");
             const savedEnd = localStorage.getItem("pbis_end_date");
-            
+
             if (savedStart && savedEnd) {
                 setStartDate(savedStart);
                 setEndDate(savedEnd);

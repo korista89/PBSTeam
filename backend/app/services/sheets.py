@@ -47,15 +47,37 @@ def get_main_worksheet():
         print(f"Error connecting to sheet: {e}")
         return None
 
-def fetch_all_records():
+import time
+
+# Simple in-memory cache
+_cache = {
+    "records": {"data": [], "timestamp": 0},
+    "users": {"data": [], "timestamp": 0},
+    "board": {"data": [], "timestamp": 0}
+}
+CACHE_TTL = 300  # 5 minutes
+
+def clear_cache(key: str = None):
+    if key and key in _cache:
+        _cache[key] = {"data": [], "timestamp": 0}
+    elif key is None:
+        for k in _cache:
+            _cache[k] = {"data": [], "timestamp": 0}
+
+def fetch_all_records(force_refresh: bool = False):
+    global _cache
+    now = time.time()
+    
+    if not force_refresh and _cache["records"]["data"] and (now - _cache["records"]["timestamp"] < CACHE_TTL):
+        return _cache["records"]["data"]
+
     worksheet = get_main_worksheet()
     if not worksheet:
         return []
     
-    # Get all values including headers
-    # expected_headers argument can be used to validate, but for now we trust `get_all_records`
     try:
         all_values = worksheet.get_all_records()
+        _cache["records"] = {"data": all_values, "timestamp": now}
         return all_values
     except Exception as e:
         print(f"Error fetching records: {e}")
@@ -153,20 +175,32 @@ def get_users_worksheet():
         print(f"Error accessing Users worksheet: {e}")
         return None
 
-def get_user_by_id(user_id: str):
+def fetch_all_users():
+    global _cache
+    now = time.time()
+    
+    # Check cache
+    if _cache["users"]["data"] and (now - _cache["users"]["timestamp"] < CACHE_TTL):
+        return _cache["users"]["data"]
+
     ws = get_users_worksheet()
     if not ws:
-        return None
+        return []
     
     try:
         records = ws.get_all_records()
-        for r in records:
-            if str(r.get('ID')) == str(user_id):
-                return r
-        return None
+        _cache["users"] = {"data": records, "timestamp": now}
+        return records
     except Exception as e:
-        print(f"Error fetching user: {e}")
-        return None
+        print(f"Error fetching users: {e}")
+        return []
+
+def get_user_by_id(user_id: str):
+    users = fetch_all_users()
+    for r in users:
+        if str(r.get('ID')) == str(user_id):
+            return r
+    return None
 
 def update_user_password(user_id: str, new_password: str):
     ws = get_users_worksheet()
@@ -179,6 +213,7 @@ def update_user_password(user_id: str, new_password: str):
             if str(r.get('ID')) == str(user_id):
                 # Row index is idx + 2 (1 for header, 1 for 0-index)
                 ws.update_cell(idx + 2, 2, new_password)  # Column 2 is Password
+                clear_cache("users")
                 return {"message": "Password updated"}
         return {"error": "User not found"}
     except Exception as e:
@@ -228,6 +263,7 @@ STUDENT_CODES = [
     "6001", "6002", "6003", "6004", "6005", "6006"
 ]
 
+
 def code_to_class_name(code: str) -> str:
     """Convert 4-digit student code to class name"""
     if len(code) != 4:
@@ -256,6 +292,75 @@ def code_to_class_name(code: str) -> str:
     
     course_name = course_names.get(course, "")
     return f"{course_name} {grade}학년 {cls}반"
+
+def get_unique_class_info() -> dict:
+    """
+    Extract unique class IDs and Names from STUDENT_CODES.
+    Returns dict: { '211': '초등 1학년 1반', ... }
+    Class ID is the first 3 digits of student code (e.g. 2111 -> 211)
+    """
+    classes = {}
+    for code in STUDENT_CODES:
+        if len(code) < 3: continue
+        
+        # Determine Class ID (Provisional: first 3 digits)
+        # For special classes (34xx, 44xx), we still use first 3 distinct digits if they distinguish classes
+        # 3401 -> 340 (Visiting)
+        class_id = code[:3]
+        class_name = code_to_class_name(code)
+        
+        if class_id not in classes:
+            classes[class_id] = class_name
+            
+    return classes
+
+def reset_users_sheet():
+    """
+    Re-initialize Users sheet with proper Admin and Class Teacher accounts.
+    Admin: admin01 ~ admin10
+    Teacher: [ClassID] (e.g. 211)
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Cannot access Google Sheets"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        
+        # Delete old if exists
+        try:
+            old_ws = sheet.worksheet("Users")
+            sheet.del_worksheet(old_ws)
+        except gspread.WorksheetNotFound:
+            pass
+            
+        print("Creating new 'Users' worksheet...")
+        # Headers: ID, Password, Role, LastLogin, ClassID, ClassName
+        ws = sheet.add_worksheet(title="Users", rows=100, cols=6)
+        ws.append_row(["ID", "Password", "Role", "LastLogin", "ClassID", "ClassName"])
+        
+        all_rows = []
+        
+        # 1. Admins (admin01 ~ admin10)
+        for i in range(1, 11):
+            uid = f"admin{i:02d}"
+            all_rows.append([uid, "admin123", "admin", "", "", "관리자"])
+            
+        # 2. Class Teachers
+        class_info = get_unique_class_info()
+        # Sort by Class ID
+        sorted_ids = sorted(class_info.keys())
+        
+        for cid in sorted_ids:
+            cname = class_info[cid]
+            all_rows.append([cid, "teacher123", "class_teacher", "", cid, cname])
+            
+        ws.update(all_rows, 'A2')
+        clear_cache("users")
+        return {"message": f"Users sheet reset. {len(all_rows)} users created."}
+    except Exception as e:
+        print(f"Error resetting Users sheet: {e}")
+        return {"error": str(e)}
 
 
 def get_student_status_worksheet():
@@ -386,6 +491,83 @@ def update_student_tier(code: str, tier_values: dict, memo: str = ""):
         return {"error": f"Student code {code} not found"}
     except Exception as e:
         print(f"Error updating tier: {e}")
+        return {"error": str(e)}
+
+
+def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = None, beable_code: str = None, memo: str = ""):
+    """
+    Unified update: tier status + enrollment + beable code in a single batch.
+    Reduces Google Sheets API calls from 3 separate requests to 1 batch.
+    """
+    ws = get_student_status_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        records = ws.get_all_records()
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        tier_columns = {
+            'Tier1': 6,
+            'Tier2(CICO)': 7,
+            'Tier2(SST)': 8,
+            'Tier3': 9,
+            'Tier3+': 10,
+        }
+        
+        for idx, r in enumerate(records):
+            if str(r.get('학생코드')) == str(code):
+                row_num = idx + 2
+                
+                # Build batch update
+                batch_updates = []
+                
+                # Update tier columns
+                for tier_name, col_num in tier_columns.items():
+                    if tier_name in tier_values:
+                        value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
+                        batch_updates.append({
+                            "range": f"{_col_letter(col_num)}{row_num}",
+                            "values": [[value]]
+                        })
+                
+                # Update enrollment (column 4)
+                if enrolled is not None:
+                    batch_updates.append({
+                        "range": f"D{row_num}",
+                        "values": [[enrolled]]
+                    })
+                
+                # Update BeAble code (column 5)
+                if beable_code is not None:
+                    batch_updates.append({
+                        "range": f"E{row_num}",
+                        "values": [[beable_code]]
+                    })
+                
+                # Update 변경일 (column 11)
+                batch_updates.append({
+                    "range": f"K{row_num}",
+                    "values": [[today]]
+                })
+                
+                # Update 메모 (column 12)
+                if memo:
+                    batch_updates.append({
+                        "range": f"L{row_num}",
+                        "values": [[memo]]
+                    })
+                
+                # Execute batch update
+                if batch_updates:
+                    ws.batch_update(batch_updates)
+                
+                return {"message": f"Student {code} updated successfully", "code": code}
+        
+        return {"error": f"Student code {code} not found"}
+    except Exception as e:
+        print(f"Error in unified update: {e}")
         return {"error": str(e)}
 
 
@@ -546,6 +728,90 @@ def add_cico_daily(data: dict):
 
 
 # =============================
+# Meeting Notes Worksheet
+# =============================
+def get_meeting_notes_worksheet():
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return None
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            return sheet.worksheet("MeetingNotes")
+        except gspread.WorksheetNotFound:
+            print("Creating 'MeetingNotes' worksheet...")
+            ws = sheet.add_worksheet(title="MeetingNotes", rows=500, cols=8)
+            # Headers including StudentCode for individual consultation logs
+            ws.append_row(["Date", "MeetingType", "Content", "Author", "CreatedAt", "StudentCode", "PeriodStart", "PeriodEnd"])
+            return ws
+    except Exception as e:
+        print(f"Error accessing MeetingNotes worksheet: {e}")
+        return None
+
+def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
+    ws = get_meeting_notes_worksheet()
+    if not ws:
+        return []
+    
+    try:
+        records = ws.get_all_records()
+        # sort by CreatedAt desc
+        valid_records = []
+        for r in records:
+            # Filter by meeting_type if provided
+            if meeting_type and str(r.get('MeetingType')) != str(meeting_type):
+                continue
+            # Filter by student_code if provided
+            if student_code and str(r.get('StudentCode')) != str(student_code):
+                continue
+            
+            valid_records.append({
+                "id": str(r.get('CreatedAt')), # Use CreatedAt as ID for now
+                "date": r.get('Date'),
+                "meeting_type": r.get('MeetingType'),
+                "content": r.get('Content'),
+                "author": r.get('Author'),
+                "created_at": r.get('CreatedAt'),
+                "student_code": r.get('StudentCode', ''),
+                "period_start": r.get('PeriodStart', ''),
+                "period_end": r.get('PeriodEnd', '')
+            })
+            
+        # Sort descending by CreatedAt
+        valid_records.sort(key=lambda x: x['created_at'], reverse=True)
+        return valid_records
+    except Exception as e:
+        print(f"Error fetching meeting notes: {e}")
+        return []
+
+def add_meeting_note(data: dict):
+    ws = get_meeting_notes_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        from datetime import datetime
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        row = [
+            data.get('date', datetime.now().strftime("%Y-%m-%d")),
+            data.get('meeting_type', 'tier1'),
+            data.get('content', ''),
+            data.get('author', ''),
+            created_at,
+            data.get('student_code', ''),
+            data.get('period_start', ''),
+            data.get('period_end', '')
+        ]
+        ws.append_row(row)
+        return {"message": "Meeting note added", "created_at": created_at}
+    except Exception as e:
+        print(f"Error adding meeting note: {e}")
+        return {"error": str(e)}
+
+
+# =============================
 # CICO Monthly Grid APIs
 # =============================
 
@@ -630,6 +896,143 @@ def get_business_days(year: int, month: int, holidays: list = None):
     return dates
 
 
+def _calculate_cico_rate(student: dict) -> dict:
+    """
+    Calculate 수행/발생률 and 달성여부 from daily input data.
+    Supports multiple scale types: O/X, 0/1/2점, 0~5, 0~7교시, 회/분.
+    Handles both 증가(increase) and 감소(decrease) target behaviors.
+    """
+    days = student.get("days", {})
+    scale = student.get("척도", "O/X(발생)")
+    behavior_type = student.get("목표행동 유형", "증가 목표행동")
+    goal_criteria = student.get("목표 달성 기준", "80% 이상")
+    
+    # Collect non-empty day values
+    filled_values = []
+    for day_label, val in days.items():
+        val = str(val).strip()
+        if val and val != "-" and val != "·":
+            filled_values.append(val)
+    
+    if not filled_values:
+        return {"rate_str": "-", "achieved": "-", "rate_num": None, "input_days": 0, "total_days": len(days)}
+    
+    input_days = len(filled_values)
+    total_days = len(days)
+    
+    # Calculate rate based on scale type
+    rate_num = None
+    
+    if scale == "O/X(발생)":
+        # Count O's and X's
+        o_count = sum(1 for v in filled_values if v.upper() == "O")
+        total = len(filled_values)
+        if total > 0:
+            if behavior_type == "증가 목표행동":
+                # O = success for increase targets
+                rate_num = (o_count / total) * 100
+            else:
+                # X = success for decrease targets (no occurrence)
+                x_count = total - o_count
+                rate_num = (x_count / total) * 100
+    
+    elif scale == "0점/1점/2점":
+        # Max per entry = 2
+        total_score = 0
+        count = 0
+        for v in filled_values:
+            try:
+                s = float(v)
+                total_score += s
+                count += 1
+            except (ValueError, TypeError):
+                continue
+        if count > 0:
+            max_possible = count * 2
+            if behavior_type == "증가 목표행동":
+                rate_num = (total_score / max_possible) * 100
+            else:
+                rate_num = ((max_possible - total_score) / max_possible) * 100
+    
+    elif scale == "0~5":
+        total_score = 0
+        count = 0
+        for v in filled_values:
+            try:
+                s = float(v)
+                total_score += s
+                count += 1
+            except (ValueError, TypeError):
+                continue
+        if count > 0:
+            max_possible = count * 5
+            if behavior_type == "증가 목표행동":
+                rate_num = (total_score / max_possible) * 100
+            else:
+                rate_num = ((max_possible - total_score) / max_possible) * 100
+    
+    elif scale == "0~7교시":
+        total_score = 0
+        count = 0
+        for v in filled_values:
+            try:
+                s = float(v)
+                total_score += s
+                count += 1
+            except (ValueError, TypeError):
+                continue
+        if count > 0:
+            max_possible = count * 7
+            if behavior_type == "증가 목표행동":
+                rate_num = (total_score / max_possible) * 100
+            else:
+                rate_num = ((max_possible - total_score) / max_possible) * 100
+    
+    else:
+        # Free input (1~100회 or 1~100분) — use average directly as rate
+        total_score = 0
+        count = 0
+        for v in filled_values:
+            try:
+                s = float(v)
+                total_score += s
+                count += 1
+            except (ValueError, TypeError):
+                continue
+        if count > 0:
+            avg = total_score / count
+            rate_num = avg  # The average IS the rate for free-input scales
+    
+    # Format rate string
+    if rate_num is not None:
+        rate_str = f"{round(rate_num)}%"
+    else:
+        rate_str = "-"
+    
+    # Determine achievement (달성 여부)
+    achieved = "-"
+    if rate_num is not None and goal_criteria:
+        # Parse goal criteria: "80% 이상", "20% 이하", etc.
+        try:
+            goal_str = goal_criteria.replace("%", "").replace("이상", "").replace("이하", "").strip()
+            goal_val = float(goal_str)
+            
+            if "이하" in goal_criteria:
+                achieved = "O" if rate_num <= goal_val else "X"
+            else:  # 이상 (default)
+                achieved = "O" if rate_num >= goal_val else "X"
+        except (ValueError, TypeError):
+            achieved = "-"
+    
+    return {
+        "rate_str": rate_str,
+        "achieved": achieved,
+        "rate_num": round(rate_num, 1) if rate_num is not None else None,
+        "input_days": input_days,
+        "total_days": total_days
+    }
+
+
 def get_monthly_cico_data(month: int):
     """
     Get all student data from a monthly sheet for the CICO grid view.
@@ -704,6 +1107,14 @@ def get_monthly_cico_data(month: int):
                 idx = dc["index"]
                 val = row[idx] if idx < len(row) else ""
                 student["days"][dc["label"]] = val
+            
+            # ===== Auto-calculate 수행/발생률 and 달성 여부 =====
+            calc_result = _calculate_cico_rate(student)
+            student["수행_발생률"] = calc_result["rate_str"]
+            student["목표_달성_여부"] = calc_result["achieved"]
+            student["rate_num"] = calc_result["rate_num"]
+            student["input_days"] = calc_result["input_days"]
+            student["total_days"] = calc_result["total_days"]
             
             if is_tier2 == "O":
                 students.append(student)
@@ -1484,8 +1895,98 @@ def initialize_monthly_sheets():
             
             print(f"Initialized {m_name}")
 
+        clear_cache() # Invalidate all caches after refresh
         return {"message": "Monthly sheets initialized"}
 
     except Exception as e:
         print(f"Error initializing monthly sheets: {e}")
+        return {"error": str(e)}
+
+
+# =============================
+# Board Worksheet (Notices)
+# =============================
+def get_board_worksheet():
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return None
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            return sheet.worksheet("Board")
+        except gspread.WorksheetNotFound:
+            print("Creating 'Board' worksheet...")
+            ws = sheet.add_worksheet(title="Board", rows=100, cols=6)
+            ws.append_row(["ID", "Title", "Content", "Author", "CreatedAt", "Views"])
+            return ws
+    except Exception as e:
+        print(f"Error accessing Board worksheet: {e}")
+        return None
+
+def fetch_board_posts():
+    global _cache
+    now = time.time()
+    
+    if _cache["board"]["data"] and (now - _cache["board"]["timestamp"] < CACHE_TTL):
+        return _cache["board"]["data"]
+
+    ws = get_board_worksheet()
+    if not ws:
+        return []
+    
+    try:
+        records = ws.get_all_records()
+        valid_records = []
+        for r in records:
+            valid_records.append({
+                "id": str(r.get("ID")),
+                "title": r.get("Title"),
+                "content": r.get("Content"),
+                "author": r.get("Author"),
+                "created_at": r.get("CreatedAt"),
+                "views": r.get("Views")
+            })
+            
+        valid_records.sort(key=lambda x: x["created_at"], reverse=True)
+        _cache["board"] = {"data": valid_records, "timestamp": now}
+        return valid_records
+    except Exception as e:
+        print(f"Error fetching board posts: {e}")
+        return []
+
+def add_board_post(title: str, content: str, author: str):
+    ws = get_board_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        from datetime import datetime
+        import uuid
+        
+        post_id = str(uuid.uuid4())[:8]
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        row = [post_id, title, content, author, created_at, 0]
+        ws.append_row(row)
+        clear_cache("board") # Invalidate cache
+        return {"message": "Post added", "post_id": post_id}
+    except Exception as e:
+        print(f"Error adding board post: {e}")
+        return {"error": str(e)}
+
+def delete_board_post(post_id: str):
+    ws = get_board_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        cell = ws.find(post_id)
+        if cell:
+            ws.delete_rows(cell.row)
+            clear_cache("board") # Invalidate cache
+            return {"message": "Post deleted"}
+        return {"error": "Post not found"}
+    except Exception as e:
+        print(f"Error deleting board post: {e}")
         return {"error": str(e)}

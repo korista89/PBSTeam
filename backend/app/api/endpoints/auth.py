@@ -27,7 +27,9 @@ async def login(request: LoginRequest):
         "message": "Login successful",
         "user": {
             "id": user.get("ID"),
-            "role": user.get("Role")
+            "role": user.get("Role"),
+            "class_id": user.get("ClassID", ""),
+            "class_name": user.get("ClassName", "")
         }
     }
 
@@ -41,6 +43,17 @@ async def list_users():
 async def change_password(user_id: str, request: PasswordUpdateRequest):
     """Admin only: Update password for a user"""
     result = update_user_password(user_id, request.new_password)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+@router.post("/reset-users")
+async def reset_users_db():
+    """
+    DEV ONLY: Reset Users sheet to default Admin + 34 Class Teachers
+    """
+    from app.services.sheets import reset_users_sheet
+    result = reset_users_sheet()
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result

@@ -66,3 +66,13 @@ async def debug_data():
         "march_TierStatus불일치": march_unmatched,
         "march_일치_records_count": len(march_matched_records)
     }
+
+@router.post("/dashboard/refresh")
+async def refresh_dashboard():
+    """Trigger a refresh of monthly sheets and dashboard data."""
+    from app.services.sheets import initialize_monthly_sheets
+    result = initialize_monthly_sheets()
+    if "error" in result:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result

@@ -48,6 +48,20 @@ export interface DashboardData {
     heatmap: HeatmapData[];
     safety_alerts: SafetyAlert[];
     ai_comment?: string;
+    ai_report?: AIReport;
+}
+
+export interface AIReport {
+    briefing_text: string;
+    sections: {
+        briefing: string;
+        agenda: string;
+        order: string;
+        decision: string;
+        checklist: string;
+    };
+    tier_stats?: any;
+    summary?: any;
 }
 
 export interface StudentProfile {
@@ -64,6 +78,16 @@ export interface StudentData {
     abc_data: { x: string; y: string; z: number; function: string }[];
     functions: ChartData[];
     cico_trend: TrendData[];
+    weekly_trend?: any[];
+    behavior_types?: ChartData[];
+    location_stats?: ChartData[];
+    time_stats?: ChartData[];
+    weekday_dist?: ChartData[];
+    monthly_trend?: any[];
+    daily_intensity?: any[];
+    separation_stats?: any[];
+    daily_report_freq?: any[];
+    monthly_report_freq?: any[];
 }
 
 export interface StudentMeetingData {
@@ -86,4 +110,11 @@ export interface MeetingAnalysisResponse {
     period: string;
     students: StudentMeetingData[];
     summary: MeetingAnalysisSummary;
+}
+
+export interface User {
+    id: string;
+    role: string;
+    class_id?: string;
+    class_name?: string;
 }

@@ -69,7 +69,7 @@ export default function Tier3Report() {
         params.append("end_date", endDate);
       }
       const queryString = params.toString();
-      const url = queryString 
+      const url = queryString
         ? `${apiUrl}/api/v1/analytics/tier3-report?${queryString}`
         : `${apiUrl}/api/v1/analytics/tier3-report`;
       const res = await axios.get(url);
@@ -201,6 +201,11 @@ export default function Tier3Report() {
                 ))}
               </div>
 
+              {/* Meeting Notes Section */}
+              <div style={{ marginBottom: "24px" }}>
+                <MeetingNotesSection apiUrl={apiUrl} meetingType="tier3" title="Tier 3 사례회의록" />
+              </div>
+
               {/* Student Table */}
               {data.students.length === 0 ? (
                 <div style={{
@@ -215,7 +220,7 @@ export default function Tier3Report() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                     <thead>
                       <tr style={{ background: "rgba(51,65,85,0.8)" }}>
-                        {["Tier", "학생코드", "학급", "사건 수", "최대 강도", "평균 강도", "주요 행동", "주간 추이", "시스템 의사결정 제안"].map(h => (
+                        {["Tier", "학생코드", "학급", "사건 수", "최대 강도", "평균 강도", "주요 행동", "주간 추이", "시스템 의사결정 제안", "분석"].map(h => (
                           <th key={h} style={{
                             padding: "10px 8px", color: "#94a3b8", fontWeight: 600,
                             borderBottom: "1px solid #334155", textAlign: "left",
@@ -284,24 +289,133 @@ export default function Tier3Report() {
                               {s.decision}
                             </span>
                           </td>
+                          <td style={{ padding: "10px 8px" }}>
+                            <button
+                              onClick={() => window.location.href = `/student/${s.code}`} // Assuming code works, or name if preferred
+                              style={{
+                                padding: "4px 8px",
+                                background: "#3b82f6",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                fontSize: "0.7rem",
+                                cursor: "pointer"
+                              }}
+                            >
+                              상세
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-
-              {/* Footer info */}
-              <div style={{
-                marginTop: "16px", padding: "12px 16px", background: "rgba(30,41,59,0.4)",
-                borderRadius: "8px", color: "#64748b", fontSize: "0.7rem"
-              }}>
-                💡 의사결정 기준: 사건 0건 → Tier2 하향 검토 | 사건 ≤4건 → 관찰 유지 | 강도 5+ or 사건 10+건 → Tier3+ 검토
-              </div>
             </>
           )}
         </main>
       </div>
     </AuthCheck>
+  );
+}
+
+// Sub-component for Meeting Notes to keep code clean
+function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, meetingType: string, title: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [content, setContent] = useState("");
+  const [notes, setNotes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchNotes = async () => {
+    try {
+      const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${meetingType}`);
+      setNotes(res.data.notes || []);
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    if (expanded) fetchNotes();
+  }, [expanded]);
+
+  const saveNote = async () => {
+    if (!content.trim()) return;
+    setLoading(true);
+    try {
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+        meeting_type: meetingType,
+        date: new Date().toISOString().split('T')[0],
+        content,
+        author: "Teacher"
+      });
+      setContent("");
+      fetchNotes();
+      alert("저장되었습니다.");
+    } catch (e) {
+      alert("저장 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ background: "rgba(30,41,59,0.6)", borderRadius: "12px", border: "1px solid #334155", overflow: "hidden" }}>
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          padding: "16px 20px", cursor: "pointer",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: expanded ? "rgba(30,41,59,0.8)" : "transparent"
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: "1rem", color: "#e2e8f0", display: "flex", alignItems: "center", gap: "8px" }}>
+          📝 {title}
+        </h3>
+        <span style={{ color: "#94a3b8" }}>{expanded ? "▲ 접기" : "▼ 펼치기"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "20px", borderTop: "1px solid #334155" }}>
+          <div style={{ marginBottom: "20px" }}>
+            <textarea
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              placeholder="회의 내용을 비식별화하여 입력하세요..."
+              style={{
+                width: "100%", minHeight: "80px", padding: "12px",
+                background: "#0f172a", border: "1px solid #475569",
+                borderRadius: "8px", color: "#f1f5f9", marginBottom: "10px"
+              }}
+            />
+            <button
+              onClick={saveNote}
+              disabled={loading || !content.trim()}
+              style={{
+                padding: "8px 16px", background: "#6366f1", color: "white",
+                border: "none", borderRadius: "6px", cursor: "pointer",
+                fontSize: "0.85rem", opacity: loading ? 0.7 : 1
+              }}
+            >
+              {loading ? "저장 중..." : "회의록 저장"}
+            </button>
+          </div>
+
+          <div>
+            <h4 style={{ margin: "0 0 12px 0", fontSize: "0.9rem", color: "#cbd5e1" }}>📋 최근 기록</h4>
+            {notes.length === 0 ? (
+              <p style={{ color: "#64748b", fontSize: "0.85rem" }}>기록이 없습니다.</p>
+            ) : (
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "200px", overflowY: "auto" }}>
+                {notes.map(n => (
+                  <li key={n.id} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px dashed #334155" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: "4px" }}>{n.date} | {n.author}</div>
+                    <div style={{ fontSize: "0.9rem", color: "#e2e8f0", whiteSpace: "pre-wrap" }}>{n.content}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -2,11 +2,7 @@
 
 import { useEffect, useState, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
-
-interface User {
-    id: string;
-    role: string;
-}
+import { User } from "../types";
 
 interface AuthProviderProps {
     children: ReactNode;
@@ -63,10 +59,10 @@ export function AuthCheck({ children, requireAdmin = false }: AuthProviderProps 
 
     if (loading) {
         return (
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
+            <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
                 height: '100vh',
                 fontSize: '1.2rem',
                 color: '#666'

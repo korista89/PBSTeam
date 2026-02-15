@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from app.services.sheets import (
     fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
     update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
-    reset_tier_status_sheet
+    reset_tier_status_sheet, update_student_tier_unified
 )
 from pydantic import BaseModel
 from typing import Optional, List
@@ -21,6 +21,18 @@ class TierUpdateRequest(BaseModel):
     tier3: Optional[str] = None  # O or X
     tier3_plus: Optional[str] = None  # O or X
     memo: Optional[str] = ""
+
+class UnifiedTierUpdateRequest(BaseModel):
+    """Single request for all tier-related updates"""
+    code: str
+    tier1: Optional[str] = None
+    tier2_cico: Optional[str] = None
+    tier2_sst: Optional[str] = None
+    tier3: Optional[str] = None
+    tier3_plus: Optional[str] = None
+    memo: Optional[str] = ""
+    enrolled: Optional[str] = None
+    beable_code: Optional[str] = None
 
 class EnrollmentUpdateRequest(BaseModel):
     code: str
@@ -57,6 +69,32 @@ async def update_tier(request: TierUpdateRequest):
         tier_values['Tier3+'] = request.tier3_plus
     
     result = update_student_tier(request.code, tier_values, request.memo)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+@router.put("/status/unified")
+async def update_tier_unified(request: UnifiedTierUpdateRequest):
+    """Unified update: tier + enrollment + beable in single API call"""
+    tier_values = {}
+    if request.tier1 is not None:
+        tier_values['Tier1'] = request.tier1
+    if request.tier2_cico is not None:
+        tier_values['Tier2(CICO)'] = request.tier2_cico
+    if request.tier2_sst is not None:
+        tier_values['Tier2(SST)'] = request.tier2_sst
+    if request.tier3 is not None:
+        tier_values['Tier3'] = request.tier3
+    if request.tier3_plus is not None:
+        tier_values['Tier3+'] = request.tier3_plus
+    
+    result = update_student_tier_unified(
+        code=request.code,
+        tier_values=tier_values,
+        enrolled=request.enrolled,
+        beable_code=request.beable_code,
+        memo=request.memo or ""
+    )
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result

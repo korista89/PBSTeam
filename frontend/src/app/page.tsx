@@ -25,6 +25,7 @@ import {
 import { DashboardData, ChartData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
+import { DashboardSkeleton } from "./components/DashboardSkeleton";
 import { COLORS, TIER_COLORS } from "./constants";
 
 export default function Home() {
@@ -67,7 +68,16 @@ export default function Home() {
     if (error) return <div className={styles.error}>{error}</div>;
 
     // Initial data check (first load)
-    if (!data && loading) return <div className={styles.loading}><span className={styles.spinner} />데이터 분석 중... 🧠</div>;
+    if (!data && loading) return (
+        <AuthCheck>
+            <div className={styles.container}>
+                <GlobalNav currentPage="dashboard" />
+                <main className={styles.main} style={{ marginTop: '20px' }}>
+                    <DashboardSkeleton />
+                </main>
+            </div>
+        </AuthCheck>
+    );
     if (!data) return null;
 
     // Handle API error response
@@ -192,17 +202,78 @@ export default function Home() {
                         </div>
                     </div>
 
-                    {/* AI Insight Section */}
-                    {data.ai_comment && (
+                    {/* AI Meeting Agent Report */}
+                    {data.ai_report ? (
+                        <div className={styles.card} style={{ marginBottom: '2rem', borderLeft: '5px solid #8b5cf6', backgroundColor: '#f5f3ff' }}>
+                            <h2 style={{ fontSize: '1.3rem', color: '#6d28d9', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                🤖 행동중재지원팀 회의 에이전트
+                            </h2>
+
+                            {/* Tab Navigation */}
+                            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', borderBottom: '1px solid #ddd', paddingBottom: '10px', overflowX: 'auto' }}>
+                                {['briefing', 'agenda', 'order', 'decision', 'checklist'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => {
+                                            const el = document.getElementById(`tab-${tab}`);
+                                            if (el) {
+                                                document.querySelectorAll('.report-tab').forEach(e => (e as HTMLElement).style.display = 'none');
+                                                el.style.display = 'block';
+                                                document.querySelectorAll('.tab-btn').forEach(e => (e as HTMLElement).style.fontWeight = 'normal');
+                                                (document.getElementById(`btn-${tab}`) as HTMLElement).style.fontWeight = 'bold';
+                                                (document.getElementById(`btn-${tab}`) as HTMLElement).style.borderBottom = '2px solid #8b5cf6';
+                                            }
+                                        }}
+                                        id={`btn-${tab}`}
+                                        className="tab-btn"
+                                        style={{
+                                            border: 'none',
+                                            background: 'none',
+                                            fontSize: '1rem',
+                                            cursor: 'pointer',
+                                            padding: '5px 10px',
+                                            color: '#5b21b6',
+                                            whiteSpace: 'nowrap',
+                                            fontWeight: tab === 'briefing' ? 'bold' : 'normal',
+                                            borderBottom: tab === 'briefing' ? '2px solid #8b5cf6' : 'none'
+                                        }}
+                                    >
+                                        {tab === 'briefing' && '📋 현황 브리핑'}
+                                        {tab === 'agenda' && '📌 회의 안건'}
+                                        {tab === 'order' && '🔄 진행 순서'}
+                                        {tab === 'decision' && '🗳️ 의사결정 기준'}
+                                        {tab === 'checklist' && '☑️ 체크리스트'}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Content Areas */}
+                            <div id="tab-briefing" className="report-tab" style={{ display: 'block', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
+                                {data.ai_report.sections.briefing}
+                            </div>
+                            <div id="tab-agenda" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
+                                {data.ai_report.sections.agenda}
+                            </div>
+                            <div id="tab-order" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
+                                {data.ai_report.sections.order}
+                            </div>
+                            <div id="tab-decision" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
+                                {data.ai_report.sections.decision}
+                            </div>
+                            <div id="tab-checklist" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
+                                {data.ai_report.sections.checklist}
+                            </div>
+                        </div>
+                    ) : (data.ai_comment && (
                         <div className={styles.card} style={{ marginBottom: '2rem', borderLeft: '5px solid #8b5cf6', backgroundColor: '#f5f3ff' }}>
                             <h2 style={{ fontSize: '1.2rem', color: '#6d28d9', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🤖 행동 분석 AI 리포트 (Beta)
+                                🤖 행동 분석 AI 리포트
                             </h2>
                             <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', fontSize: '0.95rem', color: '#333' }}>
                                 {data.ai_comment}
                             </div>
                         </div>
-                    )}
+                    ))}
 
                     {/* Summary Cards */}
                     <div className={styles.statGrid}>
