@@ -1236,55 +1236,21 @@ def create_monthly_cico_sheet(year: int, month: int):
         ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+5)
         ws.update(rows)
         
-        # 4. Add Dropdowns (Data Validation)
-        try:
-             # Requires gspread-formatting
-             # pip install gspread-formatting
-             from gspread_formatting import DataValidationRule, ConditionType, set_data_validation_for_cell_range
-             
-             start_row = 2
-             end_row = len(rows)
-             
-             # A. Scale Dropdown (Col 7 / G)
-             # "O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "free"
-             scale_rule = DataValidationRule(
-                 condition_type=ConditionType.ONE_OF_LIST,
-                 condition_values=["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "직접입력(회/분)"],
-                 showCustomUi=True
-             )
-             set_data_validation_for_cell_range(ws, f"G{start_row}:G{end_row}", scale_rule)
-             
-             # B. Type Dropdown (Col 6 / F)
-             type_rule = DataValidationRule(
-                condition_type=ConditionType.ONE_OF_LIST,
-                condition_values=["증가 목표행동", "감소 목표행동"],
-                showCustomUi=True
-             )
-             set_data_validation_for_cell_range(ws, f"F{start_row}:F{end_row}", type_rule)
-             
-             # C. Goal Criteria (Col 9 / I)
-             goal_rule = DataValidationRule(
-                 condition_type=ConditionType.ONE_OF_LIST,
-                 condition_values=["80% 이상", "20% 이하", "90% 이상", "10% 이하", "100%", "0%"],
-                 showCustomUi=True
-             )
-             set_data_validation_for_cell_range(ws, f"I{start_row}:I{end_row}", goal_rule)
-             
-             # D. Achieved & Tier2 & Next Month (O/X)
-             # Tier2: Col 4 / D. Achieved: Col 11 / K. Next Month: Col 15 / O
-             ox_rule = DataValidationRule(
-                 condition_type=ConditionType.ONE_OF_LIST,
-                 condition_values=["O", "X"],
-                 showCustomUi=True
-             )
-             set_data_validation_for_cell_range(ws, f"D{start_row}:D{end_row}", ox_rule)
-             set_data_validation_for_cell_range(ws, f"K{start_row}:K{end_row}", ox_rule)
-             set_data_validation_for_cell_range(ws, f"O{start_row}:O{end_row}", ox_rule)
-             
-        except Exception as e:
-            print(f"Warning: Failed to set data validation: {e}")
-            import traceback
-            traceback.print_exc()
+        # 4. Add Dropdowns (Data Validation) - DISABLED due to import error
+        # try:
+        #      # Requires gspread-formatting
+        #      # pip install gspread-formatting
+        #      from gspread_formatting import DataValidationRule, ConditionType, set_data_validation_for_cell_range
+        #      
+        #      start_row = 2
+        #      end_row = len(rows)
+        #      
+        #      # ... (Disabled) ...
+        #      
+        # except Exception as e:
+        #     print(f"Warning: Failed to set data validation: {e}")
+        #     import traceback
+        #     traceback.print_exc()
         
         return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
         
