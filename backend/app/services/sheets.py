@@ -1170,6 +1170,128 @@ def _calculate_cico_rate(student: dict) -> dict:
     }
 
 
+
+def create_monthly_cico_sheet(year: int, month: int):
+    """
+    Create a new monthly CICO sheet with dropdowns and student data from TierStatus.
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not available"}
+        
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        
+        # Check if exists
+        try:
+            ws = sheet.worksheet(month_name)
+            return {"message": f"Sheet '{month_name}' already exists.", "exists": True}
+        except gspread.WorksheetNotFound:
+            pass
+            
+        # 1. Fetch CICO Students (Tier2(CICO) == 'O')
+        status_records = fetch_student_status()
+        cico_students = [s for s in status_records if s.get('Tier2(CICO)') == 'O']
+        
+        if not cico_students:
+            return {"error": "No students marked for CICO in TierStatus."}
+            
+        # 2. Prepare Rows
+        # Fixed cols: 15
+        fixed_headers = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
+        
+        # Day cols
+        import calendar
+        num_days = calendar.monthrange(year, month)[1]
+        day_headers = [str(d) for d in range(1, num_days + 1)]
+        
+        headers = fixed_headers + day_headers
+        
+        rows = [headers]
+        
+        for s in cico_students:
+            row = [
+                s.get('번호', ''),
+                s.get('학급', ''),
+                s.get('학생코드', ''),
+                "O", # Tier2
+                "", # Target Behavior
+                "증가 목표행동", # Type
+                "0/1/2점", # Scale
+                "", # Input Criteria
+                "80% 이상", # Goal Criteria
+                "", # Rate
+                "", # Achieved
+                "", # Memo
+                "", # Entered By
+                "", # Team Discussion
+                ""  # Next Month
+            ]
+            # Add empty days make sure length matches
+            row += [""] * num_days
+            rows.append(row)
+            
+        # 3. Create Sheet
+        ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+5)
+        ws.update(rows)
+        
+        # 4. Add Dropdowns (Data Validation)
+        try:
+             # Requires gspread >= 6.0
+             from gspread.utils import rowcol_to_a1
+             from gspread.formatting import DataValidationRule, ConditionType, BooleanCondition
+             
+             start_row = 2
+             end_row = len(rows)
+             
+             # A. Scale Dropdown (Col 7 / G)
+             # "O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "free"
+             scale_rule = DataValidationRule(
+                 ConditionType.ONE_OF_LIST,
+                 ["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "직접입력(회/분)"],
+                 showCustomUi=True
+             )
+             ws.set_data_validation(start_row, 7, end_row, 7, scale_rule)
+             
+             # B. Type Dropdown (Col 6 / F)
+             type_rule = DataValidationRule(
+                ConditionType.ONE_OF_LIST,
+                ["증가 목표행동", "감소 목표행동"],
+                showCustomUi=True
+             )
+             ws.set_data_validation(start_row, 6, end_row, 6, type_rule)
+             
+             # C. Goal Criteria (Col 9 / I)
+             goal_rule = DataValidationRule(
+                 ConditionType.ONE_OF_LIST,
+                 ["80% 이상", "20% 이하", "90% 이상", "10% 이하", "100%", "0%"],
+                 showCustomUi=True
+             )
+             ws.set_data_validation(start_row, 9, end_row, 9, goal_rule)
+             
+             # D. Achieved & Tier2 & Next Month (O/X)
+             # Tier2: Col 4 / D
+             # Achieved: Col 11 / K
+             # Next Month: Col 15 / O
+             ox_rule = DataValidationRule(
+                 ConditionType.ONE_OF_LIST,
+                 ["O", "X"],
+                 showCustomUi=True
+             )
+             ws.set_data_validation(start_row, 4, end_row, 4, ox_rule)
+             ws.set_data_validation(start_row, 11, end_row, 11, ox_rule)
+             ws.set_data_validation(start_row, 15, end_row, 15, ox_rule)
+             
+        except Exception as e:
+            print(f"Warning: Failed to set data validation: {e}")
+        
+        return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_monthly_cico_data(month: int):
     """
     Get all student data from a monthly sheet for the CICO grid view.

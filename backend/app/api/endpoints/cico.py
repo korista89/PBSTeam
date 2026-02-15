@@ -9,9 +9,27 @@ from app.services.sheets import (
     get_holidays_from_config,
     get_business_days,
     get_cico_report_data,
+    create_monthly_cico_sheet
 )
 
+
 router = APIRouter()
+
+class GenerateSheetRequest(BaseModel):
+    year: int
+    month: int
+
+@router.post("/generate")
+async def generate_cico_sheet(req: GenerateSheetRequest):
+    """Generate a monthly CICO sheet with dropdowns for students marked as Tier2(CICO)."""
+    if req.month < 1 or req.month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 1-12")
+    
+    result = create_monthly_cico_sheet(req.year, req.month)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
 
 
 @router.get("/business-days")
@@ -37,11 +55,14 @@ async def get_cico_report(month: int = 3):
 @router.get("/monthly")
 async def get_cico_monthly(month: int = 3):
     """Get all Tier2 student data for a monthly sheet (grid view)."""
-    if month < 3 or month > 12:
-        raise HTTPException(status_code=400, detail="Month must be 3-12")
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 1-12")
     
     data = get_monthly_cico_data(month)
     if "error" in data:
+        # If sheet not found, return 404 so frontend can show "Generate" button
+        if "없습니다" in data["error"]:
+             raise HTTPException(status_code=404, detail=data["error"])
         raise HTTPException(status_code=500, detail=data["error"])
     return data
 
