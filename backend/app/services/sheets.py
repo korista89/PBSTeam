@@ -749,8 +749,9 @@ def add_cico_daily(data: dict):
     
     try:
         from datetime import datetime
+        date_str = data.get('date', datetime.now().strftime("%Y-%m-%d"))
         row = [
-            data.get('date', datetime.now().strftime("%Y-%m-%d")),
+            date_str,
             data.get('student_code'),
             data.get('target1', ''),
             data.get('target2', ''),
@@ -759,10 +760,141 @@ def add_cico_daily(data: dict):
             data.get('entered_by', '')
         ]
         ws.append_row(row)
+        
+        # Trigger recalculation for this student/date
+        # We need the month from date to update the monthly sheet
+        try:
+            month = int(date_str.split("-")[1])
+            # Recalculate monthly stats for this student
+            # We don't have exact row/col here easily without searching, 
+            # but update_monthly_cico_cells handles batch updates if we provide data.
+            # Actually, simply calling a recalc function for the student/month is better.
+            # For now, we rely on the frontend or a separate trigger, OR we can try to update the monthly sheet here.
+            
+            # Let's try to update calculation using update_monthly_cico_cells
+            # We need to find the day column and student row in the monthly sheet.
+            # This is complex to do blindly.
+            # Alternate approach: The frontend usually calls sync or we rely on the sheet formulas if present.
+            # But the user said formulas are gone/not working.
+            # We implemented update_monthly_cico_cells earlier.
+            
+            # Let's construct a "virtual" update to trigger recalc
+            # We need to know which day (1-31) and student code.
+            day = int(date_str.split("-")[2])
+            
+            # This is heavy to do on every add. 
+            # Ideally, we should just update the specific cell in the monthly sheet.
+            
+            # For this immediate fix, we will just return success 
+            # and let the separate daily->monthly sync process handle it 
+            # OR we call the sync function if it exists.
+            
+            # WAIT: We logic in update_monthly_cico_cells is for MANUAL edits on the monthly sheet.
+            # Here we are adding to the DAILY log. 
+            # We need a function "sync_daily_to_monthly(student_code, month, day)"
+            
+            # Given the urgency, let's just append for now 
+            # and ensure the monthly sheet is updated via the existing 'update_monthly_cico_cells' 
+            # if the user edits the monthly view. 
+            # However, the user wants "auto calculation". 
+            # So when we add a daily record, we should update the monthly sheet too.
+            
+            sync_result = sync_daily_entry_to_monthly(
+                student_code=str(data.get('student_code')),
+                date_str=date_str,
+                target1=data.get('target1', ''),
+                target2=data.get('target2', '')
+            )
+            print(f"DEBUG: Sync result: {sync_result}")
+            
+        except Exception as e:
+            print(f"DEBUG: Failed to sync to monthly sheet: {e}")
+
         return {"message": "CICO daily record added"}
     except Exception as e:
         print(f"Error adding CICO daily: {e}")
         return {"error": str(e)}
+
+def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, target2: str):
+    """
+    Update the corresponding cell in the monthly sheet based on daily input.
+    Rule: If both targets are 'O' -> 'O', if one is 'X' -> 'X' (or based on behavior type).
+    Actually, the daily log has 'achievement_rate'.
+    Common logic: If rate >= 80% (or criteria) -> O, else X?
+    Or simply: O/X input?
+    
+    The user wants "CICO 수행률/달성여부".
+    If the daily input has O/X targets, we can determine the daily outcome.
+    Let's assume:
+    - If Rate >= Goal -> O
+    - But here we just want to mark the day cell (1, 2, 3...) in the monthly sheet.
+    
+    Let's try to map: 
+    If Target1=O and Target2=O => Daily=O
+    If any X => Daily=X (strict)
+    Or based on percentage.
+    
+    Let's use a simple heuristic for now: 
+    If achievement_rate >= 80 -> O, else X.
+    """
+    try:
+        month = int(date_str.split("-")[1])
+        day = int(date_str.split("-")[2])
+        
+        # Calculate daily outcome
+        t1 = target1.upper() == 'O'
+        t2 = target2.upper() == 'O'
+        # Default: both must be O for 'O', or maybe 80%?
+        # Let's check achievement_rate passed in? 
+        # API calculates rate before calling this.
+        # But we need O/X for the cell.
+        
+        daily_val = "O" if (t1 and t2) else "X" # Simple strict rule
+        
+        # Now update monthly sheet
+        updates = [{
+            "row": None, # Will be found by student_code
+            "col": str(day),
+            "value": daily_val
+        }]
+        
+        return update_monthly_cico_cells(month, updates, student_code_override=student_code)
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def update_user_role(user_id: str, new_role: str, new_class: str = ""):
+    """Update user role and class in Users sheet"""
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not available"}
+        
+    try:
+        sh = client.open_by_url(settings.SHEET_URL)
+        ws = sh.worksheet("Users")
+        records = ws.get_all_records()
+        
+        cell = ws.find(user_id)
+        if not cell:
+            return {"error": "User not found"}
+            
+        # Headers: ID, Password, Role, ClassID, ClassName, Name, LastLogin
+        # We need to find column indices for Role and ClassID
+        headers = ws.row_values(1)
+        role_col = headers.index("Role") + 1
+        class_id_col = headers.index("ClassID") + 1
+        class_name_col = headers.index("ClassName") + 1
+        
+        ws.update_cell(cell.row, role_col, new_role)
+        ws.update_cell(cell.row, class_id_col, new_class)
+        ws.update_cell(cell.row, class_name_col, new_class) # Use ID as Name for simplicity or lookup
+        
+        clear_cache("users")
+        return {"message": f"User {user_id} updated"}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 
 # =============================

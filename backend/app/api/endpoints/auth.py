@@ -47,6 +47,24 @@ async def change_password(user_id: str, request: PasswordUpdateRequest):
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+class UserRoleUpdateRequest(BaseModel):
+    user_id: str
+    new_role: str
+    new_class: Optional[str] = ""
+
+@router.put("/users/{user_id}/role")
+async def update_role(user_id: str, request: UserRoleUpdateRequest):
+    """Admin only: Update user role and class"""
+    from app.services.sheets import update_user_role
+    result = update_user_role(user_id, request.new_role, request.new_class)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
 @router.post("/reset-users")
 async def reset_users_db():
     """

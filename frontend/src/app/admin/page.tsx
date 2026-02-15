@@ -5,9 +5,11 @@ import axios from "axios";
 import styles from "../page.module.css";
 
 interface User {
-    ID: number;
+    ID: string;
     Role: string;
     LastLogin: string;
+    ClassID?: string;
+    ClassName?: string;
 }
 
 export default function AdminPage() {
@@ -173,29 +175,144 @@ export default function AdminPage() {
                     </div>
                 </div>
 
-                {/* User List */}
+                {/* User List & Role Management */}
                 <div className={styles.card}>
-                    <h2 style={{ marginBottom: '20px' }}>👥 사용자 목록</h2>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
+                    <h2 style={{ marginBottom: '20px' }}>👥 사용자 권한 관리</h2>
+                    <div style={{ padding: '10px', backgroundColor: '#eef2ff', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', borderLeft: '4px solid #6366f1' }}>
+                        💡 사용자를 클릭하여 역할과 담당 학급을 수정할 수 있습니다.
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
                         {users.map(u => (
                             <div
                                 key={u.ID}
+                                onClick={() => {
+                                    setSelectedUser(u.ID);
+                                    // Reset edit fields when selecting new user
+                                    setNewPassword("");
+                                    setMessage("");
+                                }}
                                 style={{
-                                    padding: '10px',
-                                    backgroundColor: u.Role === 'admin' ? '#fef3c7' : '#f3f4f6',
+                                    padding: '15px',
+                                    backgroundColor: selectedUser === u.ID ? '#eff6ff' : (u.Role === 'admin' ? '#fef3c7' : '#f3f4f6'),
+                                    border: selectedUser === u.ID ? '2px solid #3b82f6' : '1px solid #ddd',
                                     borderRadius: '8px',
-                                    textAlign: 'center'
+                                    cursor: 'pointer',
+                                    position: 'relative'
                                 }}
                             >
-                                <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{u.ID}</div>
-                                <div style={{ fontSize: '0.85rem', color: u.Role === 'admin' ? '#b45309' : '#6b7280' }}>
-                                    {u.Role === 'admin' ? '👑 관리자' : '👤 교사'}
+                                <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '5px' }}>{u.ID}</div>
+                                <div style={{ fontSize: '0.9rem', color: u.Role === 'admin' ? '#b45309' : '#4b5563', marginBottom: '3px' }}>
+                                    {u.Role === 'admin' ? '👑 관리자' : (u.Role === 'class_manager' ? '🛡️ 학급관리자' : '👤 일반 교사')}
                                 </div>
+                                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                                    {u.ClassID ? `🏫 ${u.ClassID}` : '(담당 학급 없음)'}
+                                </div>
+
+                                {selectedUser === u.ID && (
+                                    <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px dashed #cbd5e1' }} onClick={e => e.stopPropagation()}>
+                                        <h4 style={{ margin: '0 0 10px 0', fontSize: '14px' }}>정보 수정</h4>
+                                        <RoleEditor
+                                            user={u}
+                                            onUpdate={() => {
+                                                fetchUsers();
+                                                setMessage("정보가 업데이트되었습니다.");
+                                            }}
+                                        />
+                                        <div style={{ marginTop: '10px' }}>
+                                            <input
+                                                type="password"
+                                                placeholder="새비밀번호 변경 시 입력"
+                                                value={newPassword}
+                                                onChange={e => setNewPassword(e.target.value)}
+                                                style={{ width: '100%', padding: '6px', fontSize: '12px', marginBottom: '5px' }}
+                                            />
+                                            <button
+                                                onClick={handlePasswordChange}
+                                                disabled={!newPassword}
+                                                style={{
+                                                    width: '100%', padding: '6px',
+                                                    backgroundColor: newPassword ? '#10b981' : '#cbd5e1',
+                                                    color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
+                                                }}
+                                            >
+                                                비밀번호 변경
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
                 </div>
             </main>
+        </div>
+    );
+}
+
+function RoleEditor({ user, onUpdate }: { user: any, onUpdate: () => void }) {
+    const [role, setRole] = useState(user.Role);
+    const [classId, setClassId] = useState(user.ClassID || ""); // Use ClassID field
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        setRole(user.Role);
+        setClassId(user.ClassID || "");
+    }, [user]);
+
+    const handleSave = async () => {
+        setLoading(true);
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            await axios.put(`${apiUrl}/api/v1/auth/users/${user.ID}/role`, {
+                user_id: user.ID,
+                new_role: role,
+                new_class: classId
+            });
+            onUpdate();
+        } catch (e) {
+            console.error(e);
+            alert("업데이트 실패");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ fontSize: '13px' }}>
+            <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', marginBottom: '3px', fontWeight: 'bold' }}>권한 (Role)</label>
+                <select
+                    value={role}
+                    onChange={e => setRole(e.target.value)}
+                    style={{ width: '100%', padding: '5px' }}
+                >
+                    <option value="teacher">교사 (Teacher)</option>
+                    <option value="class_manager">학급관리자 (Class Manager)</option>
+                    <option value="admin">최고관리자 (Admin)</option>
+                </select>
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'block', marginBottom: '3px', fontWeight: 'bold' }}>담당 학급 (Class)</label>
+                <input
+                    type="text"
+                    value={classId}
+                    onChange={e => setClassId(e.target.value)}
+                    placeholder="예: 1-1, 2-3"
+                    style={{ width: '100%', padding: '5px' }}
+                />
+            </div>
+            <button
+                onClick={handleSave}
+                disabled={loading}
+                style={{
+                    width: '100%', padding: '6px',
+                    backgroundColor: '#3b82f6', color: 'white',
+                    border: 'none', borderRadius: '4px', cursor: 'pointer'
+                }}
+            >
+                {loading ? "저장 중..." : "설정 저장"}
+            </button>
         </div>
     );
 }

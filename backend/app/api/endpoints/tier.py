@@ -169,13 +169,21 @@ async def get_cico_records(student_code: Optional[str] = None, start_date: Optio
 @router.post("/cico")
 async def add_cico_record(data: CICODailyInput):
     """Add a new CICO daily record"""
-    # Calculate achievement rate
-    achieved = sum([1 for x in [data.target1, data.target2] if x.upper() == 'O'])
-    rate = int((achieved / 2) * 100)
+    # Rate calculation is now handled by sheets.py or the frontend can send it.
+    # But CICODailyInput has achievement_rate.
+    # If the frontend sends it, we use it. If not, sheets.py handles it?
+    # Actually, sheets.py just saves what we send.
+    # But we want to REMOVE the hardcoded logic here.
+    
+    # Calculate rate ONLY if not provided (fallback)
+    rate = data.achievement_rate
+    if rate == 0 and (data.target1 or data.target2):
+         achieved = sum([1 for x in [data.target1, data.target2] if x.upper() == 'O'])
+         rate = int((achieved / 2) * 100)
     
     record_data = {
         "date": data.date,
-        "student_code": data.student_code,
+        "student_code": str(data.student_code), # Ensure string
         "target1": data.target1,
         "target2": data.target2,
         "achievement_rate": rate,
