@@ -314,12 +314,7 @@ def get_unique_class_info() -> dict:
             
     return classes
 
-        ws.update(all_rows, 'A2')
-        clear_cache("users")
-        return {"message": f"Users sheet reset. {len(all_rows)} users created."}
-    except Exception as e:
-        print(f"Error resetting Users sheet: {e}")
-        return {"error": str(e)}
+
 
 def _generate_teacher_id(class_name: str) -> str:
     """
