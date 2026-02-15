@@ -29,7 +29,7 @@ class MeetingNoteResponse(BaseModel):
     created_at: str
 
 
-@router.post("/meeting-notes")
+@router.post("")
 async def save_meeting_note(request: MeetingNoteRequest):
     """Save a meeting note"""
     data = {
@@ -49,14 +49,14 @@ async def save_meeting_note(request: MeetingNoteRequest):
     return {"message": "회의록이 저장되었습니다.", "result": result}
 
 
-@router.get("/meeting-notes")
+@router.get("")
 async def get_meeting_notes(meeting_type: Optional[str] = None, student_code: Optional[str] = None):
     """Get meeting notes, optionally filtered by type and student_code"""
     notes = fetch_meeting_notes(meeting_type, student_code)
     return {"notes": notes, "total": len(notes)}
 
 
-@router.get("/meeting-notes/latest")
+@router.get("/latest")
 async def get_latest_notes():
     """Get the latest note for each meeting type"""
     # Fetch all notes (or optimize later to fetch by type)

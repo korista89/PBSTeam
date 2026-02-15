@@ -5,7 +5,7 @@ from app.services.sheets import (
     reset_tier_status_sheet, update_student_tier_unified
 )
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 
 router = APIRouter()
 
@@ -33,6 +33,8 @@ class UnifiedTierUpdateRequest(BaseModel):
     memo: Optional[str] = ""
     enrolled: Optional[str] = None
     beable_code: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
 
 class EnrollmentUpdateRequest(BaseModel):
     code: str
