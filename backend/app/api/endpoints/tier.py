@@ -24,7 +24,7 @@ class TierUpdateRequest(BaseModel):
 
 class UnifiedTierUpdateRequest(BaseModel):
     """Single request for all tier-related updates"""
-    code: str
+    code: Union[str, int]
     tier1: Optional[str] = None
     tier2_cico: Optional[str] = None
     tier2_sst: Optional[str] = None
@@ -37,11 +37,11 @@ class UnifiedTierUpdateRequest(BaseModel):
     model_config = {"extra": "ignore"}
 
 class EnrollmentUpdateRequest(BaseModel):
-    code: str
+    code: Union[str, int]
     enrolled: str  # O or X
 
 class BeAbleCodeUpdateRequest(BaseModel):
-    code: str
+    code: Union[str, int]
     beable_code: str
 
 @router.get("/status")
@@ -119,7 +119,7 @@ async def update_enrollment(request: EnrollmentUpdateRequest):
     """Update a student's enrollment status (O/X)"""
     if request.enrolled not in ["O", "X"]:
         raise HTTPException(status_code=400, detail="Enrolled must be O or X")
-    result = update_student_enrollment(request.code, request.enrolled)
+    result = update_student_enrollment(str(request.code), request.enrolled)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
@@ -127,7 +127,7 @@ async def update_enrollment(request: EnrollmentUpdateRequest):
 @router.put("/beable")
 async def update_beable(request: BeAbleCodeUpdateRequest):
     """Update a student's BeAble code for data linking"""
-    result = update_student_beable_code(request.code, request.beable_code)
+    result = update_student_beable_code(str(request.code), request.beable_code)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
@@ -153,7 +153,7 @@ async def reset_sheet():
 
 class CICODailyInput(BaseModel):
     date: Optional[str] = None
-    student_code: str
+    student_code: Union[str, int]
     target1: str  # O or X
     target2: str  # O or X
     achievement_rate: Optional[int] = 0
