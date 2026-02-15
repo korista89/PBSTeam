@@ -458,6 +458,21 @@ def analyze_meeting_data(target_date: str = None):
     if '강도' in df.columns:
         df['강도'] = pd.to_numeric(df['강도'], errors='coerce').fillna(0)
 
+    # --- Prepare Tier Status Map ---
+    all_status = fetch_student_status()
+    student_tier_map = {}
+    for s in all_status:
+        # Determine max tier
+        tier = "Tier 1"
+        if s.get('Tier3+') == 'O': tier = "Tier 3+"
+        elif s.get('Tier3') == 'O': tier = "Tier 3"
+        elif s.get('Tier2(CICO)') == 'O' or s.get('Tier2(SST)') == 'O': tier = "Tier 2"
+        
+        # Map by Name (assuming unique names for now, or use Code if available)
+        s_name = s.get('학생명')
+        if s_name:
+            student_tier_map[s_name] = tier
+
     # --- Decision Algorithm ---
     student_analysis = []
     
@@ -500,19 +515,27 @@ def analyze_meeting_data(target_date: str = None):
                     is_tier2_candidate = True
                     break
             
-            # 3. Current Tier Status (Mock - need DB for real state)
-            # Default to Tier 1 unless we find a way to store state
-            current_tier = "Tier 1"
+            # 3. Current Tier Status (Real Data)
+            # Fetch from student_tier_map derived from all_status
+            current_tier = student_tier_map.get(name, "Tier 1")
             
-            # 4. Teacher Opinion (Placeholder - to be fetched from DB or Sheet)
+            # 4. Teacher Opinion (Placeholder)
             teacher_opinion = ""
 
-            # 5. CICO Data (Placeholder)
-            cico_avg = 0 # Mock
+            # 5. CICO Data (Placeholder - could fetch if needed)
+            cico_avg = 0 
             
             student_analysis.append({
                 "name": name,
                 "class": group['코드번호'].iloc[0] if '코드번호' in group.columns else "-",
+                "total_incidents": len(group),
+                "weekly_avg": round(len(group) / 4, 1),
+                "is_emergency": is_emergency,
+                "emergency_reason": ", ".join(emergency_reason),
+                "is_tier2_candidate": is_tier2_candidate,
+                "current_tier": current_tier,
+                "decision_recommendation": "Tier 3 (Immediate)" if is_emergency else ("Tier 2 (Entry)" if is_tier2_candidate else "Maintain Tier 1")
+            })
                 "total_incidents": len(group),
                 "weekly_avg": round(len(group) / 4, 1),
                 "is_emergency": is_emergency,
