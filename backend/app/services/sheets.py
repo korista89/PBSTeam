@@ -761,96 +761,32 @@ def add_cico_daily(data: dict):
         ]
         ws.append_row(row)
         
-        # Trigger recalculation for this student/date
-        # We need the month from date to update the monthly sheet
-        try:
-            month = int(date_str.split("-")[1])
-            # Recalculate monthly stats for this student
-            # We don't have exact row/col here easily without searching, 
-            # but update_monthly_cico_cells handles batch updates if we provide data.
-            # Actually, simply calling a recalc function for the student/month is better.
-            # For now, we rely on the frontend or a separate trigger, OR we can try to update the monthly sheet here.
-            
-            # Let's try to update calculation using update_monthly_cico_cells
-            # We need to find the day column and student row in the monthly sheet.
-            # This is complex to do blindly.
-            # Alternate approach: The frontend usually calls sync or we rely on the sheet formulas if present.
-            # But the user said formulas are gone/not working.
-            # We implemented update_monthly_cico_cells earlier.
-            
-            # Let's construct a "virtual" update to trigger recalc
-            # We need to know which day (1-31) and student code.
-            day = int(date_str.split("-")[2])
-            
-            # This is heavy to do on every add. 
-            # Ideally, we should just update the specific cell in the monthly sheet.
-            
-            # For this immediate fix, we will just return success 
-            # and let the separate daily->monthly sync process handle it 
-            # OR we call the sync function if it exists.
-            
-            # WAIT: We logic in update_monthly_cico_cells is for MANUAL edits on the monthly sheet.
-            # Here we are adding to the DAILY log. 
-            # We need a function "sync_daily_to_monthly(student_code, month, day)"
-            
-            # Given the urgency, let's just append for now 
-            # and ensure the monthly sheet is updated via the existing 'update_monthly_cico_cells' 
-            # if the user edits the monthly view. 
-            # However, the user wants "auto calculation". 
-            # So when we add a daily record, we should update the monthly sheet too.
-            
-            sync_result = sync_daily_entry_to_monthly(
-                student_code=str(data.get('student_code')),
-                date_str=date_str,
-                target1=data.get('target1', ''),
-                target2=data.get('target2', '')
-            )
-            print(f"DEBUG: Sync result: {sync_result}")
-            
-        except Exception as e:
-            print(f"DEBUG: Failed to sync to monthly sheet: {e}")
-
-        return {"message": "CICO daily record added"}
-    except Exception as e:
-        print(f"Error adding CICO daily: {e}")
-        return {"error": str(e)}
-
 def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, target2: str):
     """
     Update the corresponding cell in the monthly sheet based on daily input.
-    Rule: If both targets are 'O' -> 'O', if one is 'X' -> 'X' (or based on behavior type).
-    Actually, the daily log has 'achievement_rate'.
-    Common logic: If rate >= 80% (or criteria) -> O, else X?
-    Or simply: O/X input?
-    
-    The user wants "CICO 수행률/달성여부".
-    If the daily input has O/X targets, we can determine the daily outcome.
-    Let's assume:
-    - If Rate >= Goal -> O
-    - But here we just want to mark the day cell (1, 2, 3...) in the monthly sheet.
-    
-    Let's try to map: 
-    If Target1=O and Target2=O => Daily=O
-    If any X => Daily=X (strict)
-    Or based on percentage.
-    
-    Let's use a simple heuristic for now: 
-    If achievement_rate >= 80 -> O, else X.
     """
     try:
         month = int(date_str.split("-")[1])
         day = int(date_str.split("-")[2])
         
-        # Calculate daily outcome
+        # Determine Daily Outcome (O/X) for the cell
+        # Logic: If both O -> O? Or if valid data exists?
+        # The user said "Rate calculation not working".
+        # We need to mark the day as something to count it.
+        
         t1 = target1.upper() == 'O'
         t2 = target2.upper() == 'O'
-        # Default: both must be O for 'O', or maybe 80%?
-        # Let's check achievement_rate passed in? 
-        # API calculates rate before calling this.
-        # But we need O/X for the cell.
         
-        daily_val = "O" if (t1 and t2) else "X" # Simple strict rule
+        daily_val = ""
+        # If at least one target is present
+        if target1 or target2:
+            daily_val = "O" if (t1 and t2) else "X"
+            if not target2 and target1: daily_val = target1.upper()
+            if not target1 and target2: daily_val = target2.upper()
         
+        if not daily_val:
+            return {"message": "No targets to sync"}
+
         # Now update monthly sheet
         updates = [{
             "row": None, # Will be found by student_code
@@ -858,9 +794,11 @@ def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, 
             "value": daily_val
         }]
         
+        print(f"DEBUG: Syncing Daily {date_str} for {student_code} -> {daily_val}")
         return update_monthly_cico_cells(month, updates, student_code_override=student_code)
         
     except Exception as e:
+        print(f"DEBUG: Sync Error: {e}")
         return {"error": str(e)}
 
 
@@ -1336,9 +1274,14 @@ def update_monthly_cico_cells(month: int, updates: list):
             
             # If col is a string (header name), convert to column index
             if isinstance(col, str):
+                # Try exact match first
                 if col in headers:
                     col = headers.index(col) + 1  # Convert to 1-based
+                # Try appending "일" (e.g., "1" -> "1일")
+                elif f"{col}일" in headers:
+                     col = headers.index(f"{col}일") + 1
                 else:
+                    print(f"DEBUG: Column '{col}' not found in headers")
                     continue  # Skip unknown columns
             
             if row and col:
@@ -1350,20 +1293,27 @@ def update_monthly_cico_cells(month: int, updates: list):
         
         # Recalculate Logic
         try:
-            # Identify columns
-            try:
-                rate_idx = headers.index("수행/발생률")
-                achieved_idx = headers.index("목표 달성 여부")
-                goal_idx = headers.index("목표 달성 기준")
-                type_idx = headers.index("목표행동 유형")
-            except ValueError as ve:
-                print(f"DEBUG: Critical columns missing for recalc: {ve}")
-                rate_idx = -1
+            # Identify columns using loose matching
+            def find_col(candidates):
+                for c in candidates:
+                    if c in headers: return headers.index(c)
+                return -1
+
+            rate_idx = find_col(["수행/발생률", "수행률", "발생률"])
+            achieved_idx = find_col(["목표 달성 여부", "달성여부", "성공여부"])
+            goal_idx = find_col(["목표 달성 기준", "목표기준", "기준"])
+            type_idx = find_col(["목표행동 유형", "행동유형"])
+            
+            if rate_idx == -1:
+                print("DEBUG: '수행/발생률' column missing, skipping calculation")
 
             day_cols = []
             for d in range(1, 32):
+                # Check both "1" and "1일" formats
                 if str(d) in headers:
                     day_cols.append(headers.index(str(d)))
+                elif f"{d}일" in headers:
+                    day_cols.append(headers.index(f"{d}일"))
             
             if rate_idx != -1:
                 print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
@@ -1376,19 +1326,25 @@ def update_monthly_cico_cells(month: int, updates: list):
                         print(f"DEBUG: Row {r_idx} out of bounds")
                         continue
                     
-                    # Apply pending updates to memory
+                    # Apply pending updates to memory for accurate calculation
                     for u in updates:
+                        # Logic to find if this update applies to current row
+                        # 'u' has 'row' (1-based)
                         if u.get("row") == r_idx:
                             c = u.get("col")
-                            if isinstance(c, str) and c in headers:
-                                c = headers.index(c) + 1
-                            c_idx = c - 1
-                            if 0 <= c_idx < len(row_data):
+                            # Resolve column index again
+                            c_idx = -1
+                            if isinstance(c, int): c_idx = c - 1
+                            elif isinstance(c, str):
+                                if c in headers: c_idx = headers.index(c)
+                                elif f"{c}일" in headers: c_idx = headers.index(f"{c}일")
+                            
+                            if c_idx != -1 and 0 <= c_idx < len(row_data):
                                 row_data[c_idx] = u.get("value", "")
                                 
                     # Calculate Rate
-                    target_type = row_data[type_idx] if len(row_data) > type_idx else ""
-                    goal_criteria = row_data[goal_idx] if len(row_data) > goal_idx else ""
+                    target_type = row_data[type_idx] if (type_idx != -1 and len(row_data) > type_idx) else "증가 목표행동"
+                    goal_criteria = row_data[goal_idx] if (goal_idx != -1 and len(row_data) > goal_idx) else "80% 이상"
                     
                     total_days = 0
                     success_days = 0
@@ -1398,9 +1354,10 @@ def update_monthly_cico_cells(month: int, updates: list):
                             val = str(row_data[dc]).strip()
                             if val in ["O", "X"]:
                                 total_days += 1
-                                if target_type == "감소 목표행동":
+                                if "감소" in str(target_type):
                                     if val == "X": success_days += 1
                                 else:
+                                    # Default to Increase
                                     if val == "O": success_days += 1
                     
                     rate_val = 0
@@ -1412,11 +1369,15 @@ def update_monthly_cico_cells(month: int, updates: list):
                     # Achievement
                     is_achieved = "X"
                     try:
-                        criteria_num = int(''.join(filter(str.isdigit, goal_criteria)))
-                        if "이상" in goal_criteria:
-                            if rate_val >= criteria_num: is_achieved = "O"
-                        elif "이하" in goal_criteria:
+                        # Extract number from criteria
+                        import re
+                        match = re.search(r'\d+', str(goal_criteria))
+                        criteria_num = int(match.group()) if match else 80
+                        
+                        if "이하" in str(goal_criteria):
                             if rate_val <= criteria_num: is_achieved = "O"
+                        else: # 이상
+                            if rate_val >= criteria_num: is_achieved = "O"
                     except:
                         pass
                     
@@ -1426,10 +1387,11 @@ def update_monthly_cico_cells(month: int, updates: list):
                         "range": f"{_col_letter(rate_idx + 1)}{r_idx}",
                         "values": [[final_rate_str]]
                     })
-                    cells_to_update.append({
-                        "range": f"{_col_letter(achieved_idx + 1)}{r_idx}",
-                        "values": [[is_achieved]]
-                    })
+                    if achieved_idx != -1:
+                        cells_to_update.append({
+                            "range": f"{_col_letter(achieved_idx + 1)}{r_idx}",
+                            "values": [[is_achieved]]
+                        })
                     print(f"DEBUG: Row {r_idx} Calculated - Rate: {final_rate_str}, Achieved: {is_achieved}")
 
         except Exception as e:
