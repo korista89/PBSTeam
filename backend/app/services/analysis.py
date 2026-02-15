@@ -146,6 +146,30 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
     total_incidents = len(df)
     avg_intensity = float(df['강도'].mean()) if not df.empty and '강도' in df.columns else 0.0
 
+    # Additional Analysis for T1 Report
+    # 9. Weekday Analysis
+    weekday_stats = []
+    weekday_names = ['월', '화', '수', '목', '금', '토', '일']
+    if 'date_obj' in df.columns:
+        df['weekday'] = df['date_obj'].dt.dayofweek
+        wd_counts = df['weekday'].value_counts().sort_index()
+        for wd, cnt in wd_counts.items():
+             name = weekday_names[int(wd)] if int(wd) < 7 else str(wd)
+             weekday_stats.append({"name": name, "value": int(cnt)})
+
+    # 10. Antecedent (배경) Analysis
+    antecedent_stats = []
+    if '배경' in df.columns:
+        a_counts = df['배경'].value_counts().head(10) # Top 10
+        antecedent_stats = [{"name": k, "value": int(v)} for k, v in a_counts.items()]
+
+    # 11. Consequence (결과) Analysis
+    consequence_stats = []
+    if '결과' in df.columns:
+        c_counts = df['결과'].value_counts().head(10) # Top 10
+        consequence_stats = [{"name": k, "value": int(v)} for k, v in c_counts.items()]
+
+
     # Generate AI Insight with enriched tier data
     try:
         all_status = fetch_student_status()
@@ -190,10 +214,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
         "big5": {
             "locations": location_stats,
             "times": time_stats,
-            "behaviors": behavior_stats
+            "behaviors": behavior_stats,
+            "weekdays": weekday_stats
         },
         "risk_list": at_risk_list,
         "functions": function_stats,
+        "antecedents": antecedent_stats,
+        "consequences": consequence_stats,
         "heatmap": heatmap_data,
         "safety_alerts": safety_alerts,
         "ai_comment": ai_comment,

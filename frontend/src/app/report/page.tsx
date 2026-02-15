@@ -168,11 +168,84 @@ export default function MonthlyReport() {
           </div>
         </section>
 
+        {/* 3. Detailed Pattern Analysis */}
+        <section className="report-section">
+          <h2>3. 상세 패턴 분석 (Detailed Pattern Analysis)</h2>
+
+          {/* Row 1: Temporal Patterns */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>시간대별 패턴 (Time of Day)</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.big5.times} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Bar dataKey="value" fill="#8b5cf6" barSize={30}>
+                    <LabelList dataKey="value" position="top" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>요일별 패턴 (Day of Week)</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.big5.weekdays} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Bar dataKey="value" fill="#f59e0b" barSize={30}>
+                    <LabelList dataKey="value" position="top" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Row 2: Functional Patterns */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>행동의 기능 (Function) - '왜?'</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data.functions}
+                    cx="50%" cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {data.functions.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>배경 사건 (Antecedent) - '언제?'</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '11px' }} />
+                  <Bar dataKey="value" fill="#ef4444" barSize={15}>
+                    <LabelList dataKey="value" position="right" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
+
         <div className="page-break"></div>
 
-        {/* 3. Tier 2/3 List */}
+        {/* 4. Tier 2/3 List */}
         <section className="report-section">
-          <h2>3. 학생 지원 현황 (Tier 2 & 3 Support)</h2>
+          <h2>4. 학생 지원 현황 (Tier 2 & 3 Support)</h2>
 
           <h3>🚨 고위험군 안전 알림 (Safety Alerts - Last 30 Days)</h3>
           {data.safety_alerts && data.safety_alerts.length > 0 ? (
@@ -233,10 +306,9 @@ export default function MonthlyReport() {
           </table>
         </section>
 
-        {/* 4. Action Plan */}
-        {/* 4. Action Plan & Meeting Notes */}
+        {/* 5. Action Plan & Meeting Notes */}
         <section className="report-section" style={{ borderBottom: 'none' }}>
-          <h2>4. 이달의 실행 계획 (Action Plan) 및 회의록</h2>
+          <h2>5. 이달의 실행 계획 (Action Plan) 및 회의록</h2>
           <MeetingNotesSection apiUrl={process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"} meetingType="tier1" title="전체 교직원 회의록" />
         </section>
       </div>

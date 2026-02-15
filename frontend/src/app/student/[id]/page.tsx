@@ -5,7 +5,8 @@ import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis, Label
+  PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis, Label,
+  BarChart, Bar, LabelList
 } from "recharts";
 import styles from "../../page.module.css";
 import { StudentData, ChartData } from "../../types";
@@ -218,17 +219,68 @@ export default function StudentDetail() {
             <div className={styles.chartSection}>
               <h3>📉 행동 빈도 추이 (Frequency Trend)</h3>
               <p className={styles.subtitle}>중재 효과를 확인하기 위한 시계열 그래프입니다.</p>
-              <div className={styles.chartContainer}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={cico_trend}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="count" stroke="#82ca9d" name="일별 발생 횟수" strokeWidth={3} dot={{ r: 4 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                {/* Daily Trend */}
+                <div className={styles.chartContainer}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>일별 추이 (Daily)</h4>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={cico_trend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={11} />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="count" stroke="#82ca9d" name="발생 횟수" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Weekly Trend */}
+                <div className={styles.chartContainer}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>주별 추이 (Weekly)</h4>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.weekly_trend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="week" fontSize={11} />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#8884d8" name="주별 발생" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '30px' }}>
+                {/* Monthly Trend */}
+                <div className={styles.chartContainer}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>월별 추이 (Monthly)</h4>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.monthly_trend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" fontSize={11} />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#4f46e5" name="월별 발생" barSize={30} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Weekday Distribution */}
+                <div className={styles.chartContainer}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>요일별 분포 (Weekday)</h4>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.weekday_dist}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" fontSize={11} />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#f59e0b" name="발생 건수">
+                        <LabelList dataKey="value" position="top" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
 

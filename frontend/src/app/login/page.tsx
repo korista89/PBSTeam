@@ -2,29 +2,43 @@
 
 import React, { useState } from "react";
 import axios from "axios";
-import styles from "../page.module.css";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../components/AuthProvider";
 import { CLASS_LIST } from "../constants";
 
 export default function LoginPage() {
+    const router = useRouter();
+    const { login } = useAuth();
+
     const [loginType, setLoginType] = useState<"admin" | "teacher">("teacher");
-    const [adminId, setAdminId] = useState("1");
-    const [classId, setClassId] = useState(CLASS_LIST[0]?.id || "");
+    const [classId, setClassId] = useState(CLASS_LIST[0]?.code || "");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleLogin = async () => {
+    const handleLogin = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+
         setLoading(true);
         setError("");
 
         try {
             // Construct user_id
             let userId = "";
-            if (loginType === "admin") {
-                // admin01 ~ admin10
-                userId = `admin${adminId.padStart(2, '0')}`;
+
+            if (loginType === "teacher") {
+                // Find selected class object
+                const selectedClass = CLASS_LIST.find(c => c.code === classId);
+                if (!selectedClass) {
+                    setError("올바르지 않은 학급 선택입니다.");
+                    setLoading(false);
+                    return;
+                }
+                // Use the Korean ID (e.g., 초1-1관리자)
+                userId = selectedClass.id || selectedClass.code;
             } else {
-                userId = classId;
+                // Admin: Fixed to "admin" (System Admin)
+                userId = "admin";
             }
 
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -33,17 +47,19 @@ export default function LoginPage() {
                 password: password
             });
 
-            // Store login info in localStorage
-            localStorage.setItem("user", JSON.stringify(response.data.user));
+            console.log("Login success:", response.data);
+            login(response.data); // Context update
 
-            // Redirect to dashboard
-            window.location.href = "/";
-        } catch (err: unknown) {
-            if (axios.isAxiosError(err)) {
-                setError(err.response?.data?.detail || "로그인 실패");
+            // Redirect based on role
+            if (response.data.role === 'admin') {
+                router.push('/');
             } else {
-                setError("로그인 실패");
+                router.push('/cico');
             }
+
+        } catch (err: any) {
+            console.error(err);
+            setError(err.response?.data?.detail || "로그인에 실패했습니다.");
         } finally {
             setLoading(false);
         }
@@ -65,7 +81,7 @@ export default function LoginPage() {
                 width: '100%',
                 maxWidth: '400px'
             }}>
-                <h1 style={{ textAlign: 'center', marginBottom: '10px', color: '#333' }}>
+                <h1 style={{ textAlign: 'center', marginBottom: '10px', color: '#333', fontSize: '1.8rem' }}>
                     🏫 특수학교 PBIS
                 </h1>
                 <p style={{ textAlign: 'center', marginBottom: '30px', color: '#666' }}>
@@ -74,109 +90,112 @@ export default function LoginPage() {
 
                 {error && (
                     <div style={{
-                        padding: '10px', marginBottom: '20px',
+                        padding: '12px', marginBottom: '20px',
                         backgroundColor: '#fee2e2', color: '#dc2626',
-                        borderRadius: '8px', textAlign: 'center'
+                        borderRadius: '8px', textAlign: 'center', fontSize: '0.9rem'
                     }}>
-                        {error}
+                        ⚠️ {error}
                     </div>
                 )}
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', marginBottom: '20px', borderBottom: '2px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', marginBottom: '25px', borderBottom: '2px solid #e5e7eb' }}>
                     <button
-                        onClick={() => { setLoginType("teacher"); setPassword(""); }}
+                        onClick={() => { setLoginType("teacher"); setPassword(""); setError(""); }}
                         style={{
-                            flex: 1, padding: '10px', border: 'none', background: 'none',
-                            borderBottom: loginType === "teacher" ? '2px solid #6366f1' : 'none',
-                            color: loginType === "teacher" ? '#6366f1' : '#6b7280',
-                            fontWeight: 'bold', cursor: 'pointer', marginBottom: '-2px'
+                            flex: 1, padding: '12px', border: 'none', background: 'none',
+                            borderBottom: loginType === "teacher" ? '3px solid #6366f1' : '3px solid transparent',
+                            color: loginType === "teacher" ? '#6366f1' : '#9ca3af',
+                            fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', marginBottom: '-2px',
+                            transition: 'all 0.2s'
                         }}
                     >
                         👨‍🏫 담임교사
                     </button>
                     <button
-                        onClick={() => { setLoginType("admin"); setPassword(""); }}
+                        onClick={() => { setLoginType("admin"); setPassword(""); setError(""); }}
                         style={{
-                            flex: 1, padding: '10px', border: 'none', background: 'none',
-                            borderBottom: loginType === "admin" ? '2px solid #6366f1' : 'none',
-                            color: loginType === "admin" ? '#6366f1' : '#6b7280',
-                            fontWeight: 'bold', cursor: 'pointer', marginBottom: '-2px'
+                            flex: 1, padding: '12px', border: 'none', background: 'none',
+                            borderBottom: loginType === "admin" ? '3px solid #ef4444' : '3px solid transparent',
+                            color: loginType === "admin" ? '#ef4444' : '#9ca3af',
+                            fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', marginBottom: '-2px',
+                            transition: 'all 0.2s'
                         }}
                     >
                         🛡️ 관리자
                     </button>
                 </div>
 
-                <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
-                        {loginType === "admin" ? "관리자 번호" : "학급 선택"}
-                    </label>
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-                    {loginType === "admin" ? (
-                        <select
-                            value={adminId}
-                            onChange={(e) => setAdminId(e.target.value)}
-                            style={{
-                                width: '100%', padding: '12px', border: '2px solid #e5e7eb',
-                                borderRadius: '8px', fontSize: '1rem', backgroundColor: 'white'
-                            }}
-                        >
-                            {Array.from({ length: 10 }, (_, i) => i + 1).map(num => (
-                                <option key={num} value={num}>{num}번 관리자</option>
-                            ))}
-                        </select>
+                    {loginType === "teacher" ? (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151', fontSize: '0.9rem' }}>
+                                학급 선택
+                            </label>
+                            <select
+                                value={classId}
+                                onChange={(e) => setClassId(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '14px', border: '1px solid #d1d5db',
+                                    borderRadius: '10px', fontSize: '1rem', backgroundColor: '#f9fafb',
+                                    outline: 'none'
+                                }}
+                            >
+                                {CLASS_LIST.map(cls => (
+                                    <option key={cls.code} value={cls.code}>{cls.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     ) : (
-                        <select
-                            value={classId}
-                            onChange={(e) => setClassId(e.target.value)}
-                            style={{
-                                width: '100%', padding: '12px', border: '2px solid #e5e7eb',
-                                borderRadius: '8px', fontSize: '1rem', backgroundColor: 'white'
-                            }}
-                        >
-                            {CLASS_LIST.map(cls => (
-                                <option key={cls.id} value={cls.id}>{cls.name}</option>
-                            ))}
-                        </select>
+                        <div style={{
+                            padding: '15px', backgroundColor: '#fef2f2', borderRadius: '10px',
+                            border: '1px solid #fee2e2', color: '#b91c1c', fontSize: '0.9rem',
+                            display: 'flex', alignItems: 'center', gap: '10px'
+                        }}>
+                            <span>🔒 <b>전체 관리자(admin)</b> 계정으로 로그인합니다.</span>
+                        </div>
                     )}
-                </div>
 
-                <div style={{ marginBottom: '30px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#333' }}>
-                        비밀번호
-                    </label>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="비밀번호를 입력하세요"
-                        onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151', fontSize: '0.9rem' }}>
+                            비밀번호
+                        </label>
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="비밀번호를 입력하세요"
+                            style={{
+                                width: '100%', padding: '14px', border: '1px solid #d1d5db',
+                                borderRadius: '10px', fontSize: '1rem', outline: 'none'
+                            }}
+                            required
+                        />
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={loading}
                         style={{
-                            width: '100%', padding: '12px', border: '2px solid #e5e7eb',
-                            borderRadius: '8px', fontSize: '1rem'
+                            width: '100%', padding: '16px', marginTop: '10px',
+                            backgroundColor: loading ? '#9ca3af' : (loginType === "teacher" ? '#6366f1' : '#ef4444'),
+                            color: 'white', border: 'none', borderRadius: '12px',
+                            fontSize: '1.1rem', fontWeight: 'bold',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                            transition: 'transform 0.1s, background 0.2s'
                         }}
-                    />
+                    >
+                        {loading ? "로그인 중..." : "로그인"}
+                    </button>
+                </form>
+
+                <div style={{ textAlign: 'center', marginTop: '30px', borderTop: '1px solid #f3f4f6', paddingTop: '20px' }}>
+                    <p style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
+                        Designed by <b>PBS Team</b>
+                    </p>
                 </div>
-
-                <button
-                    onClick={handleLogin}
-                    disabled={loading}
-                    style={{
-                        width: '100%', padding: '14px',
-                        backgroundColor: loading ? '#9ca3af' : '#6366f1',
-                        color: 'white', border: 'none', borderRadius: '8px',
-                        fontSize: '1.1rem', fontWeight: 'bold',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        transition: 'background 0.2s'
-                    }}
-                >
-                    {loading ? "로그인 중..." : "🔐 로그인"}
-                </button>
-
-                <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.85rem', color: '#999' }}>
-                    초기 비밀번호: admin123 / teacher123
-                </p>
             </div>
         </div>
     );

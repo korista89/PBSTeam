@@ -55,7 +55,7 @@ _cache = {
     "users": {"data": [], "timestamp": 0},
     "board": {"data": [], "timestamp": 0}
 }
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 10  # 10 seconds for near real-time
 
 def clear_cache(key: str = None):
     if key and key in _cache:
@@ -314,11 +314,54 @@ def get_unique_class_info() -> dict:
             
     return classes
 
+        ws.update(all_rows, 'A2')
+        clear_cache("users")
+        return {"message": f"Users sheet reset. {len(all_rows)} users created."}
+    except Exception as e:
+        print(f"Error resetting Users sheet: {e}")
+        return {"error": str(e)}
+
+def _generate_teacher_id(class_name: str) -> str:
+    """
+    Generate Korean ID from class name.
+    Ex: "초등 1학년 1반" -> "초1-1관리자"
+        "유치원 1반" -> "유1관리자" (Grade is often integrated or 0)
+        "중학교 1학년 1반" -> "중1-1관리자"
+        "고등 3학년 1반" -> "고3-1관리자"
+        "전공과 1학년 1반" -> "전1-1관리자"
+    """
+    try:
+        if "유치원" in class_name:
+            # "유치원 1반" -> extract numbers
+            parts = class_name.split()
+            # Find class num
+            cls_num = parts[-1].replace("반", "")
+            return f"유{cls_num}관리자"
+        
+        prefix_map = {
+            "초등": "초", "중학교": "중", "고등": "고", "전공과": "전", "예비": "예비"
+        }
+        
+        # Standard format: "Process Grade학년 Class반"
+        # "초등 1학년 1반" -> ["초등", "1학년", "1반"]
+        parts = class_name.split()
+        if len(parts) >= 3:
+            process = parts[0]
+            grade = parts[1].replace("학년", "")
+            cls = parts[2].replace("반", "")
+            
+            p_char = prefix_map.get(process, process[0])
+            return f"{p_char}{grade}-{cls}관리자"
+            
+        return class_name.replace(" ", "") + "관리자"
+    except:
+        return class_name + "관리자"
+
 def reset_users_sheet():
     """
-    Re-initialize Users sheet with proper Admin and Class Teacher accounts.
-    Admin: admin01 ~ admin10
-    Teacher: [ClassID] (e.g. 211)
+    Re-initialize Users sheet.
+    Admin: admin (System Admin)
+    Teachers: Korean Style IDs (e.g., 초1-1관리자)
     """
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
@@ -335,29 +378,26 @@ def reset_users_sheet():
             pass
             
         print("Creating new 'Users' worksheet...")
-        # Headers: ID, Password, Role, LastLogin, ClassID, ClassName
-        ws = sheet.add_worksheet(title="Users", rows=100, cols=6)
+        ws = sheet.add_worksheet(title="Users", rows=150, cols=6)
         ws.append_row(["ID", "Password", "Role", "LastLogin", "ClassID", "ClassName"])
         
         all_rows = []
         
-        # 1. Admins (admin01 ~ admin10)
-        for i in range(1, 11):
-            uid = f"admin{i:02d}"
-            all_rows.append([uid, "admin123", "admin", "", "", "관리자"])
+        # 1. System Admin
+        all_rows.append(["admin", "admin123", "admin", "", "", "전체관리자"])
             
         # 2. Class Teachers
         class_info = get_unique_class_info()
-        # Sort by Class ID
         sorted_ids = sorted(class_info.keys())
         
         for cid in sorted_ids:
             cname = class_info[cid]
-            all_rows.append([cid, "teacher123", "class_teacher", "", cid, cname])
+            korean_id = _generate_teacher_id(cname)
+            all_rows.append([korean_id, "teacher123", "class_teacher", "", cid, cname])
             
         ws.update(all_rows, 'A2')
         clear_cache("users")
-        return {"message": f"Users sheet reset. {len(all_rows)} users created."}
+        return {"message": f"Users sheet reset. {len(all_rows)} users created. (Admin: 'admin', Teachers: '초1-1관리자' style)"}
     except Exception as e:
         print(f"Error resetting Users sheet: {e}")
         return {"error": str(e)}
@@ -805,6 +845,7 @@ def add_meeting_note(data: dict):
             data.get('period_end', '')
         ]
         ws.append_row(row)
+        clear_cache("meeting_notes") # Invalidate cache
         return {"message": "Meeting note added", "created_at": created_at}
     except Exception as e:
         print(f"Error adding meeting note: {e}")

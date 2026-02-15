@@ -42,9 +42,12 @@ export interface DashboardData {
         locations: ChartData[];
         times: ChartData[];
         behaviors: ChartData[];
+        weekdays: ChartData[];
     };
     risk_list: RiskStudent[];
     functions: ChartData[];
+    antecedents: ChartData[];
+    consequences: ChartData[];
     heatmap: HeatmapData[];
     safety_alerts: SafetyAlert[];
     ai_comment?: string;

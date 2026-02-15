@@ -1,17 +1,50 @@
-"""
-AI/Rule-based Meeting Agent for School Behavior Intervention Team.
-Generates structured meeting briefing, agenda, and decision support.
-"""
-from typing import Dict, List, Optional
+import os
+import openai
+from dotenv import load_dotenv
 
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def generate_ai_insight(summary: Dict, trends: list, risk_list: list) -> str:
     """
-    Original simple insight for backward compatibility.
+    Generate AI insight using OpenAI API.
     """
-    result = generate_meeting_agent_report(summary, trends, risk_list)
-    return result.get("briefing_text", "데이터를 분석 중입니다.")
+    try:
+        if not openai.api_key:
+            return "OpenAI API Key가 설정되지 않았습니다."
 
+        prompt = f"""
+        당신은 특수학교의 행동중재지원팀(PBIS Team) 코디네이터이자 행동 분석 전문가입니다.
+        다음 데이터를 바탕으로 교직원 회의에서 사용할 '행동 중재 회의 브리핑'을 작성해주세요.
+        
+        [데이터 요약]
+        - 총 행동 발생 건수: {summary.get('total_incidents', 0)}건
+        - 고위험 학생 수: {len(risk_list)}명
+        
+        [고위험 학생 목록 (Top 3)]
+        {', '.join([f"{r.get('name', r.get('학생명', 'N/A'))} ({r.get('count', 0)}건)" for r in risk_list[:3]])}
+        
+        [지시사항]
+        1. 학교 전체의 행동 발생 추이와 심각도를 분석하고, 긍정적인 변화나 우려되는 점을 명확히 짚어주세요.
+        2. 고위험 학생들에 대해 구체적인 중재 방향(기능 평가 필요성, 환경 수정 등)을 제안하세요.
+        3. 선생님들에게 격려와 구체적인 행동 가이드(예: 칭찬 강화, 예방적 접근)를 포함하세요.
+        4. 말투는 정중하고 전문적인 '해요체'를 사용하세요.
+        5. 분량은 300~500자 내외로 핵심만 요약하세요.
+        """
+        
+        response = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a specialized AI assistant for School Wide PBIS (Positive Behavior Interventions and Supports)."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=600
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"AI Insight Error: {e}")
+        return "AI 분석을 생성하는 도중 오류가 발생했습니다."
 
 def generate_meeting_agent_report(
     summary: Dict,
