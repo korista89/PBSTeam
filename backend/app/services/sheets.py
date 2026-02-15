@@ -42,7 +42,16 @@ def get_main_worksheet():
         
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        return sheet.sheet1 
+        # Fix: Use explicit "BehaviorLogs" sheet for 2-way sync
+        try:
+            return sheet.worksheet("BehaviorLogs")
+        except gspread.WorksheetNotFound:
+            # Fallback creation if not exists (should be handled by setup script but good for safety)
+            print("Creating 'BehaviorLogs' worksheet...")
+            headers = ["행동발생 날짜", "시간대", "장소", "강도", "행동유형", "기능", "배경", "결과", "학생명", "학생코드", "코드번호", "입력자", "입력일", "비고"]
+            ws = sheet.add_worksheet(title="BehaviorLogs", rows=1000, cols=20)
+            ws.append_row(headers)
+            return ws
     except Exception as e:
         print(f"Error connecting to sheet: {e}")
         return None
