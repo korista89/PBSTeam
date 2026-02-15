@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import styles from './page.module.css';
+import { AuthCheck } from '../components/AuthProvider';
+import GlobalNav from '../components/GlobalNav';
 
 // Load mermaid from CDN script in layout or head, OR dynamically import
 // Since we are in Next.js, we can try to use a script tag or just assume the user might not have 'mermaid' installed as a package.
@@ -10,64 +12,66 @@ import styles from './page.module.css';
 // Given the user constraint "Port this HTML", the HTML used a CDN. I will use a simple logical wrapper.
 
 export default function ProtocolPage() {
-  const [mermaidLoaded, setMermaidLoaded] = useState(false);
+    const [mermaidLoaded, setMermaidLoaded] = useState(false);
 
-  useEffect(() => {
-    // Dynamically load mermaid script
-    const script = document.createElement('script');
-    script.src = "https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js";
-    script.async = true;
-    script.onload = () => {
-        // @ts-expect-error mermaid is global from CDN
-        window.mermaid.initialize({ startOnLoad: false, theme: 'neutral', flowchart: { curve: 'basis', htmlLabels: true } });
-        // @ts-expect-error mermaid is global from CDN
-        window.mermaid.run({ querySelector: '.mermaid' }).then(() => {
-            setMermaidLoaded(true);
-        });
-    };
-    document.body.appendChild(script);
+    useEffect(() => {
+        // Dynamically load mermaid script
+        const script = document.createElement('script');
+        script.src = "https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js";
+        script.async = true;
+        script.onload = () => {
+            // @ts-expect-error mermaid is global from CDN
+            window.mermaid.initialize({ startOnLoad: false, theme: 'neutral', flowchart: { curve: 'basis', htmlLabels: true } });
+            // @ts-expect-error mermaid is global from CDN
+            window.mermaid.run({ querySelector: '.mermaid' }).then(() => {
+                setMermaidLoaded(true);
+            });
+        };
+        document.body.appendChild(script);
 
-    return () => {
-        document.body.removeChild(script);
-    }
-  }, []);
+        return () => {
+            document.body.removeChild(script);
+        }
+    }, []);
 
-  return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <h1>🏫 학교 행동중재 지원 체계도 (Final Standard Protocol)</h1>
-        <button className={styles.btnPrint} onClick={() => window.print()}>🖨 인쇄 / PDF 저장</button>
-      </div>
+    return (
+        <AuthCheck>
+            <GlobalNav currentPage="protocol" />
+            <div className={styles.container}>
+                <div className={styles.header}>
+                    <h1>🏫 학교 행동중재 지원 체계도 (Final Standard Protocol)</h1>
+                    <button className={styles.btnPrint} onClick={() => window.print()}>🖨 인쇄 / PDF 저장</button>
+                </div>
 
-      <div className={styles.summaryGrid}>
-        <div className={`${styles.card} ${styles.cT1}`}>
-            <h3>Tier 1 보편적</h3>
-            <p>전교생 예방 교육</p>
-        </div>
-        <div className={`${styles.card} ${styles.cT2}`}>
-            <h3>Tier 2 표적</h3>
-            <p>CICO / 소집단</p>
-        </div>
-        <div className={`${styles.card} ${styles.cT3}`}>
-            <h3>Tier 3 개별</h3>
-            <p>기능평가(FBA)</p>
-        </div>
-        <div className={`${styles.card} ${styles.cT3p}`}>
-            <h3>Tier 3+ 연계</h3>
-            <p>외부 전문가 협력</p>
-        </div>
-        <div className={`${styles.card} ${styles.cEm}`}>
-            <h3>🚨 Red Line</h3>
-            <p>상해/제지 시 즉시</p>
-        </div>
-      </div>
+                <div className={styles.summaryGrid}>
+                    <div className={`${styles.card} ${styles.cT1}`}>
+                        <h3>Tier 1 보편적</h3>
+                        <p>전교생 예방 교육</p>
+                    </div>
+                    <div className={`${styles.card} ${styles.cT2}`}>
+                        <h3>Tier 2 표적</h3>
+                        <p>CICO / 소집단</p>
+                    </div>
+                    <div className={`${styles.card} ${styles.cT3}`}>
+                        <h3>Tier 3 개별</h3>
+                        <p>기능평가(FBA)</p>
+                    </div>
+                    <div className={`${styles.card} ${styles.cT3p}`}>
+                        <h3>Tier 3+ 연계</h3>
+                        <p>외부 전문가 협력</p>
+                    </div>
+                    <div className={`${styles.card} ${styles.cEm}`}>
+                        <h3>🚨 Red Line</h3>
+                        <p>상해/제지 시 즉시</p>
+                    </div>
+                </div>
 
-      <div className={styles.dashboard}>
-        <div className={styles.panelLeft}>
-            <div className={styles.panelTitle}>의사결정 흐름도 (Decision Tree)</div>
-            {!mermaidLoaded && <div className={styles.loadingMsg}>도표 로딩 중...</div>}
-            <div className="mermaid">
-{`
+                <div className={styles.dashboard}>
+                    <div className={styles.panelLeft}>
+                        <div className={styles.panelTitle}>의사결정 흐름도 (Decision Tree)</div>
+                        {!mermaidLoaded && <div className={styles.loadingMsg}>도표 로딩 중...</div>}
+                        <div className="mermaid">
+                            {`
 flowchart TD
     %% Style Definitions
     classDef t1 fill:#e3f2fd,stroke:#1565c0,color:#0d47a1,stroke-width:2px;
@@ -119,82 +123,83 @@ flowchart TD
     class Emergency em;
     class Check,Data,GroupCheck decision;
 `}
-            </div>
-        </div>
+                        </div>
+                    </div>
 
-        <div className={styles.panelRight}>
-            <div className={styles.panelTitle}>단계별 운영 프로토콜 및 기준 상세</div>
-            <table className={styles.table}>
-                <colgroup>
-                    <col style={{width: '20%'}} />
-                    <col style={{width: '35%'}} />
-                    <col style={{width: '45%'}} />
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th>단계 (Tier)</th>
-                        <th>진입 기준 (Entry Criteria)</th>
-                        <th>중재 및 환류 (Intervention & Exit)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr style={{backgroundColor: '#fff5f5'}}>
-                        <td><span className={`${styles.tag} ${styles.red}`}>긴급 (Red)</span></td>
-                        <td>
-                            • <b>물리적 제지 1회 이상</b><br/>
-                            • <b>신체 상해 발생</b>
-                        </td>
-                        <td>
-                            • 즉시 <b>Tier 3</b>로 직행 (절차 생략)<br/>
-                            • 위기관리계획(CMP) 최우선 수립
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><span className={`${styles.tag} ${styles.orange}`}>Tier 2</span></td>
-                        <td>
-                            <span className={styles.highlightText}>• 2주 연속 주 2회 이상</span><br/>
-                            • 담임교사 추천 (데이터 필)
-                        </td>
-                        <td>
-                            • <b>CICO</b> (기본) / <b>SST</b> (2인이상)<br/>
-                            • 성공 시: 2주 유지 후 하향<br/>
-                            • 실패 시: Tier 3 상향
-                        </td>
-                    </tr>
-                    <tr>
-                        <td><span className={`${styles.tag} ${styles.darkRed}`}>Tier 3</span></td>
-                        <td>
-                            • Tier 2 중재 실패<br/>
-                            • 긴급 트랙 해당자
-                        </td>
-                        <td>
-                            • <b>기능평가(FBA) & 행동중재(BIP)</b><br/>
-                            • 성공 시: 4주 유지 후 Tier 2로 완화<br/>
-                            • 실패 시: 외부 전문가 연계
-                        </td>
-                    </tr>
-                    <tr style={{backgroundColor: '#fcf8fd'}}>
-                        <td><span className={`${styles.tag} ${styles.purple}`}>Tier 3+</span><br/>(지역사회)</td>
-                        <td>
-                            • 교내 자원으로 해결 불가<br/>
-                            • 의료적 진단 필요 시
-                        </td>
-                        <td>
-                            • 병원 치료, 교육청 지원단 연계<br/>
-                            • <span className={styles.highlightText}>안정화 시 Tier 3팀으로 이관</span><br/>
-                            (바로 종결하지 않고 학교 적응 지원)
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                    <div className={styles.panelRight}>
+                        <div className={styles.panelTitle}>단계별 운영 프로토콜 및 기준 상세</div>
+                        <table className={styles.table}>
+                            <colgroup>
+                                <col style={{ width: '20%' }} />
+                                <col style={{ width: '35%' }} />
+                                <col style={{ width: '45%' }} />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>단계 (Tier)</th>
+                                    <th>진입 기준 (Entry Criteria)</th>
+                                    <th>중재 및 환류 (Intervention & Exit)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style={{ backgroundColor: '#fff5f5' }}>
+                                    <td><span className={`${styles.tag} ${styles.red}`}>긴급 (Red)</span></td>
+                                    <td>
+                                        • <b>물리적 제지 1회 이상</b><br />
+                                        • <b>신체 상해 발생</b>
+                                    </td>
+                                    <td>
+                                        • 즉시 <b>Tier 3</b>로 직행 (절차 생략)<br />
+                                        • 위기관리계획(CMP) 최우선 수립
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><span className={`${styles.tag} ${styles.orange}`}>Tier 2</span></td>
+                                    <td>
+                                        <span className={styles.highlightText}>• 2주 연속 주 2회 이상</span><br />
+                                        • 담임교사 추천 (데이터 필)
+                                    </td>
+                                    <td>
+                                        • <b>CICO</b> (기본) / <b>SST</b> (2인이상)<br />
+                                        • 성공 시: 2주 유지 후 하향<br />
+                                        • 실패 시: Tier 3 상향
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><span className={`${styles.tag} ${styles.darkRed}`}>Tier 3</span></td>
+                                    <td>
+                                        • Tier 2 중재 실패<br />
+                                        • 긴급 트랙 해당자
+                                    </td>
+                                    <td>
+                                        • <b>기능평가(FBA) & 행동중재(BIP)</b><br />
+                                        • 성공 시: 4주 유지 후 Tier 2로 완화<br />
+                                        • 실패 시: 외부 전문가 연계
+                                    </td>
+                                </tr>
+                                <tr style={{ backgroundColor: '#fcf8fd' }}>
+                                    <td><span className={`${styles.tag} ${styles.purple}`}>Tier 3+</span><br />(지역사회)</td>
+                                    <td>
+                                        • 교내 자원으로 해결 불가<br />
+                                        • 의료적 진단 필요 시
+                                    </td>
+                                    <td>
+                                        • 병원 치료, 교육청 지원단 연계<br />
+                                        • <span className={styles.highlightText}>안정화 시 Tier 3팀으로 이관</span><br />
+                                        (바로 종결하지 않고 학교 적응 지원)
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
 
-            <div className={styles.alertBox}>
-                <b>💡 변경 사항 요약</b><br/>
-                1. <b>기준 강화:</b> Tier 2 진입 장벽을 &#39;주 2회씩 2주 연속&#39;으로 높여, 일시적 행동이 아닌 <b>지속적 패턴</b>을 가진 학생을 선별합니다.<br/>
-                2. <b>환류 시스템:</b> 지역사회 지원(Tier 3+)을 통해 행동이 안정되면, <b>다시 교내 개별지원팀(Tier 3)</b>이 인계받아 학교 내 일반화를 돕습니다. (Step-down)
+                        <div className={styles.alertBox}>
+                            <b>💡 변경 사항 요약</b><br />
+                            1. <b>기준 강화:</b> Tier 2 진입 장벽을 &#39;주 2회씩 2주 연속&#39;으로 높여, 일시적 행동이 아닌 <b>지속적 패턴</b>을 가진 학생을 선별합니다.<br />
+                            2. <b>환류 시스템:</b> 지역사회 지원(Tier 3+)을 통해 행동이 안정되면, <b>다시 교내 개별지원팀(Tier 3)</b>이 인계받아 학교 내 일반화를 돕습니다. (Step-down)
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-      </div>
-    </div>
-  );
+        </AuthCheck>
+    );
 }
