@@ -536,13 +536,7 @@ def analyze_meeting_data(target_date: str = None):
                 "current_tier": current_tier,
                 "decision_recommendation": "Tier 3 (Immediate)" if is_emergency else ("Tier 2 (Entry)" if is_tier2_candidate else "Maintain Tier 1")
             })
-                "total_incidents": len(group),
-                "weekly_avg": round(len(group) / 4, 1),
-                "is_emergency": is_emergency,
-                "emergency_reason": ", ".join(emergency_reason),
-                "is_tier2_candidate": is_tier2_candidate,
-                "decision_recommendation": "Tier 3 (Immediate)" if is_emergency else ("Tier 2 (Entry)" if is_tier2_candidate else "Maintain Tier 1")
-            })
+
 
     # Sort: Emergency -> Tier 2 Candidate -> Regular
     # Custom sort key
