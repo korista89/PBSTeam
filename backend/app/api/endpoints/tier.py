@@ -85,6 +85,9 @@ async def update_tier_unified(request: Request):
         # Manual validation
         req_data = UnifiedTierUpdateRequest(**body)
         
+        # Ensure code is string
+        str_code = str(req_data.code)
+        
         tier_values = {}
         if req_data.tier1 is not None:
             tier_values['Tier1'] = req_data.tier1
@@ -98,7 +101,7 @@ async def update_tier_unified(request: Request):
             tier_values['Tier3+'] = req_data.tier3_plus
         
         result = update_student_tier_unified(
-            code=req_data.code,
+            code=str_code,
             tier_values=tier_values,
             enrolled=req_data.enrolled,
             beable_code=req_data.beable_code,
