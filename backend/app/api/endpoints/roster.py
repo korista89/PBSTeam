@@ -18,7 +18,7 @@ async def get_codes():
     return mapping
 
 @router.post("/codes")
-async def save_codes(codes: List[Dict[str, str]]):
+async def save_codes(codes: list[dict[str, str]]):
     result = update_student_codes(codes)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])

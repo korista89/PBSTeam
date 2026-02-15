@@ -54,7 +54,7 @@ class CellUpdate(BaseModel):
 
 class BatchUpdateRequest(BaseModel):
     month: int
-    updates: List[CellUpdate]
+    updates: list[CellUpdate]
 
 
 @router.post("/monthly/update")
