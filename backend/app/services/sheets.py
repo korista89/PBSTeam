@@ -761,6 +761,23 @@ def add_cico_daily(data: dict):
         ]
         ws.append_row(row)
         
+        # Trigger recalculation
+        try:
+            sync_result = sync_daily_entry_to_monthly(
+                student_code=str(data.get('student_code')),
+                date_str=date_str,
+                target1=data.get('target1', ''),
+                target2=data.get('target2', '')
+            )
+            print(f"DEBUG: Sync result: {sync_result}")
+        except Exception as e:
+            print(f"DEBUG: Failed to sync to monthly sheet: {e}")
+
+        return {"message": "CICO daily record added"}
+    except Exception as e:
+        print(f"Error adding CICO daily: {e}")
+        return {"error": str(e)}
+
 def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, target2: str):
     """
     Update the corresponding cell in the monthly sheet based on daily input.
