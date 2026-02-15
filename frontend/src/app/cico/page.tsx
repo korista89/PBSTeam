@@ -62,6 +62,7 @@ export default function CICOGridPage() {
   const [editingSettings, setEditingSettings] = useState<{ row: number; field: string } | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveStatus, setSaveStatus] = useState<string>("");
+  const [generating, setGenerating] = useState(false);
 
   const apiUrl = typeof window !== "undefined"
     ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -102,7 +103,16 @@ export default function CICOGridPage() {
       setData(monthlyData);
     } catch (err: unknown) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : "데이터 로딩 실패";
+      let msg = "데이터 로딩 실패";
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 404) {
+          setError("SHEET_MISSING");
+          return;
+        }
+        msg = err.response?.data?.detail || err.message;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
       setError(msg);
     } finally {
       setLoading(false);
@@ -249,6 +259,24 @@ export default function CICOGridPage() {
     if (isNaN(num)) return rate;
     if (num <= 1) return `${Math.round(num * 100)}%`;
     return `${Math.round(num)}%`;
+  };
+
+  const handleGenerateSheet = async () => {
+    setGenerating(true);
+    try {
+      const year = new Date().getFullYear();
+      await axios.post(`${apiUrl}/api/v1/cico/generate`, {
+        year: year,
+        month: month
+      });
+      alert(`${month}월 시트가 생성되었습니다.`);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      alert("시트 생성에 실패했습니다.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   // Meeting Notes State
@@ -461,9 +489,36 @@ export default function CICOGridPage() {
             </div>
           )}
 
-          {error && (
+          {error && error !== "SHEET_MISSING" && (
             <div style={{ textAlign: "center", padding: "50px", color: "#dc2626" }}>
               ⚠ {error}
+            </div>
+          )}
+
+          {error === "SHEET_MISSING" && (
+            <div style={{ textAlign: "center", padding: "50px", backgroundColor: "#fff", borderRadius: "12px", border: "1px dashed #ccc" }}>
+              <p style={{ fontSize: "1.1rem", color: "#666", marginBottom: "20px" }}>
+                📊 {month}월 CICO 기록 시트가 아직 생성되지 않았습니다.
+              </p>
+              <button
+                onClick={handleGenerateSheet}
+                disabled={generating}
+                style={{
+                  padding: "12px 24px",
+                  fontSize: "1rem",
+                  backgroundColor: "#4f46e5",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                }}
+              >
+                {generating ? "생성 중..." : `✨ ${month}월 시트 생성하기`}
+              </button>
+              <p style={{ marginTop: "15px", color: "#9ca3af", fontSize: "0.85rem" }}>
+                * TierStatus에 등록된 Tier2(CICO) 대상 학생들을 불러와 시트를 생성합니다.
+              </p>
             </div>
           )}
 

@@ -1238,9 +1238,9 @@ def create_monthly_cico_sheet(year: int, month: int):
         
         # 4. Add Dropdowns (Data Validation)
         try:
-             # Requires gspread >= 6.0
-             from gspread.utils import rowcol_to_a1
-             from gspread.formatting import DataValidationRule, ConditionType, BooleanCondition
+             # Requires gspread-formatting
+             # pip install gspread-formatting
+             from gspread_formatting import DataValidationRule, ConditionType, set_data_validation_for_cell_range
              
              start_row = 2
              end_row = len(rows)
@@ -1248,43 +1248,43 @@ def create_monthly_cico_sheet(year: int, month: int):
              # A. Scale Dropdown (Col 7 / G)
              # "O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "free"
              scale_rule = DataValidationRule(
-                 ConditionType.ONE_OF_LIST,
-                 ["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "직접입력(회/분)"],
+                 condition_type=ConditionType.ONE_OF_LIST,
+                 condition_values=["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "직접입력(회/분)"],
                  showCustomUi=True
              )
-             ws.set_data_validation(start_row, 7, end_row, 7, scale_rule)
+             set_data_validation_for_cell_range(ws, f"G{start_row}:G{end_row}", scale_rule)
              
              # B. Type Dropdown (Col 6 / F)
              type_rule = DataValidationRule(
-                ConditionType.ONE_OF_LIST,
-                ["증가 목표행동", "감소 목표행동"],
+                condition_type=ConditionType.ONE_OF_LIST,
+                condition_values=["증가 목표행동", "감소 목표행동"],
                 showCustomUi=True
              )
-             ws.set_data_validation(start_row, 6, end_row, 6, type_rule)
+             set_data_validation_for_cell_range(ws, f"F{start_row}:F{end_row}", type_rule)
              
              # C. Goal Criteria (Col 9 / I)
              goal_rule = DataValidationRule(
-                 ConditionType.ONE_OF_LIST,
-                 ["80% 이상", "20% 이하", "90% 이상", "10% 이하", "100%", "0%"],
+                 condition_type=ConditionType.ONE_OF_LIST,
+                 condition_values=["80% 이상", "20% 이하", "90% 이상", "10% 이하", "100%", "0%"],
                  showCustomUi=True
              )
-             ws.set_data_validation(start_row, 9, end_row, 9, goal_rule)
+             set_data_validation_for_cell_range(ws, f"I{start_row}:I{end_row}", goal_rule)
              
              # D. Achieved & Tier2 & Next Month (O/X)
-             # Tier2: Col 4 / D
-             # Achieved: Col 11 / K
-             # Next Month: Col 15 / O
+             # Tier2: Col 4 / D. Achieved: Col 11 / K. Next Month: Col 15 / O
              ox_rule = DataValidationRule(
-                 ConditionType.ONE_OF_LIST,
-                 ["O", "X"],
+                 condition_type=ConditionType.ONE_OF_LIST,
+                 condition_values=["O", "X"],
                  showCustomUi=True
              )
-             ws.set_data_validation(start_row, 4, end_row, 4, ox_rule)
-             ws.set_data_validation(start_row, 11, end_row, 11, ox_rule)
-             ws.set_data_validation(start_row, 15, end_row, 15, ox_rule)
+             set_data_validation_for_cell_range(ws, f"D{start_row}:D{end_row}", ox_rule)
+             set_data_validation_for_cell_range(ws, f"K{start_row}:K{end_row}", ox_rule)
+             set_data_validation_for_cell_range(ws, f"O{start_row}:O{end_row}", ox_rule)
              
         except Exception as e:
             print(f"Warning: Failed to set data validation: {e}")
+            import traceback
+            traceback.print_exc()
         
         return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
         
