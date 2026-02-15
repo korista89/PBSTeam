@@ -1279,6 +1279,7 @@ def update_monthly_cico_cells(month: int, updates: list):
             return {"error": f"'{month_name}' 시트가 없습니다."}
         
         headers = ws.row_values(1)
+        all_values = ws.get_all_values() # Fix: Fetch all values for recalc
         
         # Build batch update
         cells_to_update = []
@@ -1291,12 +1292,25 @@ def update_monthly_cico_cells(month: int, updates: list):
             
             # If col is a string (header name), convert to column index
             if isinstance(col, str):
-                # Try exact match first
+                col_idx = -1
+                # 1. Exact match
                 if col in headers:
-                    col = headers.index(col) + 1  # Convert to 1-based
-                # Try appending "일" (e.g., "1" -> "1일")
-                elif f"{col}일" in headers:
-                     col = headers.index(f"{col}일") + 1
+                    col_idx = headers.index(col) + 1
+                else:
+                    # 2. Flexible match for Days (1, 1일, 01, 1(월)) using Regex
+                    import re
+                    # Check if col is a day number
+                    if col.isdigit():
+                        day_num = int(col)
+                        for idx, h in enumerate(headers):
+                            # Extract first number from header
+                            match = re.search(r'^(\d+)', str(h))
+                            if match and int(match.group(1)) == day_num:
+                                col_idx = idx + 1
+                                break
+                
+                if col_idx != -1:
+                    col = col_idx
                 else:
                     print(f"DEBUG: Column '{col}' not found in headers")
                     continue  # Skip unknown columns
@@ -1310,27 +1324,34 @@ def update_monthly_cico_cells(month: int, updates: list):
         
         # Recalculate Logic
         try:
-            # Identify columns using loose matching
-            def find_col(candidates):
-                for c in candidates:
-                    if c in headers: return headers.index(c)
+            # Identify columns using Regex loose matching
+            def find_col_regex(pattern):
+                import re
+                for idx, h in enumerate(headers):
+                    if re.search(pattern, str(h)):
+                        return idx
                 return -1
 
-            rate_idx = find_col(["수행/발생률", "수행률", "발생률"])
-            achieved_idx = find_col(["목표 달성 여부", "달성여부", "성공여부"])
-            goal_idx = find_col(["목표 달성 기준", "목표기준", "기준"])
-            type_idx = find_col(["목표행동 유형", "행동유형"])
+            rate_idx = find_col_regex(r'수행.*률|발생.*률|Rate')
+            achieved_idx = find_col_regex(r'달성.*여부|성공.*여부')
+            goal_idx = find_col_regex(r'달성.*기준|목표.*기준')
+            type_idx = find_col_regex(r'행동.*유형')
             
             if rate_idx == -1:
                 print("DEBUG: '수행/발생률' column missing, skipping calculation")
-
+            
             day_cols = []
-            for d in range(1, 32):
-                # Check both "1" and "1일" formats
-                if str(d) in headers:
-                    day_cols.append(headers.index(str(d)))
-                elif f"{d}일" in headers:
-                    day_cols.append(headers.index(f"{d}일"))
+            import re
+            for idx, h in enumerate(headers):
+                # Assume day columns start with a number and are roughly in the middle
+                # Simple heuristic: header is just digits or digits+"일"
+                # But headers can be anything.
+                # Let's rely on range 1-31.
+                match = re.search(r'^(\d+)(일)?$', str(h).strip())
+                if match:
+                   day = int(match.group(1))
+                   if 1 <= day <= 31:
+                       day_cols.append(idx)
             
             if rate_idx != -1:
                 print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
