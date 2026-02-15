@@ -474,6 +474,9 @@ def fetch_student_status():
         # Add row_index for updates
         for idx, record in enumerate(records):
             record['row_index'] = idx + 2  # +2 for header and 1-indexing
+            # Ensure student code is string
+            if '학생코드' in record:
+                record['학생코드'] = str(record['학생코드'])
         return records
     except Exception as e:
         print(f"Error fetching status: {e}")
