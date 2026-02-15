@@ -844,8 +844,10 @@ def add_meeting_note(data: dict):
             data.get('period_start', ''),
             data.get('period_end', '')
         ]
+        print(f"DEBUG: Appending meeting note: {row}")
         ws.append_row(row)
         clear_cache("meeting_notes") # Invalidate cache
+        print("DEBUG: Meeting note added successfully")
         return {"message": "Meeting note added", "created_at": created_at}
     except Exception as e:
         print(f"Error adding meeting note: {e}")
@@ -1218,84 +1220,91 @@ def update_monthly_cico_cells(month: int, updates: list):
         
         # Recalculate Logic
         try:
-            all_values = ws.get_all_values()
-            
             # Identify columns
-            rate_idx = headers.index("수행/발생률")
-            achieved_idx = headers.index("목표 달성 여부")
-            goal_idx = headers.index("목표 달성 기준")
-            type_idx = headers.index("목표행동 유형")
-            
+            try:
+                rate_idx = headers.index("수행/발생률")
+                achieved_idx = headers.index("목표 달성 여부")
+                goal_idx = headers.index("목표 달성 기준")
+                type_idx = headers.index("목표행동 유형")
+            except ValueError as ve:
+                print(f"DEBUG: Critical columns missing for recalc: {ve}")
+                rate_idx = -1
+
             day_cols = []
             for d in range(1, 32):
                 if str(d) in headers:
                     day_cols.append(headers.index(str(d)))
-
-            for r_idx in rows_to_recalc:
-                # 0-based index for python list
-                row_data_idx = r_idx - 1
-                if row_data_idx < len(all_values):
-                    row_data = list(all_values[row_data_idx])
-                else:
-                    continue
-                
-                # Apply pending updates to memory
-                for u in updates:
-                    if u.get("row") == r_idx:
-                        c = u.get("col")
-                        if isinstance(c, str) and c in headers:
-                            c = headers.index(c) + 1
-                        c_idx = c - 1
-                        if 0 <= c_idx < len(row_data):
-                            row_data[c_idx] = u.get("value", "")
-                            
-                # Calculate Rate
-                target_type = row_data[type_idx] if len(row_data) > type_idx else ""
-                goal_criteria = row_data[goal_idx] if len(row_data) > goal_idx else ""
-                
-                total_days = 0
-                success_days = 0
-                
-                for dc in day_cols:
-                    if dc < len(row_data):
-                        val = str(row_data[dc]).strip()
-                        if val in ["O", "X"]:
-                            total_days += 1
-                            if target_type == "감소 목표행동":
-                                if val == "X": success_days += 1
-                            else:
-                                if val == "O": success_days += 1
-                
-                rate_val = 0
-                if total_days > 0:
-                    rate_val = (success_days / total_days) * 100
+            
+            if rate_idx != -1:
+                print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
+                for r_idx in rows_to_recalc:
+                    # 0-based index for python list
+                    row_data_idx = r_idx - 1
+                    if row_data_idx < len(all_values):
+                        row_data = list(all_values[row_data_idx])
+                    else:
+                        print(f"DEBUG: Row {r_idx} out of bounds")
+                        continue
                     
-                final_rate_str = f"{int(rate_val)}%" if total_days > 0 else "-"
-                
-                # Achievement
-                is_achieved = "X"
-                try:
-                    criteria_num = int(''.join(filter(str.isdigit, goal_criteria)))
-                    if "이상" in goal_criteria:
-                        if rate_val >= criteria_num: is_achieved = "O"
-                    elif "이하" in goal_criteria:
-                        if rate_val <= criteria_num: is_achieved = "O"
-                except:
-                    pass
-                
-                if total_days == 0: is_achieved = "-"
-                
-                cells_to_update.append({
-                    "range": f"{_col_letter(rate_idx + 1)}{r_idx}",
-                    "values": [[final_rate_str]]
-                })
-                cells_to_update.append({
-                    "range": f"{_col_letter(achieved_idx + 1)}{r_idx}",
-                    "values": [[is_achieved]]
-                })
+                    # Apply pending updates to memory
+                    for u in updates:
+                        if u.get("row") == r_idx:
+                            c = u.get("col")
+                            if isinstance(c, str) and c in headers:
+                                c = headers.index(c) + 1
+                            c_idx = c - 1
+                            if 0 <= c_idx < len(row_data):
+                                row_data[c_idx] = u.get("value", "")
+                                
+                    # Calculate Rate
+                    target_type = row_data[type_idx] if len(row_data) > type_idx else ""
+                    goal_criteria = row_data[goal_idx] if len(row_data) > goal_idx else ""
+                    
+                    total_days = 0
+                    success_days = 0
+                    
+                    for dc in day_cols:
+                        if dc < len(row_data):
+                            val = str(row_data[dc]).strip()
+                            if val in ["O", "X"]:
+                                total_days += 1
+                                if target_type == "감소 목표행동":
+                                    if val == "X": success_days += 1
+                                else:
+                                    if val == "O": success_days += 1
+                    
+                    rate_val = 0
+                    if total_days > 0:
+                        rate_val = (success_days / total_days) * 100
+                        
+                    final_rate_str = f"{int(rate_val)}%" if total_days > 0 else "-"
+                    
+                    # Achievement
+                    is_achieved = "X"
+                    try:
+                        criteria_num = int(''.join(filter(str.isdigit, goal_criteria)))
+                        if "이상" in goal_criteria:
+                            if rate_val >= criteria_num: is_achieved = "O"
+                        elif "이하" in goal_criteria:
+                            if rate_val <= criteria_num: is_achieved = "O"
+                    except:
+                        pass
+                    
+                    if total_days == 0: is_achieved = "-"
+                    
+                    cells_to_update.append({
+                        "range": f"{_col_letter(rate_idx + 1)}{r_idx}",
+                        "values": [[final_rate_str]]
+                    })
+                    cells_to_update.append({
+                        "range": f"{_col_letter(achieved_idx + 1)}{r_idx}",
+                        "values": [[is_achieved]]
+                    })
+                    print(f"DEBUG: Row {r_idx} Calculated - Rate: {final_rate_str}, Achieved: {is_achieved}")
 
-        except ValueError:
-            pass # Missing columns
+        except Exception as e:
+            print(f"DEBUG: Error in recalculation loop: {e}")
+            pass # Continue to update whatever we have
 
         # Batch update using gspread
         if cells_to_update:
@@ -2083,6 +2092,7 @@ def fetch_board_posts():
 def add_board_post(title: str, content: str, author: str):
     ws = get_board_worksheet()
     if not ws:
+        print("DEBUG: Board sheet not accessible")
         return {"error": "Sheet not accessible"}
     
     try:
@@ -2093,8 +2103,10 @@ def add_board_post(title: str, content: str, author: str):
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         row = [post_id, title, content, author, created_at, 0]
+        print(f"DEBUG: Appending board post: {row}")
         ws.append_row(row)
         clear_cache("board") # Invalidate cache
+        print(f"DEBUG: Board post added {post_id}")
         return {"message": "Post added", "post_id": post_id}
     except Exception as e:
         print(f"Error adding board post: {e}")
