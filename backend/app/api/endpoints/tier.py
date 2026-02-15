@@ -5,7 +5,7 @@ from app.services.sheets import (
     reset_tier_status_sheet, update_student_tier_unified
 )
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Union
 
 router = APIRouter()
 
