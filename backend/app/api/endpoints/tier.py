@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.services.sheets import (
     fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
     update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
@@ -76,30 +76,40 @@ async def update_tier(request: TierUpdateRequest):
     return result
 
 @router.put("/status/unified")
-async def update_tier_unified(request: UnifiedTierUpdateRequest):
+async def update_tier_unified(request: Request):
     """Unified update: tier + enrollment + beable in single API call"""
-    tier_values = {}
-    if request.tier1 is not None:
-        tier_values['Tier1'] = request.tier1
-    if request.tier2_cico is not None:
-        tier_values['Tier2(CICO)'] = request.tier2_cico
-    if request.tier2_sst is not None:
-        tier_values['Tier2(SST)'] = request.tier2_sst
-    if request.tier3 is not None:
-        tier_values['Tier3'] = request.tier3
-    if request.tier3_plus is not None:
-        tier_values['Tier3+'] = request.tier3_plus
-    
-    result = update_student_tier_unified(
-        code=request.code,
-        tier_values=tier_values,
-        enrolled=request.enrolled,
-        beable_code=request.beable_code,
-        memo=request.memo or ""
-    )
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
+    try:
+        body = await request.json()
+        print(f"DEBUG: Unified Update Body: {body}")
+        
+        # Manual validation
+        req_data = UnifiedTierUpdateRequest(**body)
+        
+        tier_values = {}
+        if req_data.tier1 is not None:
+            tier_values['Tier1'] = req_data.tier1
+        if req_data.tier2_cico is not None:
+            tier_values['Tier2(CICO)'] = req_data.tier2_cico
+        if req_data.tier2_sst is not None:
+            tier_values['Tier2(SST)'] = req_data.tier2_sst
+        if req_data.tier3 is not None:
+            tier_values['Tier3'] = req_data.tier3
+        if req_data.tier3_plus is not None:
+            tier_values['Tier3+'] = req_data.tier3_plus
+        
+        result = update_student_tier_unified(
+            code=req_data.code,
+            tier_values=tier_values,
+            enrolled=req_data.enrolled,
+            beable_code=req_data.beable_code,
+            memo=req_data.memo or ""
+        )
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result
+    except Exception as e:
+        print(f"DEBUG: Validation/Update Error: {e}")
+        raise HTTPException(status_code=422, detail=f"Validation Error: {str(e)}")
 
 @router.put("/enrollment")
 async def update_enrollment(request: EnrollmentUpdateRequest):
