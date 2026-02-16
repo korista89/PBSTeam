@@ -124,6 +124,7 @@ export interface MeetingAnalysisResponse {
 export interface User {
     id: string;
     role: string;
+    Role?: string; // Legacy support
     class_id?: string;
     class_name?: string;
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
-import { AuthCheck } from "../../components/AuthProvider";
+import { AuthCheck, useAuth } from "../../components/AuthProvider";
 
 interface TrendItem {
   month: string;
@@ -50,6 +50,8 @@ export default function CICOReport() {
   const [data, setData] = useState<CICOReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [is404, setIs404] = useState(false);
+  const { isAdmin } = useAuth();
 
   const apiUrl =
     typeof window !== "undefined"
@@ -67,16 +69,40 @@ export default function CICOReport() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError("");
+    setIs404(false);
     try {
       const res = await axios.get(`${apiUrl}/api/v1/cico/report?month=${month}`);
       setData(res.data);
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "데이터 로딩 실패");
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        setIs404(true);
+        setError(`${month}월 CICO 데이터가 없습니다.`);
+      } else {
+        setError(err instanceof Error ? err.message : "데이터 로딩 실패");
+      }
     } finally {
       setLoading(false);
     }
   }, [month, apiUrl]);
+
+  const handleCreateSheet = async () => {
+    if (!isAdmin()) {
+      alert("관리자만 시트를 생성할 수 있습니다.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await axios.post(`${apiUrl}/api/v1/cico/generate`, { month: Number(month) });
+      alert(`${month}월 시트가 생성되었습니다.`);
+      setIs404(false);
+      fetchData();
+    } catch (e) {
+      console.error(e);
+      alert("시트 생성 실패");
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -200,10 +226,32 @@ export default function CICOReport() {
 
           {error && (
             <div style={{
-              padding: "16px", background: "#ef44441a", border: "1px solid #ef444440",
+              padding: "24px", background: "#ef44441a", border: "1px solid #ef444440",
               borderRadius: "12px", color: "#fca5a5", textAlign: "center"
             }}>
-              ⚠️ {error}
+              <p style={{ fontSize: '1.1rem', marginBottom: '16px', fontWeight: 'bold' }}>⚠️ {error}</p>
+
+              {is404 && isAdmin() && (
+                <button
+                  onClick={handleCreateSheet}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '1rem',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                  }}
+                >
+                  📅 {month}월 CICO 시트 생성하기
+                </button>
+              )}
+              {is404 && !isAdmin() && (
+                <p style={{ color: "#94a3b8" }}>관리자에게 시트 생성을 요청해주세요.</p>
+              )}
             </div>
           )}
 
