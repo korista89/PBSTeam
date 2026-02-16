@@ -480,6 +480,14 @@ export default function CICOGridPage() {
             </div>
           )}
 
+          {/* DEBUG UI - To remove */}
+          {data && (
+            <div style={{ fontSize: "11px", color: "red", padding: "10px", background: "#eee" }}>
+              DEBUG INFO: Month={month} / DayCols={data.day_columns?.length} <br />
+              FirstCol: {JSON.stringify(data.day_columns?.[0])}
+            </div>
+          )}
+
           {/* Grid Table */}
           {!loading && !error && filteredData && (
             <>
