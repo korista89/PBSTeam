@@ -29,6 +29,7 @@ interface CICOStudent {
 interface DayColumn {
   index: number;
   label: string;
+  display?: string; // e.g. "03-03"
 }
 
 interface MonthlyData {
@@ -96,16 +97,38 @@ export default function CICOGridPage() {
 
       // Filter day_columns based on business days if available
       if (businessDays.length > 0) {
-        // Keep only columns whose label is in businessDays (or match date format)
-        // Note: businessDays are like "03-02", "03-03". Labels might be "1", "2"...
-        // We need to convert or match loosely.
-        // Backend now returns day_columns with labels as they appear in sheet ("1", "2"...)
-        // Business days API returns "MM-DD" or "M-D"? Usually "MM-DD".
-        // Let's assume we show ALL columns from sheet for safety, OR try to match.
-        // IF businessDays are dates, and sheet headers are just days (1, 2), we need month context.
-        // Simple fix: Show ALL columns returned by backend (which are actual sheet columns).
-        // Ignoring businessDays override for column strictness to prevent sync errors.
-        // monthlyData.day_columns = monthlyData.day_columns; 
+        const filteredCols: DayColumn[] = [];
+
+        // Convert businessDays to Set of integers for fast lookup
+        // "03-03" -> 3
+        const businessDayInts = new Set(businessDays.map(d => parseInt(d.split('-')[1], 10)));
+
+        // Map businessDay to formatted string for display
+        // 3 -> "03-03"
+        const businessDayMap: { [key: number]: string } = {};
+        businessDays.forEach(d => {
+          const dayInt = parseInt(d.split('-')[1], 10);
+          businessDayMap[dayInt] = d;
+        });
+
+        // Loop through original columns from backend (which have labels "1", "2", "3"...)
+        (monthlyData.day_columns as DayColumn[]).forEach(col => {
+          const dayNum = parseInt(col.label, 10);
+
+          if (!isNaN(dayNum) && businessDayInts.has(dayNum)) {
+            // Create new column object with updated display label
+            filteredCols.push({
+              index: col.index,
+              label: col.label, // Keep original label "3" for data lookup
+              display: businessDayMap[dayNum] // "03-03" for UI
+            });
+          }
+        });
+
+        // Replace original columns with filtered ones if we found matches
+        if (filteredCols.length > 0) {
+          monthlyData.day_columns = filteredCols;
+        }
       }
 
       // Filter students if user is a teacher (and not admin)
@@ -480,13 +503,6 @@ export default function CICOGridPage() {
             </div>
           )}
 
-          {/* DEBUG UI - To remove */}
-          {data && (
-            <div style={{ fontSize: "11px", color: "red", padding: "10px", background: "#eee" }}>
-              DEBUG INFO: Month={month} / DayCols={data.day_columns?.length} <br />
-              FirstCol: {JSON.stringify(data.day_columns?.[0])}
-            </div>
-          )}
 
           {/* Grid Table */}
           {!loading && !error && filteredData && (
@@ -541,7 +557,7 @@ export default function CICOGridPage() {
                             padding: "4px 1px",
                             letterSpacing: "-0.5px",
                           }}>
-                            {day.label}
+                            {day.display || day.label}
                           </th>
                         ))}
 
