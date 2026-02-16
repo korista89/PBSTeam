@@ -155,6 +155,9 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ color: 'white', fontSize: '0.85rem' }}>
                     {isAdmin() ? '👑' : '👤'} {user.id}번
+                    <span style={{ fontSize: '0.7rem', color: '#fbbf24', marginLeft: '8px' }}>
+                        (Debug: {user.role || user.Role || "NoRole"})
+                    </span>
                 </span>
                 <button
                     onClick={() => {
