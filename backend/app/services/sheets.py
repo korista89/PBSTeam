@@ -2641,3 +2641,32 @@ def save_bip(bip_data: dict):
     except Exception as e:
         print(f"Error saving BIP: {e}")
         return {"error": str(e)}
+
+def add_holiday(date_str, name):
+    """Add a holiday to the '날짜 관리' sheet."""
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            config_ws = sheet.worksheet("날짜 관리")
+        except gspread.WorksheetNotFound:
+            # Try creating it if missing
+            config_ws = sheet.add_worksheet(title="날짜 관리", rows=100, cols=3)
+            config_ws.append_row(["공휴일 날짜 (YYYY-MM-DD)", "공휴일 이름", "비고"])
+            
+        # Check if already exists
+        existing = config_ws.col_values(1)
+        if date_str in existing:
+             return {"error": "Holiday already exists on this date"}
+             
+        # Append
+        config_ws.append_row([date_str, name, "수동 추가됨"])
+        clear_cache() # Clear cache to refresh holidays
+        return {"message": f"Holiday {name} ({date_str}) added"}
+    except Exception as e:
+        print(f"Error adding holiday: {e}")
+        return {"error": str(e)}
+

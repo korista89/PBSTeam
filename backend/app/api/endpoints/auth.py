@@ -27,7 +27,7 @@ async def login(request: LoginRequest):
         "message": "Login successful",
         "user": {
             "id": user.get("ID"),
-            "role": user.get("Role"),
+            "role": str(user.get("Role")).lower(), # Normalize to lowercase
             "class_id": user.get("ClassID", ""),
             "class_name": user.get("ClassName", "")
         }
