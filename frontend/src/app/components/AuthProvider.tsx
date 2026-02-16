@@ -15,7 +15,14 @@ export function useAuth() {
             const stored = localStorage.getItem("user");
             if (stored) {
                 try {
-                    return JSON.parse(stored);
+                    const parsed = JSON.parse(stored);
+                    // Validate essential fields
+                    if (parsed && parsed.id && (parsed.role || parsed.Role)) {
+                        return parsed;
+                    } else {
+                        console.warn("Invalid user data found, clearing storage");
+                        localStorage.removeItem("user");
+                    }
                 } catch {
                     localStorage.removeItem("user");
                 }
