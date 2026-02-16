@@ -100,7 +100,7 @@ export default function Home() {
         );
     }
 
-    const { summary, trends, big5, risk_list, functions, heatmap } = data;
+    const { summary, trends, big5, risk_list, functions, heatmap, antecedents, consequences } = data;
 
     return (
         <AuthCheck>
@@ -296,59 +296,67 @@ export default function Home() {
 
                     {/* Tier 1: Big 5 Analysis Section */}
                     <section className={styles.sectionHeader}>
-                        <h2>📊 Tier 1: 보편적 지원 (Big 5 분석)</h2>
+                        <h2>📊 Tier 1: 보편적 지원 (Big 5 & ABC 분석)</h2>
                     </section>
 
+                    {/* Trends */}
                     <div className={styles.chartGrid}>
                         <div className={styles.chartSection}>
-                            <h3>📈 행동 발생 추이 (Trend)</h3>
+                            <h3>📈 일별 발생 추이 (Daily Trend)</h3>
                             <div className={styles.chartContainer}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={trends}>
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis />
+                                        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                                        <YAxis allowDecimals={false} />
                                         <Tooltip />
-                                        <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="발생 건수" />
+                                        <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="발생 건수" dot={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
 
                         <div className={styles.chartSection}>
-                            <h3>🏫 장소별 빈도 (Location)</h3>
+                            <h3>📊 주별 발생 추이 (Weekly Trend)</h3>
                             <div className={styles.chartContainer}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={big5.locations} layout="vertical">
+                                    <BarChart data={data.weekly_trends || []}>
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" />
-                                        <YAxis dataKey="name" type="category" width={100} />
+                                        <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                                        <YAxis allowDecimals={false} />
                                         <Tooltip />
-                                        <Bar dataKey="value" fill="#82ca9d" name="건수" radius={[0, 4, 4, 0]} />
+                                        <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
                     </div>
 
-                    <div className={styles.chartGrid}>
+                    {/* ABC Analysis */}
+                    <h3 style={{ marginTop: '30px', marginBottom: '15px', color: '#4b5563', borderLeft: '4px solid #6366f1', paddingLeft: '10px' }}>
+                        🧩 ABC 행동 분석 (Antecedent - Behavior - Consequence)
+                    </h3>
+
+                    <div className={styles.chartGrid} style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                        {/* Antecedent */}
                         <div className={styles.chartSection}>
-                            <h3>⏰ 시간대별 빈도 (Time)</h3>
+                            <h3>A: 선행사건 (Antecedent)</h3>
                             <div className={styles.chartContainer}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={big5.times}>
+                                    <BarChart data={antecedents} layout="vertical" margin={{ left: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis />
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} interval={0} />
                                         <Tooltip />
-                                        <Bar dataKey="value" fill="#8884d8" name="건수" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="value" fill="#10b981" name="건수" radius={[0, 4, 4, 0]} barSize={20} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
 
+                        {/* Behavior */}
                         <div className={styles.chartSection}>
-                            <h3>🤬 행동 유형별 빈도 (Behavior)</h3>
+                            <h3>B: 행동 유형 (Behavior)</h3>
                             <div className={styles.chartContainer}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -358,7 +366,17 @@ export default function Home() {
                                             cy="50%"
                                             labelLine={false}
                                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
+                                                const RADIAN = Math.PI / 180;
+                                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                                const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                                return percent > 0.05 ? (
+                                                    <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
+                                                        {`${(percent * 100).toFixed(0)}%`}
+                                                    </text>
+                                                ) : null;
+                                            }}
                                             outerRadius={80}
                                             fill="#0088FE"
                                             dataKey="value"
@@ -368,13 +386,67 @@ export default function Home() {
                                             ))}
                                         </Pie>
                                         <Tooltip />
+                                        <Legend verticalAlign="bottom" height={36} iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
                                     </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* Consequence */}
+                        <div className={styles.chartSection}>
+                            <h3>C: 후속결과 (Consequence)</h3>
+                            <div className={styles.chartContainer}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={consequences} layout="vertical" margin={{ left: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} interval={0} />
+                                        <Tooltip />
+                                        <Bar dataKey="value" fill="#f59e0b" name="건수" radius={[0, 4, 4, 0]} barSize={20} />
+                                    </BarChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
                     </div>
 
-                    {/* Hotspot & Functions */}
+
+                    {/* Context Analysis */}
+                    <h3 style={{ marginTop: '30px', marginBottom: '15px', color: '#4b5563', borderLeft: '4px solid #f97316', paddingLeft: '10px' }}>
+                        📍 상황 요인 분석 (Context)
+                    </h3>
+
+                    <div className={styles.chartGrid}>
+                        <div className={styles.chartSection}>
+                            <h3>🏫 장소별 빈도 (Location)</h3>
+                            <div className={styles.chartContainer}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={big5.locations} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" />
+                                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} />
+                                        <Tooltip />
+                                        <Bar dataKey="value" fill="#82ca9d" name="건수" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div className={styles.chartSection}>
+                            <h3>⏰ 시간대별 빈도 (Time)</h3>
+                            <div className={styles.chartContainer}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={big5.times}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                        <YAxis />
+                                        <Tooltip />
+                                        <Bar dataKey="value" fill="#8884d8" name="건수" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className={styles.chartGrid}>
                         <div className={styles.chartSection}>
                             <h3>🔥 Hot Spot (장소 x 시간)</h3>
@@ -382,8 +454,8 @@ export default function Home() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                                         <CartesianGrid />
-                                        <XAxis type="category" dataKey="x" name="시간" />
-                                        <YAxis type="category" dataKey="y" name="장소" />
+                                        <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} />
+                                        <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} />
                                         <ZAxis type="number" dataKey="value" range={[50, 500]} name="빈도" />
                                         <Tooltip cursor={{ strokeDasharray: '3 3' }} />
                                         <Scatter name="Incidents" data={heatmap} fill="#e02424" />
@@ -393,7 +465,7 @@ export default function Home() {
                         </div>
 
                         <div className={styles.chartSection}>
-                            <h3>🤔 행동 기능 (Why)</h3>
+                            <h3>🤔 행동 기능 (Function of Behavior)</h3>
                             <div className={styles.chartContainer}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -405,13 +477,14 @@ export default function Home() {
                                             outerRadius={80}
                                             fill="#8884d8"
                                             dataKey="value"
+                                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                                         >
                                             {functions.map((entry: ChartData, index: number) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <Tooltip />
-                                        <Legend verticalAlign="bottom" height={36} />
+                                        <Legend verticalAlign="bottom" height={36} iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>

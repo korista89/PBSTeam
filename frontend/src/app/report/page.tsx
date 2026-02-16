@@ -4,7 +4,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
-  PieChart, Pie, Cell, Legend, ResponsiveContainer
+  PieChart, Pie, Cell, Legend, ResponsiveContainer,
+  LineChart, Line, ScatterChart, Scatter, ZAxis, Tooltip
 } from "recharts";
 import { DashboardData } from "../types";
 import { AuthCheck } from "../components/AuthProvider";
@@ -137,9 +138,44 @@ export default function MonthlyReport() {
           </div>
         </section>
 
-        {/* 2. Tier 1 Big 5 */}
+        {/* 2. Trends */}
         <section className="report-section">
-          <h2>2. 학교 전체 패턴 (Big 5 Analysis)</h2>
+          <h2>2. 행동 발생 추이 (Trends)</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>일별 발생 추이 (Daily Trend)</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data.trends}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" style={{ fontSize: '11px' }} />
+                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="발생 건수" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>주별 발생 추이 (Weekly Trend)</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.weekly_trends || []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="week" style={{ fontSize: '11px' }} />
+                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="count" position="top" fontSize={11} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. Tier 1 Big 5 */}
+        <section className="report-section">
+          <h2>3. 학교 전체 패턴 (Big 5 Analysis)</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
             <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
               <h3>주요 발생 장소</h3>
@@ -249,9 +285,40 @@ export default function MonthlyReport() {
                   <XAxis type="number" />
                   <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '11px' }} />
                   <Bar dataKey="value" fill="#ef4444" barSize={15}>
-                    <LabelList dataKey="value" position="right" />
+                    <LabelList dataKey="value" position="right" fontSize={11} />
                   </Bar>
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Row 3: Consequence & Heatmap */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '30px' }}>
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>후속 결과 (Consequence) - '무엇을 얻었나?'</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.consequences} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '11px' }} />
+                  <Bar dataKey="value" fill="#f59e0b" barSize={15}>
+                    <LabelList dataKey="value" position="right" fontSize={11} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+              <h3>🔥 Hot Spot (장소 x 시간)</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid />
+                  <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} />
+                  <ZAxis type="number" dataKey="value" range={[50, 500]} name="빈도" />
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                  <Scatter name="Incidents" data={data.heatmap} fill="#e02424" />
+                </ScatterChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -298,7 +365,6 @@ export default function MonthlyReport() {
                 <th style={{ width: '20%' }}>학급</th>
                 <th style={{ width: '15%' }}>발생횟수 (월)</th>
                 <th>비고</th>
-                <th style={{ width: '15%' }}>Tier 변경</th>
               </tr>
             </thead>
             <tbody>
@@ -317,23 +383,6 @@ export default function MonthlyReport() {
                   <td>{s.class}</td>
                   <td>{s.count}</td>
                   <td></td>
-                  <td>
-                    <select
-                      defaultValue=""
-                      onChange={e => handleTierChange(s.name, e.target.value)}
-                      style={{
-                        padding: "4px", borderRadius: "4px", border: "1px solid #cbd5e1",
-                        fontSize: "11px", width: "100%"
-                      }}
-                    >
-                      <option value="" disabled>선택</option>
-                      <option value="Tier1">Tier 1</option>
-                      <option value="Tier2(CICO)">Tier 2 (CICO)</option>
-                      <option value="Tier2(SST)">Tier 2 (SST)</option>
-                      <option value="Tier3">Tier 3</option>
-                      <option value="Tier3+">Tier 3+</option>
-                    </select>
-                  </td>
                 </tr>
               ))}
             </tbody>

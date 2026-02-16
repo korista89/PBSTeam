@@ -204,6 +204,66 @@ def fetch_all_users():
         print(f"Error fetching users: {e}")
         return []
 
+def create_user(user_data: dict):
+    """
+    Create a new user in the 'Users' sheet.
+    user_data: {ID, Password, Role, Name, Phone, Email, ClassID, ClassName}
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("Users")
+        except gspread.WorksheetNotFound:
+            return {"error": "Users sheet not found"}
+            
+        # Check if user already exists
+        all_records = ws.get_all_records()
+        for r in all_records:
+            if str(r.get("ID")) == str(user_data.get("ID")):
+                return {"error": "User ID already exists"}
+        
+        # Prepare row
+        headers = ws.row_values(1)
+        row = []
+        for h in headers:
+            row.append(user_data.get(h, ""))
+            
+        ws.append_row(row)
+        clear_cache()
+        return {"message": f"User {user_data.get('ID')} created successfully"}
+            
+    except Exception as e:
+        print(f"Error creating user: {e}")
+        return {"error": str(e)}
+
+def delete_user(user_id: str):
+    """
+    Delete a user from the 'Users' sheet.
+    """
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        ws = sheet.worksheet("Users")
+        
+        cell = ws.find(user_id, in_column=1) # Assuming ID is in Column 1
+        if not cell:
+            return {"error": "User not found"}
+            
+        ws.delete_rows(cell.row)
+        clear_cache()
+        return {"message": f"User {user_id} deleted successfully"}
+            
+    except Exception as e:
+        print(f"Error deleting user: {e}")
+        return {"error": str(e)}
+
 def get_user_by_id(user_id: str):
     users = fetch_all_users()
     for r in users:
@@ -952,6 +1012,38 @@ def add_meeting_note(data: dict):
 # CICO Monthly Grid APIs
 # =============================
 
+def set_default_holidays(ws):
+    """Populate default Korean holidays (2025-2026)"""
+    default_holidays = [
+        ["2025-01-01", "신정"],
+        ["2025-01-28", "설날 연휴"], ["2025-01-29", "설날"], ["2025-01-30", "설날 연휴"],
+        ["2025-03-01", "삼일절"], ["2025-03-03", "대체공휴일(삼일절)"],
+        ["2025-05-05", "어린이날"], ["2025-05-06", "대체공휴일(어린이날)"],
+        ["2025-06-06", "현충일"],
+        ["2025-08-15", "광복절"],
+        ["2025-10-03", "개천절"],
+        ["2025-10-05", "추석 연휴"], ["2025-10-06", "추석"], ["2025-10-07", "추석 연휴"], ["2025-10-08", "대체공휴일(추석)"],
+        ["2025-10-09", "한글날"],
+        ["2025-12-25", "성탄절"],
+        
+        ["2026-01-01", "신정"],
+        ["2026-02-16", "설날 연휴"], ["2026-02-17", "설날"], ["2026-02-18", "설날 연휴"],
+        ["2026-03-01", "삼일절"], ["2026-03-02", "대체공휴일(삼일절)"],
+        ["2026-05-05", "어린이날"], ["2026-05-24", "석가탄신일"], ["2026-05-25", "대체공휴일(석가탄신일)"],
+        ["2026-06-06", "현충일"],
+        ["2026-08-15", "광복절"],
+        ["2026-09-24", "추석 연휴"], ["2026-09-25", "추석"], ["2026-09-26", "추석 연휴"], ["2026-09-28", "대체공휴일(추석)"],
+        ["2026-10-03", "개천절"],
+        ["2026-10-09", "한글날"],
+        ["2026-12-25", "성탄절"]
+    ]
+    # Check if empty (excluding header)
+    if len(ws.col_values(1)) <= 2:
+        print("Populating default holidays...")
+        for h in default_holidays:
+            ws.append_row(h + ["자동생성"])
+
+
 def get_holidays_from_config():
     """Get holidays list from '날짜 관리' sheet (fallback to '설정(Config)')"""
     client = get_sheets_client()
@@ -973,6 +1065,7 @@ def get_holidays_from_config():
                     ["※ 아래에 공휴일을 입력하세요", "", ""],
                 ])
                 print("Created '날짜 관리' sheet")
+                set_default_holidays(config_ws) # Populate defaults
             except Exception as create_err:
                 print(f"Error creating 날짜 관리 sheet: {create_err}")
                 # Fallback to 설정(Config)
@@ -983,6 +1076,9 @@ def get_holidays_from_config():
         
         if not config_ws:
             return []
+            
+        # Ensure defaults if empty
+        set_default_holidays(config_ws)
         
         raw = config_ws.col_values(1)  # Column A = holiday dates
         holidays = []
@@ -1257,6 +1353,28 @@ def create_monthly_cico_sheet(year: int, month: int):
         return {"error": str(e)}
 
 
+def find_col_fuzzy(headers: list, candidates: list) -> int:
+    """Find column index (0-based) matching any of the candidates (case-insensitive)"""
+    # Normalize headers
+    norm_headers = [str(h).strip().lower().replace(" ", "") for h in headers]
+    
+    for c in candidates:
+        norm_c = c.strip().lower().replace(" ", "")
+        try:
+            return norm_headers.index(norm_c)
+        except ValueError:
+            continue
+    
+    # Try partial match for some keywords
+    for idx, h in enumerate(norm_headers):
+        for c in candidates:
+            norm_c = c.strip().lower().replace(" ", "")
+            if len(norm_c) > 2 and norm_c in h:
+                return idx
+                
+    return -1
+
+
 def get_monthly_cico_data(month: int):
     """
     Get all student data from a monthly sheet for the CICO grid view.
@@ -1282,11 +1400,36 @@ def get_monthly_cico_data(month: int):
         headers = all_values[0]
         
         # Find key column indices
+        # Find key column indices with synonyms
         col_map = {}
-        key_cols = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
-        for col_name in key_cols:
-            if col_name in headers:
-                col_map[col_name] = headers.index(col_name)
+        
+        # Define synonyms
+        synonyms = {
+            "번호": ["번호", "No", "연번"],
+            "학급": ["학급", "Class", "반"],
+            "학생코드": ["학생코드", "StudentCode", "Code", "코드"],
+            "Tier2": ["Tier2", "Tier2(CICO)", "대상자", "CICO", "대상"],
+            "목표행동": ["목표행동", "TargetBehavior", "Behavior"],
+            "목표행동 유형": ["목표행동유형", "유형", "Type"],
+            "척도": ["척도", "Scale", "점수기준"],
+            "입력 기준": ["입력기준", "Criteria"],
+            "목표 달성 기준": ["목표달성기준", "Goal"],
+            "수행/발생률": ["수행/발생률", "수행률", "발생률", "성취율", "Rate", "Performance"],
+            "목표 달성 여부": ["목표달성여부", "달성여부", "성공여부", "Achieved", "Result"],
+            "교사메모": ["교사메모", "Memo", "비고"],
+            "입력자": ["입력자", "Writer", "Author"],
+            "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk"],
+            "차월 대상여부": ["차월대상여부", "차월", "NextMonth"]
+        }
+        
+        for key, candidates in synonyms.items():
+            idx = find_col_fuzzy(headers, candidates)
+            if idx != -1:
+                col_map[key] = idx
+        
+        # Ensure essential columns found
+        if "학생코드" not in col_map: col_map["학생코드"] = 2
+        if "Tier2" not in col_map: col_map["Tier2"] = 3
         
         # Find day columns (columns between "목표 달성 기준" and "수행/발생률")
         # Find day columns: Check for "1".."31" or "MM-DD"
@@ -1305,8 +1448,8 @@ def get_monthly_cico_data(month: int):
                 is_day = True
             
             # Additional safety: Don't include "Code-1" if that existed
-            # And ensure it's not one of the known key text columns
-            if h_str in key_cols:
+            # And ensure it's not one of the known key text columns (by index)
+            if i in col_map.values():
                 is_day = False
                 
             if is_day:
@@ -1492,11 +1635,14 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                 # Simple heuristic: header is just digits or digits+"일"
                 # But headers can be anything.
                 # Let's rely on range 1-31.
-                match = re.search(r'^(\d+)(일)?$', str(h).strip())
+                # Match "1", "1일", "03-03", "3-3"
+                # If MM-DD, we just need to know it's a day bucket.
+                # Actually we just need to capture it as a valid day column.
+                # We don't necessarily need the exact day number for calculation if we just iterate day_cols.
+                match = re.search(r'^(\d{1,2})[-/.](\d{1,2})$|^(\d{1,2})(일)?$', str(h).strip())
                 if match:
-                   day = int(match.group(1))
-                   if 1 <= day <= 31:
-                       day_cols.append(idx)
+                   # It's a date column
+                   day_cols.append(idx)
             
             if rate_idx != -1:
                 print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
@@ -1790,11 +1936,33 @@ def get_cico_report_data(month: int):
         headers = all_values[0]
         
         # Column indices
+        # Column indices with synonyms
         col_idx = {}
-        for name in ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도",
-                      "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "팀 협의 내용"]:
-            if name in headers:
-                col_idx[name] = headers.index(name)
+        synonyms = {
+            "번호": ["번호", "No"],
+            "학급": ["학급", "Class"],
+            "학생코드": ["학생코드", "Code"],
+            "Tier2": ["Tier2", "CICO"],
+            "목표행동": ["목표행동", "Target"],
+            "목표행동 유형": ["목표행동유형", "Type"],
+            "척도": ["척도", "Scale"],
+            "입력 기준": ["입력기준"],
+            "목표 달성 기준": ["목표달성기준"],
+            "수행/발생률": ["수행/발생률", "수행률", "발생률", "성취율", "Rate"],
+            "목표 달성 여부": ["목표달성여부", "달성여부", "Achieved"],
+            "팀 협의 내용": ["팀협의내용", "협의내용"]
+        }
+        
+        for key, candidates in synonyms.items():
+            idx = find_col_fuzzy(headers, candidates)
+            if idx != -1:
+                col_idx[key] = idx
+        
+        # Ensure essentials
+        if "수행/발생률" not in col_idx:  # Critical for report
+             # Try simple search default
+             try: col_idx["수행/발생률"] = headers.index("수행/발생률")
+             except: pass
         
         # Get multi-month trends (last 3 months including current)
         months_list = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
@@ -2401,4 +2569,75 @@ def delete_board_post(post_id: str):
         return {"error": "Post not found"}
     except Exception as e:
         print(f"Error deleting board post: {e}")
+        return {"error": str(e)}
+
+# =============================
+# BIP (Behavior Intervention Plan) Worksheet
+# =============================
+def ensure_bip_sheet():
+    """Ensure 'BIP' sheet exists with correct headers."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("BIP")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="BIP", rows=100, cols=15)
+            headers = [
+                "StudentCode", "TargetBehavior", "Hypothesis", 
+                "PreventionStrategies", "TeachingStrategies", "ConsequenceStrategies",
+                "CrisisPlan", "EvaluationPlan", "UpdatedAt", "Author"
+            ]
+            ws.append_row(headers)
+        return ws
+    except Exception as e:
+        print(f"Error checking BIP sheet: {e}")
+        return None
+
+def get_bip(student_code: str):
+    """Get BIP for a student."""
+    ws = ensure_bip_sheet()
+    if not ws: return None
+    
+    try:
+        records = ws.get_all_records()
+        for r in records:
+            if str(r.get("StudentCode")) == str(student_code):
+                return r
+        return None
+    except Exception as e:
+        print(f"Error getting BIP: {e}")
+        return None
+
+def save_bip(bip_data: dict):
+    """
+    Save or Update BIP.
+    bip_data must include 'StudentCode'.
+    """
+    ws = ensure_bip_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    
+    student_code = bip_data.get("StudentCode")
+    if not student_code: return {"error": "StudentCode required"}
+    
+    try:
+        cell = ws.find(student_code, in_column=1)
+        headers = ws.row_values(1)
+        row = []
+        for h in headers:
+            row.append(bip_data.get(h, ""))
+            
+        if cell:
+            # Delete and re-insert to update
+            ws.delete_rows(cell.row)
+            ws.insert_row(row, index=cell.row)
+        else:
+            # Append
+            ws.append_row(row)
+            
+        clear_cache()
+        return {"message": "BIP saved successfully"}
+    except Exception as e:
+        print(f"Error saving BIP: {e}")
         return {"error": str(e)}

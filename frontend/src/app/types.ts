@@ -30,6 +30,11 @@ export interface SafetyAlert {
     intensity: number;
 }
 
+export interface WeeklyTrendData {
+    week: string;
+    count: number;
+}
+
 export interface DashboardData {
     error?: string;
     summary: {
@@ -38,6 +43,7 @@ export interface DashboardData {
         risk_student_count: number;
     };
     trends: TrendData[];
+    weekly_trends?: WeeklyTrendData[];
     big5: {
         locations: ChartData[];
         times: ChartData[];

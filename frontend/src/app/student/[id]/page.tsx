@@ -114,7 +114,16 @@ export default function StudentDetail() {
                 {profile.class} | 행동지원 등급: <span style={{ color: TIER_COLORS[profile.tier] || '#666', fontWeight: 'bold' }}>{profile.tier}</span>
               </p>
             </div>
-            <button className={styles.actionBtn} onClick={() => router.back()}>← 뒤로</button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className={styles.actionBtn}
+                onClick={() => router.push(`/student/${encodeURIComponent(studentName)}/bip`)}
+                style={{ backgroundColor: '#8b5cf6' }}
+              >
+                📝 BIP 작성/수정
+              </button>
+              <button className={styles.actionBtn} onClick={() => router.back()}>← 뒤로</button>
+            </div>
           </div>
 
           <main className={styles.main}>

@@ -267,22 +267,7 @@ export default function Tier3Report() {
                             }}>
                               {s.tier}
                             </span>
-                            <select
-                              value={s.tier} // Assumes s.tier matches mapped values "Tier3", "Tier3+" etc.
-                              onChange={e => handleTierChange(s.code, e.target.value)}
-                              style={{
-                                marginLeft: "8px",
-                                padding: "2px", borderRadius: "4px", border: "1px solid #475569",
-                                background: "#1e293b", color: "#f1f5f9", fontSize: "0.7rem",
-                                cursor: "pointer"
-                              }}
-                            >
-                              <option value="Tier1">T1</option>
-                              <option value="Tier2(CICO)">T2(CICO)</option>
-                              <option value="Tier2(SST)">T2(SST)</option>
-                              <option value="Tier3">T3</option>
-                              <option value="Tier3+">T3+</option>
-                            </select>
+
                           </td>
                           <td style={{ padding: "10px 8px", color: "#f1f5f9", fontWeight: 600 }}>{s.code}</td>
                           <td style={{ padding: "10px 8px", color: "#cbd5e1" }}>{s.class}</td>
@@ -323,7 +308,7 @@ export default function Tier3Report() {
                           </td>
                           <td style={{ padding: "10px 8px" }}>
                             <button
-                              onClick={() => window.location.href = `/student/${s.code}`} // Assuming code works, or name if preferred
+                              onClick={() => window.location.href = `/student/${s.code}`}
                               style={{
                                 padding: "4px 8px",
                                 background: "#3b82f6",
@@ -335,6 +320,21 @@ export default function Tier3Report() {
                               }}
                             >
                               상세
+                            </button>
+                            <button
+                              onClick={() => window.location.href = `/student/${s.code}/bip`}
+                              style={{
+                                padding: "4px 8px",
+                                background: "#8b5cf6",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                fontSize: "0.7rem",
+                                cursor: "pointer",
+                                marginLeft: "5px"
+                              }}
+                            >
+                              BIP
                             </button>
                           </td>
                         </tr>

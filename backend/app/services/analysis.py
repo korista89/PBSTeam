@@ -49,8 +49,25 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
         # For the dashboard chart, we often want recent daily trend or monthly trend.
         # Let's provide Daily trend for the last 30 entries or similar
         date_counts = df['행동발생 날짜'].value_counts().sort_index().to_dict()
+        
+        # Weekly Trend
+        weekly_counts = {}
+        if 'date_obj' in df.columns:
+            df['week'] = df['date_obj'].dt.isocalendar().week.astype(int)
+            df['year'] = df['date_obj'].dt.year
+            # Create sortable week key "YYYY-WW"
+            # Group by Year-Week
+            w_grouped = df.groupby(['year', 'week']).size()
+            
+            # Convert to list of dicts directly
+            # Format: "2025-W10"
+            for (y, w), count in w_grouped.items():
+                label = f"{y}-W{w:02d}"
+                weekly_counts[label] = int(count)
+                
     else:
         date_counts = {}
+        weekly_counts = {}
 
     # 3. Location Stats (Big 5)
     location_stats = []
@@ -211,6 +228,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
             "risk_student_count": len(at_risk_list)
         },
         "trends": [{"date": k, "count": v} for k, v in date_counts.items()],
+        "weekly_trends": [{"week": k, "count": v} for k, v in weekly_counts.items()],
         "big5": {
             "locations": location_stats,
             "times": time_stats,

@@ -265,7 +265,7 @@ export default function CICOReport() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                     <thead>
                       <tr style={{ background: "rgba(51,65,85,0.8)" }}>
-                        {["학생코드", "학급", "목표행동", "유형", "척도", "달성기준", "수행률", "달성", "추이", "시스템 의사결정 제안", "팀 협의", "Tier 변경"].map(h => (
+                        {["학생코드", "학급", "목표행동", "유형", "척도", "달성기준", "수행률", "달성", "추이", "시스템 의사결정 제안", "팀 협의"].map(h => (
                           <th key={h} style={{
                             padding: "10px 8px", color: "#94a3b8", fontWeight: 600,
                             borderBottom: "1px solid #334155", textAlign: "left",
@@ -331,22 +331,6 @@ export default function CICOReport() {
                             maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                           }}>
                             {s.team_talk || "-"}
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>
-                            <select
-                              defaultValue="Tier2(CICO)" // Assume they are T2(CICO) since they are in this report
-                              onChange={e => handleTierChange(s.code, e.target.value)}
-                              style={{
-                                padding: "4px", borderRadius: "4px", border: "1px solid #475569",
-                                background: "#1e293b", color: "#f1f5f9", fontSize: "0.75rem"
-                              }}
-                            >
-                              <option value="Tier1">Tier 1</option>
-                              <option value="Tier2(CICO)">Tier 2 (CICO)</option>
-                              <option value="Tier2(SST)">Tier 2 (SST)</option>
-                              <option value="Tier3">Tier 3</option>
-                              <option value="Tier3+">Tier 3+</option>
-                            </select>
                           </td>
                         </tr>
                       ))}

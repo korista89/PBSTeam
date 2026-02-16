@@ -56,6 +56,47 @@ class UserRoleUpdateRequest(BaseModel):
     new_role: str
     new_class: Optional[str] = ""
 
+class CreateUserRequest(BaseModel):
+    id: str
+    password: str
+    role: str = "teacher"
+    name: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    class_id: Optional[str] = ""
+    class_name: Optional[str] = ""
+
+@router.post("/users")
+async def create_new_user(request: CreateUserRequest):
+    """Admin only: Create a new user"""
+    from app.services.sheets import create_user
+    
+    user_data = {
+        "ID": request.id,
+        "Password": request.password,
+        "Role": request.role,
+        "Name": request.name,
+        "Phone": request.phone,
+        "Email": request.email,
+        "ClassID": request.class_id,
+        "ClassName": request.class_name
+    }
+    
+    result = create_user(user_data)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@router.delete("/users/{user_id}")
+async def delete_existing_user(user_id: str):
+    """Admin only: Delete a user"""
+    from app.services.sheets import delete_user
+    
+    result = delete_user(user_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
 @router.put("/users/{user_id}/role")
 async def update_role(user_id: str, request: UserRoleUpdateRequest):
     """Admin only: Update user role and class"""

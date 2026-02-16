@@ -16,11 +16,20 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        // Load dates from localStorage on mount
+        // Load dates from localStorage on mount (Priority: URL > LocalStorage > Default)
+        const searchParams = new URLSearchParams(window.location.search);
+        const urlStart = searchParams.get("startDate");
+        const urlEnd = searchParams.get("endDate");
+
         const savedStart = localStorage.getItem("pbis_start_date");
         const savedEnd = localStorage.getItem("pbis_end_date");
 
-        if (savedStart && savedEnd) {
+        if (urlStart && urlEnd) {
+            setStartDate(urlStart);
+            setEndDate(urlEnd);
+            localStorage.setItem("pbis_start_date", urlStart);
+            localStorage.setItem("pbis_end_date", urlEnd);
+        } else if (savedStart && savedEnd) {
             setStartDate(savedStart);
             setEndDate(savedEnd);
         } else {
@@ -169,25 +178,38 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     );
 }
 
-// Hook to get current date range from localStorage
+// Hook to get current date range from localStorage and URL
 export function useDateRange() {
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
 
     useEffect(() => {
         const loadDates = () => {
+            // Priority: 1. URL Params, 2. localStorage, 3. Default (4 weeks)
+            const searchParams = new URLSearchParams(window.location.search);
+            const urlStart = searchParams.get("startDate");
+            const urlEnd = searchParams.get("endDate");
+
             const savedStart = localStorage.getItem("pbis_start_date");
             const savedEnd = localStorage.getItem("pbis_end_date");
 
-            if (savedStart && savedEnd) {
+            if (urlStart && urlEnd) {
+                setStartDate(urlStart);
+                setEndDate(urlEnd);
+                // Sync to localStorage
+                localStorage.setItem("pbis_start_date", urlStart);
+                localStorage.setItem("pbis_end_date", urlEnd);
+            } else if (savedStart && savedEnd) {
                 setStartDate(savedStart);
                 setEndDate(savedEnd);
             } else {
                 const today = new Date();
                 const prev = new Date();
                 prev.setDate(today.getDate() - 28);
-                setStartDate(prev.toISOString().split('T')[0]);
-                setEndDate(today.toISOString().split('T')[0]);
+                const defaultStart = prev.toISOString().split('T')[0];
+                const defaultEnd = today.toISOString().split('T')[0];
+                setStartDate(defaultStart);
+                setEndDate(defaultEnd);
             }
         };
 

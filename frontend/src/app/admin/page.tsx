@@ -51,6 +51,21 @@ export default function AdminPage() {
         }
     };
 
+    const handleDeleteUser = async (userId: string) => {
+        if (!confirm(`정말로 사용자 ${userId}를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
+
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            await axios.delete(`${apiUrl}/api/v1/auth/users/${userId}`);
+            setMessage(`사용자 ${userId}가 삭제되었습니다.`);
+            fetchUsers();
+            if (selectedUser === userId) setSelectedUser("");
+        } catch (err) {
+            console.error(err);
+            setMessage("사용자 삭제 실패");
+        }
+    };
+
     const handlePasswordChange = async () => {
         if (!selectedUser || !newPassword) {
             setMessage("사용자와 새 비밀번호를 입력하세요.");
@@ -175,6 +190,15 @@ export default function AdminPage() {
                     </div>
                 </div>
 
+                {/* Create User Section */}
+                <div className={styles.card} style={{ marginBottom: '20px', borderLeft: '4px solid #3b82f6' }}>
+                    <h2 style={{ marginBottom: '15px' }}>➕ 사용자 추가</h2>
+                    <CreateUserForm onCreated={() => {
+                        fetchUsers();
+                        setMessage("새 사용자가 생성되었습니다.");
+                    }} />
+                </div>
+
                 {/* User List & Role Management */}
                 <div className={styles.card}>
                     <h2 style={{ marginBottom: '20px' }}>👥 사용자 권한 관리</h2>
@@ -208,6 +232,22 @@ export default function AdminPage() {
                                 <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                                     {u.ClassID ? `🏫 ${u.ClassID}` : '(담당 학급 없음)'}
                                 </div>
+
+                                {u.Role !== 'admin' && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteUser(u.ID);
+                                        }}
+                                        style={{
+                                            position: 'absolute', top: '10px', right: '10px',
+                                            background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem'
+                                        }}
+                                        title="사용자 삭제"
+                                    >
+                                        🗑️
+                                    </button>
+                                )}
 
                                 {selectedUser === u.ID && (
                                     <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px dashed #cbd5e1' }} onClick={e => e.stopPropagation()}>
@@ -312,6 +352,95 @@ function RoleEditor({ user, onUpdate }: { user: any, onUpdate: () => void }) {
                 }}
             >
                 {loading ? "저장 중..." : "설정 저장"}
+            </button>
+        </div>
+    );
+}
+
+function CreateUserForm({ onCreated }: { onCreated: () => void }) {
+    const [formData, setFormData] = useState({
+        id: "", password: "", role: "teacher", name: "", class_id: ""
+    });
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async () => {
+        if (!formData.id || !formData.password) {
+            alert("ID와 비밀번호는 필수입니다.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            await axios.post(`${apiUrl}/api/v1/auth/users`, {
+                id: formData.id,
+                password: formData.password,
+                role: formData.role,
+                name: formData.name,
+                class_id: formData.class_id,
+                class_name: formData.class_id ? `${formData.class_id}반` : ""
+            });
+            onCreated();
+            setFormData({ id: "", password: "", role: "teacher", name: "", class_id: "" });
+        } catch (e: any) {
+            console.error(e);
+            alert(e.response?.data?.detail || "생성 실패");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>아이디 (ID)</label>
+                <input
+                    value={formData.id} onChange={e => setFormData({ ...formData, id: e.target.value })}
+                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} placeholder="User ID"
+                />
+            </div>
+            <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>비밀번호</label>
+                <input
+                    type="password"
+                    value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })}
+                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} placeholder="Password"
+                />
+            </div>
+            <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>이름</label>
+                <input
+                    value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} placeholder="Name"
+                />
+            </div>
+            <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>권한</label>
+                <select
+                    value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}
+                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                >
+                    <option value="teacher">교사</option>
+                    <option value="class_manager">학급관리자</option>
+                    <option value="admin">관리자</option>
+                </select>
+            </div>
+            <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: '2px' }}>학급 (Class)</label>
+                <input
+                    value={formData.class_id} onChange={e => setFormData({ ...formData, class_id: e.target.value })}
+                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', width: '80px' }} placeholder="Ex: 1-1"
+                />
+            </div>
+            <button
+                onClick={handleSubmit}
+                disabled={loading}
+                style={{
+                    padding: '8px 16px', background: '#3b82f6', color: 'white',
+                    border: 'none', borderRadius: '4px', cursor: 'pointer', height: '35px'
+                }}
+            >
+                {loading ? "생성 중..." : "추가하기"}
             </button>
         </div>
     );

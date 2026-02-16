@@ -46,13 +46,14 @@ const CRITERIA_INCREASE = ["90% 이상", "80% 이상", "70% 이상", "60% 이상
 const CRITERIA_DECREASE = ["10% 이하", "20% 이하", "30% 이하", "40% 이하", "50% 이하"];
 
 function getInputOptions(scale: string): string[] {
-  switch (scale) {
-    case "O/X(발생)": return ["O", "X"];
-    case "0점/1점/2점": return ["0", "1", "2"];
-    case "0~5": return ["0", "1", "2", "3", "4", "5"];
-    case "0~7교시": return ["0", "1", "2", "3", "4", "5", "6", "7"];
-    default: return []; // Free input for 회/분
-  }
+  const normParams = scale?.trim() || "";
+
+  if (normParams.includes("O/X")) return ["O", "X"];
+  if (normParams.includes("0점/1점/2점") || normParams.includes("0/1/2")) return ["0", "1", "2"];
+  if (normParams.includes("0~5")) return ["0", "1", "2", "3", "4", "5"];
+  if (normParams.includes("0~7")) return ["0", "1", "2", "3", "4", "5", "6", "7"];
+
+  return []; // Free input
 }
 
 export default function CICOGridPage() {
@@ -95,40 +96,50 @@ export default function CICOGridPage() {
       const monthlyData = monthlyRes.data;
       const businessDays: string[] = bizDaysRes.data.business_days || [];
 
-      // Filter day_columns based on business days if available
-      if (businessDays.length > 0) {
-        const filteredCols: DayColumn[] = [];
-
-        // Convert businessDays to Set of integers for fast lookup
-        // "03-03" -> 3
-        const businessDayInts = new Set(businessDays.map(d => parseInt(d.split('-')[1], 10)));
-
-        // Map businessDay to formatted string for display
-        // 3 -> "03-03"
-        const businessDayMap: { [key: number]: string } = {};
-        businessDays.forEach(d => {
-          const dayInt = parseInt(d.split('-')[1], 10);
+      // Improved Header Logic:
+      // Map business days for legacy integer column support
+      const businessDayMap: { [key: number]: string } = {};
+      businessDays.forEach(d => {
+        // d is "MM-DD". 
+        const parts = d.split('-');
+        if (parts.length >= 2) {
+          const dayInt = parseInt(parts[1], 10); // Extract Day part
           businessDayMap[dayInt] = d;
-        });
-
-        // Loop through original columns from backend (which have labels "1", "2", "3"...)
-        (monthlyData.day_columns as DayColumn[]).forEach(col => {
-          const dayNum = parseInt(col.label, 10);
-
-          if (!isNaN(dayNum) && businessDayInts.has(dayNum)) {
-            // Create new column object with updated display label
-            filteredCols.push({
-              index: col.index,
-              label: col.label, // Keep original label "3" for data lookup
-              display: businessDayMap[dayNum] // "03-03" for UI
-            });
-          }
-        });
-
-        // Replace original columns with filtered ones if we found matches
-        if (filteredCols.length > 0) {
-          monthlyData.day_columns = filteredCols;
         }
+      });
+
+      const filteredCols: DayColumn[] = [];
+      const usedLabels = new Set();
+
+      (monthlyData.day_columns as DayColumn[]).forEach(col => {
+        const label = col.label;
+        let display = label;
+
+        // Check if label is already MM-DD format (regex for M-D or MM-DD)
+        if (/^\d{1,2}-\d{1,2}$/.test(label)) {
+          display = label;
+        } else {
+          // Legacy: Try to treat as day number
+          const dayNum = parseInt(label, 10);
+          if (!isNaN(dayNum) && businessDayMap[dayNum]) {
+            display = businessDayMap[dayNum];
+          }
+        }
+
+        // Deduplicate
+        if (!usedLabels.has(col.index)) {
+          filteredCols.push({
+            index: col.index,
+            label: col.label,
+            display: display
+          });
+          usedLabels.add(col.index);
+        }
+      });
+
+      // Always update columns with our processed list
+      if (filteredCols.length > 0) {
+        monthlyData.day_columns = filteredCols;
       }
 
       // Filter students if user is a teacher (and not admin)
