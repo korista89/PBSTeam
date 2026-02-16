@@ -48,10 +48,11 @@ export default function LoginPage() {
             });
 
             console.log("Login success:", response.data);
-            login(response.data); // Context update
+            const userData = response.data.user; // Extract user object
+            login(userData); // Context update
 
             // Redirect based on role
-            if (response.data.role === 'admin') {
+            if (userData.role === 'admin') {
                 router.push('/');
             } else {
                 router.push('/cico');
