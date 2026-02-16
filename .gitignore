@@ -6,12 +6,15 @@ __pycache__/
 backend/venv/
 backend/.env
 backend/service_account.json
+service_account.json
+repair_venv/
 
 # Frontend
 frontend/node_modules/
 frontend/.next/
 frontend/.env
 frontend/.env.local
+package-lock.json
 
 # General
 .DS_Store

@@ -60,7 +60,7 @@ export default function CICOGridPage() {
   const [month, setMonth] = useState(3);
   const [data, setData] = useState<MonthlyData | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const [is404, setIs404] = useState(false);
   const [error, setError] = useState("");
   const [pendingUpdates, setPendingUpdates] = useState<
     { row: number; col: number; value: string }[]
@@ -82,6 +82,8 @@ export default function CICOGridPage() {
       setMonth(currentMonth);
     }
   }, []);
+
+  const { user, isAdmin } = useAuth();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -113,21 +115,28 @@ export default function CICOGridPage() {
 
       (monthlyData.day_columns as DayColumn[]).forEach(col => {
         const label = col.label;
-        let display = label;
+        let display = "";
+        let isValidDate = false;
 
-        // Check if label is already MM-DD format (regex for M-D or MM-DD)
+        // Check 1: Label matches MM-DD format directly
         if (/^\d{1,2}-\d{1,2}$/.test(label)) {
-          display = label;
+          // Verify if this date is in our business days list
+          // businessDays format is "MM-DD"
+          if (businessDays.includes(label)) {
+            display = label;
+            isValidDate = true;
+          }
         } else {
-          // Legacy: Try to treat as day number
+          // Legacy/Integer Check: Try to treat as day number
           const dayNum = parseInt(label, 10);
           if (!isNaN(dayNum) && businessDayMap[dayNum]) {
             display = businessDayMap[dayNum];
+            isValidDate = true;
           }
         }
 
-        // Deduplicate
-        if (!usedLabels.has(col.index)) {
+        // Only add if it's a valid business day (or if it's a special column? No, strictly business days for now)
+        if (isValidDate && !usedLabels.has(col.index)) {
           filteredCols.push({
             index: col.index,
             label: col.label,
@@ -150,15 +159,37 @@ export default function CICOGridPage() {
       setData(monthlyData);
     } catch (err: unknown) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : "데이터 로딩 실패";
-      setError(msg);
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        setIs404(true);
+        setError(`${month}월 CICO 데이터가 없습니다.`);
+      } else {
+        const msg = err instanceof Error ? err.message : "데이터 로딩 실패";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
   }, [month, apiUrl]);
 
-  // Auth context
-  const { user, isAdmin } = useAuth();
+  const handleCreateSheet = async () => {
+    if (!isAdmin()) {
+      alert("관리자만 시트를 생성할 수 있습니다.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // Ensure month is integer
+      await axios.post(`${apiUrl}/api/v1/cico/generate`, { month: Number(month) });
+      alert(`${month}월 시트가 생성되었습니다.`);
+      setIs404(false);
+      fetchData();
+    } catch (e) {
+      console.error(e);
+      alert("시트 생성 실패");
+      setLoading(false);
+    }
+  };
+
 
   // Filtered data
   const filteredData = React.useMemo(() => {
@@ -510,7 +541,27 @@ export default function CICOGridPage() {
 
           {error && (
             <div style={{ textAlign: "center", padding: "50px", color: "#dc2626" }}>
-              ⚠ {error}
+              <p style={{ fontSize: '1.2rem', marginBottom: '15px' }}>⚠ {error}</p>
+              {is404 && isAdmin() && (
+                <button
+                  onClick={handleCreateSheet}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '1rem'
+                  }}
+                >
+                  📅 {month}월 CICO 시트 생성하기
+                </button>
+              )}
+              {is404 && !isAdmin() && (
+                <p>관리자에게 시트 생성을 요청해주세요.</p>
+              )}
             </div>
           )}
 
