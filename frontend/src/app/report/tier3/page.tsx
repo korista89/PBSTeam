@@ -86,6 +86,22 @@ export default function Tier3Report() {
     fetchData();
   }, [fetchData]);
 
+  const handleTierChange = async (studentCode: string, newTier: string) => {
+    if (!confirm(`${studentCode}님의 Tier를 ${newTier}로 변경하시겠습니까?`)) return;
+    try {
+      // Endpoint to update tier status
+      await axios.post(`${apiUrl}/api/v1/students/tier-update`, {
+        student_code: studentCode,
+        tier: newTier
+      });
+      alert("변경되었습니다.");
+      fetchData();
+    } catch (e) {
+      console.error(e);
+      alert("변경 실패");
+    }
+  };
+
   const getIntensityColor = (intensity: number) => {
     if (intensity >= 5) return "#ef4444";
     if (intensity >= 3) return "#f59e0b";
@@ -251,6 +267,22 @@ export default function Tier3Report() {
                             }}>
                               {s.tier}
                             </span>
+                            <select
+                              value={s.tier} // Assumes s.tier matches mapped values "Tier3", "Tier3+" etc.
+                              onChange={e => handleTierChange(s.code, e.target.value)}
+                              style={{
+                                marginLeft: "8px",
+                                padding: "2px", borderRadius: "4px", border: "1px solid #475569",
+                                background: "#1e293b", color: "#f1f5f9", fontSize: "0.7rem",
+                                cursor: "pointer"
+                              }}
+                            >
+                              <option value="Tier1">T1</option>
+                              <option value="Tier2(CICO)">T2(CICO)</option>
+                              <option value="Tier2(SST)">T2(SST)</option>
+                              <option value="Tier3">T3</option>
+                              <option value="Tier3+">T3+</option>
+                            </select>
                           </td>
                           <td style={{ padding: "10px 8px", color: "#f1f5f9", fontWeight: 600 }}>{s.code}</td>
                           <td style={{ padding: "10px 8px", color: "#cbd5e1" }}>{s.class}</td>

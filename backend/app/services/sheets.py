@@ -1202,9 +1202,8 @@ def create_monthly_cico_sheet(year: int, month: int):
         fixed_headers = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
         
         # Day cols
-        import calendar
-        num_days = calendar.monthrange(year, month)[1]
-        day_headers = [str(d) for d in range(1, num_days + 1)]
+        holidays = get_holidays_from_config()
+        day_headers = get_business_days(year, month, holidays)
         
         headers = fixed_headers + day_headers
         
@@ -1229,7 +1228,7 @@ def create_monthly_cico_sheet(year: int, month: int):
                 ""  # Next Month
             ]
             # Add empty days make sure length matches
-            row += [""] * num_days
+            row += [""] * len(day_headers)
             rows.append(row)
             
         # 3. Create Sheet

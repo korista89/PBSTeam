@@ -42,7 +42,23 @@ export default function MonthlyReport() {
       }
     };
     fetchData();
+    fetchData();
   }, [startDate, endDate]);
+
+  const handleTierChange = async (studentCode: string, newTier: string) => {
+    if (!confirm(`${studentCode} 학생의 Tier를 ${newTier}(으)로 변경하시겠습니까?`)) return;
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/students/tier-update`, {
+        student_code: studentCode,
+        tier: newTier
+      });
+      alert("변경되었습니다.");
+      // Optionally refresh data
+    } catch (e) {
+      console.error(e);
+      alert("변경 실패");
+    }
+  };
 
   // Early return if no data
   if (!data) {
@@ -282,6 +298,7 @@ export default function MonthlyReport() {
                 <th style={{ width: '20%' }}>학급</th>
                 <th style={{ width: '15%' }}>발생횟수 (월)</th>
                 <th>비고</th>
+                <th style={{ width: '15%' }}>Tier 변경</th>
               </tr>
             </thead>
             <tbody>
@@ -300,6 +317,23 @@ export default function MonthlyReport() {
                   <td>{s.class}</td>
                   <td>{s.count}</td>
                   <td></td>
+                  <td>
+                    <select
+                      defaultValue=""
+                      onChange={e => handleTierChange(s.name, e.target.value)}
+                      style={{
+                        padding: "4px", borderRadius: "4px", border: "1px solid #cbd5e1",
+                        fontSize: "11px", width: "100%"
+                      }}
+                    >
+                      <option value="" disabled>선택</option>
+                      <option value="Tier1">Tier 1</option>
+                      <option value="Tier2(CICO)">Tier 2 (CICO)</option>
+                      <option value="Tier2(SST)">Tier 2 (SST)</option>
+                      <option value="Tier3">Tier 3</option>
+                      <option value="Tier3+">Tier 3+</option>
+                    </select>
+                  </td>
                 </tr>
               ))}
             </tbody>
