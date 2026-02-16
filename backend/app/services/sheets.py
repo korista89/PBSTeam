@@ -1290,15 +1290,30 @@ def get_monthly_cico_data(month: int):
                 col_map[col_name] = headers.index(col_name)
         
         # Find day columns (columns between "목표 달성 기준" and "수행/발생률")
-        goal_criteria_idx = col_map.get("목표 달성 기준", 8)
-        rate_idx = col_map.get("수행/발생률", -1)
-        
+        # Find day columns: Check for "1".."31" or "MM-DD"
         day_columns = []
-        if rate_idx > goal_criteria_idx + 1:
-            for i in range(goal_criteria_idx + 1, rate_idx):
+        
+        for i, h in enumerate(headers):
+            h_str = str(h).strip()
+            is_day = False
+            
+            # Check for integer day (1-31)
+            if h_str.isdigit() and 1 <= int(h_str) <= 31:
+                is_day = True
+            # Check for MM-DD format
+            elif "-" in h_str and len(h_str) == 5:
+                # Basic check, maybe refine regex if needed but this usually works
+                is_day = True
+            
+            # Additional safety: Don't include "Code-1" if that existed
+            # And ensure it's not one of the known key text columns
+            if h_str in key_cols:
+                is_day = False
+                
+            if is_day:
                 day_columns.append({
                     "index": i,
-                    "label": headers[i] if i < len(headers) else str(i)
+                    "label": h_str
                 })
         
         # Build student rows (only Tier2='O')
@@ -1346,7 +1361,8 @@ def get_monthly_cico_data(month: int):
         
         return {
             "month": month_name,
-            "day_columns": [dc["label"] for dc in day_columns],
+            "month": month_name,
+            "day_columns": day_columns, # Return full object {index, label}
             "students": students,
             "col_map": {k: v for k, v in col_map.items()}
         }

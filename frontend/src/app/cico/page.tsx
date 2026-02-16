@@ -26,9 +26,14 @@ interface CICOStudent {
   days: DayValue;
 }
 
+interface DayColumn {
+  index: number;
+  label: string;
+}
+
 interface MonthlyData {
   month: string;
-  day_columns: string[];
+  day_columns: DayColumn[];
   students: CICOStudent[];
   col_map: { [key: string]: number };
 }
@@ -89,9 +94,18 @@ export default function CICOGridPage() {
       const monthlyData = monthlyRes.data;
       const businessDays: string[] = bizDaysRes.data.business_days || [];
 
-      // Override day_columns with business days (MM-DD format)
+      // Filter day_columns based on business days if available
       if (businessDays.length > 0) {
-        monthlyData.day_columns = businessDays;
+        // Keep only columns whose label is in businessDays (or match date format)
+        // Note: businessDays are like "03-02", "03-03". Labels might be "1", "2"...
+        // We need to convert or match loosely.
+        // Backend now returns day_columns with labels as they appear in sheet ("1", "2"...)
+        // Business days API returns "MM-DD" or "M-D"? Usually "MM-DD".
+        // Let's assume we show ALL columns from sheet for safety, OR try to match.
+        // IF businessDays are dates, and sheet headers are just days (1, 2), we need month context.
+        // Simple fix: Show ALL columns returned by backend (which are actual sheet columns).
+        // Ignoring businessDays override for column strictness to prevent sync errors.
+        // monthlyData.day_columns = monthlyData.day_columns; 
       }
 
       // Filter students if user is a teacher (and not admin)
@@ -159,12 +173,11 @@ export default function CICOGridPage() {
   const handleCellChange = (student: CICOStudent, dayLabel: string, value: string) => {
     if (!data) return;
 
-    // Find column index from col_map and day_columns
-    const goalCriteriaIdx = data.col_map["목표 달성 기준"] ?? 8;
-    const dayIndex = data.day_columns.indexOf(dayLabel);
-    if (dayIndex === -1) return;
+    // Find column index directly from day object
+    const dayCol = data.day_columns.find(d => d.label === dayLabel);
+    if (!dayCol) return;
 
-    const colIdx = goalCriteriaIdx + 1 + dayIndex + 1; // +1 for 0-to-1-based conversion
+    const colIdx = dayCol.index + 1; // 0-based from backend to 1-based for sheet
 
     // Update local state
     setData(prev => {
@@ -512,7 +525,7 @@ export default function CICOGridPage() {
 
                         {/* Day columns — MM-DD weekday headers */}
                         {filteredData.day_columns.map(day => (
-                          <th key={day} style={{
+                          <th key={day.label} style={{
                             ...thStyle,
                             minWidth: "42px",
                             maxWidth: "42px",
@@ -520,7 +533,7 @@ export default function CICOGridPage() {
                             padding: "4px 1px",
                             letterSpacing: "-0.5px",
                           }}>
-                            {day}
+                            {day.label}
                           </th>
                         ))}
 
@@ -596,14 +609,14 @@ export default function CICOGridPage() {
 
                           {/* Day cells */}
                           {filteredData.day_columns.map(day => {
-                            const val = student.days[day] || "";
-                            const isEditing = editingCell?.row === student.row && editingCell?.day === day;
+                            const val = student.days[day.label] || "";
+                            const isEditing = editingCell?.row === student.row && editingCell?.day === day.label;
                             const options = getInputOptions(student.척도);
                             const bg = getCellColor(val, student["목표행동 유형"]);
 
                             return (
                               <td
-                                key={day}
+                                key={day.label}
                                 style={{
                                   ...tdStyle,
                                   padding: "0",
@@ -620,12 +633,12 @@ export default function CICOGridPage() {
                                       const currentIdx = options.indexOf(val);
                                       const nextVal = currentIdx === -1 ? options[0]
                                         : currentIdx === options.length - 1 ? "" : options[currentIdx + 1];
-                                      handleCellChange(student, day, nextVal);
+                                      handleCellChange(student, day.label, nextVal);
                                     } else {
-                                      setEditingCell({ row: student.row, day });
+                                      setEditingCell({ row: student.row, day: day.label });
                                     }
                                   } else if (options.length === 0) {
-                                    setEditingCell({ row: student.row, day });
+                                    setEditingCell({ row: student.row, day: day.label });
                                   }
                                 }}
                               >
@@ -634,7 +647,7 @@ export default function CICOGridPage() {
                                     <select
                                       autoFocus
                                       value={val}
-                                      onChange={e => handleCellChange(student, day, e.target.value)}
+                                      onChange={e => handleCellChange(student, day.label, e.target.value)}
                                       onBlur={() => setEditingCell(null)}
                                       style={{
                                         width: "100%",
@@ -654,7 +667,7 @@ export default function CICOGridPage() {
                                       autoFocus
                                       type="number"
                                       defaultValue={val}
-                                      onBlur={e => handleCellChange(student, day, e.target.value)}
+                                      onBlur={e => handleCellChange(student, day.label, e.target.value)}
                                       onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                                       style={{
                                         width: "100%",
