@@ -51,7 +51,25 @@ async def change_password(user_id: str, request: PasswordUpdateRequest):
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
+class HolidayRequest(BaseModel):
+    date: str # YYYY-MM-DD
+    name: str
+
+@router.get("/holidays")
+async def get_holidays_api():
+    from app.services.sheets import get_holidays_from_config
+    return get_holidays_from_config()
+
+@router.post("/holidays")
+async def add_holiday_api(req: HolidayRequest):
+    from app.services.sheets import add_holiday
+    result = add_holiday(req.date, req.name)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
 class UserRoleUpdateRequest(BaseModel):
+
     user_id: str
     new_role: str
     new_class: Optional[str] = ""

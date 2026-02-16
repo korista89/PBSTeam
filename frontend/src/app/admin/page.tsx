@@ -19,6 +19,10 @@ export default function AdminPage() {
     const [newPassword, setNewPassword] = useState("");
     const [message, setMessage] = useState("");
     const [currentUser, setCurrentUser] = useState<{ id: string, role: string } | null>(null);
+    const [holidays, setHolidays] = useState<string[]>([]);
+    const [newHolidayDate, setNewHolidayDate] = useState("");
+    const [newHolidayName, setNewHolidayName] = useState("");
+    const [holidayMessage, setHolidayMessage] = useState("");
 
     useEffect(() => {
         // Check if user is admin
@@ -37,7 +41,40 @@ export default function AdminPage() {
         }
 
         fetchUsers();
+        fetchHolidays();
     }, []);
+
+    const fetchHolidays = async () => {
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const response = await axios.get(`${apiUrl}/api/v1/auth/holidays`);
+            setHolidays(response.data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleAddHoliday = async () => {
+        if (!newHolidayDate || !newHolidayName) {
+            alert("날짜와 이름을 입력하세요.");
+            return;
+        }
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            await axios.post(`${apiUrl}/api/v1/auth/holidays`, {
+                date: newHolidayDate,
+                name: newHolidayName
+            });
+            setHolidayMessage("휴일이 추가되었습니다.");
+            setNewHolidayDate("");
+            setNewHolidayName("");
+            fetchHolidays();
+        } catch (e) {
+            console.error(e);
+            alert("휴일 추가 실패");
+        }
+    };
+
 
     const fetchUsers = async () => {
         try {
@@ -197,6 +234,42 @@ export default function AdminPage() {
                         fetchUsers();
                         setMessage("새 사용자가 생성되었습니다.");
                     }} />
+                </div>
+
+                {/* Holiday Management Section */}
+                <div className={styles.card} style={{ marginBottom: '20px', borderLeft: '4px solid #f59e0b' }}>
+                    <h2 style={{ marginBottom: '15px' }}>📅 공휴일 관리</h2>
+                    {holidayMessage && <div style={{ color: 'green', marginBottom: '10px' }}>{holidayMessage}</div>}
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                        <input
+                            type="date"
+                            value={newHolidayDate}
+                            onChange={e => setNewHolidayDate(e.target.value)}
+                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                        />
+                        <input
+                            type="text"
+                            placeholder="휴일 이름 (예: 개교기념일)"
+                            value={newHolidayName}
+                            onChange={e => setNewHolidayName(e.target.value)}
+                            style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                        />
+                        <button
+                            onClick={handleAddHoliday}
+                            style={{ padding: '8px 16px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                            추가
+                        </button>
+                    </div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #eee', padding: '10px', borderRadius: '4px' }}>
+                        {holidays.length === 0 ? <p>등록된 휴일이 없습니다.</p> : (
+                            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                {holidays.map((h, i) => (
+                                    <li key={i} style={{ padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}>{h}</li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
                 </div>
 
                 {/* User List & Role Management */}
