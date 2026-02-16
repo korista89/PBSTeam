@@ -30,7 +30,7 @@ export default function AdminPage() {
         if (stored) {
             const user = JSON.parse(stored);
             setCurrentUser(user);
-            if (user.role !== "admin") {
+            if (user.role?.toLowerCase() !== "admin") {
                 alert("관리자 권한이 필요합니다.");
                 window.location.href = "/";
                 return;
