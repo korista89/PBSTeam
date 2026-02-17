@@ -26,7 +26,7 @@ export default function MeetingMinutesPage() {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
                 // 1. Fetch Analytics
                 let analyticsUrl = `${apiUrl}/api/v1/analytics/dashboard`;

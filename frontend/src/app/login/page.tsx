@@ -41,7 +41,7 @@ export default function LoginPage() {
                 userId = "admin";
             }
 
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const response = await axios.post(`${apiUrl}/api/v1/auth/login`, {
                 user_id: userId,
                 password: password

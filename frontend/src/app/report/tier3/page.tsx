@@ -56,8 +56,8 @@ export default function Tier3Report() {
 
   const apiUrl =
     typeof window !== "undefined"
-      ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      : "http://localhost:8000";
+      ? process.env.NEXT_PUBLIC_API_URL || ""
+      : "";
 
   const fetchData = useCallback(async () => {
     setLoading(true);

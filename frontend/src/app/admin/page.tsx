@@ -46,7 +46,7 @@ export default function AdminPage() {
 
     const fetchHolidays = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const response = await axios.get(`${apiUrl}/api/v1/auth/holidays`);
             setHolidays(response.data);
         } catch (err) {
@@ -60,7 +60,7 @@ export default function AdminPage() {
             return;
         }
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.post(`${apiUrl}/api/v1/auth/holidays`, {
                 date: newHolidayDate,
                 name: newHolidayName
@@ -78,7 +78,7 @@ export default function AdminPage() {
 
     const fetchUsers = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const response = await axios.get(`${apiUrl}/api/v1/auth/users`);
             setUsers(response.data);
         } catch (err) {
@@ -92,7 +92,7 @@ export default function AdminPage() {
         if (!confirm(`정말로 사용자 ${userId}를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.delete(`${apiUrl}/api/v1/auth/users/${userId}`);
             setMessage(`사용자 ${userId}가 삭제되었습니다.`);
             fetchUsers();
@@ -110,7 +110,7 @@ export default function AdminPage() {
         }
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.put(`${apiUrl}/api/v1/auth/users/${selectedUser}/password`, {
                 user_id: selectedUser,
                 new_password: newPassword
@@ -137,7 +137,7 @@ export default function AdminPage() {
                         onClick={async () => {
                             if (!confirm("모든 월별 시트를 초기화/갱신하시겠습니까? 시간이 걸릴 수 있습니다.")) return;
                             try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
                                 await axios.post(`${apiUrl}/api/v1/analytics/dashboard/refresh`);
                                 alert("데이터 갱신 완료!");
                             } catch (e) {
@@ -376,7 +376,7 @@ function RoleEditor({ user, onUpdate }: { user: any, onUpdate: () => void }) {
     const handleSave = async () => {
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.put(`${apiUrl}/api/v1/auth/users/${user.ID}/role`, {
                 user_id: user.ID,
                 new_role: role,
@@ -444,7 +444,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
 
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.post(`${apiUrl}/api/v1/auth/users`, {
                 id: formData.id,
                 password: formData.password,

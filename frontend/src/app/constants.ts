@@ -17,11 +17,13 @@ export const TIER_COLORS: { [key: string]: string } = {
 };
 
 // API URL helper
+// On Vercel, frontend and backend share the same domain (vercel.json routes /api/* to backend)
+// So in production, we use "" (empty string = relative path) unless NEXT_PUBLIC_API_URL is explicitly set
 export function getApiUrl(): string {
     if (typeof window !== "undefined") {
-        return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        return process.env.NEXT_PUBLIC_API_URL || "";
     }
-    return "http://localhost:8000";
+    return process.env.NEXT_PUBLIC_API_URL || "";
 }
 
 export const CLASS_LIST = [

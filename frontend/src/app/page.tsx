@@ -43,7 +43,7 @@ export default function Home() {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
+                let url = `${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/analytics/dashboard`;
                 const params = new URLSearchParams();
                 params.append("start_date", startDate);
                 params.append("end_date", endDate);

@@ -12,7 +12,7 @@ import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../components/GlobalNav";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
-const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") : "http://localhost:8000";
+const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
 // ====== AI Analysis Card Component ======
 function AIAnalysisCard({ sectionName, dataContext }: { sectionName: string; dataContext: any }) {

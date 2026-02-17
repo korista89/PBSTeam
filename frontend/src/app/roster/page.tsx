@@ -11,7 +11,7 @@ export default function RosterPage() {
   useEffect(() => {
     const fetchRoster = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
         const response = await axios.get(`${apiUrl}/api/v1/roster`);
         setRoster(response.data);
       } catch (err) {

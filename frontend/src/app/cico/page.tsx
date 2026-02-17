@@ -71,8 +71,8 @@ export default function CICOGridPage() {
   const [saveStatus, setSaveStatus] = useState<string>("");
 
   const apiUrl = typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-    : "http://localhost:8000";
+    ? process.env.NEXT_PUBLIC_API_URL || ""
+    : "";
 
   // Determine current month on load based on today's date
   useEffect(() => {

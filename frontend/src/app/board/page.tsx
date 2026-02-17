@@ -37,7 +37,7 @@ export default function BoardPage() {
     const fetchPosts = async () => {
         try {
             setLoading(true);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const res = await axios.get(`${apiUrl}/api/v1/board`);
             setPosts(res.data);
         } catch (err) {
@@ -53,7 +53,7 @@ export default function BoardPage() {
 
         try {
             setWriteLoading(true);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.post(`${apiUrl}/api/v1/board`, {
                 title,
                 content,
@@ -76,7 +76,7 @@ export default function BoardPage() {
         if (!confirm("정말 삭제하시겠습니까?")) return;
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.delete(`${apiUrl}/api/v1/board/${postId}`);
             fetchPosts();
         } catch (err) {

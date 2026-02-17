@@ -22,7 +22,7 @@ export default function MeetingPage() {
         const fetchMeetingData = async () => {
             try {
                 setLoading(true);
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
                 const params = new URLSearchParams();
                 params.append("start_date", startDate);
                 params.append("end_date", endDate);

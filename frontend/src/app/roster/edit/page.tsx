@@ -21,7 +21,7 @@ export default function CodeManagementPage() {
 
   const fetchCodes = async () => {
       try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
           const res = await axios.get(`${apiUrl}/api/v1/roster/codes`);
           
           let fetchedData: StudentCode[] = [];
@@ -123,7 +123,7 @@ export default function CodeManagementPage() {
   const handleSave = async () => {
       try {
           setSaving(true);
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
           
           // Convert back to format backend expects [ {Code, Name, Memo} ]
           // API expects List[Dict]

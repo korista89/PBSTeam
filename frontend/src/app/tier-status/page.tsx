@@ -106,7 +106,7 @@ export default function TierStatusPage() {
     const fetchStatus = async () => {
         try {
             setLoading(true);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
 
             const fetchedStudents = response.data.students || response.data || [];
@@ -149,7 +149,7 @@ export default function TierStatusPage() {
 
         setSaving(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
             await axios.put(`${apiUrl}/api/v1/tier/status/unified`, {
                 code: editingCode,

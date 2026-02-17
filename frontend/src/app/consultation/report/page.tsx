@@ -21,7 +21,7 @@ export default function ConsultationReportPage() {
     const fetchReport = async () => {
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             // Check if backend supports this aggregation. 
             // For now, let's fetch meeting notes and aggregate them on frontend or use existing dashboard API
             // The user wants a specific "Meeting Minutes" report.

@@ -19,7 +19,7 @@ export default function StudentDetail() {
   const router = useRouter();
   const studentName = decodeURIComponent(params.id as string);
   const { startDate, endDate } = useDateRange();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   const [data, setData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +35,7 @@ export default function StudentDetail() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
         const params = new URLSearchParams();
         if (startDate && endDate) {
           params.append("start_date", startDate);
@@ -63,7 +63,7 @@ export default function StudentDetail() {
     if (!data?.profile?.student_code) return;
     const fetchAnalysis = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
         const res = await axios.get(`${apiUrl}/api/v1/students/${data.profile.student_code}/analysis`);
         setAnalysisData(res.data);
       } catch (e) {
@@ -316,7 +316,7 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   useEffect(() => {
     if (studentCode && studentCode !== "-") {

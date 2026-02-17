@@ -1098,16 +1098,14 @@ def get_business_days(year: int, month: int, holidays: list = None):
     if holidays is None:
         holidays = []
     
-    # Normalize holidays to support both YYYY-MM-DD and MM-DD formats
-    holiday_full = set()
-    holiday_short = set()
+    # Normalize holidays — only use full YYYY-MM-DD matching to prevent cross-year bleeding
+    holiday_set = set()
     for h in holidays:
         h = h.strip()
-        if len(h) == 10:  # YYYY-MM-DD
-            holiday_full.add(h)
-            holiday_short.add(h[5:])  # MM-DD
-        elif len(h) == 5:  # MM-DD
-            holiday_short.add(h)
+        if len(h) == 10:  # YYYY-MM-DD — exact match
+            holiday_set.add(h)
+        elif len(h) == 5:  # MM-DD — assume current year
+            holiday_set.add(f"{year}-{h}")
     
     dates = []
     
@@ -1121,7 +1119,7 @@ def get_business_days(year: int, month: int, holidays: list = None):
         date_str = d.strftime("%Y-%m-%d")
         short_date = d.strftime("%m-%d")
         
-        if day_of_week < 5 and date_str not in holiday_full and short_date not in holiday_short:
+        if day_of_week < 5 and date_str not in holiday_set:
             dates.append(short_date)
         
         d += datetime.timedelta(days=1)
