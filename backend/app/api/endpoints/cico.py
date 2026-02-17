@@ -45,10 +45,13 @@ async def get_cico_business_days(month: int = 3, year: int = 2025):
 @router.get("/report")
 async def get_cico_report(month: int = 3):
     """Get T2 CICO report data for decision making."""
-    if month < 3 or month > 12:
-        raise HTTPException(status_code=400, detail="Month must be 3-12")
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 1-12")
     data = get_cico_report_data(month)
     if "error" in data:
+        # Return 404 if sheet not found, so frontend can show "Create Sheet" button
+        if "없습니다" in data["error"]:
+            raise HTTPException(status_code=404, detail=data["error"])
         raise HTTPException(status_code=500, detail=data["error"])
     return data
 
@@ -81,8 +84,8 @@ class BatchUpdateRequest(BaseModel):
 @router.post("/monthly/update")
 async def update_cico_cells(req: BatchUpdateRequest):
     """Batch update daily cell values in a monthly sheet."""
-    if req.month < 3 or req.month > 12:
-        raise HTTPException(status_code=400, detail="Month must be 3-12")
+    if req.month < 1 or req.month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 1-12")
     
     updates = [{"row": u.row, "col": u.col, "value": u.value} for u in req.updates]
     result = update_monthly_cico_cells(req.month, updates)

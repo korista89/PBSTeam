@@ -5,35 +5,96 @@ import axios from "axios";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
   PieChart, Pie, Cell, Legend, ResponsiveContainer,
-  LineChart, Line, ScatterChart, Scatter, ZAxis, Tooltip
+  LineChart, Line, Tooltip, ScatterChart, Scatter, ZAxis,
 } from "recharts";
 import { DashboardData } from "../types";
 import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../components/GlobalNav";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") : "http://localhost:8000";
 
+// ====== AI Analysis Card Component ======
+function AIAnalysisCard({ sectionName, dataContext }: { sectionName: string; dataContext: any }) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  const requestAnalysis = async () => {
+    setLoading(true);
+    setVisible(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
+        section_name: sectionName,
+        data_context: dataContext || {}
+      });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch (e) {
+      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="no-print" style={{ marginTop: '15px' }}>
+      {!visible ? (
+        <button
+          onClick={requestAnalysis}
+          style={{
+            padding: '8px 16px', backgroundColor: '#7c3aed', color: 'white',
+            border: 'none', borderRadius: '8px', cursor: 'pointer',
+            fontSize: '0.85rem', fontWeight: '600',
+            boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
+            transition: 'all 0.2s'
+          }}
+        >
+          🤖 BCBA AI 분석 요청
+        </button>
+      ) : (
+        <div style={{
+          backgroundColor: '#f5f3ff', padding: '16px', borderRadius: '10px',
+          border: '1px solid #ddd5f5', marginTop: '10px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h4 style={{ margin: 0, color: '#6d28d9', fontSize: '0.9rem' }}>🤖 BCBA AI 분석 — {sectionName}</h4>
+            <button onClick={() => setVisible(false)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#9ca3af'
+            }}>✕ 닫기</button>
+          </div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#7c3aed' }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>⏳</div>
+              AI가 데이터를 분석하고 있습니다...
+            </div>
+          ) : (
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: '1.6', color: '#334155' }}>
+              {analysis}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====== Main Report Component ======
 export default function MonthlyReport() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Date State from GlobalNav (localStorage)
   const { startDate, endDate } = useDateRange();
-
   const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
   useEffect(() => {
     if (!startDate || !endDate) return;
-
     const fetchData = async () => {
       try {
         setLoading(true);
-        let url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analytics/dashboard`;
+        let url = `${apiUrl}/api/v1/analytics/dashboard`;
         const params = new URLSearchParams();
         params.append("start_date", startDate);
         params.append("end_date", endDate);
         url += `?${params.toString()}`;
-
         const response = await axios.get(url);
         setData(response.data);
       } catch (err) {
@@ -43,25 +104,22 @@ export default function MonthlyReport() {
       }
     };
     fetchData();
-    fetchData();
   }, [startDate, endDate]);
 
   const handleTierChange = async (studentCode: string, newTier: string) => {
     if (!confirm(`${studentCode} 학생의 Tier를 ${newTier}(으)로 변경하시겠습니까?`)) return;
     try {
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/students/tier-update`, {
+      await axios.post(`${apiUrl}/api/v1/students/tier-update`, {
         student_code: studentCode,
         tier: newTier
       });
       alert("변경되었습니다.");
-      // Optionally refresh data
     } catch (e) {
       console.error(e);
       alert("변경 실패");
     }
   };
 
-  // Early return if no data
   if (!data) {
     return (
       <AuthCheck>
@@ -83,24 +141,26 @@ export default function MonthlyReport() {
             .no-print { display: none; }
             .page-break { page-break-before: always; }
         }
+        @media (max-width: 768px) {
+            .report-container { padding: 10px !important; }
+            .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
+        }
         .report-section { margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
         h1 { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #1e3a8a; }
         h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 20px 0 10px 0; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
         th { background-color: #eff6ff; color: #1e40af; }
-        .summary-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
-        .stat-box { padding: 15px; border-radius: 8px; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); text-align: center; }
-        .stat-value { font-size: 24px; font-weight: bold; color: #1e40af; }
+        .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-box { padding: 15px; border-radius: 10px; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .stat-value { font-size: 28px; font-weight: bold; color: #1e40af; }
         .stat-label { font-size: 11px; color: #64748b; margin-top: 5px; }
-      `}</style>
+        `}</style>
 
         {/* Controller */}
-        <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
-          </div>
-          <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>🖨️ 리포트 인쇄 / PDF 저장</button>
+        <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
+          <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🖨️ PDF 저장</button>
         </div>
 
         {/* Header */}
@@ -109,17 +169,7 @@ export default function MonthlyReport() {
           <p style={{ color: '#666' }}>발행일: {date} | 작성주체: PBS 리더십팀</p>
         </header>
 
-        {/* 0. AI Insight */}
-        {data?.ai_comment && (
-          <section className="report-section" style={{ backgroundColor: '#f5f3ff', padding: '15px', borderRadius: '8px', border: '1px solid #ddd' }}>
-            <h2 style={{ marginTop: 0, borderLeft: 'none', paddingLeft: 0, color: '#6d28d9' }}>🤖 AI 행동 분석 요약</h2>
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: '1.5' }}>
-              {data.ai_comment}
-            </div>
-          </section>
-        )}
-
-        {/* 1. Summary */}
+        {/* ===== Section 1: 총괄 현황 ===== */}
         <section className="report-section">
           <h2>1. 총괄 현황 (Overview)</h2>
           <div className="summary-stats">
@@ -136,14 +186,18 @@ export default function MonthlyReport() {
               <div className="stat-label">집중 지원 대상 (Tier 2/3)</div>
             </div>
           </div>
+          <AIAnalysisCard
+            sectionName="총괄 현황"
+            dataContext={{ total_incidents: data.summary.total_incidents, avg_intensity: data.summary.avg_intensity, risk_count: data.summary.risk_student_count }}
+          />
         </section>
 
-        {/* 2. Trends */}
+        {/* ===== Section 2: 추이 ===== */}
         <section className="report-section">
           <h2>2. 행동 발생 추이 (Trends)</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>일별 발생 추이 (Daily Trend)</h3>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>일별 발생 추이</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.trends}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -155,15 +209,14 @@ export default function MonthlyReport() {
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>주별 발생 추이 (Weekly Trend)</h3>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>주별 발생 추이</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.weekly_trends || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="week" style={{ fontSize: '11px' }} />
                   <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
                   <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: '11px' }} />
                   <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[4, 4, 0, 0]}>
                     <LabelList dataKey="count" position="top" fontSize={11} />
                   </Bar>
@@ -171,13 +224,19 @@ export default function MonthlyReport() {
               </ResponsiveContainer>
             </div>
           </div>
+          <AIAnalysisCard
+            sectionName="행동 발생 추이"
+            dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends }}
+          />
         </section>
 
-        {/* 3. Tier 1 Big 5 */}
+        {/* ===== Section 3: Big 5 + 상세 패턴 합병 ===== */}
         <section className="report-section">
-          <h2>3. 학교 전체 패턴 (Big 5 Analysis)</h2>
+          <h2>3. 학교 전체 패턴 분석 (Big 5 & ABC)</h2>
+
+          {/* Row 1: Location & Behavior Type */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
               <h3>주요 발생 장소</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.big5.locations} layout="vertical" margin={{ left: 20 }}>
@@ -190,19 +249,12 @@ export default function MonthlyReport() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
               <h3>주요 행동 유형</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={data.big5.behaviors}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, value }) => `${name} (${value})`}
-                  >
+                  <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value"
+                    label={({ name, value }) => `${name} (${value})`}>
                     {data.big5.behaviors.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
@@ -212,24 +264,13 @@ export default function MonthlyReport() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div style={{ marginTop: '20px' }}>
-            <h3>* 데이터 해석 및 제언</h3>
-            <div style={{ border: '1px solid #ddd', padding: '10px', borderRadius: '4px', backgroundColor: '#fafafa', fontSize: '12px', minHeight: '60px' }}>
-              (여기에 교사 회의 코멘트를 수기 작성하거나, 시스템이 자동 생성한 인사이트가 표시됩니다.)
-            </div>
-          </div>
-        </section>
 
-        {/* 3. Detailed Pattern Analysis */}
-        <section className="report-section">
-          <h2>3. 상세 패턴 분석 (Detailed Pattern Analysis)</h2>
-
-          {/* Row 1: Temporal Patterns */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '30px' }}>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>시간대별 패턴 (Time of Day)</h3>
+          {/* Row 2: Time & Day */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>시간대별 패턴</h3>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.big5.times} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <BarChart data={data.big5.times} margin={{ top: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -239,10 +280,10 @@ export default function MonthlyReport() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>요일별 패턴 (Day of Week)</h3>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>요일별 패턴</h3>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.big5.weekdays} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <BarChart data={data.big5.weekdays} margin={{ top: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -254,20 +295,14 @@ export default function MonthlyReport() {
             </div>
           </div>
 
-          {/* Row 2: Functional Patterns */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>행동의 기능 (Function) - '왜?'</h3>
+          {/* Row 3: Function & Antecedent & Consequence */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>행동의 기능 — '왜?'</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={data.functions}
-                    cx="50%" cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
+                  <Pie data={data.functions} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value"
+                    label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
                     {data.functions.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
@@ -276,9 +311,8 @@ export default function MonthlyReport() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>배경 사건 (Antecedent) - '언제?'</h3>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>배경 사건 — '언제?'</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -292,10 +326,10 @@ export default function MonthlyReport() {
             </div>
           </div>
 
-          {/* Row 3: Consequence & Heatmap */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '30px' }}>
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
-              <h3>후속 결과 (Consequence) - '무엇을 얻었나?'</h3>
+          {/* Row 4: Consequence & Heatmap */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+              <h3>후속 결과 — '무엇을 얻었나?'</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.consequences} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -307,8 +341,7 @@ export default function MonthlyReport() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-
-            <div style={{ flex: 1, minWidth: '300px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
               <h3>🔥 Hot Spot (장소 x 시간)</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
@@ -322,77 +355,101 @@ export default function MonthlyReport() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          <AIAnalysisCard
+            sectionName="학교 전체 패턴 (Big 5 & ABC 분석)"
+            dataContext={{
+              top_locations: data.big5.locations?.slice(0, 3),
+              top_behaviors: data.big5.behaviors?.slice(0, 3),
+              top_times: data.big5.times?.slice(0, 3),
+              functions: data.functions?.slice(0, 3),
+              antecedents: data.antecedents?.slice(0, 3),
+              consequences: data.consequences?.slice(0, 3),
+            }}
+          />
         </section>
 
         <div className="page-break"></div>
 
-        {/* 4. Tier 2/3 List */}
+        {/* ===== Section 4: Tier 2/3 List ===== */}
         <section className="report-section">
           <h2>4. 학생 지원 현황 (Tier 2 & 3 Support)</h2>
 
-          <h3>🚨 고위험군 안전 알림 (Safety Alerts - Last 30 Days)</h3>
+          <h3>🚨 고위험군 안전 알림 (Safety Alerts)</h3>
           {data.safety_alerts && data.safety_alerts.length > 0 ? (
-            <table style={{ marginBottom: '20px' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: '20%' }}>날짜</th>
-                  <th style={{ width: '20%' }}>학생</th>
-                  <th>내용</th>
-                  <th style={{ width: '10%' }}>강도</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.safety_alerts.map((alert, idx) => (
-                  <tr key={idx}>
-                    <td>{alert.date}</td>
-                    <td>{alert.student}</td>
-                    <td>{alert.location}에서 {alert.type}</td>
-                    <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{alert.intensity}</td>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ marginBottom: '20px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '20%' }}>날짜</th>
+                    <th style={{ width: '20%' }}>학생</th>
+                    <th>내용</th>
+                    <th style={{ width: '10%' }}>강도</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.safety_alerts.map((alert, idx) => (
+                    <tr key={idx}>
+                      <td>{alert.date}</td>
+                      <td>{alert.student}</td>
+                      <td>{alert.location}에서 {alert.type}</td>
+                      <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{alert.intensity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>해당 기간 동안 보고된 고위험(강도 5) 행동이 없습니다.</p>
           )}
 
-          <h3>⚠️ 소그룹/개별 지원 대상자 (Screening List)</h3>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '15%' }}>Tier</th>
-                <th style={{ width: '20%' }}>학생명</th>
-                <th style={{ width: '20%' }}>학급</th>
-                <th style={{ width: '15%' }}>발생횟수 (월)</th>
-                <th>비고</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.risk_list.map((s, idx) => (
-                <tr key={idx}>
-                  <td>
-                    <span style={{
-                      padding: '2px 6px', borderRadius: '4px', fontSize: '10px',
-                      backgroundColor: s.tier === 'Tier 3' ? '#fee2e2' : '#fef3c7',
-                      color: s.tier === 'Tier 3' ? '#991b1b' : '#92400e'
-                    }}>
-                      {s.tier}
-                    </span>
-                  </td>
-                  <td>{s.name}</td>
-                  <td>{s.class}</td>
-                  <td>{s.count}</td>
-                  <td></td>
+          <h3>⚠️ 소그룹/개별 지원 대상자</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: '15%' }}>Tier</th>
+                  <th style={{ width: '20%' }}>학생명</th>
+                  <th style={{ width: '20%' }}>학급</th>
+                  <th style={{ width: '15%' }}>발생횟수</th>
+                  <th>비고</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.risk_list.map((s, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <span style={{
+                        padding: '2px 6px', borderRadius: '4px', fontSize: '10px',
+                        backgroundColor: s.tier === 'Tier 3' ? '#fee2e2' : '#fef3c7',
+                        color: s.tier === 'Tier 3' ? '#991b1b' : '#92400e'
+                      }}>
+                        {s.tier}
+                      </span>
+                    </td>
+                    <td>{s.name}</td>
+                    <td>{s.class}</td>
+                    <td>{s.count}</td>
+                    <td></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <AIAnalysisCard
+            sectionName="학생 지원 현황 (Tier 조정 의사결정)"
+            dataContext={{
+              safety_alerts_count: data.safety_alerts?.length || 0,
+              risk_students: data.risk_list?.slice(0, 5).map(s => ({ name: s.name, tier: s.tier, count: s.count })),
+            }}
+          />
         </section>
 
-        {/* 5. Action Plan & Meeting Notes */}
+        {/* ===== Section 5: Meeting Notes ===== */}
         <section className="report-section" style={{ borderBottom: 'none' }}>
           <h2>5. 이달의 실행 계획 (Action Plan) 및 회의록</h2>
-          <MeetingNotesSection apiUrl={process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"} meetingType="tier1" title="전체 교직원 회의록" />
+          <MeetingNotesSection apiUrl={apiUrl} meetingType="tier1" title="전체 교직원 회의록" />
         </section>
       </div>
     </AuthCheck>
@@ -439,41 +496,20 @@ function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, m
 
   return (
     <div style={{ marginTop: '10px' }}>
-      <div
-        className="no-print"
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          padding: "10px", cursor: "pointer",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          backgroundColor: "#f1f5f9", borderRadius: "8px", marginBottom: "10px"
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: "14px", color: "#334155" }}>📝 {title} (입력/조회)</h3>
+      <div className="no-print" onClick={() => setExpanded(!expanded)}
+        style={{ padding: "10px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f1f5f9", borderRadius: "8px", marginBottom: "10px" }}>
+        <h3 style={{ margin: 0, fontSize: "14px", color: "#334155" }}>📝 {title}</h3>
         <span style={{ fontSize: "12px", color: "#64748b" }}>{expanded ? "접기" : "펼치기"}</span>
       </div>
 
       {expanded && (
         <div style={{ padding: "0 5px" }}>
           <div className="no-print" style={{ marginBottom: "20px" }}>
-            <textarea
-              value={content}
-              onChange={e => setContent(e.target.value)}
+            <textarea value={content} onChange={e => setContent(e.target.value)}
               placeholder="회의 결정사항 및 실행계획을 입력하세요..."
-              style={{
-                width: "100%", minHeight: "80px", padding: "10px",
-                border: "1px solid #cbd5e1", borderRadius: "4px",
-                marginBottom: "8px", fontFamily: "inherit"
-              }}
-            />
-            <button
-              onClick={saveNote}
-              disabled={loading || !content.trim()}
-              style={{
-                padding: "6px 12px", backgroundColor: "#3b82f6", color: "white",
-                border: "none", borderRadius: "4px", cursor: "pointer",
-                fontSize: "12px"
-              }}
-            >
+              style={{ width: "100%", minHeight: "80px", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "4px", marginBottom: "8px", fontFamily: "inherit" }} />
+            <button onClick={saveNote} disabled={loading || !content.trim()}
+              style={{ padding: "6px 12px", backgroundColor: "#3b82f6", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}>
               {loading ? "저장 중..." : "회의록 저장"}
             </button>
           </div>

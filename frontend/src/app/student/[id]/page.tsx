@@ -19,6 +19,7 @@ export default function StudentDetail() {
   const router = useRouter();
   const studentName = decodeURIComponent(params.id as string);
   const { startDate, endDate } = useDateRange();
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [data, setData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -293,7 +294,12 @@ export default function StudentDetail() {
               </div>
             </div>
 
-            {/* Row 4: Consultation Log (Teacher Feedback) */}
+            {/* Row 4: AI Analysis */}
+            <div style={{ marginTop: '30px' }}>
+              <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
+            </div>
+
+            {/* Row 5: Consultation Log (Teacher Feedback) */}
             <div style={{ marginTop: '30px' }}>
               <ConsultationLog studentCode={profile.student_code} studentName={profile.name} />
             </div>
@@ -399,6 +405,63 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string; apiUrl: string }) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  const requestAnalysis = async () => {
+    setLoading(true);
+    setVisible(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, {
+        student_code: studentCode
+      });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch {
+      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {!visible ? (
+        <button onClick={requestAnalysis} style={{
+          padding: '10px 20px', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+          color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer',
+          fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(124,58,237,0.3)'
+        }}>
+          🤖 BCBA AI 종합 분석
+        </button>
+      ) : (
+        <div style={{
+          background: '#f5f3ff', border: '1px solid #ddd5f5',
+          borderRadius: '12px', padding: '20px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, color: '#6d28d9', fontSize: '1rem' }}>🤖 BCBA AI 종합 분석</h3>
+            <button onClick={() => setVisible(false)} style={{
+              background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '0.8rem'
+            }}>✕ 닫기</button>
+          </div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '30px', color: '#7c3aed' }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>⏳</div>
+              AI가 학생 데이터를 종합 분석하고 있습니다...
+            </div>
+          ) : (
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: '1.7', color: '#334155' }}>
+              {analysis}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

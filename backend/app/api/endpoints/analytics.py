@@ -76,3 +76,100 @@ async def refresh_dashboard():
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=result["error"])
     return result
+
+
+# ============================================================
+# AI BCBA Analysis Endpoints
+# ============================================================
+
+from pydantic import BaseModel
+from typing import Optional, List
+
+class SectionAnalysisRequest(BaseModel):
+    section_name: str
+    data_context: dict
+
+class CICOAnalysisRequest(BaseModel):
+    month: int = 3
+    students_data: Optional[list] = None
+
+class Tier3AnalysisRequest(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+class StudentAnalysisRequest(BaseModel):
+    student_code: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+@router.post("/ai-section-analysis")
+async def ai_section_analysis(req: SectionAnalysisRequest):
+    """Generate BCBA AI analysis for a T1 report section."""
+    from app.services.ai_insight import generate_bcba_section_analysis
+    result = generate_bcba_section_analysis(req.section_name, req.data_context)
+    return {"analysis": result}
+
+@router.post("/ai-cico-analysis")
+async def ai_cico_analysis(req: CICOAnalysisRequest):
+    """Generate BCBA AI analysis for CICO report."""
+    from app.services.ai_insight import generate_bcba_cico_analysis
+    from app.services.sheets import get_cico_report_data
+    
+    if req.students_data:
+        students = req.students_data
+    else:
+        data = get_cico_report_data(req.month)
+        if "error" in data:
+            return {"analysis": f"데이터 로드 실패: {data['error']}"}
+        students = data.get("students", [])
+    
+    result = generate_bcba_cico_analysis(students)
+    return {"analysis": result}
+
+@router.post("/ai-tier3-analysis")
+async def ai_tier3_analysis(req: Tier3AnalysisRequest):
+    """Generate BCBA AI analysis for Tier 3 report."""
+    from app.services.ai_insight import generate_bcba_tier3_analysis
+    
+    t3_data = get_tier3_report_data(req.start_date, req.end_date)
+    if "error" in t3_data:
+        return {"analysis": f"데이터 로드 실패: {t3_data['error']}"}
+    
+    records = fetch_all_records()
+    # Filter records for T3 students
+    t3_codes = [s.get("code", "") for s in t3_data.get("students", [])]
+    t3_logs = [r for r in records if str(r.get("학생코드", "")) in t3_codes or str(r.get("코드번호", "")) in t3_codes]
+    
+    result = generate_bcba_tier3_analysis(
+        t3_data.get("students", []), 
+        t3_logs
+    )
+    return {"analysis": result}
+
+@router.post("/ai-student-analysis")
+async def ai_student_analysis(req: StudentAnalysisRequest):
+    """Generate BCBA AI analysis for individual student."""
+    from app.services.ai_insight import generate_bcba_student_analysis
+    from app.services.sheets import fetch_student_status
+    
+    records = fetch_all_records()
+    student_logs = [r for r in records if str(r.get("학생코드", "")) == req.student_code or str(r.get("코드번호", "")) == req.student_code]
+    
+    # Get student info from TierStatus
+    status_records = fetch_student_status()
+    student_info = {}
+    for s in status_records:
+        if s.get("학생코드", "") == req.student_code or s.get("코드번호", "") == req.student_code:
+            student_info = {
+                "code": req.student_code,
+                "class": s.get("학급", ""),
+                "tier": s.get("Tier", s.get("지원단계", "")),
+            }
+            break
+    
+    if not student_info:
+        student_info = {"code": req.student_code, "class": "", "tier": ""}
+    
+    result = generate_bcba_student_analysis(student_info, student_logs)
+    return {"analysis": result}
+

@@ -6,12 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import styles from "../../../page.module.css";
 import { AuthCheck } from "../../../components/AuthProvider";
 import GlobalNav from "../../../components/GlobalNav";
-import { BIP_STRATEGIES } from "../../../constants";
 
 interface BIPData {
     StudentCode: string;
     TargetBehavior: string;
     Hypothesis: string;
+    Goals: string;
     PreventionStrategies: string;
     TeachingStrategies: string;
     ConsequenceStrategies: string;
@@ -27,10 +27,12 @@ export default function BIPEditor() {
     const studentName = decodeURIComponent(params.id as string);
     const [studentCode, setStudentCode] = useState("");
     const [loading, setLoading] = useState(true);
+    const [aiLoading, setAiLoading] = useState<string | null>(null); // Track which AI action is loading
     const [bip, setBip] = useState<BIPData>({
         StudentCode: "",
         TargetBehavior: "",
         Hypothesis: "",
+        Goals: "",
         PreventionStrategies: "",
         TeachingStrategies: "",
         ConsequenceStrategies: "",
@@ -41,32 +43,27 @@ export default function BIPEditor() {
     });
     const [saving, setSaving] = useState(false);
 
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
     useEffect(() => {
         if (!studentName) return;
 
         const fetchData = async () => {
             try {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-                // 1. Get Student Info to get Code
                 const studentRes = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}`);
                 const code = studentRes.data.profile.student_code;
                 setStudentCode(code);
 
-                // 2. Get BIP Data
                 try {
                     const bipRes = await axios.get(`${apiUrl}/api/v1/bip/students/${code}/bip`);
                     if (bipRes.data && bipRes.data.StudentCode) {
                         setBip(bipRes.data);
                     } else {
-                        // Initialize with code
                         setBip(prev => ({ ...prev, StudentCode: code }));
                     }
-                } catch (e) {
-                    console.log("No existing BIP found, starting fresh.");
+                } catch {
                     setBip(prev => ({ ...prev, StudentCode: code }));
                 }
-
             } catch (err) {
                 console.error(err);
                 alert("학생 정보를 불러오는데 실패했습니다.");
@@ -83,32 +80,56 @@ export default function BIPEditor() {
         setBip(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleAutoFill = () => {
-        const hypothesis = bip.Hypothesis;
-        if (!hypothesis) {
-            alert("먼저 '가설(Hypothesis)'에 행동의 기능을 입력해주세요. (예: 관심 끌기, 회피, 물건/활동 얻기, 감각/자기자극)");
-            return;
-        }
-
-        let matchedStrategy = null;
-        for (const key in BIP_STRATEGIES) {
-            if (hypothesis.includes(key) || key.includes(hypothesis) || (hypothesis.includes("관심") && key.includes("관심")) || (hypothesis.includes("회피") && key.includes("회피"))) {
-                matchedStrategy = BIP_STRATEGIES[key];
-                break;
-            }
-        }
-
-        if (matchedStrategy) {
-            if (confirm("입력된 가설을 바탕으로 추천 전략을 자동 입력하시겠습니까?\\n(기존 내용은 유지되며 뒤에 추가됩니다.)")) {
+    // NEW: AI Hypothesis Generation
+    const handleAIHypothesis = async () => {
+        if (!studentCode) return;
+        setAiLoading("hypothesis");
+        try {
+            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-hypothesis`);
+            const aiResult = res.data.hypothesis || "";
+            if (aiResult) {
                 setBip(prev => ({
                     ...prev,
-                    PreventionStrategies: prev.PreventionStrategies ? prev.PreventionStrategies + "\\n\\n" + matchedStrategy!.prevention : matchedStrategy!.prevention,
-                    TeachingStrategies: prev.TeachingStrategies ? prev.TeachingStrategies + "\\n\\n" + matchedStrategy!.teaching : matchedStrategy!.teaching,
-                    ConsequenceStrategies: prev.ConsequenceStrategies ? prev.ConsequenceStrategies + "\\n\\n" + matchedStrategy!.consequence : matchedStrategy!.consequence
+                    TargetBehavior: prev.TargetBehavior ? prev.TargetBehavior + "\n\n---\n🤖 AI 분석 결과:\n" + extractSection(aiResult, "표적행동") : extractSection(aiResult, "표적행동") || prev.TargetBehavior,
+                    Hypothesis: prev.Hypothesis ? prev.Hypothesis + "\n\n---\n🤖 AI 분석 결과:\n" + extractSection(aiResult, "가설") : extractSection(aiResult, "가설") || prev.Hypothesis,
+                    Goals: prev.Goals ? prev.Goals + "\n\n---\n🤖 AI 분석 결과:\n" + extractSection(aiResult, "목표") : extractSection(aiResult, "목표") || prev.Goals,
                 }));
             }
-        } else {
-            alert("일치하는 추천 전략을 찾을 수 없습니다.\\n가설에 '관심', '회피', '물건', '감각' 등의 키워드를 포함시켜주세요.");
+        } catch {
+            alert("AI 가설수립 요청 실패. 잠시 후 다시 시도해주세요.");
+        } finally {
+            setAiLoading(null);
+        }
+    };
+
+    // NEW: AI Strategy Recommendation
+    const handleAIStrategies = async () => {
+        if (!studentCode) return;
+        if (!bip.TargetBehavior && !bip.Hypothesis) {
+            alert("먼저 '표적행동'과 '가설'을 입력하거나 AI 가설수립을 실행해주세요.");
+            return;
+        }
+        setAiLoading("strategies");
+        try {
+            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-strategies`, {
+                target_behavior: bip.TargetBehavior,
+                hypothesis: bip.Hypothesis,
+                goals: bip.Goals,
+            });
+            const aiResult = res.data.strategies || "";
+            if (aiResult) {
+                setBip(prev => ({
+                    ...prev,
+                    PreventionStrategies: appendAI(prev.PreventionStrategies, extractSection(aiResult, "예방")),
+                    TeachingStrategies: appendAI(prev.TeachingStrategies, extractSection(aiResult, "교수")),
+                    ConsequenceStrategies: appendAI(prev.ConsequenceStrategies, extractSection(aiResult, "강화")),
+                    CrisisPlan: appendAI(prev.CrisisPlan, extractSection(aiResult, "위기")),
+                }));
+            }
+        } catch {
+            alert("AI 추천전략 요청 실패. 잠시 후 다시 시도해주세요.");
+        } finally {
+            setAiLoading(null);
         }
     };
 
@@ -116,16 +137,14 @@ export default function BIPEditor() {
         if (!studentCode) return;
         setSaving(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
             await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/bip`, {
                 ...bip,
                 StudentCode: studentCode,
                 UpdatedAt: new Date().toISOString().split('T')[0],
-                Author: "Teacher" // Should be from auth context
+                Author: "Teacher"
             });
             alert("행동중재계획(BIP)이 저장되었습니다.");
-        } catch (e) {
-            console.error(e);
+        } catch {
             alert("저장 실패");
         } finally {
             setSaving(false);
@@ -144,24 +163,13 @@ export default function BIPEditor() {
                         <h1 className={styles.title}>📋 행동중재계획 (BIP) 작성</h1>
                         <p className={styles.subtitle}>{studentName} ({studentCode})</p>
                     </div>
-                    <div>
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            style={{
-                                padding: '10px 20px', backgroundColor: '#10b981', color: 'white',
-                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', marginRight: '10px'
-                            }}
-                        >
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={handleSave} disabled={saving}
+                            style={{ padding: '10px 20px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                             {saving ? "저장 중..." : "💾 저장하기"}
                         </button>
-                        <button
-                            onClick={() => router.back()}
-                            style={{
-                                padding: '10px 20px', backgroundColor: '#64748b', color: 'white',
-                                border: 'none', borderRadius: '8px', cursor: 'pointer'
-                            }}
-                        >
+                        <button onClick={() => router.back()}
+                            style={{ padding: '10px 20px', backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                             취소 / 뒤로
                         </button>
                     </div>
@@ -169,25 +177,49 @@ export default function BIPEditor() {
 
                 <main className={styles.main}>
                     <div className={styles.card}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #3b82f6', paddingBottom: '10px' }}>
+                        {/* AI Buttons Row */}
+                        <div style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            marginBottom: '20px', borderBottom: '2px solid #3b82f6', paddingBottom: '10px',
+                            flexWrap: 'wrap', gap: '10px'
+                        }}>
                             <h2 style={{ margin: 0 }}>행동 지원 계획 수립</h2>
-                            <button
-                                onClick={handleAutoFill}
-                                style={{
-                                    padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white',
-                                    border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem'
-                                }}
-                            >
-                                🤖 AI 전략 추천 (가설 기반)
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <button onClick={handleAIHypothesis} disabled={aiLoading !== null}
+                                    style={{
+                                        padding: '8px 16px', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                                        color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                                        fontSize: '0.85rem', fontWeight: 600, opacity: aiLoading ? 0.6 : 1,
+                                        boxShadow: '0 2px 8px rgba(124,58,237,0.3)'
+                                    }}>
+                                    {aiLoading === "hypothesis" ? "⏳ 분석 중..." : "🤖 AI 가설수립"}
+                                </button>
+                                <button onClick={handleAIStrategies} disabled={aiLoading !== null}
+                                    style={{
+                                        padding: '8px 16px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                                        color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                                        fontSize: '0.85rem', fontWeight: 600, opacity: aiLoading ? 0.6 : 1,
+                                        boxShadow: '0 2px 8px rgba(59,130,246,0.3)'
+                                    }}>
+                                    {aiLoading === "strategies" ? "⏳ 분석 중..." : "🤖 AI 추천전략"}
+                                </button>
+                            </div>
                         </div>
+
+                        {aiLoading && (
+                            <div style={{
+                                background: '#f5f3ff', padding: '12px 16px', borderRadius: '8px',
+                                marginBottom: '16px', textAlign: 'center', color: '#7c3aed', fontSize: '0.9rem'
+                            }}>
+                                ⏳ AI가 학생 데이터를 분석하고 있습니다... (약 10~15초 소요)
+                            </div>
+                        )}
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             {/* Left Column */}
                             <div>
                                 <Section title="1. 표적 행동 (Target Behavior)" color="#ef4444">
                                     <textarea
-                                        className={styles.textarea}
                                         value={bip.TargetBehavior}
                                         onChange={e => handleChange("TargetBehavior", e.target.value)}
                                         placeholder="구체적이고 관찰 가능한 행동으로 기술하세요."
@@ -202,12 +234,18 @@ export default function BIPEditor() {
                                         placeholder="행동의 기능과 배경 사건에 대한 가설을 기술하세요."
                                         style={{ height: '100px', width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                                     />
-                                    <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '5px' }}>
-                                        * 'AI 전략 추천'을 위해 '관심', '회피', '물건', '감각' 등의 단어를 포함해주세요.
-                                    </p>
                                 </Section>
 
-                                <Section title="3. 예방 전략 (Prevention)" color="#3b82f6">
+                                <Section title="3. 목표 (Goals)" color="#6366f1">
+                                    <textarea
+                                        value={bip.Goals}
+                                        onChange={e => handleChange("Goals", e.target.value)}
+                                        placeholder="구체적이고 측정 가능한 목표 (예: 주 5회 → 주 2회 이하로 감소)"
+                                        style={{ height: '80px', width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                    />
+                                </Section>
+
+                                <Section title="4. 예방 전략 (Prevention)" color="#3b82f6">
                                     <textarea
                                         value={bip.PreventionStrategies}
                                         onChange={e => handleChange("PreventionStrategies", e.target.value)}
@@ -219,7 +257,7 @@ export default function BIPEditor() {
 
                             {/* Right Column */}
                             <div>
-                                <Section title="4. 대체 행동 교육 (Teaching)" color="#10b981">
+                                <Section title="5. 대체 행동 교육 (Teaching)" color="#10b981">
                                     <textarea
                                         value={bip.TeachingStrategies}
                                         onChange={e => handleChange("TeachingStrategies", e.target.value)}
@@ -228,7 +266,7 @@ export default function BIPEditor() {
                                     />
                                 </Section>
 
-                                <Section title="5. 반응 전략 (Consequence)" color="#8b5cf6">
+                                <Section title="6. 강화 전략 (Reinforcement)" color="#8b5cf6">
                                     <textarea
                                         value={bip.ConsequenceStrategies}
                                         onChange={e => handleChange("ConsequenceStrategies", e.target.value)}
@@ -237,7 +275,7 @@ export default function BIPEditor() {
                                     />
                                 </Section>
 
-                                <Section title="6. 위기 관리 (Crisis Plan)" color="#be123c">
+                                <Section title="7. 위기 관리 (Crisis Plan)" color="#be123c">
                                     <textarea
                                         value={bip.CrisisPlan}
                                         onChange={e => handleChange("CrisisPlan", e.target.value)}
@@ -248,7 +286,7 @@ export default function BIPEditor() {
                             </div>
                         </div>
 
-                        <Section title="7. 평가 계획 (Evaluation)" color="#64748b">
+                        <Section title="8. 평가 계획 (Evaluation)" color="#64748b">
                             <textarea
                                 value={bip.EvaluationPlan}
                                 onChange={e => handleChange("EvaluationPlan", e.target.value)}
@@ -274,4 +312,32 @@ function Section({ title, color, children }: { title: string, color: string, chi
             {children}
         </div>
     );
+}
+
+// Helper: Extract a section from AI multi-section text
+function extractSection(text: string, keyword: string): string {
+    if (!text) return "";
+    const lines = text.split("\n");
+    let capturing = false;
+    let result: string[] = [];
+    for (const line of lines) {
+        if (line.includes(`[${keyword}`) || line.includes(`**[${keyword}`)) {
+            capturing = true;
+            continue;
+        }
+        if (capturing && (line.startsWith("**[") || line.startsWith("[")) && !line.includes(keyword)) {
+            break;
+        }
+        if (capturing) {
+            result.push(line);
+        }
+    }
+    return result.join("\n").trim() || text;
+}
+
+// Helper: Append AI result to existing text
+function appendAI(existing: string, aiText: string): string {
+    if (!aiText) return existing;
+    if (!existing) return aiText;
+    return existing + "\n\n---\n🤖 AI 추천:\n" + aiText;
 }

@@ -343,11 +343,69 @@ export default function Tier3Report() {
                   </table>
                 </div>
               )}
+
+              {/* AI Analysis */}
+              <Tier3AIAnalysis apiUrl={apiUrl} />
             </>
           )}
         </main>
       </div>
     </AuthCheck>
+  );
+}
+
+function Tier3AIAnalysis({ apiUrl }: { apiUrl: string }) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  const requestAnalysis = async () => {
+    setLoading(true);
+    setVisible(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-tier3-analysis`, {});
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch {
+      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: "20px" }}>
+      {!visible ? (
+        <button onClick={requestAnalysis} style={{
+          padding: "10px 20px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+          color: "white", border: "none", borderRadius: "10px", cursor: "pointer",
+          fontSize: "0.9rem", fontWeight: 600, boxShadow: "0 4px 12px rgba(124,58,237,0.3)"
+        }}>
+          🤖 BCBA AI 종합 분석
+        </button>
+      ) : (
+        <div style={{
+          background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)",
+          borderRadius: "12px", padding: "20px", marginTop: "12px"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h3 style={{ margin: 0, color: "#a78bfa", fontSize: "1rem" }}>🤖 BCBA AI 분석 — Tier 3 학생 종합</h3>
+            <button onClick={() => setVisible(false)} style={{
+              background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "0.8rem"
+            }}>✕ 닫기</button>
+          </div>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "30px", color: "#a78bfa" }}>
+              <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>⏳</div>
+              AI가 Tier 3 학생 데이터를 분석하고 있습니다...
+            </div>
+          ) : (
+            <div style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", lineHeight: "1.7", color: "#e2e8f0" }}>
+              {analysis}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

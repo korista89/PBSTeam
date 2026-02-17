@@ -6,46 +6,52 @@ from typing import Dict, List, Optional
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
-    """
-    Generate AI insight using OpenAI API.
-    """
+BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격을 가진 특수학교 행동 분석 전문가입니다.
+학교차원 긍정적 행동지원(SW-PBIS) 프레임워크에 기반하여 데이터를 분석하고, 
+학교 행동중재지원팀의 의사결정을 돕는 전문적인 분석 결과를 제공합니다.
+분석은 항상 한국어로, 정중한 '해요체'로 작성합니다.
+ABA(응용행동분석) 원리에 기반한 분석을 합니다."""
+
+def _call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
+    """Shared OpenAI API call wrapper."""
     try:
         if not openai.api_key:
-            return "OpenAI API Key가 설정되지 않았습니다."
-
-        prompt = f"""
-        당신은 특수학교의 행동중재지원팀(PBIS Team) 코디네이터이자 행동 분석 전문가입니다.
-        다음 데이터를 바탕으로 교직원 회의에서 사용할 '행동 중재 회의 브리핑'을 작성해주세요.
-        
-        [데이터 요약]
-        - 총 행동 발생 건수: {summary.get('total_incidents', 0)}건
-        - 고위험 학생 수: {len(risk_list)}명
-        
-        [고위험 학생 목록 (Top 3)]
-        {', '.join([f"{r.get('name', r.get('학생명', 'N/A'))} ({r.get('count', 0)}건)" for r in risk_list[:3]])}
-        
-        [지시사항]
-        1. 학교 전체의 행동 발생 추이와 심각도를 분석하고, 긍정적인 변화나 우려되는 점을 명확히 짚어주세요.
-        2. 고위험 학생들에 대해 구체적인 중재 방향(기능 평가 필요성, 환경 수정 등)을 제안하세요.
-        3. 선생님들에게 격려와 구체적인 행동 가이드(예: 칭찬 강화, 예방적 접근)를 포함하세요.
-        4. 말투는 정중하고 전문적인 '해요체'를 사용하세요.
-        5. 분량은 300~500자 내외로 핵심만 요약하세요.
-        """
+            return "⚠️ OpenAI API Key가 설정되지 않았습니다. Vercel 환경변수에 OPENAI_API_KEY를 추가해주세요."
         
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a specialized AI assistant for School Wide PBIS (Positive Behavior Interventions and Supports)."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
             temperature=0.7,
-            max_tokens=600
+            max_tokens=max_tokens
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"AI Insight Error: {e}")
-        return "AI 분석을 생성하는 도중 오류가 발생했습니다."
+        print(f"OpenAI API Error: {e}")
+        return f"⚠️ AI 분석 중 오류가 발생했습니다: {str(e)}"
+
+
+def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
+    """Generate AI insight for dashboard."""
+    prompt = f"""다음 데이터를 바탕으로 교직원 회의에서 사용할 '행동 중재 회의 브리핑'을 작성해주세요.
+    
+[데이터 요약]
+- 총 행동 발생 건수: {summary.get('total_incidents', 0)}건
+- 고위험 학생 수: {len(risk_list)}명
+
+[고위험 학생 목록 (Top 3)]
+{', '.join([f"{r.get('name', r.get('학생명', 'N/A'))} ({r.get('count', 0)}건)" for r in risk_list[:3]])}
+
+[지시사항]
+1. 학교 전체의 행동 발생 추이와 심각도를 분석하고, 긍정적인 변화나 우려되는 점을 명확히 짚어주세요.
+2. 고위험 학생들에 대해 구체적인 중재 방향(기능 평가 필요성, 환경 수정 등)을 제안하세요.
+3. 선생님들에게 격려와 구체적인 행동 가이드(예: 칭찬 강화, 예방적 접근)를 포함하세요.
+4. 분량은 300~500자 내외로 핵심만 요약하세요."""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 600)
+
 
 def generate_meeting_agent_report(
     summary: dict,
@@ -55,17 +61,10 @@ def generate_meeting_agent_report(
     cico_summary: Optional[dict] = None,
     tier3_students: Optional[list] = None
 ) -> dict:
-    """
-    Generate a comprehensive meeting agent report for the School Behavior Intervention Team.
-    
-    Returns structured data:
-    - briefing_text: Full text briefing (Korean)
-    - sections: Parsed sections for frontend rendering
-    """
+    """Generate a comprehensive meeting agent report for the School Behavior Intervention Team."""
     total_incidents = summary.get("total_incidents", 0)
     risk_count = len(risk_list) if risk_list else 0
     
-    # Default tier stats if not provided
     if not tier_stats:
         tier_stats = {
             "enrolled": 210,
@@ -83,7 +82,6 @@ def generate_meeting_agent_report(
     t3 = tier_stats.get("tier3", {})
     t3p = tier_stats.get("tier3_plus", {})
     
-    # ===== Section 1: Briefing =====
     briefing_lines = []
     briefing_lines.append("## 📋 주요 현황 브리핑")
     briefing_lines.append("")
@@ -98,19 +96,16 @@ def generate_meeting_agent_report(
     briefing_lines.append(f"| Tier 3+ (외부연계) | {t3p.get('count', 0)}명 | {t3p.get('pct', 0)}% | 위기 지원 |")
     briefing_lines.append("")
     
-    # Behavior summary
     briefing_lines.append(f"### 행동 발생 현황")
     briefing_lines.append(f"- 분석 기간 내 총 행동 발생 건수: **{total_incidents}건**")
     if risk_count > 0:
         briefing_lines.append(f"- 주의 요망 학생: **{risk_count}명**")
-        top_risk = risk_list[:3] if risk_list else []
-        for r in top_risk:
+        for r in risk_list[:3]:
             name = r.get("name", r.get("학생명", ""))
             count = r.get("count", r.get("건수", 0))
             briefing_lines.append(f"  - {name}: {count}건")
     briefing_lines.append("")
     
-    # CICO Summary
     if cico_summary:
         briefing_lines.append("### CICO 수행 현황")
         briefing_lines.append(f"- CICO 대상 학생: {cico_summary.get('total_students', 0)}명")
@@ -118,7 +113,6 @@ def generate_meeting_agent_report(
         briefing_lines.append(f"- 목표 달성: {cico_summary.get('achieved_count', 0)}명 / 미달성: {cico_summary.get('not_achieved_count', 0)}명")
         briefing_lines.append("")
     
-    # ===== Section 2: Agenda =====
     agenda_lines = []
     agenda_lines.append("## 📌 회의 안건")
     agenda_lines.append("")
@@ -147,7 +141,6 @@ def generate_meeting_agent_report(
         agenda_lines.append("- 외부 연계(Tier 3+) 필요 여부 논의")
     agenda_lines.append("")
     
-    # Emergency agenda
     if risk_count > 0:
         agenda_lines.append("### ⚠️ 긴급 안건")
         for r in risk_list[:3]:
@@ -156,7 +149,6 @@ def generate_meeting_agent_report(
             agenda_lines.append(f"- **{name}** ({count}건): 즉각적 개입 방안 논의 필요")
         agenda_lines.append("")
     
-    # ===== Section 3: Meeting Order =====
     order_lines = []
     order_lines.append("## 🔄 안건 진행 순서")
     order_lines.append("")
@@ -177,7 +169,6 @@ def generate_meeting_agent_report(
     order_lines.append("```")
     order_lines.append("")
     
-    # ===== Section 4: Decision Methods =====
     decision_lines = []
     decision_lines.append("## 🗳️ 의사결정 방법")
     decision_lines.append("")
@@ -189,7 +180,6 @@ def generate_meeting_agent_report(
     decision_lines.append("| Tier3 → Tier3+ | 자·타해 위험 또는 FBA/BIP 효과 없음 | 학교장 승인 필요 |")
     decision_lines.append("")
     
-    # ===== Section 5: Checklist =====
     checklist_lines = []
     checklist_lines.append("## ☑️ 회의 체크리스트")
     checklist_lines.append("")
@@ -211,7 +201,6 @@ def generate_meeting_agent_report(
     checklist_lines.append("- [ ] 차기 회의 일정 및 과제 확정")
     checklist_lines.append("")
     
-    # Combine all sections
     full_text = "\n".join(
         briefing_lines + agenda_lines + order_lines + decision_lines + checklist_lines
     )
@@ -232,3 +221,299 @@ def generate_meeting_agent_report(
             "cico_students": cico_summary.get("total_students", 0) if cico_summary else 0,
         }
     }
+
+
+# ============================================================
+# NEW: BCBA Analysis Functions for Platform Overhaul
+# ============================================================
+
+def generate_bcba_section_analysis(section_name: str, data_context: dict) -> str:
+    """Generate BCBA analysis for a specific T1 report section."""
+    prompt = f"""[분석 대상 섹션]: {section_name}
+
+[데이터]:
+{_format_dict(data_context)}
+
+[지시사항]
+BCBA로서 위 데이터를 분석하여 학교 행동중재지원팀의 의사결정을 도와주세요.
+
+1. 데이터에서 발견되는 핵심 패턴과 트렌드를 요약하세요.
+2. 데이터 기반으로 우려할 점 또는 긍정적 변화를 짚어주세요.
+3. 학교 차원에서 취해야 할 구체적인 의사결정 포인트(2~3가지)를 제안하세요.
+4. 300~500자 이내로 작성하세요.
+5. 전문적이되 교사가 이해하기 쉬운 표현을 사용하세요."""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 600)
+
+
+def generate_bcba_cico_analysis(students_data: list) -> str:
+    """Generate BCBA analysis for CICO report — per-student analysis."""
+    student_summaries = []
+    for s in students_data[:15]:  # Limit to prevent token overflow
+        student_summaries.append(
+            f"- {s.get('code','?')}: 목표행동={s.get('target_behavior','')}, "
+            f"척도={s.get('scale','')}, 기준={s.get('goal_criteria','')}, "
+            f"수행률={s.get('rate','')}, 달성={s.get('achieved','')}, "
+            f"유형={s.get('behavior_type','')}"
+        )
+    
+    prompt = f"""[이번 달 CICO 학생 데이터]
+{chr(10).join(student_summaries)}
+
+[지시사항]
+BCBA로서 이번 달 CICO 입력 결과를 종합적으로 분석하여, 학교 행동중재지원팀의 의사결정을 지원하세요.
+
+1. 각 학생의 목표행동, 척도, 기준, 수행률, 달성여부를 고려하여 학생별로 분석하세요.
+2. CICO 수행률 패턴에서 의미있는 점(향상, 정체, 악화 등)을 찾아주세요.
+3. Tier 조정이 필요한 학생이 있다면 구체적으로 제안하세요.
+   - 2개월 연속 목표 달성 → Tier 1 하향 권장
+   - 3개월 연속 미달성 → Tier 3 상향 또는 CICO 수정 검토
+4. 학생별 1~2줄 핵심 분석 + 전체 요약을 제공하세요."""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1000)
+
+
+def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
+    """Generate BCBA analysis for T3 report."""
+    student_info = []
+    for s in tier3_students[:10]:
+        student_info.append(
+            f"- {s.get('code','')}: 학급={s.get('class','')}, "
+            f"행동발생={s.get('incidents',0)}건, 최고강도={s.get('max_intensity','')}, "
+            f"주요유형={s.get('top_type','')}, 주요기능={s.get('top_function','')}"
+        )
+    
+    # Summarize behavior logs
+    log_summary = _summarize_behavior_logs(behavior_logs)
+    
+    prompt = f"""[Tier 3 학생 현황]
+{chr(10).join(student_info)}
+
+[행동 기록 요약]
+{log_summary}
+
+{f"[CICO 데이터 요약]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
+
+[지시사항]
+BCBA로서 이번 달 Tier 3 학생들의 행동 데이터를 종합 분석하세요.
+
+1. 각 학생의 행동 형태, 기능, 빈도, 강도, 발생 패턴(날짜, 요일, 시간대)을 고려하세요.
+2. 분석 결과에서 알 수 있는 핵심 시사점을 제시하세요.
+3. 각 학생에게 필요한 지원(BIP 수정, 환경 수정, 강화 전략 변경 등)을 구체적으로 추천하세요.
+4. 외부 연계(Tier 3+)가 필요한 학생이 있다면 근거와 함께 제안하세요."""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1200)
+
+
+def generate_bcba_student_analysis(
+    student_info: dict, 
+    behavior_logs: list, 
+    cico_data: list = None,
+    teacher_notes: list = None
+) -> str:
+    """Generate BCBA analysis for individual student detail page."""
+    log_summary = _summarize_behavior_logs(behavior_logs)
+    
+    notes_text = ""
+    if teacher_notes:
+        notes_text = "\n[담임교사 의견]\n" + "\n".join(
+            [f"- {n.get('date','')}: {n.get('content','')}" for n in teacher_notes[:10]]
+        )
+    
+    prompt = f"""[학생 정보]
+- 학생코드: {student_info.get('code', '')}
+- 학급: {student_info.get('class', '')}
+- 현재 Tier: {student_info.get('tier', '')}
+
+[행동 기록 요약]
+{log_summary}
+
+{f"[CICO 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
+
+{notes_text}
+
+[지시사항]
+BCBA로서 이 학생의 행동 데이터를 종합적으로 분석하세요.
+
+1. 행동의 형태, 기능, 빈도, 강도, 지속시간, 발생 패턴(날짜, 요일, 시간대)을 고려하세요.
+2. 담임교사 의견이 있다면 반드시 참고하여 분석에 반영하세요.
+3. 분석 결과에서 알 수 있는 핵심 시사점을 제시하세요.
+4. 이 학생에게 필요한 구체적인 지원 방향을 추천하세요.
+5. Tier 조정이 필요하다면 근거와 함께 제안하세요."""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1000)
+
+
+def generate_bip_hypothesis(
+    student_code: str,
+    behavior_logs: list,
+    tier_data: dict = None,
+    cico_data: list = None
+) -> str:
+    """Generate BIP hypothesis (가설수립) based on comprehensive data analysis."""
+    log_summary = _summarize_behavior_logs(behavior_logs)
+    
+    prompt = f"""[학생 코드]: {student_code}
+{f"[Tier 정보]: {tier_data}" if tier_data else ""}
+
+[행동 기록 분석]
+{log_summary}
+
+{f"[CICO 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
+
+[지시사항]
+BCBA로서 위 데이터를 종합적으로 분석하여 BIP(행동중재계획)의 가설을 수립하세요.
+
+다음 형식으로 작성해주세요:
+
+**[표적행동]**
+(현재 나타나는 행동을 구체적이고 관찰 가능한 용어로 정의)
+
+**[가설]**
+(배경사건-선행사건-행동-후속결과 패턴을 기반으로, 행동의 기능을 파악한 가설)
+형식: "(배경)일 때, (선행사건)이 발생하면, (학생이름)은/는 (행동)을 하고, 그 결과 (기능/강화)를 얻는다."
+
+**[목표 (수치화)]**
+(구체적이고 측정 가능한 목표를 작성)
+예: "주 5회 → 주 2회 이하로 감소" 또는 "착석 시간 3분 → 10분으로 증가"
+"""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 800)
+
+
+def generate_bip_strategies(
+    student_code: str,
+    target_behavior: str,
+    hypothesis: str,
+    goals: str,
+    behavior_logs: list,
+    cico_data: list = None
+) -> str:
+    """Generate BIP intervention strategies (추천전략) based on current BIP fields."""
+    log_summary = _summarize_behavior_logs(behavior_logs)
+    
+    prompt = f"""[학생 코드]: {student_code}
+
+[현재 BIP 내용]
+- 표적행동: {target_behavior}
+- 가설: {hypothesis}
+- 목표 (수치화): {goals}
+
+[행동 기록 분석]
+{log_summary}
+
+{f"[CICO 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
+
+[지시사항]
+BCBA로서 위 표적행동, 가설, 목표에 맞추어 구체적인 중재 전략을 제안하세요.
+
+다음 4가지 영역별로 작성해주세요:
+
+**[예방 전략 (Prevention)]**
+- 배경사건/선행사건 수정을 통해 문제행동 발생을 사전에 예방하는 전략
+
+**[교수 전략 (Teaching)]**  
+- 대체행동/바람직한 행동을 체계적으로 가르치는 전략
+
+**[강화 전략 (Reinforcement)]**
+- 바람직한 행동을 강화하고 문제행동의 강화를 차단하는 전략
+
+**[위기관리 계획 (Crisis Plan)]**
+- 위기 상황(자·타해, 도주 등) 발생 시 대응 절차
+
+각 영역당 2~3가지 구체적 전략을 제안하세요. 특수학교 현장에서 실제 적용 가능한 수준으로 작성하세요."""
+    
+    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1200)
+
+
+# ============================================================
+# Utility Functions
+# ============================================================
+
+def _format_dict(d: dict) -> str:
+    """Format a dict for prompt inclusion."""
+    lines = []
+    for k, v in d.items():
+        if isinstance(v, list):
+            lines.append(f"- {k}: {len(v)}개 항목")
+            for item in v[:5]:
+                lines.append(f"  - {item}")
+        elif isinstance(v, dict):
+            lines.append(f"- {k}: {v}")
+        else:
+            lines.append(f"- {k}: {v}")
+    return "\n".join(lines)
+
+
+def _format_list(lst: list) -> str:
+    """Format a list for prompt inclusion."""
+    if not lst:
+        return "(데이터 없음)"
+    return "\n".join([f"- {item}" for item in lst[:10]])
+
+
+def _summarize_behavior_logs(logs: list) -> str:
+    """Summarize behavior logs for AI prompt."""
+    if not logs:
+        return "(행동 기록 없음)"
+    
+    total = len(logs)
+    
+    # Count by type
+    type_counts = {}
+    function_counts = {}
+    time_counts = {}
+    day_counts = {}
+    intensity_sum = 0
+    intensity_count = 0
+    
+    for log in logs:
+        btype = log.get("행동유형", log.get("type", ""))
+        func = log.get("기능", log.get("function", ""))
+        time_slot = log.get("시간대", log.get("time", ""))
+        date_str = log.get("행동발생 날짜", log.get("date", ""))
+        intensity = log.get("강도", log.get("intensity", 0))
+        
+        if btype:
+            type_counts[btype] = type_counts.get(btype, 0) + 1
+        if func:
+            function_counts[func] = function_counts.get(func, 0) + 1
+        if time_slot:
+            time_counts[time_slot] = time_counts.get(time_slot, 0) + 1
+        if date_str:
+            # Try to extract day of week
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(str(date_str), "%Y-%m-%d")
+                days = ["월", "화", "수", "목", "금", "토", "일"]
+                day_name = days[dt.weekday()]
+                day_counts[day_name] = day_counts.get(day_name, 0) + 1
+            except:
+                pass
+        try:
+            ival = float(intensity)
+            intensity_sum += ival
+            intensity_count += 1
+        except:
+            pass
+    
+    avg_intensity = round(intensity_sum / intensity_count, 2) if intensity_count > 0 else 0
+    
+    lines = [
+        f"- 총 행동 발생: {total}건",
+        f"- 평균 강도: {avg_intensity}",
+        f"- 행동유형별: {_top_items(type_counts, 5)}",
+        f"- 기능별: {_top_items(function_counts, 5)}",
+        f"- 시간대별: {_top_items(time_counts, 5)}",
+        f"- 요일별: {_top_items(day_counts, 5)}",
+    ]
+    
+    return "\n".join(lines)
+
+
+def _top_items(counts: dict, n: int = 5) -> str:
+    """Get top N items from a count dict as a formatted string."""
+    if not counts:
+        return "(없음)"
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:n]
+    return ", ".join([f"{k}({v}건)" for k, v in sorted_items])

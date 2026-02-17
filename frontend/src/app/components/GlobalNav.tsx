@@ -92,9 +92,9 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         }}>
             {/* Logo */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'white' }}>
+                <a href="/" style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'white', textDecoration: 'none', cursor: 'pointer' }}>
                     🏫 PBIS
-                </span>
+                </a>
             </div>
 
             {/* Navigation Links */}
@@ -154,10 +154,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
             {/* User Info */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ color: 'white', fontSize: '0.85rem' }}>
-                    {isAdmin() ? '👑' : '👤'} {user.id}번
-                    <span style={{ fontSize: '0.7rem', color: '#fbbf24', marginLeft: '8px' }}>
-                        (Debug: {user.role || user.Role || "NoRole"})
-                    </span>
+                    {isAdmin() ? '👑' : '👤'} {user.id}
                 </span>
                 <button
                     onClick={() => {
