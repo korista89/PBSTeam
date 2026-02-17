@@ -1,10 +1,15 @@
 import os
-import openai
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Google Gemini API setup
+import google.generativeai as genai
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격을 가진 특수학교 행동 분석 전문가입니다.
 학교차원 긍정적 행동지원(SW-PBIS) 프레임워크에 기반하여 데이터를 분석하고, 
@@ -12,24 +17,25 @@ BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격�
 분석은 항상 한국어로, 정중한 '해요체'로 작성합니다.
 ABA(응용행동분석) 원리에 기반한 분석을 합니다."""
 
-def _call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
-    """Shared OpenAI API call wrapper."""
+def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
+    """Shared Google Gemini API call wrapper."""
     try:
-        if not openai.api_key:
-            return "⚠️ OpenAI API Key가 설정되지 않았습니다. Vercel 환경변수에 OPENAI_API_KEY를 추가해주세요."
+        if not GOOGLE_API_KEY:
+            return "⚠️ Google API Key가 설정되지 않았습니다. Vercel 환경변수에 GOOGLE_API_KEY를 추가해주세요."
         
-        response = openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7,
-            max_tokens=max_tokens
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=system_prompt,
+            generation_config=genai.GenerationConfig(
+                max_output_tokens=max_tokens,
+                temperature=0.7,
+            )
         )
-        return response.choices[0].message.content.strip()
+        
+        response = model.generate_content(user_prompt)
+        return response.text.strip()
     except Exception as e:
-        print(f"OpenAI API Error: {e}")
+        print(f"Gemini API Error: {e}")
         return f"⚠️ AI 분석 중 오류가 발생했습니다: {str(e)}"
 
 
@@ -50,7 +56,7 @@ def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
 3. 선생님들에게 격려와 구체적인 행동 가이드(예: 칭찬 강화, 예방적 접근)를 포함하세요.
 4. 분량은 300~500자 내외로 핵심만 요약하세요."""
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 600)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
 
 
 def generate_meeting_agent_report(
@@ -224,7 +230,7 @@ def generate_meeting_agent_report(
 
 
 # ============================================================
-# NEW: BCBA Analysis Functions for Platform Overhaul
+# BCBA Analysis Functions (Google Gemini)
 # ============================================================
 
 def generate_bcba_section_analysis(section_name: str, data_context: dict) -> str:
@@ -243,13 +249,13 @@ BCBA로서 위 데이터를 분석하여 학교 행동중재지원팀의 의사�
 4. 300~500자 이내로 작성하세요.
 5. 전문적이되 교사가 이해하기 쉬운 표현을 사용하세요."""
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 600)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
 
 
 def generate_bcba_cico_analysis(students_data: list) -> str:
     """Generate BCBA analysis for CICO report — per-student analysis."""
     student_summaries = []
-    for s in students_data[:15]:  # Limit to prevent token overflow
+    for s in students_data[:15]:
         student_summaries.append(
             f"- {s.get('code','?')}: 목표행동={s.get('target_behavior','')}, "
             f"척도={s.get('scale','')}, 기준={s.get('goal_criteria','')}, "
@@ -270,7 +276,7 @@ BCBA로서 이번 달 CICO 입력 결과를 종합적으로 분석하여, 학교
    - 3개월 연속 미달성 → Tier 3 상향 또는 CICO 수정 검토
 4. 학생별 1~2줄 핵심 분석 + 전체 요약을 제공하세요."""
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1000)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1000)
 
 
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
@@ -283,7 +289,6 @@ def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico
             f"주요유형={s.get('top_type','')}, 주요기능={s.get('top_function','')}"
         )
     
-    # Summarize behavior logs
     log_summary = _summarize_behavior_logs(behavior_logs)
     
     prompt = f"""[Tier 3 학생 현황]
@@ -302,7 +307,7 @@ BCBA로서 이번 달 Tier 3 학생들의 행동 데이터를 종합 분석하�
 3. 각 학생에게 필요한 지원(BIP 수정, 환경 수정, 강화 전략 변경 등)을 구체적으로 추천하세요.
 4. 외부 연계(Tier 3+)가 필요한 학생이 있다면 근거와 함께 제안하세요."""
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1200)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 def generate_bcba_student_analysis(
@@ -341,7 +346,7 @@ BCBA로서 이 학생의 행동 데이터를 종합적으로 분석하세요.
 4. 이 학생에게 필요한 구체적인 지원 방향을 추천하세요.
 5. Tier 조정이 필요하다면 근거와 함께 제안하세요."""
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1000)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1000)
 
 
 def generate_bip_hypothesis(
@@ -350,7 +355,7 @@ def generate_bip_hypothesis(
     tier_data: dict = None,
     cico_data: list = None
 ) -> str:
-    """Generate BIP hypothesis (가설수립) based on comprehensive data analysis."""
+    """Generate BIP hypothesis based on comprehensive data analysis."""
     log_summary = _summarize_behavior_logs(behavior_logs)
     
     prompt = f"""[학생 코드]: {student_code}
@@ -378,7 +383,7 @@ BCBA로서 위 데이터를 종합적으로 분석하여 BIP(행동중재계획)
 예: "주 5회 → 주 2회 이하로 감소" 또는 "착석 시간 3분 → 10분으로 증가"
 """
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 800)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 800)
 
 
 def generate_bip_strategies(
@@ -389,7 +394,7 @@ def generate_bip_strategies(
     behavior_logs: list,
     cico_data: list = None
 ) -> str:
-    """Generate BIP intervention strategies (추천전략) based on current BIP fields."""
+    """Generate BIP intervention strategies based on current BIP fields."""
     log_summary = _summarize_behavior_logs(behavior_logs)
     
     prompt = f"""[학생 코드]: {student_code}
@@ -423,7 +428,7 @@ BCBA로서 위 표적행동, 가설, 목표에 맞추어 구체적인 중재 전
 
 각 영역당 2~3가지 구체적 전략을 제안하세요. 특수학교 현장에서 실제 적용 가능한 수준으로 작성하세요."""
     
-    return _call_openai(BCBA_SYSTEM_PROMPT, prompt, 1200)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 # ============================================================
@@ -459,7 +464,6 @@ def _summarize_behavior_logs(logs: list) -> str:
     
     total = len(logs)
     
-    # Count by type
     type_counts = {}
     function_counts = {}
     time_counts = {}
@@ -481,7 +485,6 @@ def _summarize_behavior_logs(logs: list) -> str:
         if time_slot:
             time_counts[time_slot] = time_counts.get(time_slot, 0) + 1
         if date_str:
-            # Try to extract day of week
             try:
                 from datetime import datetime
                 dt = datetime.strptime(str(date_str), "%Y-%m-%d")
