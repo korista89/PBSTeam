@@ -5,10 +5,16 @@ from typing import Dict, List, Optional
 load_dotenv()
 
 # Google Gemini API setup
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    _GENAI_AVAILABLE = True
+except ImportError:
+    genai = None
+    _GENAI_AVAILABLE = False
+    print("WARNING: google-generativeai not installed. AI features will be unavailable.")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-if GOOGLE_API_KEY:
+if GOOGLE_API_KEY and _GENAI_AVAILABLE:
     genai.configure(api_key=GOOGLE_API_KEY)
 
 BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격을 가진 특수학교 행동 분석 전문가입니다.
@@ -20,6 +26,8 @@ ABA(응용행동분석) 원리에 기반한 분석을 합니다."""
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
     """Shared Google Gemini API call wrapper."""
     try:
+        if not _GENAI_AVAILABLE:
+            return "⚠️ AI 모듈(google-generativeai)이 설치되지 않았습니다. 서버 관리자에게 문의하세요."
         if not GOOGLE_API_KEY:
             return "⚠️ Google API Key가 설정되지 않았습니다. Vercel 환경변수에 GOOGLE_API_KEY를 추가해주세요."
         
