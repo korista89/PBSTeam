@@ -92,7 +92,7 @@ export default function CICOGridPage() {
       // Fetch monthly data and business days in parallel
       const [monthlyRes, bizDaysRes] = await Promise.all([
         axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`),
-        axios.get(`${apiUrl}/api/v1/cico/business-days?month=${month}&year=2025`),
+        axios.get(`${apiUrl}/api/v1/cico/business-days?month=${month}&year=${new Date().getFullYear()}`),
       ]);
 
       const monthlyData = monthlyRes.data;

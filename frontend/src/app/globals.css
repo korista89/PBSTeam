@@ -113,3 +113,37 @@ a {
     opacity: 0.6;
   }
 }
+
+/* ====== Mobile Responsive ====== */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+
+  /* Tables: horizontal scroll wrapper */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  table thead,
+  table tbody,
+  table tr {
+    display: table;
+    width: 100%;
+    table-layout: auto;
+  }
+
+  /* Reduce padding in cards/sections */
+  .report-section {
+    padding: 0 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 13px;
+  }
+}

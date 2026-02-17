@@ -9,6 +9,7 @@ interface GlobalNavProps {
 
 export default function GlobalNav({ currentPage }: GlobalNavProps) {
     const { user, logout, isAdmin } = useAuth();
+    const [menuOpen, setMenuOpen] = useState(false);
 
     // Date state with localStorage persistence
     const [startDate, setStartDate] = useState("");
@@ -16,7 +17,6 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        // Load dates from localStorage on mount (Priority: URL > LocalStorage > Default)
         const searchParams = new URLSearchParams(window.location.search);
         const urlStart = searchParams.get("startDate");
         const urlEnd = searchParams.get("endDate");
@@ -33,7 +33,6 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
             setStartDate(savedStart);
             setEndDate(savedEnd);
         } else {
-            // Default: last 4 weeks
             const today = new Date();
             const prev = new Date();
             prev.setDate(today.getDate() - 28);
@@ -44,7 +43,6 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     }, []);
 
     useEffect(() => {
-        // Save dates to localStorage when they change
         if (isInitialized && startDate && endDate) {
             localStorage.setItem("pbis_start_date", startDate);
             localStorage.setItem("pbis_end_date", endDate);
@@ -70,111 +68,187 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     if (!user) return null;
 
     const handleSearch = () => {
-        // Dispatch custom event for date change
         window.dispatchEvent(new CustomEvent('pbis-date-change', {
             detail: { startDate, endDate }
         }));
     };
 
     return (
-        <nav style={{
-            background: 'linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%)',
-            padding: '12px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '10px',
-            position: 'sticky',
-            top: 0,
-            zIndex: 1000,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
-        }}>
-            {/* Logo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <a href="/" style={{ fontSize: '1.3rem', fontWeight: 'bold', color: 'white', textDecoration: 'none', cursor: 'pointer' }}>
-                    🏫 PBIS
-                </a>
-            </div>
+        <>
+            <style jsx>{`
+                .gnav {
+                    background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+                    padding: 10px 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    position: sticky;
+                    top: 0;
+                    z-index: 1000;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                }
+                .gnav-logo {
+                    font-size: 1.3rem;
+                    font-weight: bold;
+                    color: white;
+                    text-decoration: none;
+                    cursor: pointer;
+                }
+                .gnav-hamburger {
+                    display: none;
+                    background: rgba(255,255,255,0.15);
+                    border: 1px solid rgba(255,255,255,0.3);
+                    color: white;
+                    font-size: 1.4rem;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    line-height: 1;
+                }
+                .gnav-links {
+                    display: flex;
+                    gap: 4px;
+                    flex-wrap: wrap;
+                }
+                .gnav-link {
+                    padding: 5px 10px;
+                    color: white;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    font-size: 0.82rem;
+                    transition: background 0.2s;
+                }
+                .gnav-link:hover { background: rgba(255,255,255,0.2); }
+                .gnav-controls {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+                .gnav-date {
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    border: none;
+                    font-size: 0.82rem;
+                }
+                .gnav-search-btn {
+                    padding: 4px 10px;
+                    background-color: #10b981;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    font-size: 0.82rem;
+                }
+                .gnav-user {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                .gnav-user span {
+                    color: white;
+                    font-size: 0.82rem;
+                }
+                .gnav-logout {
+                    padding: 4px 10px;
+                    background: rgba(255,255,255,0.2);
+                    color: white;
+                    border: 1px solid rgba(255,255,255,0.3);
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 0.78rem;
+                }
 
-            {/* Navigation Links */}
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                {navItems.map(item => (
-                    <a
-                        key={item.key}
-                        href={item.href}
-                        style={{
-                            padding: '6px 12px',
-                            backgroundColor: currentPage === item.key ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
-                            color: 'white',
-                            borderRadius: '6px',
-                            textDecoration: 'none',
-                            fontSize: '0.85rem',
-                            fontWeight: currentPage === item.key ? 'bold' : 'normal',
-                            transition: 'background 0.2s'
-                        }}
+                @media (max-width: 768px) {
+                    .gnav {
+                        padding: 8px 12px;
+                        gap: 6px;
+                    }
+                    .gnav-top-row {
+                        display: flex;
+                        width: 100%;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    .gnav-hamburger {
+                        display: inline-block;
+                    }
+                    .gnav-links {
+                        display: none;
+                        width: 100%;
+                        flex-direction: column;
+                        gap: 2px;
+                    }
+                    .gnav-links.open {
+                        display: flex;
+                    }
+                    .gnav-link {
+                        padding: 8px 12px;
+                        font-size: 0.9rem;
+                        border-radius: 6px;
+                    }
+                    .gnav-controls {
+                        width: 100%;
+                        justify-content: center;
+                    }
+                    .gnav-user {
+                        width: 100%;
+                        justify-content: center;
+                    }
+                }
+            `}</style>
+
+            <nav className="gnav">
+                {/* Top Row: Logo + Hamburger + User (mobile) */}
+                <div className="gnav-top-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <a href="/" className="gnav-logo">🏫 PBIS</a>
+                    <button
+                        className="gnav-hamburger"
+                        onClick={() => setMenuOpen(!menuOpen)}
+                        aria-label="메뉴 열기/닫기"
                     >
-                        {item.label}
-                    </a>
-                ))}
-            </div>
+                        {menuOpen ? '✕' : '☰'}
+                    </button>
+                </div>
 
-            {/* Date Picker */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    style={{ padding: '5px 8px', borderRadius: '4px', border: 'none', fontSize: '0.85rem' }}
-                />
-                <span style={{ color: 'white' }}>~</span>
-                <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    style={{ padding: '5px 8px', borderRadius: '4px', border: 'none', fontSize: '0.85rem' }}
-                />
-                <button
-                    onClick={handleSearch}
-                    style={{
-                        padding: '5px 12px',
-                        backgroundColor: '#10b981',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        fontSize: '0.85rem'
-                    }}
-                >
-                    조회
-                </button>
-            </div>
+                {/* Navigation Links */}
+                <div className={`gnav-links ${menuOpen ? 'open' : ''}`}>
+                    {navItems.map(item => (
+                        <a
+                            key={item.key}
+                            href={item.href}
+                            className="gnav-link"
+                            style={{
+                                backgroundColor: currentPage === item.key ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
+                                fontWeight: currentPage === item.key ? 'bold' : 'normal',
+                            }}
+                            onClick={() => setMenuOpen(false)}
+                        >
+                            {item.label}
+                        </a>
+                    ))}
+                </div>
 
-            {/* User Info */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ color: 'white', fontSize: '0.85rem' }}>
-                    {isAdmin() ? '👑' : '👤'} {user.id}
-                </span>
-                <button
-                    onClick={() => {
-                        logout();
-                        window.location.href = '/login';
-                    }}
-                    style={{
-                        padding: '5px 10px',
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        color: 'white',
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem'
-                    }}
-                >
-                    로그아웃
-                </button>
-            </div>
-        </nav>
+                {/* Date Controls */}
+                <div className="gnav-controls">
+                    <input type="date" className="gnav-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <span style={{ color: 'white', fontSize: '0.85rem' }}>~</span>
+                    <input type="date" className="gnav-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                    <button className="gnav-search-btn" onClick={handleSearch}>조회</button>
+                </div>
+
+                {/* User Info */}
+                <div className="gnav-user">
+                    <span>{isAdmin() ? '👑' : '👤'} {user.id}</span>
+                    <button className="gnav-logout" onClick={() => { logout(); window.location.href = '/login'; }}>
+                        로그아웃
+                    </button>
+                </div>
+            </nav>
+        </>
     );
 }
 
