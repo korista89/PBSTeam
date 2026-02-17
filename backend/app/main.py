@@ -1,3 +1,12 @@
+import sys
+import os
+
+# Vercel runs from project root (/var/task/), but app module is under backend/
+# Add backend directory to sys.path so Python can find it
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
