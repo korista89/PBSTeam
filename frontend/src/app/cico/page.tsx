@@ -428,7 +428,7 @@ export default function CICOGridPage() {
                 }}
               >
                 {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                  <option key={m} value={m}>{m}월</option>
+                  <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
                 ))}
               </select>
 
