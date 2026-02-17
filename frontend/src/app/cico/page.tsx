@@ -179,7 +179,7 @@ export default function CICOGridPage() {
     setLoading(true);
     try {
       // Ensure month is integer
-      await axios.post(`${apiUrl}/api/v1/cico/generate`, { month: Number(month) });
+      await axios.post(`${apiUrl}/api/v1/cico/generate`, { year: new Date().getFullYear(), month: Number(month) });
       alert(`${month}월 시트가 생성되었습니다.`);
       setIs404(false);
       fetchData();
