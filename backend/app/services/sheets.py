@@ -1329,21 +1329,79 @@ def create_monthly_cico_sheet(year: int, month: int):
         ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+5)
         ws.update(rows)
         
-        # 4. Add Dropdowns (Data Validation) - DISABLED due to import error
-        # try:
-        #      # Requires gspread-formatting
-        #      # pip install gspread-formatting
-        #      from gspread_formatting import DataValidationRule, ConditionType, set_data_validation_for_cell_range
-        #      
-        #      start_row = 2
-        #      end_row = len(rows)
-        #      
-        #      # ... (Disabled) ...
-        #      
-        # except Exception as e:
-        #     print(f"Warning: Failed to set data validation: {e}")
-        #     import traceback
-        #     traceback.print_exc()
+        # 4. Add Dropdowns (Data Validation) using gspread native API
+        try:
+            from gspread.utils import ValidationConditionType
+            
+            start_row = 2
+            end_row = len(rows)
+            
+            # Column D: Tier2 (O/X)
+            ws.add_validation(
+                f'D{start_row}:D{end_row}',
+                ValidationConditionType.one_of_list,
+                ['O', 'X'],
+                showCustomUi=True
+            )
+            
+            # Column F: 목표행동 유형
+            ws.add_validation(
+                f'F{start_row}:F{end_row}',
+                ValidationConditionType.one_of_list,
+                ['증가 목표행동', '감소 목표행동'],
+                showCustomUi=True
+            )
+            
+            # Column G: 척도
+            ws.add_validation(
+                f'G{start_row}:G{end_row}',
+                ValidationConditionType.one_of_list,
+                ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'],
+                showCustomUi=True
+            )
+            
+            # Column I: 목표 달성 기준
+            ws.add_validation(
+                f'I{start_row}:I{end_row}',
+                ValidationConditionType.one_of_list,
+                ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
+                 '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'],
+                showCustomUi=True
+            )
+            
+            # Column K: 목표 달성 여부
+            ws.add_validation(
+                f'K{start_row}:K{end_row}',
+                ValidationConditionType.one_of_list,
+                ['O', 'X'],
+                showCustomUi=True
+            )
+            
+            # Column O: 차월 대상여부
+            ws.add_validation(
+                f'O{start_row}:O{end_row}',
+                ValidationConditionType.one_of_list,
+                ['유지', '종료', '상향', '하향'],
+                showCustomUi=True
+            )
+            
+            # Day columns: Default O/X for daily data entry
+            if day_headers:
+                num_fixed = len(fixed_headers)
+                from gspread.utils import rowcol_to_a1
+                day_start_col = rowcol_to_a1(1, num_fixed + 1).rstrip('1')
+                day_end_col = rowcol_to_a1(1, num_fixed + len(day_headers)).rstrip('1')
+                ws.add_validation(
+                    f'{day_start_col}{start_row}:{day_end_col}{end_row}',
+                    ValidationConditionType.one_of_list,
+                    ['O', 'X'],
+                    showCustomUi=True
+                )
+                
+        except Exception as e:
+            print(f"Warning: Failed to set data validation: {e}")
+            import traceback
+            traceback.print_exc()
         
         return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
         

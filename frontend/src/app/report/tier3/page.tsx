@@ -345,7 +345,7 @@ export default function Tier3Report() {
               )}
 
               {/* AI Analysis */}
-              <Tier3AIAnalysis apiUrl={apiUrl} />
+              <Tier3AIAnalysis apiUrl={apiUrl} startDate={startDate} endDate={endDate} />
             </>
           )}
         </main>
@@ -354,7 +354,7 @@ export default function Tier3Report() {
   );
 }
 
-function Tier3AIAnalysis({ apiUrl }: { apiUrl: string }) {
+function Tier3AIAnalysis({ apiUrl, startDate, endDate }: { apiUrl: string; startDate?: string; endDate?: string }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -363,7 +363,10 @@ function Tier3AIAnalysis({ apiUrl }: { apiUrl: string }) {
     setLoading(true);
     setVisible(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-tier3-analysis`, {});
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-tier3-analysis`, {
+        start_date: startDate || null,
+        end_date: endDate || null
+      });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch {
       setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");

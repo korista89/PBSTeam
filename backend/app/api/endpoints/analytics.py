@@ -7,6 +7,19 @@ from app.services.sheets import (
 
 router = APIRouter()
 
+# ============================================================
+# Date filtering helper
+# ============================================================
+def _filter_by_date(records: list, start_date: str = None, end_date: str = None) -> list:
+    """Filter BehaviorLogs by date range. Returns all records if no dates provided."""
+    if not start_date or not end_date:
+        return records
+    return [
+        r for r in records
+        if start_date <= str(r.get("행동발생 날짜", "")) <= end_date
+    ]
+
+
 @router.get("/dashboard")
 async def get_dashboard_summary(start_date: str = None, end_date: str = None):
     return get_analytics_data(start_date, end_date)
@@ -25,18 +38,6 @@ async def get_tier3_report(start_date: str = None, end_date: str = None):
         raise HTTPException(status_code=500, detail=data["error"])
     return data
 
-
-@router.get("/debug")
-async def debug_data():
-    """Debug endpoint to check data flow."""
-    raw_data = fetch_all_records()
-    beable_mapping = get_beable_code_mapping()
-    columns = list(raw_data[0].keys()) if raw_data else []
-    return {
-        "total_records": len(raw_data),
-        "columns": columns,
-        "beable_mapping_count": len(beable_mapping),
-    }
 
 @router.post("/dashboard/refresh")
 async def refresh_dashboard():
@@ -59,6 +60,8 @@ from typing import Optional, List
 class SectionAnalysisRequest(BaseModel):
     section_name: str
     data_context: dict
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 class CICOAnalysisRequest(BaseModel):
     month: int = 3
@@ -82,9 +85,13 @@ async def ai_section_analysis(req: SectionAnalysisRequest):
     enriched_context = dict(req.data_context)
     if not enriched_context.get("behavior_summary"):
         records = fetch_all_records()
+        # Apply date range filter
+        records = _filter_by_date(records, req.start_date, req.end_date)
         if records:
             enriched_context["total_records"] = len(records)
             enriched_context["record_sample"] = str(records[:3])[:500]
+            if req.start_date and req.end_date:
+                enriched_context["analysis_period"] = f"{req.start_date} ~ {req.end_date}"
     
     result = generate_bcba_section_analysis(req.section_name, enriched_context)
     return {"analysis": result}
@@ -115,6 +122,13 @@ async def ai_cico_analysis(req: CICOAnalysisRequest):
             cico_all_codes.add(bc)
     
     records = fetch_all_records()
+    # Filter by the CICO month's date range
+    import datetime
+    year = datetime.datetime.now().year
+    month_start = f"{year}-{req.month:02d}-01"
+    month_end = f"{year}-{req.month:02d}-31"
+    records = _filter_by_date(records, month_start, month_end)
+    
     cico_behavior_logs = [
         r for r in records
         if str(r.get("학생코드", "")).strip() in cico_all_codes
@@ -155,6 +169,9 @@ async def ai_tier3_analysis(req: Tier3AnalysisRequest):
             t3_all_codes.add(bc)
     
     records = fetch_all_records()
+    # Apply date range filter
+    records = _filter_by_date(records, req.start_date, req.end_date)
+    
     t3_logs = [
         r for r in records
         if str(r.get("학생코드", "")).strip() in t3_all_codes
@@ -192,11 +209,7 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     ]
     
     # Filter by date if provided
-    if req.start_date and req.end_date:
-        student_logs = [
-            r for r in student_logs
-            if req.start_date <= str(r.get("행동발생 날짜", "")) <= req.end_date
-        ]
+    student_logs = _filter_by_date(student_logs, req.start_date, req.end_date)
     
     # Get student info from TierStatus
     status_records = fetch_student_status()
@@ -251,4 +264,3 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
         cico_data=cico_data
     )
     return {"analysis": result}
-

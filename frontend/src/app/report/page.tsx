@@ -15,7 +15,7 @@ const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
 // ====== AI Analysis Card Component ======
-function AIAnalysisCard({ sectionName, dataContext }: { sectionName: string; dataContext: any }) {
+function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sectionName: string; dataContext: any; startDate?: string; endDate?: string }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -26,7 +26,9 @@ function AIAnalysisCard({ sectionName, dataContext }: { sectionName: string; dat
     try {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
         section_name: sectionName,
-        data_context: dataContext || {}
+        data_context: dataContext || {},
+        start_date: startDate || null,
+        end_date: endDate || null
       });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch (e) {
@@ -145,14 +147,15 @@ export default function MonthlyReport() {
             .report-container { padding: 10px !important; }
             .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
         }
-        .report-section { margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1rem; }
+        .report-section { margin-bottom: 2.5rem; border-bottom: 1px solid #eee; padding-bottom: 1.5rem; }
         h1 { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #1e3a8a; }
-        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 20px 0 10px 0; }
+        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 28px 0 16px 0; }
+        h3 { margin: 16px 0 12px 0; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: center; }
         th { background-color: #eff6ff; color: #1e40af; }
-        .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-        .stat-box { padding: 15px; border-radius: 10px; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+        .stat-box { padding: 16px; border-radius: 10px; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
         .stat-value { font-size: 28px; font-weight: bold; color: #1e40af; }
         .stat-label { font-size: 11px; color: #64748b; margin-top: 5px; }
         `}</style>
@@ -189,6 +192,7 @@ export default function MonthlyReport() {
           <AIAnalysisCard
             sectionName="총괄 현황"
             dataContext={{ total_incidents: data.summary.total_incidents, avg_intensity: data.summary.avg_intensity, risk_count: data.summary.risk_student_count }}
+            startDate={startDate} endDate={endDate}
           />
         </section>
 
@@ -227,6 +231,7 @@ export default function MonthlyReport() {
           <AIAnalysisCard
             sectionName="행동 발생 추이"
             dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends }}
+            startDate={startDate} endDate={endDate}
           />
         </section>
 
@@ -366,6 +371,7 @@ export default function MonthlyReport() {
               antecedents: data.antecedents?.slice(0, 3),
               consequences: data.consequences?.slice(0, 3),
             }}
+            startDate={startDate} endDate={endDate}
           />
         </section>
 
@@ -443,6 +449,7 @@ export default function MonthlyReport() {
               safety_alerts_count: data.safety_alerts?.length || 0,
               risk_students: data.risk_list?.slice(0, 5).map(s => ({ name: s.name, tier: s.tier, count: s.count })),
             }}
+            startDate={startDate} endDate={endDate}
           />
         </section>
 

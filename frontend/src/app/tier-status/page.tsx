@@ -340,10 +340,10 @@ export default function TierStatusPage() {
 
                                     return (
                                         <tr key={s.학생코드} style={{ backgroundColor: isInactive ? '#f9f9f9' : 'white', opacity: isInactive ? 0.5 : 1 }}>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>{s.번호}</td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', fontSize: '0.8rem' }}>{s.학급}</td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>{s.번호}</td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', fontSize: '0.8rem' }}>{s.학급}</td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
                                                 {isEditing ? (
                                                     <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} style={{ padding: '2px', width: '40px' }}>
                                                         <option value="O">O</option>
@@ -353,7 +353,7 @@ export default function TierStatusPage() {
                                                     <span style={{ color: s.재학여부 === "O" ? '#2e7d32' : '#999', fontWeight: 'bold' }}>{s.재학여부}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
                                                 {isEditing ? (
                                                     <input type="text" value={editBeAble} onChange={(e) => setEditBeAble(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="코드" />
                                                 ) : (
@@ -361,7 +361,7 @@ export default function TierStatusPage() {
                                                 )}
                                             </td>
                                             {/* 5 Tier columns with O/X */}
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f1f8e9' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f1f8e9' }}>
                                                 {isEditing ? (
                                                     <select value={editTiers.tier1} onChange={(e) => setEditTiers({ ...editTiers, tier1: e.target.value })} style={{ padding: '2px', width: '40px' }}>
                                                         <option value="O">O</option>
@@ -371,7 +371,7 @@ export default function TierStatusPage() {
                                                     <span style={{ color: s['Tier1'] === "O" ? '#2e7d32' : '#ccc', fontWeight: 'bold' }}>{s['Tier1']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#fff8e1' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#fff8e1' }}>
                                                 {isEditing ? (
                                                     <select value={editTiers.tier2_cico} onChange={(e) => setEditTiers({ ...editTiers, tier2_cico: e.target.value })} style={{ padding: '2px', width: '40px' }}>
                                                         <option value="O">O</option>
@@ -381,7 +381,7 @@ export default function TierStatusPage() {
                                                     <span style={{ color: s['Tier2(CICO)'] === "O" ? '#f57c00' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(CICO)']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#e3f2fd' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#e3f2fd' }}>
                                                 {isEditing ? (
                                                     <select value={editTiers.tier2_sst} onChange={(e) => setEditTiers({ ...editTiers, tier2_sst: e.target.value })} style={{ padding: '2px', width: '40px' }}>
                                                         <option value="O">O</option>
@@ -391,7 +391,7 @@ export default function TierStatusPage() {
                                                     <span style={{ color: s['Tier2(SST)'] === "O" ? '#1976d2' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(SST)']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#ffebee' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#ffebee' }}>
                                                 {isEditing ? (
                                                     <select value={editTiers.tier3} onChange={(e) => setEditTiers({ ...editTiers, tier3: e.target.value })} style={{ padding: '2px', width: '40px' }}>
                                                         <option value="O">O</option>
@@ -401,7 +401,7 @@ export default function TierStatusPage() {
                                                     <span style={{ color: s['Tier3'] === "O" ? '#d32f2f' : '#ccc', fontWeight: 'bold' }}>{s['Tier3']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#4a148c' }}>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#4a148c' }}>
                                                 {isEditing ? (
                                                     <select value={editTiers.tier3_plus} onChange={(e) => setEditTiers({ ...editTiers, tier3_plus: e.target.value })} style={{ padding: '2px', width: '40px', backgroundColor: '#4a148c', color: 'white' }}>
                                                         <option value="O">O</option>
@@ -411,12 +411,12 @@ export default function TierStatusPage() {
                                                     <span style={{ color: s['Tier3+'] === "O" ? '#fff' : '#888', fontWeight: 'bold' }}>{s['Tier3+']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} style={{ padding: '2px 6px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>📊</button>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} style={{ padding: '4px 10px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>📊</button>
                                             </td>
-                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}/bip`)} style={{ padding: '2px 6px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>📋</button>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}/bip`)} style={{ padding: '4px 10px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>📋</button>
                                             </td>
                                             {isAdmin() && (
                                                 <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
