@@ -28,46 +28,14 @@ async def get_tier3_report(start_date: str = None, end_date: str = None):
 
 @router.get("/debug")
 async def debug_data():
-    """Debug endpoint to check data flow"""
+    """Debug endpoint to check data flow."""
     raw_data = fetch_all_records()
     beable_mapping = get_beable_code_mapping()
-    
-    # Get columns
     columns = list(raw_data[0].keys()) if raw_data else []
-    
-    # Check 코드번호 values (all unique)
-    all_code_values = list(set(str(r.get('코드번호', 'N/A')) for r in raw_data)) if raw_data else []
-    
-    # Check BeAble mapping keys (all)
-    all_beable_keys = list(beable_mapping.keys()) if beable_mapping else []
-    
-    # Check intersection (matching codes)
-    matching_codes = set(all_code_values) & set(all_beable_keys)
-    
-    # Count matched records
-    matched_records = [r for r in raw_data if str(r.get('코드번호', '')) in all_beable_keys]
-    
-    # Check March records specifically
-    march_records = [r for r in raw_data if str(r.get('행동발생 날짜', '')).startswith('2025-03')]
-    march_codes = list(set(str(r.get('코드번호', '')) for r in march_records))
-    march_matched = [c for c in march_codes if c in all_beable_keys]
-    march_unmatched = [c for c in march_codes if c not in all_beable_keys]
-    
-    # March matched records count
-    march_matched_records = [r for r in march_records if str(r.get('코드번호', '')) in all_beable_keys]
-    
     return {
-        "시트1_total_records": len(raw_data),
-        "시트1_columns": columns,
-        "시트1_unique_코드번호_count": len(all_code_values),
-        "TierStatus_total_with_beable": len(beable_mapping),
-        "matching_codes_count": len(matching_codes),
-        "matched_records_count": len(matched_records),
-        "march_총_records": len(march_records),
-        "march_코드번호": march_codes,
-        "march_TierStatus일치": march_matched,
-        "march_TierStatus불일치": march_unmatched,
-        "march_일치_records_count": len(march_matched_records)
+        "total_records": len(raw_data),
+        "columns": columns,
+        "beable_mapping_count": len(beable_mapping),
     }
 
 @router.post("/dashboard/refresh")
@@ -135,19 +103,28 @@ async def ai_cico_analysis(req: CICOAnalysisRequest):
             return {"analysis": f"데이터 로드 실패: {data['error']}"}
         students = data.get("students", [])
     
-    # Enrich CICO students with BehaviorLogs + TierStatus
-    records = fetch_all_records()
-    status_records = fetch_student_status()
-    cico_codes = [str(s.get("code", s.get("student_code", ""))) for s in students]
+    # Resolve student codes to BeAble codes for BehaviorLogs matching
+    beable_mapping = get_beable_code_mapping()
+    reverse_map = {str(v['student_code']).strip(): k for k, v in beable_mapping.items()}
     
+    cico_student_codes = [str(s.get("code", s.get("student_code", ""))).strip() for s in students]
+    cico_all_codes = set(cico_student_codes)
+    for sc in cico_student_codes:
+        bc = reverse_map.get(sc, "")
+        if bc:
+            cico_all_codes.add(bc)
+    
+    records = fetch_all_records()
     cico_behavior_logs = [
         r for r in records
-        if str(r.get("학생코드", "")) in cico_codes or str(r.get("코드번호", "")) in cico_codes
+        if str(r.get("학생코드", "")).strip() in cico_all_codes
+        or str(r.get("코드번호", "")).strip() in cico_all_codes
     ]
     
+    status_records = fetch_student_status()
     cico_tier_info = [
         s for s in status_records
-        if s.get("학생코드", "") in cico_codes or s.get("코드번호", "") in cico_codes
+        if str(s.get("학생코드", "")).strip() in cico_all_codes
     ]
     
     result = generate_bcba_cico_analysis(
@@ -166,10 +143,23 @@ async def ai_tier3_analysis(req: Tier3AnalysisRequest):
     if "error" in t3_data:
         return {"analysis": f"데이터 로드 실패: {t3_data['error']}"}
     
+    # Resolve student codes to BeAble codes for BehaviorLogs
+    beable_mapping = get_beable_code_mapping()
+    reverse_map = {str(v['student_code']).strip(): k for k, v in beable_mapping.items()}
+    
+    t3_student_codes = [s.get("code", "") for s in t3_data.get("students", [])]
+    t3_all_codes = set(t3_student_codes)
+    for sc in t3_student_codes:
+        bc = reverse_map.get(str(sc).strip(), "")
+        if bc:
+            t3_all_codes.add(bc)
+    
     records = fetch_all_records()
-    # Filter records for T3 students
-    t3_codes = [s.get("code", "") for s in t3_data.get("students", [])]
-    t3_logs = [r for r in records if str(r.get("학생코드", "")) in t3_codes or str(r.get("코드번호", "")) in t3_codes]
+    t3_logs = [
+        r for r in records
+        if str(r.get("학생코드", "")).strip() in t3_all_codes
+        or str(r.get("코드번호", "")).strip() in t3_all_codes
+    ]
     
     result = generate_bcba_tier3_analysis(
         t3_data.get("students", []), 
