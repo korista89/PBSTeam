@@ -147,18 +147,28 @@ export default function MonthlyReport() {
         @media (max-width: 768px) {
             .report-container { padding: 10px !important; }
             .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
+            .grid-2 { grid-template-columns: 1fr !important; }
+            .chart-box { height: 350px !important; }
         }
-        .report-section { margin-bottom: 2.5rem; border-bottom: 1px solid #eee; padding-bottom: 2rem; }
-        h1 { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #1e3a8a; }
-        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 30px 0 20px 0; }
-        h3 { margin: 16px 0 12px 0; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
-        th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: center; }
-        th { background-color: #eff6ff; color: #1e40af; }
-        .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-        .stat-box { padding: 16px; border-radius: 10px; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
-        .stat-value { font-size: 28px; font-weight: bold; color: #1e40af; }
-        .stat-label { font-size: 11px; color: #64748b; margin-top: 5px; }
+        .report-section { margin-bottom: 3rem; border-bottom: 1px solid #eee; padding-bottom: 2rem; }
+        h1 { font-size: 26px; font-weight: 800; margin-bottom: 10px; color: #1e3a8a; letter-spacing: -0.5px; }
+        h2 { font-size: 20px; font-weight: 700; color: #1e293b; border-left: 6px solid #3b82f6; padding-left: 12px; margin: 40px 0 24px 0; display: flex; align-items: center; }
+        
+        .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px; }
+        .stat-box { padding: 20px; border-radius: 16px; background: white; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .stat-value { font-size: 32px; font-weight: 800; color: #0f172a; line-height: 1.2; }
+        .stat-label { font-size: 13px; font-weight: 600; color: #64748b; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        /* Grid Layout for Charts */
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
+        .chart-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 420px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+        .chart-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: #334155; display: flex; align-items: center; gap: 8px; }
+        
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background-color: #f8fafc; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+        td { color: #334155; }
+        tr:last-child td { border-bottom: none; }
         `}</style>
 
         {/* Controller */}
@@ -200,30 +210,30 @@ export default function MonthlyReport() {
         {/* ===== Section 2: 추이 ===== */}
         <section className="report-section">
           <h2>2. 행동 발생 추이 (Trends)</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>일별 발생 추이</h3>
+          <div className="grid-2">
+            <div className="chart-box">
+              <div className="chart-title">📅 일별 발생 추이</div>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.trends}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" style={{ fontSize: '11px' }} />
-                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: '11px' }} />
-                  <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="발생 건수" dot={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="date" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                  <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} name="발생 건수" dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>주별 발생 추이</h3>
+            <div className="chart-box">
+              <div className="chart-title">📊 주별 발생 추이</div>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.weekly_trends || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" style={{ fontSize: '11px' }} />
-                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="count" position="top" fontSize={11} />
+                <BarChart data={data.weekly_trends || []} barSize={40}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="week" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="count" position="top" fontSize={12} fill="#6b7280" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -241,60 +251,66 @@ export default function MonthlyReport() {
           <h2>3. 학교 전체 패턴 분석 (Big 5 & ABC)</h2>
 
           {/* Row 1: Location & Behavior Type */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>주요 발생 장소</h3>
+          {/* Row 1: Location & Behavior Type */}
+          <div className="grid-2">
+            <div className="chart-box">
+              <div className="chart-title">📍 주요 발생 장소</div>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.big5.locations} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={90} style={{ fontSize: '12px' }} />
-                  <Bar dataKey="value" fill="#3b82f6" barSize={20}>
-                    <LabelList dataKey="value" position="right" fontSize={12} />
+                <BarChart data={data.big5.locations} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                  <Bar dataKey="value" fill="#3b82f6" barSize={24} radius={[0, 4, 4, 0]}>
+                    <LabelList dataKey="value" position="right" fontSize={12} fill="#3b82f6" fontWeight="bold" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>주요 행동 유형</h3>
+            <div className="chart-box">
+              <div className="chart-title">🤔 주요 행동 유형</div>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={65} fill="#8884d8" dataKey="value"
+                  <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
                     label={({ name, value }) => `${name} (${value})`}>
                     {data.big5.behaviors.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           {/* Row 2: Time & Day */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>시간대별 패턴</h3>
+          {/* Row 2: Time & Day */}
+          <div className="grid-2">
+            <div className="chart-box">
+              <div className="chart-title">⏰ 시간대별 패턴</div>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.big5.times} margin={{ top: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Bar dataKey="value" fill="#8b5cf6" barSize={30}>
-                    <LabelList dataKey="value" position="top" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
+                  <Tooltip contentStyle={{ borderRadius: '8px' }} />
+                  <Bar dataKey="value" fill="#8b5cf6" barSize={32} radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>요일별 패턴</h3>
+            <div className="chart-box">
+              <div className="chart-title">📅 요일별 패턴</div>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.big5.weekdays} margin={{ top: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Bar dataKey="value" fill="#f59e0b" barSize={30}>
-                    <LabelList dataKey="value" position="top" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
+                  <Tooltip contentStyle={{ borderRadius: '8px' }} />
+                  <Bar dataKey="value" fill="#f59e0b" barSize={32} radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -302,30 +318,33 @@ export default function MonthlyReport() {
           </div>
 
           {/* Row 3: Function & Antecedent & Consequence */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>행동의 기능 — '왜?'</h3>
+          {/* Row 3: Function & Antecedent */}
+          <div className="grid-2">
+            <div className="chart-box">
+              <div className="chart-title">❓ 행동의 기능 (Why)</div>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.functions} cx="50%" cy="50%" outerRadius={65} fill="#8884d8" dataKey="value"
+                  <Pie data={data.functions} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
                     label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
                     {data.functions.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>배경 사건 — '언제?'</h3>
+            <div className="chart-box">
+              <div className="chart-title">⚡ 배경 사건 (When)</div>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '11px' }} />
-                  <Bar dataKey="value" fill="#ef4444" barSize={15}>
-                    <LabelList dataKey="value" position="right" fontSize={11} />
+                <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20, right: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                  <Bar dataKey="value" fill="#ef4444" barSize={20} radius={[0, 4, 4, 0]}>
+                    <LabelList dataKey="value" position="right" fontSize={11} fill="#ef4444" fontWeight="bold" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -333,29 +352,30 @@ export default function MonthlyReport() {
           </div>
 
           {/* Row 4: Consequence & Heatmap */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>후속 결과 — '무엇을 얻었나?'</h3>
+          <div className="grid-2">
+            <div className="chart-box">
+              <div className="chart-title">🎁 후속 결과 (Consequence)</div>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.consequences} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '11px' }} />
-                  <Bar dataKey="value" fill="#f59e0b" barSize={15}>
-                    <LabelList dataKey="value" position="right" fontSize={11} />
+                <BarChart data={data.consequences} layout="vertical" margin={{ left: 20, right: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                  <Bar dataKey="value" fill="#f59e0b" barSize={20} radius={[0, 4, 4, 0]}>
+                    <LabelList dataKey="value" position="right" fontSize={11} fill="#f59e0b" fontWeight="bold" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
-              <h3>🔥 Hot Spot (장소 x 시간)</h3>
+            <div className="chart-box">
+              <div className="chart-title">🔥 Hot Spot (장소 x 시간)</div>
               <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid />
-                  <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} />
-                  <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} />
-                  <ZAxis type="number" dataKey="value" range={[50, 500]} name="빈도" />
-                  <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
+                  <CartesianGrid stroke="#e2e8f0" />
+                  <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} axisLine={false} tickLine={false} />
+                  <ZAxis type="number" dataKey="value" range={[50, 400]} name="빈도" />
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px' }} />
                   <Scatter name="Incidents" data={data.heatmap} fill="#e02424" />
                 </ScatterChart>
               </ResponsiveContainer>

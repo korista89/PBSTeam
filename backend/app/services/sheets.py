@@ -2617,16 +2617,35 @@ def fetch_board_posts():
         records = ws.get_all_records()
         valid_records = []
         for r in records:
+            # Safer getter with defaults
+            pid = str(r.get("ID", ""))
+            title = r.get("Title", "")
+            content = r.get("Content", "")
+            author = r.get("Author", "")
+            created_at = r.get("CreatedAt", "")
+            # Handle Views being string/int/empty
+            try:
+                views = int(r.get("Views", 0))
+            except:
+                views = 0
+            
+            if not pid: continue # Skip empty IDs
+            
             valid_records.append({
-                "id": str(r.get("ID")),
-                "title": r.get("Title"),
-                "content": r.get("Content"),
-                "author": r.get("Author"),
-                "created_at": r.get("CreatedAt"),
-                "views": r.get("Views")
+                "id": pid,
+                "title": title,
+                "content": content,
+                "author": author,
+                "created_at": created_at,
+                "views": views
             })
             
-        valid_records.sort(key=lambda x: x["created_at"], reverse=True)
+        # Robust sort: handle missing or malformed dates
+        def parse_date(x):
+            val = x.get("created_at", "")
+            return val if val else ""
+
+        valid_records.sort(key=parse_date, reverse=True)
         _cache["board"] = {"data": valid_records, "timestamp": now}
         return valid_records
     except Exception as e:

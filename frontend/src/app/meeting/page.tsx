@@ -11,9 +11,14 @@ export default function MeetingPage() {
     const [result, setResult] = useState("");
     const [loading, setLoading] = useState(false);
 
+    // Context Period (Default: Jan 1st - Today)
+    const [contextStartDate, setContextStartDate] = useState(`${new Date().getFullYear()}-01-01`);
+    const [contextEndDate, setContextEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [showContextSettings, setShowContextSettings] = useState(false);
+
     const handleGenerate = async () => {
         if (!startDate || !endDate) {
-            alert("상단 네비게이션 바에서 분석할 기간을 먼저 선택해주세요.");
+            alert("상단 네비게이션 바에서 분석할 기간(집중 분석 기간)을 먼저 선택해주세요.");
             return;
         }
         setLoading(true);
@@ -21,7 +26,9 @@ export default function MeetingPage() {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-meeting-minutes`, {
                 start_date: startDate,
-                end_date: endDate
+                end_date: endDate,
+                context_start_date: contextStartDate,
+                context_end_date: contextEndDate
             });
             setResult(res.data.analysis);
         } catch (e: any) {
@@ -56,31 +63,70 @@ export default function MeetingPage() {
                                 설정된 기간의 학교 전체 데이터(행동발생, CICO, Tier3)를 분석하여 학교장 보고용 협의록을 자동 생성합니다.
                             </p>
 
-                            <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '8px' }}>
-                                <div style={{ flex: 1 }}>
-                                    <span style={{ fontWeight: 'bold', color: '#4b5563' }}>분석 기간: </span>
-                                    <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>
-                                        {startDate && endDate ? `${startDate} ~ ${endDate}` : '기간 미설정 (상단에서 선택하세요)'}
-                                    </span>
+                            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                                    <div style={{ flex: 1, minWidth: '300px' }}>
+                                        <div style={{ marginBottom: '5px', fontWeight: 'bold', color: '#4b5563' }}>🎯 집중 분석 기간 (Global Nav)</div>
+                                        <div style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                            {startDate && endDate ? `${startDate} ~ ${endDate}` : '상단에서 선택해주세요'}
+                                        </div>
+                                    </div>
+
+                                    <div style={{ flex: 1, minWidth: '300px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                                            <div style={{ fontWeight: 'bold', color: '#4b5563' }}>📊 비교/전체 분석 기간 (Context)</div>
+                                            <button
+                                                onClick={() => setShowContextSettings(!showContextSettings)}
+                                                style={{ border: 'none', background: 'none', color: '#666', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                            >
+                                                {showContextSettings ? "숨기기" : "변경"}
+                                            </button>
+                                        </div>
+                                        {showContextSettings ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <input
+                                                    type="date"
+                                                    value={contextStartDate}
+                                                    onChange={e => setContextStartDate(e.target.value)}
+                                                    style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
+                                                />
+                                                <span>~</span>
+                                                <input
+                                                    type="date"
+                                                    value={contextEndDate}
+                                                    onChange={e => setContextEndDate(e.target.value)}
+                                                    style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div style={{ color: '#6b7280' }}>
+                                                {contextStartDate} ~ {contextEndDate}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <button
-                                    onClick={handleGenerate}
-                                    disabled={loading || !startDate || !endDate}
-                                    style={{
-                                        padding: '10px 24px',
-                                        backgroundColor: loading ? '#9ca3af' : '#8b5cf6',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        fontSize: '1rem',
-                                        fontWeight: 'bold',
-                                        cursor: loading ? 'not-allowed' : 'pointer',
-                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                        transition: 'background 0.2s'
-                                    }}
-                                >
-                                    {loading ? "데이터 분석 및 생성 중..." : "✨ AI 협의록 생성하기"}
-                                </button>
+
+                                <div style={{ textAlign: 'right', marginTop: '10px' }}>
+                                    <button
+                                        onClick={handleGenerate}
+                                        disabled={loading || !startDate || !endDate}
+                                        style={{
+                                            padding: '12px 30px',
+                                            backgroundColor: loading ? '#9ca3af' : '#8b5cf6',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            fontSize: '1rem',
+                                            fontWeight: 'bold',
+                                            cursor: loading ? 'not-allowed' : 'pointer',
+                                            boxShadow: '0 4px 6px rgba(139, 92, 246, 0.25)',
+                                            transition: 'all 0.2s',
+                                            display: 'inline-flex', alignItems: 'center', gap: '8px'
+                                        }}
+                                    >
+                                        {loading ? "데이터 분석 및 생성 중..." : "✨ AI 협의록 생성하기"}
+                                    </button>
+                                </div>
                             </div>
                         </header>
 

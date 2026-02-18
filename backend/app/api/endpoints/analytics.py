@@ -25,6 +25,8 @@ def _filter_by_date(records: list, start_date: str = None, end_date: str = None)
 class MeetingMinutesRequest(BaseModel):
     start_date: str
     end_date: str
+    context_start_date: Optional[str] = None
+    context_end_date: Optional[str] = None
 
 @router.post("/ai-meeting-minutes")
 async def ai_meeting_minutes(req: MeetingMinutesRequest):
@@ -32,8 +34,24 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
     from app.services.ai_insight import generate_bcba_meeting_minutes
     
     # 1. Fetch all records and filter by date
-    records = fetch_all_records()
-    records = _filter_by_date(records, req.start_date, req.end_date)
+    all_records = fetch_all_records()
+    records = _filter_by_date(all_records, req.start_date, req.end_date)
+    
+    context_summary = None
+    if req.context_start_date and req.context_end_date:
+        context_records = _filter_by_date(all_records, req.context_start_date, req.context_end_date)
+        c_total = len(context_records)
+        try:
+            cd1 = datetime.strptime(req.context_start_date, "%Y-%m-%d")
+            cd2 = datetime.strptime(req.context_end_date, "%Y-%m-%d")
+            cdays = (cd2 - cd1).days + 1
+            c_avg = round(c_total / cdays, 1) if cdays > 0 else 0
+        except:
+            c_avg = 0
+        context_summary = {
+            "total_incidents": c_total,
+            "daily_avg": c_avg
+        }
     
     total_incidents = len(records)
     
@@ -96,7 +114,10 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
         
     result = generate_bcba_meeting_minutes(
         req.start_date, req.end_date,
-        summary, risk_list, cico_stats, tier3_stats
+        summary, risk_list, cico_stats, tier3_stats,
+        context_start=req.context_start_date,
+        context_end=req.context_end_date,
+        context_summary=context_summary
     )
     
     return {"analysis": result}

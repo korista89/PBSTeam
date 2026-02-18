@@ -309,16 +309,21 @@ def generate_bcba_meeting_minutes(
     summary: dict,
     risk_list: list,
     cico_stats: dict = None,
-    tier3_stats: list = None
+    tier3_stats: list = None,
+    context_start: str = None,
+    context_end: str = None,
+    context_summary: dict = None,
+    context_risk_list: list = None
 ) -> str:
-    """Generate comprehensive meeting minutes for principal reporting."""
+    """Generate comprehensive meeting minutes for principal reporting with comparative analysis."""
     
-    risk_text = "특이사항 없음"
+    # 1. Format Focus Data
+    focus_risk_text = "기록 없음"
     if risk_list:
-        risk_lines = []
+        lines = []
         for r in risk_list[:5]:
-            risk_lines.append(f"- {r.get('name', r.get('학생명', ''))}: {r.get('count', 0)}건 발생 (Tier {r.get('tier', '?')})")
-        risk_text = "\n".join(risk_lines)
+            lines.append(f"- {r.get('name', r.get('학생명', ''))}: {r.get('count', 0)}건 (Tier {r.get('tier', '?')})")
+        focus_risk_text = "\n".join(lines)
 
     cico_text = "데이터 없음"
     if cico_stats:
@@ -326,19 +331,40 @@ def generate_bcba_meeting_minutes(
 
     t3_text = "데이터 없음"
     if tier3_stats:
-        t3_lines = []
+        lines = []
         for s in tier3_stats[:5]:
-            t3_lines.append(f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 주된기능={s.get('top_function', '')}")
-        t3_text = "\n".join(t3_lines)
+            lines.append(f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 주된기능={s.get('top_function', '')}")
+        t3_text = "\n".join(lines)
 
-    prompt = f"""[기간]: {start_date} ~ {end_date}
+    # 2. Format Context Data (Comparative)
+    context_text = "(비교 데이터 없음)"
+    if context_summary:
+        context_incidents = context_summary.get('total_incidents', 0)
+        context_avg = context_summary.get('daily_avg', 0)
+        
+        # Calculate Trend
+        focus_daily = summary.get('daily_avg', 0)
+        trend = "유사"
+        if focus_daily > context_avg * 1.2: trend = "급증 (악화)"
+        elif focus_daily > context_avg * 1.05: trend = "증가"
+        elif focus_daily < context_avg * 0.8: trend = "급감 (개선)"
+        elif focus_daily < context_avg * 0.95: trend = "감소"
+        
+        context_text = f"""- 비교 기간 총 행동 발생: {context_incidents}건
+- 비교 기간 일평균 발생: {context_avg}건
+- [추세 분석]: 비교 기간 대비 집중 기간의 일평균 발생이 '**{trend}**'함 ({context_avg} -> {focus_daily})"""
 
-[전체 현황]
+    prompt = f"""[집중 분석 기간]: {start_date} ~ {end_date}
+
+[집중 기간 전체 현황]
 - 총 행동 발생: {summary.get('total_incidents', 0)}건
 - 일평균 발생: {summary.get('daily_avg', 0)}건
 
-[고위험 학생 (Risk Group)]
-{risk_text}
+[비교/전체 기간]: {context_start} ~ {context_end}
+{context_text}
+
+[고위험 학생 (Risk Group) - 집중 기간 Top 5]
+{focus_risk_text}
 
 [Tier 2 (CICO) 현황]
 {cico_text}
@@ -348,21 +374,22 @@ def generate_bcba_meeting_minutes(
 
 [지시사항]
 당신은 BCBA이자 학교행동중재지원팀 전문가입니다. 위 데이터를 바탕으로 학교장에게 보고할 '행동중재지원팀 정기 협의록'을 작성하세요.
-모든 내용은 '개조식(bullet points)'으로 간결하고 명확하게 작성해야 합니다.
+특히 '비교 기간'과 '집중 기간'을 상세히 비교하여 트렌드를 분석하는 것이 중요합니다.
 
 목차:
-1. 개요 (일시, 참석대상, 총평)
-2. 주요 데이터 분석 (추이, 패턴, Tier 1 효과성)
-3. 학생별 협의 (고위험군, CICO, 신규의뢰)
-4. 논의 및 결정 (중점지도, 연수, 행정지원)
-5. 향후 계획
+1. 개요 (일시, 분석 기간, 비교 기간, 총평)
+2. 데이터 비교 분석 (집중 기간 vs 전체/비교 기간 추이, 증감 원인 추정)
+3. Tier별 현황 및 변동 (Tier 1 효과성, CICO 수행률, Tier 3 집중관리)
+4. 학생별 논의 (고위험군 및 신규 의뢰)
+5. 종합 제언 및 향후 계획 (행정적 지원 요청 포함)
 
-[형식 예시]
-1. 개요
-   - 일시: 2024.03.20. (수) 15:30
-   - ...
-"""
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2500)
+작성 규칙:
+- 개조식(bullet points)으로 명확하게 작성.
+- 수치를 인용하여 근거 제시 (예: 일평균 2.5건 → 1.2건으로 감소).
+- 긍정적인 변화와 우려되는 점을 균형 있게 기술.
+- 분량: A4 1페이지 분량 (약 1500자 내외)."""
+
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
