@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import styles from "../../../page.module.css";
 import { AuthCheck } from "../../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../../components/GlobalNav";
+import * as XLSX from "xlsx";
 
 interface BIPData {
     StudentCode: string;
@@ -40,15 +41,15 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
     },
     {
         key: "PreventionStrategies", num: 4, title: "예방 전략", color: "#3b82f6",
-        placeholder: "예:\n• 과제 난이도 조절: 현재 수준보다 1단계 낮은 과제부터 시작\n• 시각적 스케줄 제공: 일과표를 책상에 부착하여 예측가능성 확보\n• 선행사건 조절: 2교시 후 5분 스트레칭 시간 배정\n• 선택권 제공: 과제 순서 또는 활동 선택 기회 제공"
+        placeholder: "예:\n• [NCR(비수반강화)] — 10분 FT 선호자극 제공\n• [고확률지시순서(HPC)] — 쉬운 지시 3회 후 목표 지시\n• [선행사건 조절] — 2교시 후 5분 스트레칭 배정\n• [선택제공(Choice Making)] — 과제 순서 선택 기회"
     },
     {
         key: "TeachingStrategies", num: 5, title: "교수 전략", color: "#10b981",
-        placeholder: "예:\n• 대체행동 교수: '도움 요청 카드' 사용법 직접 교수 (모델링 → 리허설 → 피드백)\n• 사회기술 훈련: 또래와 적절하게 상호작용하는 방법 연습\n• 자기조절 기술: 스트레스 상황에서 심호흡 3회 → 감정카드 선택 → 교사에게 보여주기\n• 일반화 지원: 다양한 상황에서 대체행동 연습 기회 제공"
+        placeholder: "예:\n• [BST(행동기술훈련)] — 지시→모델링→리허설→피드백 4단계 대체행동 교수\n• [사회기술훈련(SST)] — 또래 상호작용 연습\n• [자기관리(Self-Management)] — 스트레스 시 심호흡→감정카드→교사보고\n• [촉구/용암(Prompting/Fading)] — 시각적 촉구에서 자연적 단서로 전환"
     },
     {
         key: "ReinforcementStrategies", num: 6, title: "강화 전략", color: "#8b5cf6",
-        placeholder: "예:\n• 즉각적 강화: 대체행동(도움 요청) 시 즉시 사회적 칭찬 + 토큰 1개 제공\n• 토큰 경제 시스템: 토큰 5개 = 선호활동 5분 (자유시간/태블릿 사용 등)\n• 계획적 무시: 자리이탈 행동 시 과제 면제 없이 복귀 유도\n• DRA(대체행동 차별강화): 적절한 도움 요청 시 강화, 부적절한 회피 시 과제 유지"
+        placeholder: "예:\n• [DRA(대체행동 차별강화)] — 도움 요청 시 즉시 강화, 자리이탈 시 강화 차단\n• [토큰경제(Token Economy)] — 토큰 5개 = 선호활동 5분\n• [소거(Extinction)] — 자리이탈 행동 시 과제 면제 없이 복귀 유도\n• [행동계약(Behavioral Contracting)] — 주간 목표 달성 시 합의된 강화 제공"
     },
     {
         key: "CrisisPlan", num: 7, title: "위기행동지원 전략", color: "#be123c",
@@ -72,6 +73,28 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
     },
 ];
 
+// Parse AI result into 8 fields
+function parseAIResult(text: string): Record<string, string> {
+    const sections: Record<string, string> = {};
+    const patterns = [
+        { key: "TargetBehavior", pattern: /\*?\*?\[?1\.\s*표적행동\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?2\.|$)/i },
+        { key: "Hypothesis", pattern: /\*?\*?\[?2\.\s*가설[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?3\.|$)/i },
+        { key: "Goals", pattern: /\*?\*?\[?3\.\s*목표\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?4\.|$)/i },
+        { key: "PreventionStrategies", pattern: /\*?\*?\[?4\.\s*예방[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?5\.|$)/i },
+        { key: "TeachingStrategies", pattern: /\*?\*?\[?5\.\s*교수[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?6\.|$)/i },
+        { key: "ReinforcementStrategies", pattern: /\*?\*?\[?6\.\s*강화[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?7\.|$)/i },
+        { key: "CrisisPlan", pattern: /\*?\*?\[?7\.\s*위기[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?8\.|$)/i },
+        { key: "EvaluationPlan", pattern: /\*?\*?\[?8\.\s*평가[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)$/i },
+    ];
+    for (const { key, pattern } of patterns) {
+        const match = text.match(pattern);
+        if (match) {
+            sections[key] = match[1].trim();
+        }
+    }
+    return sections;
+}
+
 // Auto-growing textarea component
 function AutoTextarea({ value, onChange, placeholder }: {
     value: string;
@@ -79,15 +102,14 @@ function AutoTextarea({ value, onChange, placeholder }: {
     placeholder: string;
 }) {
     const ref = useRef<HTMLTextAreaElement>(null);
-
-    const autoGrow = useCallback(() => {
-        if (ref.current) {
-            ref.current.style.height = "auto";
-            ref.current.style.height = Math.max(ref.current.scrollHeight, 100) + "px";
+    const adjust = useCallback(() => {
+        const el = ref.current;
+        if (el) {
+            el.style.height = "auto";
+            el.style.height = Math.max(el.scrollHeight, 100) + "px";
         }
     }, []);
-
-    useEffect(() => { autoGrow(); }, [value, autoGrow]);
+    useEffect(() => { adjust(); }, [value, adjust]);
 
     return (
         <textarea
@@ -95,7 +117,7 @@ function AutoTextarea({ value, onChange, placeholder }: {
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
-            onInput={autoGrow}
+            rows={4}
             style={{
                 width: "100%", minHeight: "100px", padding: "12px", borderRadius: "8px",
                 border: "1px solid #cbd5e1", fontSize: "0.9rem", lineHeight: "1.6",
@@ -138,7 +160,6 @@ export default function BIPEditor() {
                 try {
                     const bipRes = await axios.get(`${apiUrl}/api/v1/bip/students/${code}/bip`);
                     if (bipRes.data && bipRes.data.StudentCode) {
-                        // Migration: old field name
                         if (bipRes.data.ConsequenceStrategies && !bipRes.data.ReinforcementStrategies) {
                             bipRes.data.ReinforcementStrategies = bipRes.data.ConsequenceStrategies;
                         }
@@ -203,6 +224,85 @@ export default function BIPEditor() {
         }
     };
 
+    // Append AI result to existing fields
+    const handleAppendAIContent = () => {
+        if (!aiResult) return;
+        const parsed = parseAIResult(aiResult);
+        if (Object.keys(parsed).length === 0) {
+            alert("AI 결과를 파싱할 수 없습니다. 수동으로 복사해 주세요.");
+            return;
+        }
+        setBip(prev => {
+            const updated = { ...prev };
+            for (const [key, value] of Object.entries(parsed)) {
+                const k = key as keyof BIPData;
+                if (value && k in updated) {
+                    const existing = (updated[k] || "").trim();
+                    updated[k] = existing ? `${existing}\n\n${value}` : value;
+                }
+            }
+            return updated;
+        });
+        alert("AI 생성 내용이 각 필드에 추가되었습니다.");
+    };
+
+    // Excel download
+    const handleExcelDownload = () => {
+        const wb = XLSX.utils.book_new();
+
+        // Title row data
+        const data: (string | undefined)[][] = [
+            ["행동중재계획 (BIP)"],
+            [`학생: ${studentName} (${studentCode})`, "", `작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`, "", `작성자: ${bip.Author || "Teacher"}`],
+            [],
+        ];
+
+        // Add each BIP field
+        const fieldOrder: { key: keyof BIPData; title: string }[] = [
+            { key: "TargetBehavior", title: "1. 표적행동" },
+            { key: "Hypothesis", title: "2. 가설(기능)" },
+            { key: "Goals", title: "3. 목표" },
+            { key: "PreventionStrategies", title: "4. 예방 전략" },
+            { key: "TeachingStrategies", title: "5. 교수 전략" },
+            { key: "ReinforcementStrategies", title: "6. 강화 전략" },
+            { key: "CrisisPlan", title: "7. 위기행동지원 전략" },
+            { key: "EvaluationPlan", title: "8. 평가 계획" },
+            { key: "MedicationStatus", title: "9. 약물 복용 현황" },
+            { key: "ReinforcerInfo", title: "10. 강화제 정보" },
+            { key: "OtherConsiderations", title: "11. 기타 고려사항" },
+        ];
+
+        for (const field of fieldOrder) {
+            data.push([field.title]);
+            const content = bip[field.key] || "(미입력)";
+            // Split multi-line content into separate rows
+            const lines = content.split("\n");
+            for (const line of lines) {
+                data.push(["", line]);
+            }
+            data.push([]);
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // Column widths
+        ws["!cols"] = [
+            { wch: 20 }, // Field title
+            { wch: 80 }, // Content
+            { wch: 20 },
+            { wch: 15 },
+            { wch: 20 },
+        ];
+
+        // Merge title cell
+        ws["!merges"] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // Title
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, "BIP");
+        XLSX.writeFile(wb, `BIP_${studentCode}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
     if (loading) return (
         <AuthCheck>
             <div className={styles.container}>
@@ -230,6 +330,13 @@ export default function BIPEditor() {
                             </p>
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button onClick={handleExcelDownload} style={{
+                                padding: '10px 20px', backgroundColor: '#047857', color: 'white',
+                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                                fontSize: '0.9rem'
+                            }}>
+                                📥 엑셀 다운로드
+                            </button>
                             <button onClick={handleSave} disabled={saving} style={{
                                 padding: '10px 20px', backgroundColor: '#10b981', color: 'white',
                                 border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
@@ -305,21 +412,38 @@ export default function BIPEditor() {
                                     🤖 AI BIP 제안
                                 </h3>
                             </div>
-                            <button
-                                onClick={handleAIBIPFull}
-                                disabled={aiLoading}
-                                style={{
-                                    padding: '8px 20px',
-                                    background: aiLoading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                                    color: 'white', border: 'none', borderRadius: '8px',
-                                    cursor: aiLoading ? 'wait' : 'pointer',
-                                    fontSize: '0.85rem', fontWeight: 600,
-                                    boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                {aiLoading ? "⏳ AI 분석 중... (약 15~30초)" : "🤖 AI BIP 제안 받기"}
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <button
+                                    onClick={handleAIBIPFull}
+                                    disabled={aiLoading}
+                                    style={{
+                                        padding: '8px 20px',
+                                        background: aiLoading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                                        color: 'white', border: 'none', borderRadius: '8px',
+                                        cursor: aiLoading ? 'wait' : 'pointer',
+                                        fontSize: '0.85rem', fontWeight: 600,
+                                        boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    {aiLoading ? "⏳ AI 분석 중... (약 15~30초)" : "🤖 AI BIP 제안 받기"}
+                                </button>
+                                <button
+                                    onClick={handleAppendAIContent}
+                                    disabled={!aiResult || aiLoading}
+                                    style={{
+                                        padding: '8px 20px',
+                                        background: (!aiResult || aiLoading) ? '#d1d5db' : 'linear-gradient(135deg, #059669, #047857)',
+                                        color: 'white', border: 'none', borderRadius: '8px',
+                                        cursor: (!aiResult || aiLoading) ? 'not-allowed' : 'pointer',
+                                        fontSize: '0.85rem', fontWeight: 600,
+                                        boxShadow: aiResult ? '0 2px 8px rgba(5,150,105,0.3)' : 'none',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    📝 생성 내용 추가
+                                </button>
+                            </div>
                         </div>
                         <div style={{ padding: '16px' }}>
                             {!aiResult && !aiLoading && (
@@ -333,7 +457,7 @@ export default function BIPEditor() {
                                         <li>9~11번 입력 내용 (약물/강화제/기타)</li>
                                     </ul>
                                     <p style={{ margin: '8px 0 0 0', fontStyle: 'italic' }}>
-                                        ※ AI 제안 결과를 참고하여 1~8번 칸에 복사·붙여넣기 하시면 BIP가 완성됩니다.
+                                        ※ &quot;생성 내용 추가&quot; 버튼을 누르면 기존 내용을 삭제하지 않고 AI 결과가 1~8번 칸에 자동 추가됩니다.
                                     </p>
                                 </div>
                             )}

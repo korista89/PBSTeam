@@ -548,6 +548,22 @@ BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 
 2. 각 영역당 **최대 10줄 이내**로 작성합니다.
 3. 그대로 복사하여 붙여넣기하면 BIP가 완성되도록 **실용적이고 구체적으로** 작성합니다.
 4. 7번 위기행동지원전략은 위 학교 차원 프로토콜을 기본으로 하되, 데이터에서 식별된 이 학생의 특성에 맞게 개별맞춤형으로 제시합니다.
+5. **4, 5, 6번(전략 영역)에서는 반드시 NCEAP의 EBP Report(2020) 또는 Cooper의 응용행동분석(ABA) 3판에서 명시된 증거기반실제(EBP) 절차 이름을 각 전략의 제목으로 사용합니다.**
+
+**EBP 용어 사용 규칙 (4, 5, 6번에 적용):**
+각 전략은 아래 형식으로 제시합니다:
+• **[EBP 절차명(영문 약어)]** — 구체적 적용 방법  
+예시:
+- **[NCR(비수반강화, Noncontingent Reinforcement)]** — 10분 간격 고정시간 스케줄(FT)로 선호자극 제공
+- **[고확률지시순서(High-Probability Instructional Sequence)]** — 쉬운 지시 3회 연속 후 목표 지시 제시
+- **[BST(행동기술훈련, Behavioral Skills Training)]** — 지시→모델링→리허설→피드백 4단계로 교수
+- **[DRA(대체행동 차별강화)]** — 도움 요청 시 즉시 강화, 자리이탈 시 강화 차단
+- **[토큰경제(Token Economy)]** — 토큰 5개 누적 시 선호활동 교환
+- **[자기관리(Self-Management)]** — 자기기록+자기평가+자기강화 3단계
+
+4번 예방 전략에 사용 가능한 EBP: NCR(비수반강화), 고확률지시순서(HPC), 선행사건 조절(Antecedent Modification), 환경재배치(Environmental Rearrangement), 시각적 지원(Visual Support), 선택제공(Choice Making), 구조화된 일과(Structured Schedule)
+5번 교수 전략에 사용 가능한 EBP: BST(행동기술훈련), 촉구(Prompting)/용암(Fading), 과제분석(Task Analysis), 사회기술훈련(Social Skills Training), 자기관리(Self-Management), 또래중재(Peer-Mediated Instruction), 비디오 모델링(Video Modeling), 사회 내러티브(Social Narratives)
+6번 강화 전략에 사용 가능한 EBP: DRA(대체행동 차별강화), DRI(비양립행동 차별강화), DRO(타행동 차별강화), 토큰경제(Token Economy), 행동계약(Behavioral Contracting), 집단강화(Group-Oriented Contingency), 소거(Extinction), 반응대가(Response Cost)
 
 다음 형식으로 정확히 작성하세요:
 
@@ -561,19 +577,18 @@ BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 
 (내용)
 
 **[4. 예방 전략]**
-(내용)
+(EBP 절차명을 제목으로 하여 각 전략 제시)
 
 **[5. 교수 전략]**
-(내용)
+(EBP 절차명을 제목으로 하여 각 전략 제시)
 
 **[6. 강화 전략]**
-(내용)
+(EBP 절차명을 제목으로 하여 각 전략 제시)
 
 **[7. 위기행동지원 전략]**
 (내용)
 
-**[8. 평가 계획(Tier3 졸업 기준 포함)]**
-(내용)"""
+**[8. 평가 계획(Tier3 졸업 기준 포함)]**"""
     
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2500)
 

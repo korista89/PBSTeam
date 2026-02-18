@@ -1311,7 +1311,7 @@ def create_monthly_cico_sheet(year: int, month: int):
                 "O", # Tier2
                 "", # Target Behavior
                 "증가 목표행동", # Type
-                "0/1/2점", # Scale
+                "O/X(발생)", # Scale — 기본값 O/X
                 "", # Input Criteria
                 "80% 이상", # Goal Criteria
                 "", # Rate
