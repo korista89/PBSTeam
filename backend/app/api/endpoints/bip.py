@@ -8,12 +8,15 @@ class BIPData(BaseModel):
     StudentCode: str
     TargetBehavior: str = ""
     Hypothesis: str = ""
-    Goals: str = ""  # NEW: 목표(수치화)
+    Goals: str = ""
     PreventionStrategies: str = ""
     TeachingStrategies: str = ""
-    ConsequenceStrategies: str = ""
+    ReinforcementStrategies: str = ""
     CrisisPlan: str = ""
     EvaluationPlan: str = ""
+    MedicationStatus: str = ""
+    ReinforcerInfo: str = ""
+    OtherConsiderations: str = ""
     UpdatedAt: str = ""
     Author: str = ""
 
@@ -23,6 +26,9 @@ async def get_student_bip(student_code: str):
     bip = get_bip(student_code)
     if not bip:
         return {}
+    # Migration: rename old field if present
+    if "ConsequenceStrategies" in bip and "ReinforcementStrategies" not in bip:
+        bip["ReinforcementStrategies"] = bip.pop("ConsequenceStrategies")
     return bip
 
 @router.post("/students/{student_code}/bip")
@@ -93,3 +99,92 @@ async def ai_bip_strategies(student_code: str, req: AIStrategiesRequest):
         student_logs
     )
     return {"strategies": result}
+
+
+class AIBIPFullRequest(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    medication_status: str = ""
+    reinforcer_info: str = ""
+    other_considerations: str = ""
+
+@router.post("/students/{student_code}/ai-bip-full")
+async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
+    """Generate comprehensive AI BIP using ALL data sources."""
+    from app.services.ai_insight import generate_full_bip
+    from app.services.sheets import (
+        fetch_all_records, fetch_student_status,
+        fetch_meeting_notes, get_monthly_cico_data
+    )
+    import datetime
+    
+    # 1) BehaviorLogs for the period
+    records = fetch_all_records()
+    student_logs = [
+        r for r in records 
+        if str(r.get("학생코드", "")) == student_code or str(r.get("코드번호", "")) == student_code
+    ]
+    
+    # Filter by date if provided
+    if req.start_date and req.end_date:
+        student_logs = [
+            r for r in student_logs
+            if req.start_date <= str(r.get("행동발생 날짜", "")) <= req.end_date
+        ]
+    
+    # 2) TierStatus
+    status_records = fetch_student_status()
+    tier_data = {}
+    for s in status_records:
+        if s.get("학생코드", "") == student_code or s.get("코드번호", "") == student_code:
+            tier_data = s
+            break
+    
+    # 3) MeetingNotes
+    meeting_notes = []
+    try:
+        notes_result = fetch_meeting_notes(student_code=student_code)
+        meeting_notes = notes_result if isinstance(notes_result, list) else notes_result.get("notes", [])
+    except Exception as e:
+        print(f"MeetingNotes fetch error: {e}")
+    
+    # 4) CICO monthly data
+    cico_data = []
+    try:
+        now = datetime.datetime.now()
+        month = now.month
+        if req.start_date:
+            try:
+                month = int(req.start_date.split("-")[1])
+            except:
+                pass
+        cico_result = get_monthly_cico_data(month)
+        if isinstance(cico_result, dict) and "students" in cico_result:
+            # Filter for this student
+            for cs in cico_result["students"]:
+                if str(cs.get("code", "")) == student_code or str(cs.get("student_code", "")) == student_code:
+                    cico_data.append(cs)
+        elif isinstance(cico_result, list):
+            for cs in cico_result:
+                if str(cs.get("code", "")) == student_code or str(cs.get("student_code", "")) == student_code:
+                    cico_data.append(cs)
+    except Exception as e:
+        print(f"CICO data fetch error: {e}")
+    
+    # 5) User-provided fields 9-11
+    user_context = {
+        "medication_status": req.medication_status,
+        "reinforcer_info": req.reinforcer_info,
+        "other_considerations": req.other_considerations,
+    }
+    
+    result = generate_full_bip(
+        student_code=student_code,
+        behavior_logs=student_logs,
+        tier_data=tier_data,
+        meeting_notes=meeting_notes,
+        cico_data=cico_data,
+        user_context=user_context
+    )
+    
+    return {"analysis": result}

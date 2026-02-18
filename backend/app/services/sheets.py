@@ -2581,11 +2581,13 @@ def ensure_bip_sheet():
         try:
             ws = sheet.worksheet("BIP")
         except gspread.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="BIP", rows=100, cols=15)
+            ws = sheet.add_worksheet(title="BIP", rows=300, cols=15)
             headers = [
-                "StudentCode", "TargetBehavior", "Hypothesis", 
-                "PreventionStrategies", "TeachingStrategies", "ConsequenceStrategies",
-                "CrisisPlan", "EvaluationPlan", "UpdatedAt", "Author"
+                "StudentCode", "TargetBehavior", "Hypothesis", "Goals",
+                "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies",
+                "CrisisPlan", "EvaluationPlan",
+                "MedicationStatus", "ReinforcerInfo", "OtherConsiderations",
+                "UpdatedAt", "Author"
             ]
             ws.append_row(headers)
         return ws

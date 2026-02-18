@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { useRouter } from "next/navigation";
 import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import GlobalNav from "../components/GlobalNav";
@@ -24,6 +25,7 @@ interface StudentStatus {
 
 export default function TierStatusPage() {
     const { isAdmin } = useAuth();
+    const router = useRouter();
     const [students, setStudents] = useState<StudentStatus[]>([]);
     const [enrolledCount, setEnrolledCount] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -326,6 +328,8 @@ export default function TierStatusPage() {
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>T3</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>T3+</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>변경일</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>상세분석</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>BIP</th>
                                     {isAdmin() && <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>관리</th>}
                                 </tr>
                             </thead>
@@ -408,6 +412,12 @@ export default function TierStatusPage() {
                                                 )}
                                             </td>
                                             <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} style={{ padding: '2px 6px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>📊</button>
+                                            </td>
+                                            <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}/bip`)} style={{ padding: '2px 6px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>📋</button>
+                                            </td>
                                             {isAdmin() && (
                                                 <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
                                                     {isEditing ? (

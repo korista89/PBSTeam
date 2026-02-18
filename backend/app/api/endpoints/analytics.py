@@ -1,6 +1,9 @@
 from fastapi import APIRouter
 from app.services.analysis import get_analytics_data
-from app.services.sheets import fetch_all_records, get_beable_code_mapping, get_tier3_report_data
+from app.services.sheets import (
+    fetch_all_records, get_beable_code_mapping, get_tier3_report_data,
+    fetch_student_status, fetch_meeting_notes, get_monthly_cico_data
+)
 
 router = APIRouter()
 
@@ -104,14 +107,23 @@ class StudentAnalysisRequest(BaseModel):
 
 @router.post("/ai-section-analysis")
 async def ai_section_analysis(req: SectionAnalysisRequest):
-    """Generate BCBA AI analysis for a T1 report section."""
+    """Generate BCBA AI analysis for a T1 report section using school-wide data."""
     from app.services.ai_insight import generate_bcba_section_analysis
-    result = generate_bcba_section_analysis(req.section_name, req.data_context)
+    
+    # Enrich with actual school-wide data if not provided
+    enriched_context = dict(req.data_context)
+    if not enriched_context.get("behavior_summary"):
+        records = fetch_all_records()
+        if records:
+            enriched_context["total_records"] = len(records)
+            enriched_context["record_sample"] = str(records[:3])[:500]
+    
+    result = generate_bcba_section_analysis(req.section_name, enriched_context)
     return {"analysis": result}
 
 @router.post("/ai-cico-analysis")
 async def ai_cico_analysis(req: CICOAnalysisRequest):
-    """Generate BCBA AI analysis for CICO report."""
+    """Generate BCBA AI analysis for CICO report using comprehensive data."""
     from app.services.ai_insight import generate_bcba_cico_analysis
     from app.services.sheets import get_cico_report_data
     
@@ -123,7 +135,26 @@ async def ai_cico_analysis(req: CICOAnalysisRequest):
             return {"analysis": f"데이터 로드 실패: {data['error']}"}
         students = data.get("students", [])
     
-    result = generate_bcba_cico_analysis(students)
+    # Enrich CICO students with BehaviorLogs + TierStatus
+    records = fetch_all_records()
+    status_records = fetch_student_status()
+    cico_codes = [str(s.get("code", s.get("student_code", ""))) for s in students]
+    
+    cico_behavior_logs = [
+        r for r in records
+        if str(r.get("학생코드", "")) in cico_codes or str(r.get("코드번호", "")) in cico_codes
+    ]
+    
+    cico_tier_info = [
+        s for s in status_records
+        if s.get("학생코드", "") in cico_codes or s.get("코드번호", "") in cico_codes
+    ]
+    
+    result = generate_bcba_cico_analysis(
+        students,
+        behavior_logs=cico_behavior_logs[:50],
+        tier_info=cico_tier_info
+    )
     return {"analysis": result}
 
 @router.post("/ai-tier3-analysis")
@@ -148,12 +179,18 @@ async def ai_tier3_analysis(req: Tier3AnalysisRequest):
 
 @router.post("/ai-student-analysis")
 async def ai_student_analysis(req: StudentAnalysisRequest):
-    """Generate BCBA AI analysis for individual student."""
+    """Generate BCBA AI analysis for individual student using ALL data sources."""
     from app.services.ai_insight import generate_bcba_student_analysis
-    from app.services.sheets import fetch_student_status
     
     records = fetch_all_records()
     student_logs = [r for r in records if str(r.get("학생코드", "")) == req.student_code or str(r.get("코드번호", "")) == req.student_code]
+    
+    # Filter by date if provided
+    if req.start_date and req.end_date:
+        student_logs = [
+            r for r in student_logs
+            if req.start_date <= str(r.get("행동발생 날짜", "")) <= req.end_date
+        ]
     
     # Get student info from TierStatus
     status_records = fetch_student_status()
@@ -170,6 +207,36 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     if not student_info:
         student_info = {"code": req.student_code, "class": "", "tier": ""}
     
-    result = generate_bcba_student_analysis(student_info, student_logs)
+    # Gather MeetingNotes for this student
+    meeting_notes = []
+    try:
+        notes_result = fetch_meeting_notes(student_code=req.student_code)
+        meeting_notes = notes_result if isinstance(notes_result, list) else notes_result.get("notes", [])
+    except Exception as e:
+        print(f"MeetingNotes fetch error for student analysis: {e}")
+    
+    # Gather CICO data for this student
+    import datetime
+    cico_data = []
+    try:
+        month = datetime.datetime.now().month
+        if req.start_date:
+            try:
+                month = int(req.start_date.split("-")[1])
+            except:
+                pass
+        cico_result = get_monthly_cico_data(month)
+        if isinstance(cico_result, dict) and "students" in cico_result:
+            for cs in cico_result["students"]:
+                if str(cs.get("code", "")) == req.student_code or str(cs.get("student_code", "")) == req.student_code:
+                    cico_data.append(cs)
+    except Exception as e:
+        print(f"CICO fetch error for student analysis: {e}")
+    
+    result = generate_bcba_student_analysis(
+        student_info, student_logs,
+        meeting_notes=meeting_notes,
+        cico_data=cico_data
+    )
     return {"analysis": result}
 

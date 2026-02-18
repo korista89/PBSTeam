@@ -260,8 +260,8 @@ BCBA로서 위 데이터를 분석하여 학교 행동중재지원팀의 의사�
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
 
 
-def generate_bcba_cico_analysis(students_data: list) -> str:
-    """Generate BCBA analysis for CICO report — per-student analysis."""
+def generate_bcba_cico_analysis(students_data: list, behavior_logs: list = None, tier_info: list = None) -> str:
+    """Generate BCBA analysis for CICO report — per-student analysis with enriched data."""
     student_summaries = []
     for s in students_data[:15]:
         student_summaries.append(
@@ -271,20 +271,36 @@ def generate_bcba_cico_analysis(students_data: list) -> str:
             f"유형={s.get('behavior_type','')}"
         )
     
+    # Add enriched behavior log context
+    behavior_context = ""
+    if behavior_logs:
+        from collections import Counter
+        types = Counter(str(r.get("행동유형", r.get("type", ""))) for r in behavior_logs if r.get("행동유형") or r.get("type"))
+        behavior_context = f"\n[CICO 학생들의 행동 기록 ({len(behavior_logs)}건)]\n- 유형별: {dict(types.most_common(5))}\n"
+    
+    tier_context = ""
+    if tier_info:
+        tier_lines = []
+        for t in tier_info[:15]:
+            tier_lines.append(f"- {t.get('학생코드','')}: Tier상태 T1={t.get('Tier1','')}, T2-C={t.get('Tier2(CICO)','')}, T3={t.get('Tier3','')}")
+        tier_context = f"\n[Tier 현황]\n" + "\n".join(tier_lines) + "\n"
+    
     prompt = f"""[이번 달 CICO 학생 데이터]
 {chr(10).join(student_summaries)}
-
+{behavior_context}
+{tier_context}
 [지시사항]
 BCBA로서 이번 달 CICO 입력 결과를 종합적으로 분석하여, 학교 행동중재지원팀의 의사결정을 지원하세요.
 
 1. 각 학생의 목표행동, 척도, 기준, 수행률, 달성여부를 고려하여 학생별로 분석하세요.
-2. CICO 수행률 패턴에서 의미있는 점(향상, 정체, 악화 등)을 찾아주세요.
-3. Tier 조정이 필요한 학생이 있다면 구체적으로 제안하세요.
+2. 행동 기록 데이터가 있으면 CICO 수행률과 교차 분석하세요.
+3. CICO 수행률 패턴에서 의미있는 점(향상, 정체, 악화 등)을 찾아주세요.
+4. Tier 조정이 필요한 학생이 있다면 구체적으로 제안하세요.
    - 2개월 연속 목표 달성 → Tier 1 하향 권장
    - 3개월 연속 미달성 → Tier 3 상향 또는 CICO 수정 검토
-4. 학생별 1~2줄 핵심 분석 + 전체 요약을 제공하세요."""
+5. 학생별 1~2줄 핵심 분석 + 전체 요약을 제공하세요."""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1000)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
@@ -322,16 +338,24 @@ def generate_bcba_student_analysis(
     student_info: dict, 
     behavior_logs: list, 
     cico_data: list = None,
-    teacher_notes: list = None
+    teacher_notes: list = None,
+    meeting_notes: list = None
 ) -> str:
     """Generate BCBA analysis for individual student detail page."""
     log_summary = _summarize_behavior_logs(behavior_logs)
     
+    # Merge teacher_notes and meeting_notes
+    all_notes = (teacher_notes or []) + (meeting_notes or [])
     notes_text = ""
-    if teacher_notes:
-        notes_text = "\n[담임교사 의견]\n" + "\n".join(
-            [f"- {n.get('date','')}: {n.get('content','')}" for n in teacher_notes[:10]]
-        )
+    if all_notes:
+        notes_lines = []
+        for n in all_notes[:10]:
+            date = n.get('date', n.get('날짜', ''))
+            content = n.get('content', n.get('내용', ''))
+            if content:
+                notes_lines.append(f"- [{date}] {content[:200]}")
+        if notes_lines:
+            notes_text = "\n[상담일지/관찰 기록]\n" + "\n".join(notes_lines)
     
     prompt = f"""[학생 정보]
 - 학생코드: {student_info.get('code', '')}
@@ -349,12 +373,13 @@ def generate_bcba_student_analysis(
 BCBA로서 이 학생의 행동 데이터를 종합적으로 분석하세요.
 
 1. 행동의 형태, 기능, 빈도, 강도, 지속시간, 발생 패턴(날짜, 요일, 시간대)을 고려하세요.
-2. 담임교사 의견이 있다면 반드시 참고하여 분석에 반영하세요.
-3. 분석 결과에서 알 수 있는 핵심 시사점을 제시하세요.
-4. 이 학생에게 필요한 구체적인 지원 방향을 추천하세요.
-5. Tier 조정이 필요하다면 근거와 함께 제안하세요."""
+2. 상담일지나 관찰 기록이 있다면 반드시 참고하여 분석에 반영하세요.
+3. CICO 데이터가 있다면 수행률 추이와 행동 기록의 상관관계를 분석하세요.
+4. 분석 결과에서 알 수 있는 핵심 시사점을 제시하세요.
+5. 이 학생에게 필요한 구체적인 지원 방향을 추천하세요.
+6. Tier 조정이 필요하다면 근거와 함께 제안하세요."""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1000)
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 def generate_bip_hypothesis(
@@ -437,6 +462,120 @@ BCBA로서 위 표적행동, 가설, 목표에 맞추어 구체적인 중재 전
 각 영역당 2~3가지 구체적 전략을 제안하세요. 특수학교 현장에서 실제 적용 가능한 수준으로 작성하세요."""
     
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
+
+
+SCHOOL_CRISIS_PROTOCOL = """[학교 차원 위기행동 지원 프로토콜 (기본 베이스)]
+1) 전조: 불안한 눈빛이나 짧은 호흡 등 전조 징후가 관찰될 경우, 감정카드 등 시각 도구로 자기조절을 유도하며, 진정 시 교육활동으로 복귀시키고 고조 시 다음 단계로 이행한다.
+2) 고조: 얼굴 붉힘, 목소리 고조 등 정서가 급격히 거칠어지는 학급 차원의 문제행동이 발생할 경우, 언어 자극을 최소화하고 시각자료를 활용해 자극 요소를 차단하며, 진정 시 복귀시키되 위기행동으로 악화될 경우 위기 발생 상황 알림 단계로 넘어간다.
+3) 대응 및 알림: 의자를 집어던지거나 자해적 행동 등 학교 차원 관리 위기행동이 발생할 경우, 비상벨이나 무전기로 즉시 위기대응팀을 호출하여 현장 대응 및 제한적 물리적 제지를 실행하며, 진정되면 교육활동으로 복귀시키고 지속되면 분리 장소와 분리지도 교원을 확정한다.
+4) 분리지도 및 회복: 교직원 2인 이상이 동행하여 학생을 안전하게 분리 장소로 이동시킨 경우, 진정 활동지 등을 제공하고 10분 간격으로 호흡 안정 및 지시 수용 상태를 관찰하며, 복귀 가능 기준 충족 시 학급으로 복귀시키고 미회복 시 2차 분리를 진행한다.
+5) 가정학습 조치 및 보고: 하루 2회 이상 분리 후에도 복귀를 거부하거나 반복적 위기행동으로 회복이 불가능한 경우, 관리자 보고 및 학부모 연락을 통해 가정학습 전환과 학생 인계를 실행하며, 발생 상황을 행동데이터시스템에 입력하고 분리지도 보고서를 제출하여 추후 지원 여부를 확정한다."""
+
+
+def generate_full_bip(
+    student_code: str,
+    behavior_logs: list,
+    tier_data: dict = None,
+    meeting_notes: list = None,
+    cico_data: list = None,
+    user_context: dict = None
+) -> str:
+    """Generate comprehensive BIP using ALL available data sources."""
+    log_summary = _summarize_behavior_logs(behavior_logs)
+    
+    # Format meeting notes
+    notes_text = "(상담/관찰 기록 없음)"
+    if meeting_notes:
+        notes_lines = []
+        for n in meeting_notes[:10]:
+            date = n.get("date", n.get("날짜", ""))
+            content = n.get("content", n.get("내용", ""))
+            if content:
+                notes_lines.append(f"- [{date}] {content[:150]}")
+        if notes_lines:
+            notes_text = "\n".join(notes_lines)
+    
+    # Format CICO data
+    cico_text = "(CICO 데이터 없음)"
+    if cico_data:
+        cico_lines = []
+        for c in cico_data[:5]:
+            cico_lines.append(str(c)[:200])
+        if cico_lines:
+            cico_text = "\n".join(cico_lines)
+    
+    # Format tier info
+    tier_text = "(Tier 정보 없음)"
+    if tier_data:
+        tier_text = str(tier_data)[:300]
+    
+    # User context (fields 9-11)
+    user_text = ""
+    if user_context:
+        med = user_context.get("medication_status", "")
+        reinf = user_context.get("reinforcer_info", "")
+        other = user_context.get("other_considerations", "")
+        if med: user_text += f"\n[약물 복용 현황]: {med}"
+        if reinf: user_text += f"\n[강화제 정보]: {reinf}"
+        if other: user_text += f"\n[기타 고려사항]: {other}"
+    if not user_text:
+        user_text = "(사용자 추가 입력 없음)"
+    
+    prompt = f"""[학생 코드]: {student_code}
+
+[Tier 현황]
+{tier_text}
+
+[행동 기록 분석 (BehaviorLogs)]
+{log_summary}
+
+[상담일지/관찰기록 (MeetingNotes)]
+{notes_text}
+
+[CICO 데이터]
+{cico_text}
+
+[사용자 입력 정보 (약물/강화제/기타)]
+{user_text}
+
+{SCHOOL_CRISIS_PROTOCOL}
+
+[지시사항]
+BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 영역의 BIP(행동중재계획) 내용을 작성하세요.
+
+**반드시 지켜야 할 규칙:**
+1. 각 영역의 내용은 서로 **절대 중복되지 않도록** 합니다. 8개가 합쳐져서 하나의 완성된 BIP가 됩니다.
+2. 각 영역당 **최대 10줄 이내**로 작성합니다.
+3. 그대로 복사하여 붙여넣기하면 BIP가 완성되도록 **실용적이고 구체적으로** 작성합니다.
+4. 7번 위기행동지원전략은 위 학교 차원 프로토콜을 기본으로 하되, 데이터에서 식별된 이 학생의 특성에 맞게 개별맞춤형으로 제시합니다.
+
+다음 형식으로 정확히 작성하세요:
+
+**[1. 표적행동]**
+(내용)
+
+**[2. 가설(기능)]**
+(내용)
+
+**[3. 목표]**
+(내용)
+
+**[4. 예방 전략]**
+(내용)
+
+**[5. 교수 전략]**
+(내용)
+
+**[6. 강화 전략]**
+(내용)
+
+**[7. 위기행동지원 전략]**
+(내용)
+
+**[8. 평가 계획(Tier3 졸업 기준 포함)]**
+(내용)"""
+    
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2500)
 
 
 # ============================================================
