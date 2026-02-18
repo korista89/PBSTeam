@@ -182,8 +182,24 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     """Generate BCBA AI analysis for individual student using ALL data sources."""
     from app.services.ai_insight import generate_bcba_student_analysis
     
+    # Resolve BeAble code for BehaviorLogs matching
+    beable_mapping = get_beable_code_mapping()
+    beable_code = ""
+    for bc, info in beable_mapping.items():
+        if str(info.get('student_code', '')).strip() == str(req.student_code).strip():
+            beable_code = bc
+            break
+    
+    codes_to_match = {str(req.student_code).strip()}
+    if beable_code:
+        codes_to_match.add(str(beable_code).strip())
+    
     records = fetch_all_records()
-    student_logs = [r for r in records if str(r.get("학생코드", "")) == req.student_code or str(r.get("코드번호", "")) == req.student_code]
+    student_logs = [
+        r for r in records
+        if str(r.get("학생코드", "")).strip() in codes_to_match
+        or str(r.get("코드번호", "")).strip() in codes_to_match
+    ]
     
     # Filter by date if provided
     if req.start_date and req.end_date:
@@ -196,7 +212,7 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     status_records = fetch_student_status()
     student_info = {}
     for s in status_records:
-        if s.get("학생코드", "") == req.student_code or s.get("코드번호", "") == req.student_code:
+        if str(s.get("학생코드", "")).strip() == str(req.student_code).strip():
             student_info = {
                 "code": req.student_code,
                 "class": s.get("학급", ""),
@@ -211,7 +227,12 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     meeting_notes = []
     try:
         notes_result = fetch_meeting_notes(student_code=req.student_code)
-        meeting_notes = notes_result if isinstance(notes_result, list) else notes_result.get("notes", [])
+        meeting_notes = notes_result if isinstance(notes_result, list) else []
+        # Also try with beable_code
+        if beable_code and beable_code != req.student_code:
+            notes_beable = fetch_meeting_notes(student_code=beable_code)
+            if isinstance(notes_beable, list):
+                meeting_notes.extend(notes_beable)
     except Exception as e:
         print(f"MeetingNotes fetch error for student analysis: {e}")
     
@@ -228,7 +249,8 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
         cico_result = get_monthly_cico_data(month)
         if isinstance(cico_result, dict) and "students" in cico_result:
             for cs in cico_result["students"]:
-                if str(cs.get("code", "")) == req.student_code or str(cs.get("student_code", "")) == req.student_code:
+                cs_code = str(cs.get("code", cs.get("student_code", cs.get("학생코드", "")))).strip()
+                if cs_code in codes_to_match:
                     cico_data.append(cs)
     except Exception as e:
         print(f"CICO fetch error for student analysis: {e}")
