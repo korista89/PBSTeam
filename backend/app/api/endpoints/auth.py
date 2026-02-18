@@ -28,9 +28,10 @@ async def login(request: LoginRequest):
         "user": {
             "id": user.get("ID"),
             "role": str(user.get("Role", "teacher")).lower(), 
-            "Role": str(user.get("Role", "teacher")), # Keep original for legacy compatibility
+            "Role": str(user.get("Role", "teacher")),
             "class_id": user.get("ClassID", ""),
-            "class_name": user.get("ClassName", "")
+            "class_name": user.get("ClassName", ""),
+            "name": user.get("Name", "")
         }
     }
 
@@ -48,12 +49,8 @@ async def change_password(user_id: str, request: PasswordUpdateRequest):
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
-
 class HolidayRequest(BaseModel):
-    date: str # YYYY-MM-DD
+    date: str  # YYYY-MM-DD
     name: str
 
 @router.get("/holidays")
@@ -69,11 +66,20 @@ async def add_holiday_api(req: HolidayRequest):
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
-class UserRoleUpdateRequest(BaseModel):
+@router.delete("/holidays/{date}")
+async def delete_holiday_api(date: str):
+    from app.services.sheets import delete_holiday
+    result = delete_holiday(date)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
+class UserRoleUpdateRequest(BaseModel):
     user_id: str
     new_role: str
     new_class: Optional[str] = ""
+    name: Optional[str] = ""
+    memo: Optional[str] = ""
 
 class CreateUserRequest(BaseModel):
     id: str
@@ -84,6 +90,7 @@ class CreateUserRequest(BaseModel):
     email: Optional[str] = ""
     class_id: Optional[str] = ""
     class_name: Optional[str] = ""
+    memo: Optional[str] = ""
 
 @router.post("/users")
 async def create_new_user(request: CreateUserRequest):
@@ -98,7 +105,8 @@ async def create_new_user(request: CreateUserRequest):
         "Phone": request.phone,
         "Email": request.email,
         "ClassID": request.class_id,
-        "ClassName": request.class_name
+        "ClassName": request.class_name,
+        "Memo": request.memo
     }
     
     result = create_user(user_data)
@@ -118,18 +126,16 @@ async def delete_existing_user(user_id: str):
 
 @router.put("/users/{user_id}/role")
 async def update_role(user_id: str, request: UserRoleUpdateRequest):
-    """Admin only: Update user role and class"""
+    """Admin only: Update user role, class, name, and memo"""
     from app.services.sheets import update_user_role
-    result = update_user_role(user_id, request.new_role, request.new_class)
+    result = update_user_role(user_id, request.new_role, request.new_class, request.name, request.memo)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
 @router.post("/reset-users")
 async def reset_users_db():
-    """
-    DEV ONLY: Reset Users sheet to default Admin + 34 Class Teachers
-    """
+    """DEV ONLY: Reset Users sheet to default Admin + 34 Class Teachers"""
     from app.services.sheets import reset_users_sheet
     result = reset_users_sheet()
     if "error" in result:

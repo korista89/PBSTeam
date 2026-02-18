@@ -303,6 +303,68 @@ BCBA로서 이번 달 CICO 입력 결과를 종합적으로 분석하여, 학교
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
+def generate_bcba_meeting_minutes(
+    start_date: str,
+    end_date: str,
+    summary: dict,
+    risk_list: list,
+    cico_stats: dict = None,
+    tier3_stats: list = None
+) -> str:
+    """Generate comprehensive meeting minutes for principal reporting."""
+    
+    risk_text = "특이사항 없음"
+    if risk_list:
+        risk_lines = []
+        for r in risk_list[:5]:
+            risk_lines.append(f"- {r.get('name', r.get('학생명', ''))}: {r.get('count', 0)}건 발생 (Tier {r.get('tier', '?')})")
+        risk_text = "\n".join(risk_lines)
+
+    cico_text = "데이터 없음"
+    if cico_stats:
+        cico_text = f"- CICO 대상: {cico_stats.get('total_students', 0)}명\n- 평균 수행률: {cico_stats.get('avg_rate', 0)}%\n- 목표 달성: {cico_stats.get('achieved_count', 0)}명 / 미달성: {cico_stats.get('not_achieved_count', 0)}명"
+
+    t3_text = "데이터 없음"
+    if tier3_stats:
+        t3_lines = []
+        for s in tier3_stats[:5]:
+            t3_lines.append(f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 주된기능={s.get('top_function', '')}")
+        t3_text = "\n".join(t3_lines)
+
+    prompt = f"""[기간]: {start_date} ~ {end_date}
+
+[전체 현황]
+- 총 행동 발생: {summary.get('total_incidents', 0)}건
+- 일평균 발생: {summary.get('daily_avg', 0)}건
+
+[고위험 학생 (Risk Group)]
+{risk_text}
+
+[Tier 2 (CICO) 현황]
+{cico_text}
+
+[Tier 3 (집중지원) 현황]
+{t3_text}
+
+[지시사항]
+당신은 BCBA이자 학교행동중재지원팀 전문가입니다. 위 데이터를 바탕으로 학교장에게 보고할 '행동중재지원팀 정기 협의록'을 작성하세요.
+모든 내용은 '개조식(bullet points)'으로 간결하고 명확하게 작성해야 합니다.
+
+목차:
+1. 개요 (일시, 참석대상, 총평)
+2. 주요 데이터 분석 (추이, 패턴, Tier 1 효과성)
+3. 학생별 협의 (고위험군, CICO, 신규의뢰)
+4. 논의 및 결정 (중점지도, 연수, 행정지원)
+5. 향후 계획
+
+[형식 예시]
+1. 개요
+   - 일시: 2024.03.20. (수) 15:30
+   - ...
+"""
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2500)
+
+
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
     """Generate BCBA analysis for T3 report."""
     student_info = []

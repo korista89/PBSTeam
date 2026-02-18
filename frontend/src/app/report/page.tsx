@@ -32,6 +32,7 @@ function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sect
       });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch (e) {
+      console.error(e);
       setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
     } finally {
       setLoading(false);
@@ -108,19 +109,19 @@ export default function MonthlyReport() {
     fetchData();
   }, [startDate, endDate]);
 
-  const handleTierChange = async (studentCode: string, newTier: string) => {
-    if (!confirm(`${studentCode} 학생의 Tier를 ${newTier}(으)로 변경하시겠습니까?`)) return;
-    try {
-      await axios.post(`${apiUrl}/api/v1/students/tier-update`, {
-        student_code: studentCode,
-        tier: newTier
-      });
-      alert("변경되었습니다.");
-    } catch (e) {
-      console.error(e);
-      alert("변경 실패");
-    }
-  };
+  //   const handleTierChange = async (studentCode: string, newTier: string) => {
+  //     if (!confirm(`${studentCode} 학생의 Tier를 ${newTier}(으)로 변경하시겠습니까?`)) return;
+  //     try {
+  //       await axios.post(`${apiUrl}/api/v1/students/tier-update`, {
+  //         student_code: studentCode,
+  //         tier: newTier
+  //       });
+  //       alert("변경되었습니다.");
+  //     } catch (e) {
+  //       console.error(e);
+  //       alert("변경 실패");
+  //     }
+  //   };
 
   if (!data) {
     return (
@@ -147,9 +148,9 @@ export default function MonthlyReport() {
             .report-container { padding: 10px !important; }
             .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
         }
-        .report-section { margin-bottom: 2.5rem; border-bottom: 1px solid #eee; padding-bottom: 1.5rem; }
+        .report-section { margin-bottom: 2.5rem; border-bottom: 1px solid #eee; padding-bottom: 2rem; }
         h1 { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #1e3a8a; }
-        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 28px 0 16px 0; }
+        h2 { font-size: 18px; color: #333; border-left: 5px solid #3b82f6; padding-left: 10px; margin: 30px 0 20px 0; }
         h3 { margin: 16px 0 12px 0; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
         th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: center; }
@@ -200,7 +201,7 @@ export default function MonthlyReport() {
         <section className="report-section">
           <h2>2. 행동 발생 추이 (Trends)</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>일별 발생 추이</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.trends}>
@@ -213,7 +214,7 @@ export default function MonthlyReport() {
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>주별 발생 추이</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.weekly_trends || []}>
@@ -241,24 +242,24 @@ export default function MonthlyReport() {
 
           {/* Row 1: Location & Behavior Type */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>주요 발생 장소</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.big5.locations} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '12px' }} />
+                  <YAxis dataKey="name" type="category" width={90} style={{ fontSize: '12px' }} />
                   <Bar dataKey="value" fill="#3b82f6" barSize={20}>
                     <LabelList dataKey="value" position="right" fontSize={12} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>주요 행동 유형</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value"
+                  <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={65} fill="#8884d8" dataKey="value"
                     label={({ name, value }) => `${name} (${value})`}>
                     {data.big5.behaviors.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -272,7 +273,7 @@ export default function MonthlyReport() {
 
           {/* Row 2: Time & Day */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>시간대별 패턴</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.big5.times} margin={{ top: 10 }}>
@@ -285,7 +286,7 @@ export default function MonthlyReport() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>요일별 패턴</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.big5.weekdays} margin={{ top: 10 }}>
@@ -302,11 +303,11 @@ export default function MonthlyReport() {
 
           {/* Row 3: Function & Antecedent & Consequence */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>행동의 기능 — '왜?'</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.functions} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value"
+                  <Pie data={data.functions} cx="50%" cy="50%" outerRadius={65} fill="#8884d8" dataKey="value"
                     label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
                     {data.functions.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -316,7 +317,7 @@ export default function MonthlyReport() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>배경 사건 — '언제?'</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20 }}>
@@ -333,7 +334,7 @@ export default function MonthlyReport() {
 
           {/* Row 4: Consequence & Heatmap */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '20px' }}>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>후속 결과 — '무엇을 얻었나?'</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.consequences} layout="vertical" margin={{ left: 20 }}>
@@ -346,7 +347,7 @@ export default function MonthlyReport() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ flex: 1, minWidth: '280px', height: '250px' }}>
+            <div style={{ flex: 1, minWidth: '320px', height: '300px' }}>
               <h3>🔥 Hot Spot (장소 x 시간)</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>

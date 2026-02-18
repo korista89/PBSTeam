@@ -1,195 +1,133 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import styles from './page.module.css';
 import axios from 'axios';
-import { MeetingAnalysisResponse, StudentMeetingData } from '../types';
 import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../components/GlobalNav";
 
 export default function MeetingPage() {
-    const [data, setData] = useState<MeetingAnalysisResponse | null>(null);
-    const [selectedStudent, setSelectedStudent] = useState<StudentMeetingData | null>(null);
-    const [opinion, setOpinion] = useState("");
-    const [loading, setLoading] = useState(true);
-
-    // Date State from GlobalNav (localStorage)
     const { startDate, endDate } = useDateRange();
+    const [result, setResult] = useState("");
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        if (!startDate || !endDate) return;
-        
-        const fetchMeetingData = async () => {
-            try {
-                setLoading(true);
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-                const params = new URLSearchParams();
-                params.append("start_date", startDate);
-                params.append("end_date", endDate);
-                
-                const response = await axios.get(`${apiUrl}/api/v1/analytics/meeting?${params.toString()}`);
-                setData(response.data);
-                
-                if (response.data.students && response.data.students.length > 0) {
-                    setSelectedStudent(response.data.students[0]);
-                }
-            } catch (error) {
-                console.error("Failed to fetch meeting data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchMeetingData();
-    }, [startDate, endDate]);
-
-    const handleCopyMinutes = () => {
-        if (!selectedStudent) return;
-        const text = `
-[행동중재지원팀 협의록]
-일시: ${new Date().toLocaleDateString()}
-대상학생: ${selectedStudent.name} (${selectedStudent.class})
-
-1. 현황 분석 (최근 4주)
-- 총 발생 건수: ${selectedStudent.total_incidents}건
-- 주간 평균: ${selectedStudent.weekly_avg}건
-- 위기/긴급 여부: ${selectedStudent.is_emergency ? "해당 (사유: " + selectedStudent.emergency_reason + ")" : "미해당"}
-
-2. 시스템 권고안
-- ${selectedStudent.decision_recommendation}
-
-3. 담임/팀 의견
-- ${opinion}
-
-4. 결정 사항 (5-Tier 체계)
-- ( ) Tier1 유지 (보편적 지원)
-- ( ) Tier2(CICO) 지정 (선별적 지원 - CICO)
-- ( ) Tier2(SST) 지정 (선별적 지원 - SST)
-- ( ) Tier3 지정 (집중적 지원)
-- ( ) Tier3+ 지정 (외부연계)
-        `.trim();
-        
-        navigator.clipboard.writeText(text);
-        alert("협의록 초안이 복사되었습니다!");
+    const handleGenerate = async () => {
+        if (!startDate || !endDate) {
+            alert("상단 네비게이션 바에서 분석할 기간을 먼저 선택해주세요.");
+            return;
+        }
+        setLoading(true);
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-meeting-minutes`, {
+                start_date: startDate,
+                end_date: endDate
+            });
+            setResult(res.data.analysis);
+        } catch (e: any) {
+            console.error(e);
+            alert("회의록 생성 실패: " + (e.response?.data?.detail || e.message));
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Only show full loading screen on initial load
-    if (loading && !data) return (
-        <AuthCheck>
-            <GlobalNav currentPage="meeting" />
-            <div className={styles.loading}>데이터 분석 중...</div>
-        </AuthCheck>
-    );
-    if (!data) return (
-        <AuthCheck>
-            <GlobalNav currentPage="meeting" />
-            <div className={styles.loading}>데이터를 불러올 수 없습니다.</div>
-        </AuthCheck>
-    );
+    const handleCopy = () => {
+        if (!result) return;
+        navigator.clipboard.writeText(result);
+        alert("클립보드에 복사되었습니다.");
+    };
+
+    const handlePrint = () => {
+        window.print();
+    };
 
     return (
         <AuthCheck>
-        <div className={styles.container}>
-            <GlobalNav currentPage="meeting" />
-            <div style={{ padding: '20px' }}>
-                <header style={{ marginBottom: '20px' }}>
-                    <div className={styles.title}>
-                        <h1>📅 학교행동중재지원팀 정기 협의회</h1>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
-                            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
-                        </div>
-                    </div>
-                    <div style={{ marginTop: '10px' }}>
-                        <span className={styles.badge} style={{background:'#d32f2f', marginRight: 10, fontSize: '0.9rem', padding: '5px 10px'}}>
-                            🚨 긴급 안건: {data.summary.emergency_count}명
-                        </span>
-                        <span className={styles.badge} style={{background:'#ef6c00', fontSize: '0.9rem', padding: '5px 10px'}}>
-                            ⚠️ Tier 2 진입 대상: {data.summary.tier2_candidate_count}명
-                        </span>
-                    </div>
-                </header>
+            <div className={styles.container}>
+                <GlobalNav currentPage="meeting" />
+                <main className={styles.main}>
+                    <div className={styles.card} style={{ borderLeft: '5px solid #8b5cf6', minHeight: '80vh' }}>
+                        <header style={{ marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
+                            <h1 style={{ fontSize: '1.8rem', color: '#111', marginBottom: '0.5rem' }}>
+                                🤖 학교행동중재지원팀 정기 협의회 에이전트
+                            </h1>
+                            <p style={{ color: '#666' }}>
+                                설정된 기간의 학교 전체 데이터(행동발생, CICO, Tier3)를 분석하여 학교장 보고용 협의록을 자동 생성합니다.
+                            </p>
 
-            <div className={styles.mainLayout}>
-                {/* Sidebar List */}
-                <aside className={styles.sidebar}>
-                    <div className={styles.sidebarTitle}>대상 학생 목록 ({data.students.length}명)</div>
-                    <ul className={styles.studentList}>
-                        {data.students.map((student, idx) => (
-                            <li 
-                                key={idx} 
-                                className={`${styles.studentItem} ${selectedStudent?.name === student.name ? styles.activeStudent : ''}`}
-                                onClick={() => {
-                                    setSelectedStudent(student);
-                                    setOpinion(""); // Reset opinion
-                                }}
-                            >
-                                <span className={styles.studentName}>
-                                    {student.name}
-                                    {student.is_emergency && <span className={`${styles.badge} ${styles.badgeRed}`} style={{marginLeft: 5}}>긴급</span>}
-                                    {!student.is_emergency && student.is_tier2_candidate && <span className={`${styles.badge} ${styles.badgeOrange}`} style={{marginLeft: 5}}>Tier 2 대상</span>}
-                                </span>
-                                <div className={styles.studentMeta}>
-                                    <span>{student.class}</span> | 
-                                    <span>총 {student.total_incidents}건</span>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                </aside>
-
-                {/* Main Content Area */}
-                <main className={styles.contentArea}>
-                    {selectedStudent ? (
-                        <>
-                            <div className={styles.recommendationBox}>
-                                <div className={styles.recommendationTitle}>🧠 시스템 분석 결과</div>
-                                <div style={{display:'flex', alignItems:'center', gap: 10}}>
-                                    <span style={{fontSize: '1.2rem', fontWeight: 'bold'}}>
-                                        {selectedStudent.decision_recommendation}
+                            <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '8px' }}>
+                                <div style={{ flex: 1 }}>
+                                    <span style={{ fontWeight: 'bold', color: '#4b5563' }}>분석 기간: </span>
+                                    <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>
+                                        {startDate && endDate ? `${startDate} ~ ${endDate}` : '기간 미설정 (상단에서 선택하세요)'}
                                     </span>
-                                    {selectedStudent.is_emergency && <span style={{color: '#d32f2f'}}>사유: {selectedStudent.emergency_reason}</span>}
                                 </div>
-                                <p style={{marginTop: 5, color: '#555', fontSize: '0.9rem'}}>
-                                    * 최근 4주간 주당 평균 {selectedStudent.weekly_avg}회 발생하였습니다.
-                                    {selectedStudent.is_tier2_candidate && (
-                                        <>
-                                            <br/>
-                                            * 2주 연속 주 2회 이상 발생 패턴이 감지되었습니다.
-                                        </>
-                                    )}
-                                </p>
+                                <button
+                                    onClick={handleGenerate}
+                                    disabled={loading || !startDate || !endDate}
+                                    style={{
+                                        padding: '10px 24px',
+                                        backgroundColor: loading ? '#9ca3af' : '#8b5cf6',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        fontSize: '1rem',
+                                        fontWeight: 'bold',
+                                        cursor: loading ? 'not-allowed' : 'pointer',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        transition: 'background 0.2s'
+                                    }}
+                                >
+                                    {loading ? "데이터 분석 및 생성 중..." : "✨ AI 협의록 생성하기"}
+                                </button>
                             </div>
+                        </header>
 
-                            <div className={styles.card}>
-                                <h3>📝 담임교사 / 팀 의견 작성</h3>
-                                <p style={{fontSize:'0.85rem', color:'#666', marginBottom: 5}}>
-                                    학생의 최근 상태, 가정 환경 변화, 선행 사건 등 정성적인 관찰 내용을 입력해주세요.
-                                </p>
-                                <textarea 
-                                    className={styles.textarea} 
-                                    placeholder="예: 최근 자리 배치를 바꾸면서 교우 관계 갈등이 잦아짐. 가정 내 불화가 있다는 상담 내용 있음."
-                                    value={opinion}
-                                    onChange={(e) => setOpinion(e.target.value)}
-                                />
-                                
-                                <div className={styles.actionButtons}>
-                                    <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleCopyMinutes}>
-                                        📋 협의록 초안 복사
+                        {result ? (
+                            <section>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '1rem' }}>
+                                    <button
+                                        onClick={handleCopy}
+                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+                                    >
+                                        📋 복사하기
                                     </button>
-                                    <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => window.open(`/student/${selectedStudent.name}`, '_blank')}>
-                                        상세 그래프 보기 ↗
+                                    <button
+                                        onClick={handlePrint}
+                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+                                    >
+                                        🖨️ 인쇄하기
                                     </button>
                                 </div>
+                                <div
+                                    style={{
+                                        whiteSpace: 'pre-wrap',
+                                        lineHeight: '1.8',
+                                        color: '#374151',
+                                        backgroundColor: '#fff',
+                                        padding: '2rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #e5e7eb',
+                                        fontFamily: 'sans-serif',
+                                        fontSize: '1.05rem'
+                                    }}
+                                >
+                                    {result}
+                                </div>
+                            </section>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
+                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
+                                <p>기간을 설정하고 [AI 협의록 생성하기] 버튼을 눌러주세요.</p>
+                                <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                                    Google Sheets의 모든 데이터를 기반으로 즉시 분석합니다.
+                                </p>
                             </div>
-                        </>
-                    ) : (
-                        <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100%', color:'#aaa'}}>
-                            좌측 목록에서 학생을 선택해주세요.
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </main>
             </div>
-            </div>
-        </div>
         </AuthCheck>
     );
 }

@@ -20,6 +20,86 @@ def _filter_by_date(records: list, start_date: str = None, end_date: str = None)
     ]
 
 
+class MeetingMinutesRequest(BaseModel):
+    start_date: str
+    end_date: str
+
+@router.post("/ai-meeting-minutes")
+async def ai_meeting_minutes(req: MeetingMinutesRequest):
+    """Generate comprehensive AI meeting minutes using ALL school data."""
+    from app.services.ai_insight import generate_bcba_meeting_minutes
+    
+    # 1. Fetch all records and filter by date
+    records = fetch_all_records()
+    records = _filter_by_date(records, req.start_date, req.end_date)
+    
+    total_incidents = len(records)
+    
+    # Calculate daily average
+    from datetime import datetime
+    try:
+        d1 = datetime.strptime(req.start_date, "%Y-%m-%d")
+        d2 = datetime.strptime(req.end_date, "%Y-%m-%d")
+        days = (d2 - d1).days + 1
+        daily_avg = round(total_incidents / days, 1) if days > 0 else 0
+    except:
+        daily_avg = 0
+        
+    summary = {
+        "total_incidents": total_incidents,
+        "daily_avg": daily_avg
+    }
+    
+    # 2. Identify Risk Students (Status records)
+    status_records = fetch_student_status()
+    risk_list = []
+    for s in status_records:
+        # Simple heuristic: if mentioned in logs highly
+        # Or check 'Tier' column
+        tier = str(s.get("Tier", s.get("지원단계", "")))
+        if "3" in tier or "2" in tier: # Tier 2 or 3
+            # Count incidents for this student in the filtered logs
+            scode = str(s.get("학생코드", "")).strip()
+            count = sum(1 for r in records if str(r.get("학생코드", "")).strip() == scode or str(r.get("코드번호", "")).strip() == scode)
+            if count > 0:
+                risk_list.append({
+                    "name": s.get("성명", s.get("이름", "")),
+                    "code": scode,
+                    "tier": tier,
+                    "count": count
+                })
+    
+    # Sort by count desc
+    risk_list.sort(key=lambda x: x["count"], reverse=True)
+    
+    # 3. CICO Stats (fetch current month)
+    import datetime
+    current_month = datetime.datetime.now().month
+    cico_data = get_monthly_cico_data(current_month)
+    cico_stats = {}
+    if isinstance(cico_data, dict) and "students" in cico_data:
+        students = cico_data["students"]
+        cico_stats = {
+            "total_students": len(students),
+            "avg_rate": round(sum(float(s.get("rate", 0)) for s in students) / len(students), 1) if students else 0,
+            "achieved_count": sum(1 for s in students if s.get("achieved", "") == "O"),
+            "not_achieved_count": sum(1 for s in students if s.get("achieved", "") == "X")
+        }
+        
+    # 4. Tier 3 Data
+    t3_data = get_tier3_report_data(req.start_date, req.end_date)
+    tier3_stats = []
+    if isinstance(t3_data, dict) and "students" in t3_data:
+        tier3_stats = t3_data["students"]
+        
+    result = generate_bcba_meeting_minutes(
+        req.start_date, req.end_date,
+        summary, risk_list, cico_stats, tier3_stats
+    )
+    
+    return {"analysis": result}
+
+
 @router.get("/dashboard")
 async def get_dashboard_summary(start_date: str = None, end_date: str = None):
     return get_analytics_data(start_date, end_date)

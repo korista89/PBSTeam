@@ -172,13 +172,22 @@ def get_users_worksheet():
         except gspread.WorksheetNotFound:
             print("Creating 'Users' worksheet...")
             ws = sheet.add_worksheet(title="Users", rows=110, cols=5)
-            ws.append_row(["ID", "Password", "Role", "LastLogin"])
+            # Check if Memo column exists, if not add it
+            headers = ws.row_values(1)
+            if "Memo" not in headers:
+                ws.update_cell(1, len(headers) + 1, "Memo")
+
+            return ws
+        except gspread.WorksheetNotFound:
+            print("Creating 'Users' worksheet...")
+            ws = sheet.add_worksheet(title="Users", rows=110, cols=10)
+            ws.append_row(["ID", "Password", "Role", "ClassID", "ClassName", "Name", "Phone", "Email", "LastLogin", "Memo"])
             # Initialize admin accounts (1-10)
             for i in range(1, 11):
-                ws.append_row([str(i), "admin123", "admin", ""])
+                ws.append_row([str(i), "admin123", "admin", "", "", f"Admin {i}", "", "", "", ""])
             # Initialize teacher accounts (11-100)
             for i in range(11, 101):
-                ws.append_row([str(i), "teacher123", "teacher", ""])
+                ws.append_row([str(i), "teacher123", "teacher", "", "", f"Teacher {i}", "", "", "", ""])
             return ws
     except Exception as e:
         print(f"Error accessing Users worksheet: {e}")
@@ -297,7 +306,17 @@ def get_all_users():
     try:
         records = ws.get_all_records()
         # Don't return passwords
-        return [{"ID": r.get("ID"), "Role": r.get("Role"), "LastLogin": r.get("LastLogin")} for r in records]
+        records = ws.get_all_records()
+        # Don't return passwords
+        return [{
+            "ID": r.get("ID"), 
+            "Role": r.get("Role"), 
+            "LastLogin": r.get("LastLogin"),
+            "ClassID": r.get("ClassID"),
+            "ClassName": r.get("ClassName"),
+            "Name": r.get("Name"),
+            "Memo": r.get("Memo")
+        } for r in records]
     except Exception as e:
         print(f"Error fetching users: {e}")
         return []
@@ -888,8 +907,8 @@ def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, 
         return {"error": str(e)}
 
 
-def update_user_role(user_id: str, new_role: str, new_class: str = ""):
-    """Update user role and class in Users sheet"""
+def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str = "", memo: str = ""):
+    """Update user role, class, name, and memo in Users sheet"""
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not available"}
@@ -897,26 +916,52 @@ def update_user_role(user_id: str, new_role: str, new_class: str = ""):
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         ws = sh.worksheet("Users")
-        records = ws.get_all_records()
         
-        cell = ws.find(user_id)
+        cell = ws.find(user_id, in_column=1) # Assume ID is col 1
         if not cell:
             return {"error": "User not found"}
             
-        # Headers: ID, Password, Role, ClassID, ClassName, Name, LastLogin
-        # We need to find column indices for Role and ClassID
+        # Headers: ID, Password, Role, ClassID, ClassName, Name, Phone, Email, LastLogin, Memo
         headers = ws.row_values(1)
-        role_col = headers.index("Role") + 1
-        class_id_col = headers.index("ClassID") + 1
-        class_name_col = headers.index("ClassName") + 1
         
-        ws.update_cell(cell.row, role_col, new_role)
-        ws.update_cell(cell.row, class_id_col, new_class)
-        ws.update_cell(cell.row, class_name_col, new_class) # Use ID as Name for simplicity or lookup
+        def get_col_index(header_name):
+            try:
+                return headers.index(header_name) + 1
+            except ValueError:
+                # If header missing and we trying to update Memo, maybe add it?
+                # For now, just return None
+                return None
+
+        # Update Role
+        role_col = get_col_index("Role")
+        if role_col: ws.update_cell(cell.row, role_col, new_role)
+        
+        # Update ClassID
+        class_id_col = get_col_index("ClassID")
+        if class_id_col: ws.update_cell(cell.row, class_id_col, new_class)
+        
+        # Update ClassName
+        class_name_col = get_col_index("ClassName")
+        if class_name_col: ws.update_cell(cell.row, class_name_col, new_class + "반" if new_class else "")
+        
+        # Update Name
+        if name:
+            name_col = get_col_index("Name")
+            if name_col: ws.update_cell(cell.row, name_col, name)
+            
+        # Update Memo
+        if memo:
+            memo_col = get_col_index("Memo")
+            if not memo_col:
+                # Add Memo column if missing
+                ws.update_cell(1, len(headers) + 1, "Memo")
+                memo_col = len(headers) + 1
+            ws.update_cell(cell.row, memo_col, memo)
         
         clear_cache("users")
         return {"message": f"User {user_id} updated"}
     except Exception as e:
+        print(f"Error updating user: {e}")
         return {"error": str(e)}
 
 
@@ -2726,5 +2771,27 @@ def add_holiday(date_str, name):
         return {"message": f"Holiday {name} ({date_str}) added"}
     except Exception as e:
         print(f"Error adding holiday: {e}")
+        return {\"error\": str(e)}
+
+def delete_holiday(date_str):
+    """Delete a holiday from the '날짜 관리' sheet by date."""
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        config_ws = sheet.worksheet("날짜 관리")
+        
+        dates = config_ws.col_values(1)
+        for i, d in enumerate(dates):
+            if d == date_str:
+                config_ws.delete_rows(i + 1)  # 1-indexed
+                clear_cache()
+                return {"message": f"Holiday {date_str} deleted"}
+        
+        return {"error": "Holiday not found"}
+    except Exception as e:
+        print(f"Error deleting holiday: {e}")
         return {"error": str(e)}
 
