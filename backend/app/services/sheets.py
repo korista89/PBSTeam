@@ -2771,7 +2771,7 @@ def add_holiday(date_str, name):
         return {"message": f"Holiday {name} ({date_str}) added"}
     except Exception as e:
         print(f"Error adding holiday: {e}")
-        return {\"error\": str(e)}
+        return {"error": str(e)}
 
 def delete_holiday(date_str):
     """Delete a holiday from the '날짜 관리' sheet by date."""

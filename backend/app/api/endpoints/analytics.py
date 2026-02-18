@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import Optional, List
 from app.services.analysis import get_analytics_data
 from app.services.sheets import (
     fetch_all_records, get_beable_code_mapping, get_tier3_report_data,
