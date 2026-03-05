@@ -59,6 +59,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         { href: "/meeting", label: "🤝 협의회", key: "meeting" },
         { href: "/protocol", label: "📜 프로토콜", key: "protocol" },
         { href: "/board", label: "📢 게시판", key: "board" },
+        { href: "/picture-word", label: "🎨 경은그림말", key: "picture-word" },
     ];
 
     if (isAdmin()) {

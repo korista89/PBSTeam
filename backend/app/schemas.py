@@ -19,3 +19,41 @@ class BehaviorRecord(BaseModel):
 
     class Config:
         populate_by_name = True
+
+class PictureWordRecord(BaseModel):
+    id: int
+    category: str
+    word: str
+    listener: bool = False
+    mimicry: bool = False
+    naming: bool = False
+    matching: bool = False
+    conversation: bool = False
+    mand: bool = False
+    total: int = 0
+    consultation: Optional[str] = ""
+    consultation_date: Optional[str] = ""
+
+class PictureWordLesson(BaseModel):
+    lesson_num: int
+    domain: str
+    vb_type: str
+    subject: str
+    goal: str
+    lesson_date: Optional[str] = ""
+    consultation: Optional[str] = ""
+    consultation_date: Optional[str] = ""
+    material1: Optional[str] = ""
+    material2: Optional[str] = ""
+    material3: Optional[str] = ""
+
+class PictureWordOverview(BaseModel):
+    student_name: str
+    domain_progress: dict[str, int] # domain -> count of words learned (>0 VBs)
+    total_learned: int
+
+class PictureWordMinutes(BaseModel):
+    date: str
+    source: str
+    type: str
+    content: str
