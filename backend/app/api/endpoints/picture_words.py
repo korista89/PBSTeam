@@ -1,43 +1,126 @@
-
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, Query
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
 from app.services.picture_words import (
-    init_picture_word_sheets, fetch_student_vocab, update_student_vocab,
-    fetch_lessons, update_lesson, fetch_overview, fetch_certification_status
+    fetch_all_students, fetch_students_by_class,
+    add_student, delete_student,
+    fetch_student_vocab, update_student_vocab,
+    fetch_lessons, update_lesson,
+    fetch_minutes, add_minute_entry, delete_minute_entry,
+    fetch_class_overview, fetch_certification_status,
+    init_picture_word_system
 )
-from app.schemas import PictureWordRecord, PictureWordLesson, PictureWordOverview
 
 router = APIRouter()
 
+# ─────────────────────────────────────────────────────────────
+# 초기화
+# ─────────────────────────────────────────────────────────────
 @router.post("/init")
-def init_sheets():
-    return init_picture_word_sheets()
+def init_system():
+    return init_picture_word_system()
 
-@router.get("/student/{student_num}/vocab")
-def get_vocab(student_num: int):
-    return fetch_student_vocab(student_num)
+# ─────────────────────────────────────────────────────────────
+# 학생 명부
+# ─────────────────────────────────────────────────────────────
+@router.get("/students")
+def get_all_students():
+    return fetch_all_students()
 
-@router.patch("/student/{student_num}/vocab/{vocab_id}")
-def update_vocab(student_num: int, vocab_id: int, updates: Dict[str, Any]):
-    return update_student_vocab(student_num, vocab_id, updates)
+@router.get("/students/by-class/{class_id}")
+def get_students_by_class(class_id: str):
+    return fetch_students_by_class(class_id)
 
+class AddStudentRequest(BaseModel):
+    class_id: str
+    class_name: str
+    student_num: int
+    student_name: str
+
+@router.post("/students")
+def create_student(req: AddStudentRequest):
+    return add_student(req.class_id, req.class_name, req.student_num, req.student_name)
+
+@router.delete("/students/{class_id}/{student_name}")
+def remove_student(class_id: str, student_name: str):
+    result = delete_student(class_id, student_name)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+# ─────────────────────────────────────────────────────────────
+# 체크리스트 (학생별 어휘 습득)
+# ─────────────────────────────────────────────────────────────
+@router.get("/vocab/{class_id}/{student_name}")
+def get_vocab(class_id: str, student_name: str):
+    return fetch_student_vocab(class_id, student_name)
+
+class VocabUpdateRequest(BaseModel):
+    updates: Dict[str, Any]
+
+@router.patch("/vocab/{class_id}/{student_name}/{vocab_id}")
+def patch_vocab(class_id: str, student_name: str, vocab_id: int, req: VocabUpdateRequest):
+    result = update_student_vocab(class_id, student_name, vocab_id, req.updates)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+# ─────────────────────────────────────────────────────────────
+# 수업 가이드
+# ─────────────────────────────────────────────────────────────
 @router.get("/lessons")
-def get_all_lessons():
+def get_lessons():
     return fetch_lessons()
 
+class LessonUpdateRequest(BaseModel):
+    updates: Dict[str, Any]
+
 @router.patch("/lessons/{lesson_num}")
-def update_lesson_data(lesson_num: int, updates: Dict[str, Any]):
-    return update_lesson(lesson_num, updates)
+def patch_lesson(lesson_num: int, req: LessonUpdateRequest):
+    result = update_lesson(lesson_num, req.updates)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
 
-@router.get("/overview")
-def get_picture_word_overview():
-    return fetch_overview()
-
-@router.get("/student/{student_num}/certification")
-def get_certification(student_num: int):
-    return fetch_certification_status(student_num)
-
+# ─────────────────────────────────────────────────────────────
+# 협의록
+# ─────────────────────────────────────────────────────────────
 @router.get("/minutes")
-def get_minutes():
-    from app.services.picture_words import fetch_picture_word_minutes
-    return fetch_picture_word_minutes()
+def get_minutes(class_id: Optional[str] = Query(None)):
+    return fetch_minutes(class_id)
+
+class MinuteRequest(BaseModel):
+    date: str
+    kind: str           # 수업협의 | 평가협의
+    source: str         # 학생명 또는 차시 정보
+    content: str
+    class_id: str = ""
+    class_name: str = ""
+
+@router.post("/minutes")
+def post_minute(req: MinuteRequest):
+    result = add_minute_entry(req.date, req.kind, req.source, req.content, req.class_id, req.class_name)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+@router.delete("/minutes/{row_index}")
+def remove_minute(row_index: int):
+    result = delete_minute_entry(row_index)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+# ─────────────────────────────────────────────────────────────
+# 학급 현황
+# ─────────────────────────────────────────────────────────────
+@router.get("/overview")
+def get_overview(class_id: Optional[str] = Query(None)):
+    return fetch_class_overview(class_id)
+
+# ─────────────────────────────────────────────────────────────
+# 인증제 현황
+# ─────────────────────────────────────────────────────────────
+@router.get("/certification/{class_id}/{student_name}")
+def get_certification(class_id: str, student_name: str):
+    return fetch_certification_status(class_id, student_name)
