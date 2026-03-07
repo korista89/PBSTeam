@@ -11,23 +11,45 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
 
     df = pd.DataFrame(raw_data)
     
-    # --- Get BeAble code mapping (only enrolled students with BeAble codes in TierStatus) ---
-    beable_mapping = get_beable_code_mapping()  # {beable_code: {'student_code': '1011', ...}}
+    # 2. Create BeAble to student info lookup
+    beable_to_info = beable_mapping
     
-    # beable_mapping keys are BeAble codes from TierStatus
-    valid_beable_codes = set(beable_mapping.keys())
+    # 3. Filter & Map Data
+    # Use '코드번호' (BeAble) as primary, but if not found, try to match via '학생명' or '학생코드' column if they exist
+    def resolve_student_info(row):
+        # Try primary BeAble code first
+        code_val = str(row.get('코드번호', '')).strip()
+        if code_val in beable_to_info:
+            return beable_to_info[code_val]
+        
+        # Try Student Code (4-digit) column
+        s_code = str(row.get('학생코드', '')).strip()
+        if s_code in beable_to_info:
+            return beable_to_info[s_code]
+            
+        # Try Name mapping (expensive but thorough fallback)
+        s_name = str(row.get('학생명', '')).strip()
+        for info in beable_to_info.values():
+            if info.get('student_name') == s_name:
+                return info
+        return None
+
+    resolved_records = []
+    for _, row in df.iterrows():
+        info = resolve_student_info(row)
+        if info:
+            new_row = row.to_dict()
+            new_row['student_code'] = info['student_code']
+            new_row['student_name_labeled'] = info.get('student_name', info['student_code'])
+            resolved_records.append(new_row)
     
-    # Create BeAble to student code lookup for display
-    beable_to_student_code = {k: v['student_code'] for k, v in beable_mapping.items()}
-    
-    # --- Filter: Only include records where 코드번호 (BeAble code in 시트1) is in TierStatus ---
-    if '코드번호' in df.columns:
-        # Filter: keep only rows where 코드번호 (BeAble code) is in valid_beable_codes
-        df = df[df['코드번호'].astype(str).isin(valid_beable_codes)]
-        # Convert BeAble code to 4-digit student code for display
-        df['학생코드'] = df['코드번호'].astype(str).apply(lambda x: beable_to_student_code.get(x, x))
-    else:
-        df['학생코드'] = '-'
+    if not resolved_records:
+        return {"summary": {"total_incidents": 0, "avg_intensity": 0, "risk_student_count": 0}, "risk_list": [], "safety_alerts": [], "ai_comment": "데이터가 없습니다."}
+
+    df = pd.DataFrame(resolved_records)
+    # Ensure columns exist for downstream logic
+    if '학생코드' not in df.columns:
+        df['학생코드'] = df['student_code']
     
     # Ensure numeric columns are actually numeric
     if '강도' in df.columns:
@@ -107,11 +129,12 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
             
             if tier != "Tier 1":
                 at_risk_list.append({
-                    "name": str(student_code),  # 4-digit student code
+                    "name": group['student_name_labeled'].iloc[0] if 'student_name_labeled' in group.columns else str(student_code),
+                    "student_code": str(student_code),
                     "count": int(count),
                     "max_intensity": int(max_intensity),
                     "tier": tier,
-                    "class": group['코드번호'].iloc[0] if '코드번호' in group.columns else "-"
+                    "class": group.get('학급', group.get('코드번호', pd.Series(['-']))).iloc[0]
                 })
     
     # Sort risk list by Tier (desc) then Count (desc)

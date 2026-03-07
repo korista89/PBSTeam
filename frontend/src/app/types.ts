@@ -16,6 +16,7 @@ export interface HeatmapData {
 
 export interface RiskStudent {
     name: string;
+    student_code: string;
     count: number;
     max_intensity: number;
     tier: string;

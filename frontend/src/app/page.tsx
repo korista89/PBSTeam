@@ -516,7 +516,7 @@ export default function Home() {
                                 {(() => {
                                     const filteredRiskList = isAdmin() 
                                         ? risk_list 
-                                        : risk_list.filter(s => String(s.class).startsWith(user?.class_id || ""));
+                                        : risk_list.filter(s => String(s.student_code || s.class).startsWith(user?.class_id || ""));
                                     
                                     return filteredRiskList.map((student: RiskStudent, idx: number) => (
                                         <tr key={idx}>
@@ -542,7 +542,7 @@ export default function Home() {
                                 })()}
                             </tbody>
                         </table>
-                        {(isAdmin() ? risk_list.length === 0 : risk_list.filter(s => String(s.class).startsWith(user?.class_id || "")).length === 0) && (
+                        {(isAdmin() ? risk_list.length === 0 : risk_list.filter(s => String(s.student_code || s.class).startsWith(user?.class_id || "")).length === 0) && (
                             <p className={styles.noData}>감지된 위험군 학생이 없습니다.</p>
                         )}
                     </div>
@@ -564,18 +564,30 @@ export default function Home() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.safety_alerts?.map((alert: SafetyAlert, idx: number) => (
-                                    <tr key={idx} style={{ backgroundColor: '#fef2f2' }}>
-                                        <td>{alert.date}</td>
-                                        <td>{alert.student}</td>
-                                        <td>{alert.location}</td>
-                                        <td>{alert.type}</td>
-                                        <td style={{ color: '#dc2626', fontWeight: 'bold' }}>{alert.intensity} (위험)</td>
-                                    </tr>
-                                ))}
+                                {(() => {
+                                    const filteredAlerts = isAdmin()
+                                        ? data.safety_alerts
+                                        : data.safety_alerts?.filter(alert => String(alert.student).startsWith(user?.class_id || ""));
+                                    
+                                    return filteredAlerts?.map((alert: SafetyAlert, idx: number) => (
+                                        <tr key={idx} style={{ backgroundColor: '#fef2f2' }}>
+                                            <td>{alert.date}</td>
+                                            <td>{alert.student}</td>
+                                            <td>{alert.location}</td>
+                                            <td>{alert.type}</td>
+                                            <td style={{ color: '#dc2626', fontWeight: 'bold' }}>{alert.intensity} (위험)</td>
+                                        </tr>
+                                    ));
+                                })()}
                             </tbody>
                         </table>
-                        {(!data.safety_alerts || data.safety_alerts.length === 0) && <p className={styles.noData}>최근 발생한 고위험(강도 5) 행동이 없습니다.</p>}
+                        {(() => {
+                            const filteredAlerts = isAdmin()
+                                ? data.safety_alerts
+                                : data.safety_alerts?.filter(alert => String(alert.student).startsWith(user?.class_id || ""));
+                            
+                            return (!filteredAlerts || filteredAlerts.length === 0) && <p className={styles.noData}>최근 발생한 고위험(강도 5) 행동이 없습니다.</p>;
+                        })()}
                     </div>
 
                 </main>

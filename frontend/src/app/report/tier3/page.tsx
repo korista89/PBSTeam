@@ -229,7 +229,7 @@ export default function Tier3Report() {
                 const students = data.students.filter(s => {
                   if (isAdmin()) return true;
                   const userClassId = user?.class_id || "";
-                  return s.class && String(s.class).startsWith(String(userClassId));
+                  return s.code && String(s.code).startsWith(String(userClassId));
                 });
 
                 if (students.length === 0) {

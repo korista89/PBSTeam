@@ -772,8 +772,8 @@ def get_beable_code_mapping():
             student_code = str(r.get('학생코드', '')).strip()
             enrolled = str(r.get('재학여부', 'O')).strip()
             
-            # Only include enrolled students with BeAble codes
-            if beable and enrolled == 'O':
+            # Include ALL enrolled students (even if BeAble code is missing)
+            if enrolled == 'O':
                 # Determine highest tier for this student
                 tiers = []
                 if r.get('Tier3+') == 'O': tiers.append('Tier3+')
@@ -782,8 +782,12 @@ def get_beable_code_mapping():
                 if r.get('Tier2(CICO)') == 'O': tiers.append('Tier2(CICO)')
                 if r.get('Tier1') == 'O': tiers.append('Tier1')
                 
-                mapping[beable] = {
+                # Use BeAble code as key if present, otherwise use student_code
+                mapping_key = beable if beable else student_code
+                
+                mapping[mapping_key] = {
                     'student_code': student_code,
+                    'student_name': str(r.get('학생이름', student_code)).strip(),
                     'class': r.get('학급', ''),
                     'tiers': tiers,
                     'tier1': r.get('Tier1', 'O'),
