@@ -160,8 +160,8 @@ export default function PictureWordPage() {
       }));
       setAvailableClasses(classes);
       // 기본 학급 선택: 관리자는 첫 번째, 교사는 자기 학급
-      const defaultClass = isAdmin ? classes[0]?.id || "" : userClassId;
-      setSelectedClassId(defaultClass);
+      const defaultClass = isAdmin ? classes[0]?.id || "" : String(userClassId);
+      setSelectedClassId(String(defaultClass));
     } catch (e) {
       console.error(e);
     }
@@ -169,7 +169,7 @@ export default function PictureWordPage() {
 
   useEffect(() => {
     if (!selectedClassId) return;
-    const filtered = allStudents.filter((s) => s.학급ID === selectedClassId);
+    const filtered = allStudents.filter((s) => String(s.학급ID) === String(selectedClassId));
     setClassStudents(filtered);
     setSelectedStudent(null);
     setVocab([]);
@@ -295,11 +295,11 @@ export default function PictureWordPage() {
     }
     try {
       const classInfo = availableClasses.find(
-        (c) => c.id === (isAdmin ? selectedClassId : userClassId),
+        (c) => c.id === String(isAdmin ? selectedClassId : userClassId),
       );
       await axios.post(`${API}/minutes`, {
         ...newMinute,
-        class_id: isAdmin ? selectedClassId : userClassId,
+        class_id: isAdmin ? selectedClassId : String(userClassId),
         class_name: classInfo?.name || "",
       });
       setNewMinute({ date: "", kind: "수업협의", source: "", content: "" });
@@ -420,7 +420,7 @@ export default function PictureWordPage() {
           👤 학생 선택{" "}
           {isAdmin
             ? ""
-            : `(${availableClasses.find((c) => c.id === selectedClassId)?.name || ""})`}
+            : `(${availableClasses.find((c) => c.id === String(selectedClassId))?.name || ""})`}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {classStudents.length === 0 ? (
