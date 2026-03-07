@@ -129,6 +129,25 @@ export default function Home() {
     );
   }
 
+  if (data.error) {
+    return (
+      <AuthCheck>
+        <div className="container">
+          <GlobalNav currentPage="dashboard" />
+          <div style={{ padding: '50px', textAlign: 'center', color: '#ef4444' }}>
+            <p>⚠️ {data.error}</p>
+            <p style={{ fontSize: '0.8rem', marginTop: '10px' }}>데이터가 없거나 불러오는데 실패했습니다. 상단 날짜를 조정해보세요.</p>
+          </div>
+        </div>
+      </AuthCheck>
+    );
+  }
+
+  const summary = data.summary || { total_incidents: 0, avg_intensity: 0, risk_student_count: 0 };
+  const big5 = data.big5 || { locations: [], behaviors: [], times: [], weekdays: [] };
+  const riskList = data.risk_list || [];
+  const safetyAlerts = data.safety_alerts || [];
+
   return (
     <AuthCheck>
       <div className="container">
@@ -184,21 +203,21 @@ export default function Home() {
             <h2>1. 총괄 현황 (Overview)</h2>
             <div className="summary-stats">
               <div className="stat-box">
-                <div className="stat-value">{data.summary.total_incidents}건</div>
+                <div className="stat-value">{summary.total_incidents}건</div>
                 <div className="stat-label">총 행동 발생 (ODR)</div>
               </div>
               <div className="stat-box">
-                <div className="stat-value">{data.summary.avg_intensity.toFixed(2)}</div>
+                <div className="stat-value">{(summary.avg_intensity || 0).toFixed(2)}</div>
                 <div className="stat-label">평균 행동 강도 (1-5)</div>
               </div>
               <div className="stat-box">
-                <div className="stat-value" style={{ color: '#ef4444' }}>{isAdmin() ? data.summary.risk_student_count : data.risk_list.length}명</div>
+                <div className="stat-value" style={{ color: '#ef4444' }}>{isAdmin() ? summary.risk_student_count : riskList.length}명</div>
                 <div className="stat-label">집중 지원 대상 (Tier 2/3)</div>
               </div>
             </div>
             <AIAnalysisCard
               sectionName="총괄 현황"
-              dataContext={{ total_incidents: data.summary.total_incidents, avg_intensity: data.summary.avg_intensity, risk_count: data.risk_list.length }}
+              dataContext={{ total_incidents: summary.total_incidents, avg_intensity: summary.avg_intensity, risk_count: riskList.length }}
               startDate={startDate} endDate={endDate}
             />
           </section>
@@ -237,7 +256,7 @@ export default function Home() {
             </div>
             <AIAnalysisCard
               sectionName="행동 발생 추이"
-              dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends }}
+              dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends || [] }}
               startDate={startDate} endDate={endDate}
             />
           </section>
@@ -250,7 +269,7 @@ export default function Home() {
               <div className="chart-box">
                 <div className="chart-title">📍 주요 발생 장소</div>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.big5.locations} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <BarChart data={big5.locations || []} layout="vertical" margin={{ left: 10, right: 30 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
@@ -265,9 +284,9 @@ export default function Home() {
                 <div className="chart-title">🤔 주요 행동 유형</div>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
+                    <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
                       label={({ name, value }) => `${name} (${value})`}>
-                      {data.big5.behaviors.map((entry, index) => (
+                      {(big5.behaviors || []).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -282,7 +301,7 @@ export default function Home() {
               <div className="chart-box">
                 <div className="chart-title">⏰ 시간대별 패턴</div>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.big5.times} margin={{ top: 10 }}>
+                  <BarChart data={big5.times || []} margin={{ top: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
                     <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
@@ -296,7 +315,7 @@ export default function Home() {
               <div className="chart-box">
                 <div className="chart-title">📅 요일별 패턴</div>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.big5.weekdays} margin={{ top: 10 }}>
+                  <BarChart data={big5.weekdays || []} margin={{ top: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
                     <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
@@ -314,9 +333,9 @@ export default function Home() {
                 <div className="chart-title">❓ 행동의 기능 (Why)</div>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={data.functions} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
-                      label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                      {data.functions.map((entry, index) => (
+                    <Pie data={data.functions || []} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
+                      label={({ name, percent }: any) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}>
+                      {(data.functions || []).map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -328,7 +347,7 @@ export default function Home() {
               <div className="chart-box">
                 <div className="chart-title">⚡ 배경 사건 (When)</div>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20, right: 30 }}>
+                  <BarChart data={data.antecedents || []} layout="vertical" margin={{ left: 20, right: 30 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
@@ -345,7 +364,7 @@ export default function Home() {
               <div className="chart-box">
                 <div className="chart-title">🎁 후속 결과 (Consequence)</div>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.consequences} layout="vertical" margin={{ left: 20, right: 30 }}>
+                  <BarChart data={data.consequences || []} layout="vertical" margin={{ left: 20, right: 30 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
@@ -365,7 +384,7 @@ export default function Home() {
                     <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} axisLine={false} tickLine={false} />
                     <ZAxis type="number" dataKey="value" range={[50, 400]} name="빈도" />
                     <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px' }} />
-                    <Scatter name="Incidents" data={data.heatmap} fill="#e02424" />
+                    <Scatter name="Incidents" data={data.heatmap || []} fill="#e02424" />
                   </ScatterChart>
                 </ResponsiveContainer>
               </div>
@@ -374,10 +393,10 @@ export default function Home() {
             <AIAnalysisCard
               sectionName="패턴 분석 (Big 5 & ABC 분석)"
               dataContext={{
-                top_locations: data.big5.locations?.slice(0, 3),
-                top_behaviors: data.big5.behaviors?.slice(0, 3),
-                top_times: data.big5.times?.slice(0, 3),
-                functions: data.functions?.slice(0, 3),
+                top_locations: big5.locations?.slice(0, 3),
+                top_behaviors: big5.behaviors?.slice(0, 3),
+                top_times: big5.times?.slice(0, 3),
+                functions: (data.functions || [])?.slice(0, 3),
               }}
               startDate={startDate} endDate={endDate}
             />
@@ -430,7 +449,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.risk_list.map((s, idx) => (
+                  {riskList.map((s, idx) => (
                     <tr key={idx}>
                       <td>
                         <span style={{
@@ -458,7 +477,7 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            {data.risk_list.length === 0 && <p style={{ fontSize: '12px', color: '#666' }}>감지된 위험군 학생이 없습니다.</p>}
+            {riskList.length === 0 && <p style={{ fontSize: '12px', color: '#666' }}>감지된 위험군 학생이 없습니다.</p>}
           </section>
 
           {/* ===== Section 5: Action Plan ===== */}

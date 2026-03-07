@@ -79,6 +79,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         df = df[df['student_code'].str.startswith(str(class_id), na=False)]
     
     # --- Tier 1: Big 5 Analysis ---
+    if not df.empty:
         # Group by Month-Year or just Date based on range. Let's do Weekly/Daily for now as requested "Weekly Trend"
         # For the dashboard chart, we often want recent daily trend or monthly trend.
         # Let's provide Daily trend for the last 30 entries or similar
@@ -98,7 +99,6 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             for (y, w), count in w_grouped.items():
                 label = f"{y}-W{w:02d}"
                 weekly_counts[label] = int(count)
-                
     else:
         date_counts = {}
         weekly_counts = {}
