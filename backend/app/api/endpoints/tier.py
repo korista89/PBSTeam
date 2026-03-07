@@ -25,6 +25,7 @@ class TierUpdateRequest(BaseModel):
 class UnifiedTierUpdateRequest(BaseModel):
     """Single request for all tier-related updates"""
     code: Union[str, int]
+    student_name: Optional[str] = None
     tier1: Optional[str] = None
     tier2_cico: Optional[str] = None
     tier2_sst: Optional[str] = None
@@ -105,7 +106,8 @@ async def update_tier_unified(request: Request):
             tier_values=tier_values,
             enrolled=req_data.enrolled,
             beable_code=req_data.beable_code,
-            memo=req_data.memo or ""
+            memo=req_data.memo or "",
+            student_name=req_data.student_name
         )
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])

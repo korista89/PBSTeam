@@ -298,9 +298,10 @@ def update_user_password(user_id: str, new_password: str):
         print(f"Error updating password: {e}")
         return {"error": str(e)}
 
-def update_tierstatus_certification(student_code: str, cert_count: int):
+def update_tierstatus_certification(student_code_or_name: str, cert_count: int):
     """
-    TierStatus 시트의 '그림어휘인증(수)' 열(11번째 컬럼)을 업데이트.
+    TierStatus 시트의 '그림말인증' 열(7번째 컬럼)을 업데이트.
+    학생 식별은 코드 또는 이름으로 수행.
     """
     ws = get_student_status_worksheet()
     if not ws:
@@ -308,15 +309,15 @@ def update_tierstatus_certification(student_code: str, cert_count: int):
         
     try:
         records = ws.get_all_records()
-        # 1-indexed column num: 11
+        # 1-indexed column num: 7
         for idx, r in enumerate(records):
-            if str(r.get('학생코드')) == str(student_code):
+            if str(r.get('학생코드')) == str(student_code_or_name) or str(r.get('학생이름')) == str(student_code_or_name):
                 row_num = idx + 2 # +2 for header and 0-indexing of enumerate
-                ws.update_cell(row_num, 11, cert_count)
-                return {"message": f"Updated certification count to {cert_count} for {student_code}"}
+                ws.update_cell(row_num, 7, cert_count)
+                return {"message": f"Updated certification count to {cert_count} for {student_code_or_name}"}
         return {"error": "Student not found in TierStatus"}
     except Exception as e:
-        print(f"Error updating certification in TierStatus: {e}")
+        print(f"Error updating certification: {e}")
         return {"error": str(e)}
 
 def get_all_users():
@@ -517,15 +518,14 @@ def get_student_status_worksheet():
         try:
             return sheet.worksheet("TierStatus")
         except gspread.WorksheetNotFound:
-            print("Creating 'TierStatus' worksheet with 210 students (5 tier columns)...")
-            ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=13)
-            # Header row with 5 separate tier columns + 그림어휘인증(수)
-            # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 그림어휘인증(수), 변경일, 메모
-            all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "그림어휘인증(수)", "변경일", "메모"]]
+            print("Creating 'TierStatus' worksheet with 210 students (14 columns)...")
+            ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=14)
+            # Header row with student name, certification and memo
+            all_data = [["번호", "학급", "학생코드", "학생이름", "재학여부", "BeAble코드", "그림말인증", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
             for idx, code in enumerate(STUDENT_CODES):
                 class_name = code_to_class_name(code)
-                # Default: Tier1=O, all others=X, 그림어휘인증(수)=0
-                all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", 0, "", ""])
+                # Default: name=code, enrolled=O, beable="", cert=0, T1=O, others=X, date="", memo=""
+                all_data.append([idx + 1, class_name, code, code, "O", "", 0, "O", "X", "X", "X", "X", "", ""])
             ws.update(all_data, 'A1')
             return ws
     except Exception as e:
@@ -551,17 +551,15 @@ def reset_tier_status_sheet():
         except gspread.WorksheetNotFound:
             print("No existing TierStatus worksheet to delete")
         
-        # Create new sheet with 210 students and 13 columns
-        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students (5 tier columns + 그림어휘인증(수))...")
-        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=13)
+        # Create new sheet with 210 students and 14 columns
+        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students...")
+        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=14)
         
         # Prepare all data at once for batch update
-        # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 그림어휘인증(수), 변경일, 메모
-        all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "그림어휘인증(수)", "변경일", "메모"]]
+        all_data = [["번호", "학급", "학생코드", "학생이름", "재학여부", "BeAble코드", "그림말인증", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
         for idx, code in enumerate(STUDENT_CODES):
             class_name = code_to_class_name(code)
-            # Default: Tier1=O, all others=X, 그림어휘인증(수)=0
-            all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", 0, "", ""])
+            all_data.append([idx + 1, class_name, code, code, "O", "", 0, "O", "X", "X", "X", "X", "", ""])
         
         # Batch update all rows at once
         ws.update(all_data, 'A1')
@@ -609,11 +607,11 @@ def update_student_tier(code: str, tier_values: dict, memo: str = ""):
         
         # Column mapping (1-indexed)
         tier_columns = {
-            'Tier1': 6,
-            'Tier2(CICO)': 7,
-            'Tier2(SST)': 8,
-            'Tier3': 9,
-            'Tier3+': 10,
+            'Tier1': 8,
+            'Tier2(CICO)': 9,
+            'Tier2(SST)': 10,
+            'Tier3': 11,
+            'Tier3+': 12,
         }
         
         for idx, r in enumerate(records):
@@ -626,12 +624,12 @@ def update_student_tier(code: str, tier_values: dict, memo: str = ""):
                         value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
                         ws.update_cell(row_num, col_num, value)
                 
-                # Update 변경일 (column 11)
-                ws.update_cell(row_num, 11, today)
+                # Update 변경일 (column 13)
+                ws.update_cell(row_num, 13, today)
                 
-                # Update 메모 (column 12)
+                # Update 메모 (column 14)
                 if memo:
-                    ws.update_cell(row_num, 12, memo)
+                    ws.update_cell(row_num, 14, memo)
                 
                 return {"message": f"Tier updated for {code}", "code": code, "tiers": tier_values}
         
@@ -641,10 +639,9 @@ def update_student_tier(code: str, tier_values: dict, memo: str = ""):
         return {"error": str(e)}
 
 
-def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = None, beable_code: str = None, memo: str = ""):
+def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = None, beable_code: str = None, memo: str = "", student_name: str = None):
     """
-    Unified update: tier status + enrollment + beable code in a single batch.
-    Reduces Google Sheets API calls from 3 separate requests to 1 batch.
+    Unified update: tier status + enrollment + beable code + name in a single batch.
     """
     ws = get_student_status_worksheet()
     if not ws:
@@ -656,11 +653,11 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
         today = datetime.now().strftime("%Y-%m-%d")
         
         tier_columns = {
-            'Tier1': 6,
-            'Tier2(CICO)': 7,
-            'Tier2(SST)': 8,
-            'Tier3': 9,
-            'Tier3+': 10,
+            'Tier1': 'H',
+            'Tier2(CICO)': 'I',
+            'Tier2(SST)': 'J',
+            'Tier3': 'K',
+            'Tier3+': 'L',
         }
         
         for idx, r in enumerate(records):
@@ -671,38 +668,45 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
                 batch_updates = []
                 
                 # Update tier columns
-                for tier_name, col_num in tier_columns.items():
+                for tier_name, col_letter in tier_columns.items():
                     if tier_name in tier_values:
                         value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
                         batch_updates.append({
-                            "range": f"{_col_letter(col_num)}{row_num}",
+                            "range": f"{col_letter}{row_num}",
                             "values": [[value]]
                         })
                 
-                # Update enrollment (column 4)
-                if enrolled is not None:
+                # Update student name (column 4 / D)
+                if student_name is not None:
                     batch_updates.append({
                         "range": f"D{row_num}",
+                        "values": [[student_name]]
+                    })
+                
+                # Update enrollment (column 5 / E)
+                if enrolled is not None:
+                    batch_updates.append({
+                        "range": f"E{row_num}",
                         "values": [[enrolled]]
                     })
                 
-                # Update BeAble code (column 5)
+                # Update BeAble code (column 6 / F)
                 if beable_code is not None:
                     batch_updates.append({
-                        "range": f"E{row_num}",
+                        "range": f"F{row_num}",
                         "values": [[beable_code]]
                     })
                 
-                # Update 변경일 (column 11)
+                # Update 변경일 (column 13 / M)
                 batch_updates.append({
-                    "range": f"K{row_num}",
+                    "range": f"M{row_num}",
                     "values": [[today]]
                 })
                 
-                # Update 메모 (column 12)
+                # Update 메모 (column 14 / N)
                 if memo:
                     batch_updates.append({
-                        "range": f"L{row_num}",
+                        "range": f"N{row_num}",
                         "values": [[memo]]
                     })
                 
@@ -729,7 +733,7 @@ def update_student_enrollment(code: str, enrolled: str):
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2
-                ws.update_cell(row_num, 4, enrolled)  # Column 4: 재학여부
+                ws.update_cell(row_num, 5, enrolled)  # Column 5: 재학여부
                 return {"message": f"Enrollment updated to {enrolled}"}
         return {"error": f"Student code {code} not found"}
     except Exception as e:
@@ -747,7 +751,7 @@ def update_student_beable_code(code: str, beable_code: str):
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2
-                ws.update_cell(row_num, 5, beable_code)  # Column 5: BeAble코드
+                ws.update_cell(row_num, 6, beable_code)  # Column 6: BeAble코드
                 return {"message": f"BeAble code updated to {beable_code}"}
         return {"error": f"Student code {code} not found"}
     except Exception as e:

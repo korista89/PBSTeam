@@ -11,8 +11,10 @@ interface StudentStatus {
     번호: number;
     학급: string;
     학생코드: string;
+    학생이름: string;
     재학여부: string;
     'BeAble코드': string;
+    '그림말인증': number | string;
     'Tier1': string;
     'Tier2(CICO)': string;
     'Tier2(SST)': string;
@@ -38,6 +40,7 @@ export default function TierStatusPage() {
     const [editMemo, setEditMemo] = useState("");
     const [editEnrolled, setEditEnrolled] = useState("");
     const [editBeAble, setEditBeAble] = useState("");
+    const [editName, setEditName] = useState("");
     const [editTiers, setEditTiers] = useState({
         tier1: "O",
         tier2_cico: "X",
@@ -89,8 +92,10 @@ export default function TierStatusPage() {
             번호: idx + 1,
             학급: codeToClassName(code),
             학생코드: code,
+            학생이름: code,
             재학여부: "O",
             'BeAble코드': "",
+            '그림말인증': 0,
             'Tier1': "O",
             'Tier2(CICO)': "X",
             'Tier2(SST)': "X",
@@ -133,6 +138,7 @@ export default function TierStatusPage() {
 
     const handleEdit = (student: StudentStatus) => {
         setEditingCode(student.학생코드);
+        setEditName(student.학생이름 || student.학생코드);
         setEditMemo(student.메모 || "");
         setEditEnrolled(student.재학여부);
         setEditBeAble(student['BeAble코드'] || "");
@@ -162,7 +168,8 @@ export default function TierStatusPage() {
                 tier3_plus: editTiers.tier3_plus,
                 memo: editMemo,
                 enrolled: editEnrolled,
-                beable_code: editBeAble
+                beable_code: editBeAble,
+                student_name: editName
             });
 
             setEditingCode(null);
@@ -320,8 +327,10 @@ export default function TierStatusPage() {
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '40px' }}>번호</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '100px' }}>학급</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '70px' }}>학생코드</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>학생이름</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>재학</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>BeAble</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>그림말인증</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e8f5e9' }}>T1</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#fff3e0' }}>T2-C</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e3f2fd' }}>T2-S</th>
@@ -345,6 +354,13 @@ export default function TierStatusPage() {
                                             <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
                                             <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
                                                 {isEditing ? (
+                                                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="이름" />
+                                                ) : (
+                                                    <span style={{ fontWeight: 'bold', color: '#333' }}>{s.학생이름 || s.학생코드}</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                {isEditing ? (
                                                     <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} style={{ padding: '2px', width: '40px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
@@ -359,6 +375,9 @@ export default function TierStatusPage() {
                                                 ) : (
                                                     s['BeAble코드'] || '-'
                                                 )}
+                                            </td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold', color: '#1e3a8a' }}>
+                                                {s['그림말인증'] !== undefined ? s['그림말인증'] : 0} / 13
                                             </td>
                                             {/* 5 Tier columns with O/X */}
                                             <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f1f8e9' }}>

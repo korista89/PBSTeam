@@ -46,20 +46,18 @@ def fetch_all_students() -> list[dict]:
     for r in all_status:
         if str(r.get('재학여부', 'O')).strip().upper() == 'O':
             code = str(r.get('학생코드', ''))
+            name = str(r.get('학생이름', code))
             # 학생코드가 4자리인 경우에만 처리
             if len(code) >= 3:
                 class_id = code[:3]
             else:
                 class_id = ''
             
-            # 학생 이름은 TierStatus에 명시되어 있지 않다면 학생코드나 다른 식별자로 표기
-            # * TierStatus 시트 구조상 학생 개인 이름이 없고 학생코드로 관리됨
-            # 사용자 요구사항대로 "학생이름" 필드는 "학생코드"로 대체
             students.append({
                 '학급ID': class_id,
                 '학급명': r.get('학급', ''),
                 '학생번호': code,
-                '학생이름': code  # 이름 필드에 코드 저장
+                '학생이름': name
             })
     return students
 
