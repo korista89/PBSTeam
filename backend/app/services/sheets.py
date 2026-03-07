@@ -292,10 +292,31 @@ def update_user_password(user_id: str, new_password: str):
                 # Row index is idx + 2 (1 for header, 1 for 0-index)
                 ws.update_cell(idx + 2, 2, new_password)  # Column 2 is Password
                 clear_cache("users")
-                return {"message": "Password updated"}
+                return {"message": "업데이트 완료 (메모/변경일 없음)"}
         return {"error": "User not found"}
     except Exception as e:
         print(f"Error updating password: {e}")
+        return {"error": str(e)}
+
+def update_tierstatus_certification(student_code: str, cert_count: int):
+    """
+    TierStatus 시트의 '그림어휘인증(수)' 열(11번째 컬럼)을 업데이트.
+    """
+    ws = get_student_status_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+        
+    try:
+        records = ws.get_all_records()
+        # 1-indexed column num: 11
+        for idx, r in enumerate(records):
+            if str(r.get('학생코드')) == str(student_code):
+                row_num = idx + 2 # +2 for header and 0-indexing of enumerate
+                ws.update_cell(row_num, 11, cert_count)
+                return {"message": f"Updated certification count to {cert_count} for {student_code}"}
+        return {"error": "Student not found in TierStatus"}
+    except Exception as e:
+        print(f"Error updating certification in TierStatus: {e}")
         return {"error": str(e)}
 
 def get_all_users():
@@ -497,14 +518,14 @@ def get_student_status_worksheet():
             return sheet.worksheet("TierStatus")
         except gspread.WorksheetNotFound:
             print("Creating 'TierStatus' worksheet with 210 students (5 tier columns)...")
-            ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=12)
-            # Header row with 5 separate tier columns
-            # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 변경일, 메모
-            all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
+            ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=13)
+            # Header row with 5 separate tier columns + 그림어휘인증(수)
+            # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 그림어휘인증(수), 변경일, 메모
+            all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "그림어휘인증(수)", "변경일", "메모"]]
             for idx, code in enumerate(STUDENT_CODES):
                 class_name = code_to_class_name(code)
-                # Default: Tier1=O, all others=X
-                all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", "", ""])
+                # Default: Tier1=O, all others=X, 그림어휘인증(수)=0
+                all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", 0, "", ""])
             ws.update(all_data, 'A1')
             return ws
     except Exception as e:
@@ -530,22 +551,22 @@ def reset_tier_status_sheet():
         except gspread.WorksheetNotFound:
             print("No existing TierStatus worksheet to delete")
         
-        # Create new sheet with 210 students and 12 columns
-        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students (5 tier columns)...")
-        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=12)
+        # Create new sheet with 210 students and 13 columns
+        print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students (5 tier columns + 그림어휘인증(수))...")
+        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=13)
         
         # Prepare all data at once for batch update
-        # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 변경일, 메모
-        all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
+        # Columns: 번호, 학급, 학생코드, 재학여부, BeAble코드, Tier1, Tier2(CICO), Tier2(SST), Tier3, Tier3+, 그림어휘인증(수), 변경일, 메모
+        all_data = [["번호", "학급", "학생코드", "재학여부", "BeAble코드", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "그림어휘인증(수)", "변경일", "메모"]]
         for idx, code in enumerate(STUDENT_CODES):
             class_name = code_to_class_name(code)
-            # Default: Tier1=O, all others=X
-            all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", "", ""])
+            # Default: Tier1=O, all others=X, 그림어휘인증(수)=0
+            all_data.append([idx + 1, class_name, code, "O", "", "O", "X", "X", "X", "X", 0, "", ""])
         
         # Batch update all rows at once
         ws.update(all_data, 'A1')
         
-        return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students (5 tier columns)", "count": len(STUDENT_CODES)}
+        return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students", "count": len(STUDENT_CODES)}
     except Exception as e:
         print(f"Error resetting TierStatus sheet: {e}")
         return {"error": str(e)}
