@@ -11,7 +11,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
 
     df = pd.DataFrame(raw_data)
     
-    # 2. Create BeAble to student info lookup
+    # 2. Get BeAble code mapping
+    beable_mapping = get_beable_code_mapping()
     beable_to_info = beable_mapping
     
     # 3. Filter & Map Data
@@ -44,7 +45,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
             resolved_records.append(new_row)
     
     if not resolved_records:
-        return {"summary": {"total_incidents": 0, "avg_intensity": 0, "risk_student_count": 0}, "risk_list": [], "safety_alerts": [], "ai_comment": "데이터가 없습니다."}
+        return {
+            "summary": {"total_incidents": 0, "avg_intensity": 0, "risk_student_count": 0},
+            "trends": [], "weekly_trends": [],
+            "big5": {"locations": [], "times": [], "behaviors": [], "weekdays": []},
+            "risk_list": [], "functions": [], "antecedents": [], "consequences": [],
+            "heatmap": [], "safety_alerts": [], "ai_comment": "데이터가 없습니다."
+        }
 
     df = pd.DataFrame(resolved_records)
     # Ensure columns exist for downstream logic
