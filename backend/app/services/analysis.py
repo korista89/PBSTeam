@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List, Dict
 from app.services.ai_insight import generate_ai_insight, generate_meeting_agent_report
 
-def get_analytics_data(start_date: str = None, end_date: str = None):
+def get_analytics_data(start_date: str = None, end_date: str = None, class_id: str = None):
     raw_data = fetch_all_records()
     if not raw_data:
         return {"error": "No data found"}
@@ -72,6 +72,11 @@ def get_analytics_data(start_date: str = None, end_date: str = None):
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
         if end_date:
             df = df[df['date_obj'] <= pd.to_datetime(end_date)]
+            
+    # --- Class Filtering ---
+    if class_id and not df.empty:
+        # Filter by student_code starting with class_id
+        df = df[df['student_code'].str.startswith(str(class_id), na=False)]
     
     # --- Tier 1: Big 5 Analysis ---
         # Group by Month-Year or just Date based on range. Let's do Weekly/Daily for now as requested "Weekly Trend"

@@ -1,597 +1,554 @@
 "use client";
 
-import styles from "./page.module.css";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Cell,
-    ScatterChart,
-    Scatter,
-    ZAxis,
-    LineChart,
-    Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
+  PieChart, Pie, Cell, Legend, ResponsiveContainer,
+  LineChart, Line, Tooltip, ScatterChart, Scatter, ZAxis,
 } from "recharts";
-
-import { DashboardData, ChartData, RiskStudent, SafetyAlert } from "./types";
+import { DashboardData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
-import { DashboardSkeleton } from "./components/DashboardSkeleton";
-import { COLORS, TIER_COLORS } from "./constants";
+import { COLORS } from "./constants";
 
-export default function Home() {
-    const [data, setData] = useState<DashboardData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-    const { user, isAdmin } = useAuth();
+const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
-    // Date State from GlobalNav (localStorage)
-    const { startDate, endDate } = useDateRange();
+// ====== AI Analysis Card Component ======
+function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sectionName: string; dataContext: any; startDate?: string; endDate?: string }) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
 
-    useEffect(() => {
-        // Fetch data when dates are available
-        if (!startDate || !endDate) return;
-
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                let url = `${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/analytics/dashboard`;
-                const params = new URLSearchParams();
-                params.append("start_date", startDate);
-                params.append("end_date", endDate);
-
-                url += `?${params.toString()}`;
-
-                const response = await axios.get(url);
-                setData(response.data);
-            } catch (err) {
-                console.error(err);
-                setError("데이터를 불러오는데 실패했습니다. 백엔드 연결을 확인해주세요.");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [startDate, endDate]);
-
-    // Removed early return for loading to prevent UI unmount
-
-    if (error) return <div className={styles.error}>{error}</div>;
-
-    // Initial data check (first load)
-    if (!data && loading) return (
-        <AuthCheck>
-            <div className={styles.container}>
-                <GlobalNav currentPage="dashboard" />
-                <main className={styles.main} style={{ marginTop: '20px' }}>
-                    <DashboardSkeleton />
-                </main>
-            </div>
-        </AuthCheck>
-    );
-    if (!data) return null;
-
-    // Handle API error response
-    if ('error' in data) {
-        return (
-            <AuthCheck>
-                <div className={styles.container}>
-                    <GlobalNav currentPage="dashboard" />
-                    <main className={styles.main} style={{ marginTop: '20px' }}>
-                        <div className={styles.card} style={{ textAlign: 'center', padding: '3rem' }}>
-                            <h2 style={{ color: '#6b7280' }}>데이터가 없습니다 텅! 📭</h2>
-                            <p style={{ marginTop: '1rem', color: '#374151' }}>
-                                구글 스프레드시트에 아직 데이터가 없거나, 읽어올 수 없습니다.<br />
-                                스프레드시트에 데이터를 입력해주세요.
-                            </p>
-                        </div>
-                    </main>
-                </div>
-            </AuthCheck>
-        );
+  const requestAnalysis = async () => {
+    setLoading(true);
+    setVisible(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
+        section_name: sectionName,
+        data_context: dataContext || {},
+        start_date: startDate || null,
+        end_date: endDate || null
+      });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch (e) {
+      console.error(e);
+      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const { summary, trends, big5, risk_list, functions, heatmap, antecedents, consequences } = data;
-
-    return (
-        <AuthCheck>
-            <div className={styles.container}>
-                <GlobalNav currentPage="dashboard" />
-
-                <main className={styles.main} style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s', pointerEvents: loading ? 'none' : 'auto', position: 'relative', marginTop: '20px' }}>
-                    {loading && data && (
-                        <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            zIndex: 10,
-                            backgroundColor: 'rgba(255,255,255,0.5)'
-                        }}>
-                            <div style={{
-                                background: 'white',
-                                padding: '15px 25px',
-                                borderRadius: '30px',
-                                boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                                fontWeight: 'bold',
-                                color: '#6366f1',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px'
-                            }}>
-                                🔄 데이터 분석 중...
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Tier Status Quick Summary */}
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                        gap: '15px',
-                        marginBottom: '20px'
-                    }}>
-                        <div
-                            onClick={() => window.location.href = '/tier-status'}
-                            style={{
-                                padding: '20px',
-                                background: 'linear-gradient(135deg, #10b981, #059669)',
-                                borderRadius: '12px',
-                                color: 'white',
-                                cursor: 'pointer',
-                                textAlign: 'center'
-                            }}
-                        >
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>Tier 1</div>
-                            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>보편적 지원</div>
-                        </div>
-                        <div
-                            onClick={() => window.location.href = '/cico'}
-                            style={{
-                                padding: '20px',
-                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                borderRadius: '12px',
-                                color: 'white',
-                                cursor: 'pointer',
-                                textAlign: 'center'
-                            }}
-                        >
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>Tier 2</div>
-                            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>CICO 프로그램</div>
-                        </div>
-                        <div
-                            onClick={() => window.location.href = '/tier-status?filter=Tier3'}
-                            style={{
-                                padding: '20px',
-                                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                                borderRadius: '12px',
-                                color: 'white',
-                                cursor: 'pointer',
-                                textAlign: 'center'
-                            }}
-                        >
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>Tier 3</div>
-                            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>집중 지원</div>
-                        </div>
-                        <div
-                            onClick={() => window.location.href = '/protocol'}
-                            style={{
-                                padding: '20px',
-                                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                                borderRadius: '12px',
-                                color: 'white',
-                                cursor: 'pointer',
-                                textAlign: 'center'
-                            }}
-                        >
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>📜</div>
-                            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>PBS 프로토콜</div>
-                        </div>
-                    </div>
-
-                    {/* AI Meeting Agent Report */}
-                    {data.ai_report ? (
-                        <div className={styles.card} style={{ marginBottom: '2rem', borderLeft: '5px solid #8b5cf6', backgroundColor: '#f5f3ff' }}>
-                            <h2 style={{ fontSize: '1.3rem', color: '#6d28d9', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🤖 행동중재지원팀 회의 에이전트
-                            </h2>
-
-                            {/* Tab Navigation */}
-                            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', borderBottom: '1px solid #ddd', paddingBottom: '10px', overflowX: 'auto' }}>
-                                {['briefing', 'agenda', 'order', 'decision', 'checklist'].map((tab) => (
-                                    <button
-                                        key={tab}
-                                        onClick={() => {
-                                            const el = document.getElementById(`tab-${tab}`);
-                                            if (el) {
-                                                document.querySelectorAll('.report-tab').forEach(e => (e as HTMLElement).style.display = 'none');
-                                                el.style.display = 'block';
-                                                document.querySelectorAll('.tab-btn').forEach(e => (e as HTMLElement).style.fontWeight = 'normal');
-                                                (document.getElementById(`btn-${tab}`) as HTMLElement).style.fontWeight = 'bold';
-                                                (document.getElementById(`btn-${tab}`) as HTMLElement).style.borderBottom = '2px solid #8b5cf6';
-                                            }
-                                        }}
-                                        id={`btn-${tab}`}
-                                        className="tab-btn"
-                                        style={{
-                                            border: 'none',
-                                            background: 'none',
-                                            fontSize: '1rem',
-                                            cursor: 'pointer',
-                                            padding: '5px 10px',
-                                            color: '#5b21b6',
-                                            whiteSpace: 'nowrap',
-                                            fontWeight: tab === 'briefing' ? 'bold' : 'normal',
-                                            borderBottom: tab === 'briefing' ? '2px solid #8b5cf6' : 'none'
-                                        }}
-                                    >
-                                        {tab === 'briefing' && '📋 현황 브리핑'}
-                                        {tab === 'agenda' && '📌 회의 안건'}
-                                        {tab === 'order' && '🔄 진행 순서'}
-                                        {tab === 'decision' && '🗳️ 의사결정 기준'}
-                                        {tab === 'checklist' && '☑️ 체크리스트'}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Content Areas */}
-                            <div id="tab-briefing" className="report-tab" style={{ display: 'block', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
-                                {data.ai_report.sections.briefing}
-                            </div>
-                            <div id="tab-agenda" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
-                                {data.ai_report.sections.agenda}
-                            </div>
-                            <div id="tab-order" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
-                                {data.ai_report.sections.order}
-                            </div>
-                            <div id="tab-decision" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
-                                {data.ai_report.sections.decision}
-                            </div>
-                            <div id="tab-checklist" className="report-tab" style={{ display: 'none', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#333' }}>
-                                {data.ai_report.sections.checklist}
-                            </div>
-                        </div>
-                    ) : (data.ai_comment && (
-                        <div className={styles.card} style={{ marginBottom: '2rem', borderLeft: '5px solid #8b5cf6', backgroundColor: '#f5f3ff' }}>
-                            <h2 style={{ fontSize: '1.2rem', color: '#6d28d9', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🤖 행동 분석 AI 리포트
-                            </h2>
-                            <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', fontSize: '0.95rem', color: '#333' }}>
-                                {data.ai_comment}
-                            </div>
-                        </div>
-                    ))}
-
-                    {/* Summary Cards */}
-                    <div className={styles.statGrid}>
-                        <div className={styles.card}>
-                            <h3>총 발생 건수 (ODR)</h3>
-                            <p className={styles.statValue}>{summary.total_incidents}</p>
-                            <span className={styles.trendUp}>{isAdmin() ? "학교 전체 데이터" : "전체 통계 (참고용)"}</span>
-                        </div>
-                        <div className={styles.card}>
-                            <h3>평균 강도</h3>
-                            <p className={styles.statValue}>{summary.avg_intensity.toFixed(1)}</p>
-                            <span className={styles.subtitle}>1-5 척도</span>
-                        </div>
-                        <div className={styles.card}>
-                            <h3>위험군 학생 (Tier 2/3)</h3>
-                            <p className={styles.statValue}>
-                                {isAdmin() ? summary.risk_student_count : risk_list.filter(s => String(s.class).startsWith(user?.class_id || "")).length}
-                            </p>
-                            <span className={styles.alert}>{isAdmin() ? "집중 모니터링 필요" : "우리 학급 위험군"}</span>
-                        </div>
-                    </div>
-
-                    {/* Tier 1: Big 5 Analysis Section */}
-                    <section className={styles.sectionHeader}>
-                        <h2>📊 Tier 1: 보편적 지원 (Big 5 & ABC 분석)</h2>
-                    </section>
-
-                    {/* Trends */}
-                    <div className={styles.chartGrid}>
-                        <div className={styles.chartSection}>
-                            <h3>📈 일별 발생 추이 (Daily Trend)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={trends}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="발생 건수" dot={false} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        <div className={styles.chartSection}>
-                            <h3>📊 주별 발생 추이 (Weekly Trend)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={data.weekly_trends || []}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ABC Analysis */}
-                    <h3 style={{ marginTop: '30px', marginBottom: '15px', color: '#4b5563', borderLeft: '4px solid #6366f1', paddingLeft: '10px' }}>
-                        🧩 ABC 행동 분석 (Antecedent - Behavior - Consequence)
-                    </h3>
-
-                    <div className={styles.chartGrid} style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                        {/* Antecedent */}
-                        <div className={styles.chartSection}>
-                            <h3>A: 선행사건 (Antecedent)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={antecedents} layout="vertical" margin={{ left: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" hide />
-                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} interval={0} />
-                                        <Tooltip />
-                                        <Bar dataKey="value" fill="#10b981" name="건수" radius={[0, 4, 4, 0]} barSize={20} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        {/* Behavior */}
-                        <div className={styles.chartSection}>
-                            <h3>B: 행동 유형 (Behavior)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={big5.behaviors}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                            label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
-                                                const RADIAN = Math.PI / 180;
-                                                const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                                const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                                const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                                                return percent > 0.05 ? (
-                                                    <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
-                                                        {`${(percent * 100).toFixed(0)}%`}
-                                                    </text>
-                                                ) : null;
-                                            }}
-                                            outerRadius={80}
-                                            fill="#0088FE"
-                                            dataKey="value"
-                                        >
-                                            {big5.behaviors.map((entry: ChartData, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend verticalAlign="bottom" height={36} iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        {/* Consequence */}
-                        <div className={styles.chartSection}>
-                            <h3>C: 후속결과 (Consequence)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={consequences} layout="vertical" margin={{ left: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" hide />
-                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} interval={0} />
-                                        <Tooltip />
-                                        <Bar dataKey="value" fill="#f59e0b" name="건수" radius={[0, 4, 4, 0]} barSize={20} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    {/* Context Analysis */}
-                    <h3 style={{ marginTop: '30px', marginBottom: '15px', color: '#4b5563', borderLeft: '4px solid #f97316', paddingLeft: '10px' }}>
-                        📍 상황 요인 분석 (Context)
-                    </h3>
-
-                    <div className={styles.chartGrid}>
-                        <div className={styles.chartSection}>
-                            <h3>🏫 장소별 빈도 (Location)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={big5.locations} layout="vertical">
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis type="number" />
-                                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} />
-                                        <Tooltip />
-                                        <Bar dataKey="value" fill="#82ca9d" name="건수" radius={[0, 4, 4, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        <div className={styles.chartSection}>
-                            <h3>⏰ 시간대별 빈도 (Time)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={big5.times}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Bar dataKey="value" fill="#8884d8" name="건수" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className={styles.chartGrid}>
-                        <div className={styles.chartSection}>
-                            <h3>🔥 Hot Spot (장소 x 시간)</h3>
-                            <div className={styles.chartContainer} style={{ height: 350 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                                        <CartesianGrid />
-                                        <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} />
-                                        <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} />
-                                        <ZAxis type="number" dataKey="value" range={[50, 500]} name="빈도" />
-                                        <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                                        <Scatter name="Incidents" data={heatmap} fill="#e02424" />
-                                    </ScatterChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        <div className={styles.chartSection}>
-                            <h3>🤔 행동 기능 (Function of Behavior)</h3>
-                            <div className={styles.chartContainer}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={functions}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="value"
-                                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        >
-                                            {functions.map((entry: ChartData, index: number) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend verticalAlign="bottom" height={36} iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    {/* Tier 2: Screening List */}
-                    <section className={styles.sectionHeader}>
-                        <h2>🚨 Tier 2/3: 위험군 선별 리스트 ({isAdmin() ? "전체" : "우리 학급"})</h2>
-                    </section>
-
-                    <div className={styles.riskSection}>
-                        <table className={styles.riskTable}>
-                            <thead>
-                                <tr>
-                                    <th>등급 (Tier)</th>
-                                    <th>학생명</th>
-                                    <th>학번/반</th>
-                                    <th>발생 횟수</th>
-                                    <th>최대 강도</th>
-                                    <th>상태</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(() => {
-                                    const filteredRiskList = isAdmin() 
-                                        ? risk_list 
-                                        : risk_list.filter(s => String(s.student_code || s.class).startsWith(user?.class_id || ""));
-                                    
-                                    return filteredRiskList.map((student: RiskStudent, idx: number) => (
-                                        <tr key={idx}>
-                                            <td>
-                                                <span className={styles.tierBadge} style={{ backgroundColor: TIER_COLORS[student.tier as keyof typeof TIER_COLORS] || "#ccc", color: "white" }}>
-                                                    {student.tier}
-                                                </span>
-                                            </td>
-                                            <td>{student.name}</td>
-                                            <td>{student.class}</td>
-                                            <td>{student.count}</td>
-                                            <td>{student.max_intensity}</td>
-                                            <td>
-                                                <button
-                                                    className={styles.actionBtn}
-                                                    onClick={() => window.location.href = `/student/${encodeURIComponent(student.name)}`}
-                                                >
-                                                    상세 분석
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ));
-                                })()}
-                            </tbody>
-                        </table>
-                        {(isAdmin() ? risk_list.length === 0 : risk_list.filter(s => String(s.student_code || s.class).startsWith(user?.class_id || "")).length === 0) && (
-                            <p className={styles.noData}>감지된 위험군 학생이 없습니다.</p>
-                        )}
-                    </div>
-
-                    {/* Tier 3: Safety Alerts */}
-                    <section className={styles.sectionHeader} style={{ borderColor: '#EF4444' }}>
-                        <h2 style={{ color: '#EF4444' }}>⚠️ Tier 3: 안전 알림 (Safety Alerts)</h2>
-                    </section>
-
-                    <div className={styles.riskSection} style={{ border: '1px solid #fee2e2' }}>
-                        <table className={styles.riskTable}>
-                            <thead>
-                                <tr>
-                                    <th>발생 날짜</th>
-                                    <th>학생명</th>
-                                    <th>장소</th>
-                                    <th>행동 유형</th>
-                                    <th>강도</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(() => {
-                                    const filteredAlerts = isAdmin()
-                                        ? data.safety_alerts
-                                        : data.safety_alerts?.filter(alert => String(alert.student).startsWith(user?.class_id || ""));
-                                    
-                                    return filteredAlerts?.map((alert: SafetyAlert, idx: number) => (
-                                        <tr key={idx} style={{ backgroundColor: '#fef2f2' }}>
-                                            <td>{alert.date}</td>
-                                            <td>{alert.student}</td>
-                                            <td>{alert.location}</td>
-                                            <td>{alert.type}</td>
-                                            <td style={{ color: '#dc2626', fontWeight: 'bold' }}>{alert.intensity} (위험)</td>
-                                        </tr>
-                                    ));
-                                })()}
-                            </tbody>
-                        </table>
-                        {(() => {
-                            const filteredAlerts = isAdmin()
-                                ? data.safety_alerts
-                                : data.safety_alerts?.filter(alert => String(alert.student).startsWith(user?.class_id || ""));
-                            
-                            return (!filteredAlerts || filteredAlerts.length === 0) && <p className={styles.noData}>최근 발생한 고위험(강도 5) 행동이 없습니다.</p>;
-                        })()}
-                    </div>
-
-                </main>
+  return (
+    <div className="no-print" style={{ marginTop: '15px' }}>
+      {!visible ? (
+        <button
+          onClick={requestAnalysis}
+          style={{
+            padding: '8px 16px', backgroundColor: '#7c3aed', color: 'white',
+            border: 'none', borderRadius: '8px', cursor: 'pointer',
+            fontSize: '0.85rem', fontWeight: '600',
+            boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
+            transition: 'all 0.2s'
+          }}
+        >
+          🤖 BCBA AI 분석 요청
+        </button>
+      ) : (
+        <div style={{
+          backgroundColor: '#f5f3ff', padding: '16px', borderRadius: '10px',
+          border: '1px solid #ddd5f5', marginTop: '10px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h4 style={{ margin: 0, color: '#6d28d9', fontSize: '0.9rem' }}>🤖 BCBA AI 분석 — {sectionName}</h4>
+            <button onClick={() => setVisible(false)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#9ca3af'
+            }}>✕ 닫기</button>
+          </div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#7c3aed' }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>⏳</div>
+              AI가 데이터를 분석하고 있습니다...
             </div>
-        </AuthCheck>
+          ) : (
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: '1.6', color: '#334155' }}>
+              {analysis}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====== Main Report Component (New Dashboard) ======
+export default function Home() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { user, isAdmin } = useAuth();
+  const { startDate, endDate } = useDateRange();
+  const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        let url = `${apiUrl}/api/v1/analytics/dashboard`;
+        const params = new URLSearchParams();
+        params.append("start_date", startDate);
+        params.append("end_date", endDate);
+        
+        // Add class_id for non-admins
+        if (!isAdmin() && user?.class_id) {
+          params.append("class_id", user.class_id);
+        }
+        
+        url += `?${params.toString()}`;
+        const response = await axios.get(url);
+        setData(response.data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [startDate, endDate, user, isAdmin]);
+
+  if (!data) {
+    return (
+      <AuthCheck>
+        <div className="container">
+          <GlobalNav currentPage="dashboard" />
+          <div style={{ padding: '50px', textAlign: 'center' }}>
+            <p>📊 데이터를 불러오는 중...</p>
+          </div>
+        </div>
+      </AuthCheck>
     );
+  }
+
+  return (
+    <AuthCheck>
+      <div className="container">
+        <GlobalNav currentPage="dashboard" />
+        <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '20px auto', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+          <style jsx global>{`
+          @media print {
+              body { background: white; -webkit-print-color-adjust: exact; }
+              .no-print { display: none; }
+              .page-break { page-break-before: always; }
+          }
+          @media (max-width: 768px) {
+              .report-container { padding: 10px !important; margin: 10px !important; }
+              .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
+              .grid-2 { grid-template-columns: 1fr !important; }
+              .chart-box { height: 350px !important; }
+          }
+          .report-section { margin-bottom: 3rem; border-bottom: 1px solid #eee; padding-bottom: 2rem; }
+          h1 { font-size: 26px; font-weight: 800; margin-bottom: 10px; color: #1e3a8a; letter-spacing: -0.5px; }
+          h2 { font-size: 20px; font-weight: 700; color: #1e293b; border-left: 6px solid #3b82f6; padding-left: 12px; margin: 40px 0 24px 0; display: flex; align-items: center; }
+          
+          .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px; }
+          .stat-box { padding: 20px; border-radius: 16px; background: white; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+          .stat-value { font-size: 32px; font-weight: 800; color: #0f172a; line-height: 1.2; }
+          .stat-label { font-size: 13px; font-weight: 600; color: #64748b; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+          
+          /* Grid Layout for Charts */
+          .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
+          .chart-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 420px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+          .chart-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: #334155; display: flex; align-items: center; gap: 8px; }
+          
+          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+          th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+          th { background-color: #f8fafc; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+          td { color: #334155; }
+          tr:last-child td { border-bottom: none; }
+          `}</style>
+
+          {/* Controller */}
+          <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
+            <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🖨️ PDF 저장</button>
+          </div>
+
+          {/* Header */}
+          <header style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <h1>📊 {isAdmin() ? "학교 행동 지원 종합 리포트 (대시보드)" : `${user?.class_name || '학급'} T1 행동 보고서`}</h1>
+            <p style={{ color: '#666' }}>발행일: {date} | 작성주체: {isAdmin() ? "PBS 리더십팀" : `${user?.class_name || '학급'} 담임교사`}</p>
+          </header>
+
+          {/* ===== Section 1: 총괄 현황 ===== */}
+          <section className="report-section">
+            <h2>1. 총괄 현황 (Overview)</h2>
+            <div className="summary-stats">
+              <div className="stat-box">
+                <div className="stat-value">{data.summary.total_incidents}건</div>
+                <div className="stat-label">총 행동 발생 (ODR)</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-value">{data.summary.avg_intensity.toFixed(2)}</div>
+                <div className="stat-label">평균 행동 강도 (1-5)</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-value" style={{ color: '#ef4444' }}>{isAdmin() ? data.summary.risk_student_count : data.risk_list.length}명</div>
+                <div className="stat-label">집중 지원 대상 (Tier 2/3)</div>
+              </div>
+            </div>
+            <AIAnalysisCard
+              sectionName="총괄 현황"
+              dataContext={{ total_incidents: data.summary.total_incidents, avg_intensity: data.summary.avg_intensity, risk_count: data.risk_list.length }}
+              startDate={startDate} endDate={endDate}
+            />
+          </section>
+
+          {/* ===== Section 2: 추이 ===== */}
+          <section className="report-section">
+            <h2>2. 행동 발생 추이 (Trends)</h2>
+            <div className="grid-2">
+              <div className="chart-box">
+                <div className="chart-title">📅 일별 발생 추이</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.trends}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="date" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} name="발생 건수" dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chart-box">
+                <div className="chart-title">📊 주별 발생 추이</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.weekly_trends || []} barSize={40}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="week" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[6, 6, 0, 0]}>
+                      <LabelList dataKey="count" position="top" fontSize={12} fill="#6b7280" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <AIAnalysisCard
+              sectionName="행동 발생 추이"
+              dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends }}
+              startDate={startDate} endDate={endDate}
+            />
+          </section>
+
+          {/* ===== Section 3: 패턴 분석 ===== */}
+          <section className="report-section">
+            <h2>3. {isAdmin() ? "전체" : "학급"} 패턴 분석 (Big 5 & ABC)</h2>
+
+            <div className="grid-2">
+              <div className="chart-box">
+                <div className="chart-title">📍 주요 발생 장소</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.big5.locations} layout="vertical" margin={{ left: 10, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                    <Bar dataKey="value" fill="#3b82f6" barSize={24} radius={[0, 4, 4, 0]}>
+                      <LabelList dataKey="value" position="right" fontSize={12} fill="#3b82f6" fontWeight="bold" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chart-box">
+                <div className="chart-title">🤔 주요 행동 유형</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={data.big5.behaviors} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
+                      label={({ name, value }) => `${name} (${value})`}>
+                      {data.big5.behaviors.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="grid-2">
+              <div className="chart-box">
+                <div className="chart-title">⏰ 시간대별 패턴</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.big5.times} margin={{ top: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px' }} />
+                    <Bar dataKey="value" fill="#8b5cf6" barSize={32} radius={[4, 4, 0, 0]}>
+                      <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chart-box">
+                <div className="chart-title">📅 요일별 패턴</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.big5.weekdays} margin={{ top: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px' }} />
+                    <Bar dataKey="value" fill="#f59e0b" barSize={32} radius={[4, 4, 0, 0]}>
+                      <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="grid-2">
+              <div className="chart-box">
+                <div className="chart-title">❓ 행동의 기능 (Why)</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={data.functions} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
+                      label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                      {data.functions.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chart-box">
+                <div className="chart-title">⚡ 배경 사건 (When)</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.antecedents} layout="vertical" margin={{ left: 20, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                    <Bar dataKey="value" fill="#ef4444" barSize={20} radius={[0, 4, 4, 0]}>
+                      <LabelList dataKey="value" position="right" fontSize={11} fill="#ef4444" fontWeight="bold" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="grid-2">
+              <div className="chart-box">
+                <div className="chart-title">🎁 후속 결과 (Consequence)</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.consequences} layout="vertical" margin={{ left: 20, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                    <Bar dataKey="value" fill="#f59e0b" barSize={20} radius={[0, 4, 4, 0]}>
+                      <LabelList dataKey="value" position="right" fontSize={11} fill="#f59e0b" fontWeight="bold" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="chart-box">
+                <div className="chart-title">🔥 Hot Spot (장소 x 시간)</div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
+                    <CartesianGrid stroke="#e2e8f0" />
+                    <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} axisLine={false} tickLine={false} />
+                    <ZAxis type="number" dataKey="value" range={[50, 400]} name="빈도" />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px' }} />
+                    <Scatter name="Incidents" data={data.heatmap} fill="#e02424" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <AIAnalysisCard
+              sectionName="패턴 분석 (Big 5 & ABC 분석)"
+              dataContext={{
+                top_locations: data.big5.locations?.slice(0, 3),
+                top_behaviors: data.big5.behaviors?.slice(0, 3),
+                top_times: data.big5.times?.slice(0, 3),
+                functions: data.functions?.slice(0, 3),
+              }}
+              startDate={startDate} endDate={endDate}
+            />
+          </section>
+
+          <div className="page-break"></div>
+
+          {/* ===== Section 4: Tier 2/3 List ===== */}
+          <section className="report-section">
+            <h2>4. {isAdmin() ? "위험군 및 안전 알림" : "학급 학생 지원 현황"}</h2>
+
+            <h3>🚨 고위험군 안전 알림 (Safety Alerts)</h3>
+            {data.safety_alerts && data.safety_alerts.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ marginBottom: '20px' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '20%' }}>날짜</th>
+                      <th style={{ width: '20%' }}>학생</th>
+                      <th>내용</th>
+                      <th style={{ width: '10%' }}>강도</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.safety_alerts.map((alert, idx) => (
+                      <tr key={idx}>
+                        <td>{alert.date}</td>
+                        <td>{alert.student}</td>
+                        <td>{alert.location}에서 {alert.type}</td>
+                        <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{alert.intensity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>보고된 고위험(강도 5) 행동이 없습니다.</p>
+            )}
+
+            <h3>⚠️ 집중 지원 대상자 (Tier 2/3)</h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '15%' }}>Tier</th>
+                    <th style={{ width: '20%' }}>학생명</th>
+                    <th style={{ width: '20%' }}>학번/반</th>
+                    <th style={{ width: '15%' }}>발생횟수</th>
+                    <th>상세</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.risk_list.map((s, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <span style={{
+                          padding: '2px 6px', borderRadius: '4px', fontSize: '10px',
+                          backgroundColor: s.tier === 'Tier 3' ? '#fee2e2' : '#fef3c7',
+                          color: s.tier === 'Tier 3' ? '#991b1b' : '#92400e'
+                        }}>
+                          {s.tier}
+                        </span>
+                      </td>
+                      <td>{s.name}</td>
+                      <td>{s.class}</td>
+                      <td>{s.count}</td>
+                      <td>
+                        <button
+                          className="no-print"
+                          onClick={() => window.location.href = `/student/${encodeURIComponent(s.name)}`}
+                          style={{ padding: '4px 8px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                        >
+                          분석
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.risk_list.length === 0 && <p style={{ fontSize: '12px', color: '#666' }}>감지된 위험군 학생이 없습니다.</p>}
+          </section>
+
+          {/* ===== Section 5: Action Plan ===== */}
+          <section className="report-section" style={{ borderBottom: 'none' }}>
+            <h2>5. 실행 계획 및 메모 (Action Plan)</h2>
+            <MeetingNotesSection apiUrl={apiUrl} meetingType={isAdmin() ? "tier1" : `class_${user?.class_id}`} title={isAdmin() ? "전체 교직원 회의록" : `${user?.class_name} 실행 계획`} />
+          </section>
+        </div>
+      </div>
+    </AuthCheck>
+  );
+}
+
+// Sub-component for Meeting Notes
+function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, meetingType: string, title: string }) {
+  const [expanded, setExpanded] = useState(true);
+  const [content, setContent] = useState("");
+  const [notes, setNotes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [meetingType]);
+
+  const fetchNotes = async () => {
+    try {
+      const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${meetingType}`);
+      setNotes(res.data.notes || []);
+    } catch (e) { console.error(e); }
+  };
+
+  const saveNote = async () => {
+    if (!content.trim()) return;
+    setLoading(true);
+    try {
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+        meeting_type: meetingType,
+        date: new Date().toISOString().split('T')[0],
+        content,
+        author: "User"
+      });
+      setContent("");
+      fetchNotes();
+      alert("저장되었습니다.");
+    } catch (e) {
+      alert("저장 실패");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <div className="no-print" onClick={() => setExpanded(!expanded)}
+        style={{ padding: "10px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f1f5f9", borderRadius: "8px", marginBottom: "10px" }}>
+        <h3 style={{ margin: 0, fontSize: "14px", color: "#334155" }}>📝 {title}</h3>
+        <span style={{ fontSize: "12px", color: "#64748b" }}>{expanded ? "접기" : "펼치기"}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: "0 5px" }}>
+          <div className="no-print" style={{ marginBottom: "20px" }}>
+            <textarea value={content} onChange={e => setContent(e.target.value)}
+              placeholder="내용을 입력하세요..."
+              style={{ width: "100%", minHeight: "80px", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "4px", marginBottom: "8px", fontFamily: "inherit" }} />
+            <button onClick={saveNote} disabled={loading || !content.trim()}
+              style={{ padding: "6px 12px", backgroundColor: "#3b82f6", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}>
+              {loading ? "저장 중..." : "저장하기"}
+            </button>
+          </div>
+
+          <div>
+            <h4 style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#334155" }}>📋 기록 목록</h4>
+            {notes.length === 0 ? (
+              <div style={{ border: '1px dashed #bbb', padding: '20px', minHeight: '100px', textAlign: 'center' }}>
+                <p style={{ color: '#999', fontSize: '12px' }}>기록된 내용이 없습니다.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {notes.map(n => (
+                  <div key={n.id} style={{ paddingBottom: "15px", borderBottom: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "4px" }}>📅 {n.date} | ✍️ {n.author}</div>
+                    <div style={{ fontSize: "13px", color: "#1e293b", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{n.content}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

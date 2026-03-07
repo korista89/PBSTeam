@@ -53,7 +53,6 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         { href: "/", label: "📊 대시보드", key: "dashboard" },
         { href: "/tier-status", label: "📋 Tier현황", key: "tier-status" },
         { href: "/cico", label: "📝 CICO입력", key: "cico" },
-        { href: "/report", label: "📄 T1리포트", key: "report" },
         { href: "/report/tier2", label: "📈 CICO리포트", key: "report-tier2" },
         { href: "/report/tier3", label: "🔴 T3리포트", key: "report-tier3" },
         { href: "/meeting", label: "🤝 협의회", key: "meeting" },

@@ -124,8 +124,8 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
 
 
 @router.get("/dashboard")
-async def get_dashboard_summary(start_date: str = None, end_date: str = None):
-    return get_analytics_data(start_date, end_date)
+async def get_dashboard_summary(start_date: str = None, end_date: str = None, class_id: str = None):
+    return get_analytics_data(start_date, end_date, class_id)
 
 @router.get("/meeting")
 async def get_meeting_analysis(target_date: str = None):
