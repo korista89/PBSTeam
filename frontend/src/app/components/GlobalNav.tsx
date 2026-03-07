@@ -58,7 +58,6 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         { href: "/report/tier3", label: "🔴 T3리포트", key: "report-tier3" },
         { href: "/meeting", label: "🤝 협의회", key: "meeting" },
         { href: "/protocol", label: "📜 프로토콜", key: "protocol" },
-        { href: "/board", label: "📢 게시판", key: "board" },
         { href: "/picture-word", label: "🎨 경은그림말", key: "picture-word" },
     ];
 
