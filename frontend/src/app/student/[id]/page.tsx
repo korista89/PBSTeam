@@ -10,13 +10,14 @@ import {
 } from "recharts";
 import styles from "../../page.module.css";
 import { StudentData, ChartData } from "../../types";
-import { AuthCheck } from "../../components/AuthProvider";
+import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { COLORS, TIER_COLORS } from "../../constants";
 
 export default function StudentDetail() {
   const params = useParams();
   const router = useRouter();
+  const { user, isAdmin } = useAuth();
   const studentName = decodeURIComponent(params.id as string);
   const { startDate, endDate } = useDateRange();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -98,6 +99,21 @@ export default function StudentDetail() {
   if (!data) return null;
 
   const { profile, abc_data, functions, cico_trend } = data;
+
+  // Access Control check for Teacher
+  const isUnauthorized = !isAdmin() && user?.class_id && profile?.student_code && !profile.student_code.startsWith(user.class_id);
+
+  if (isUnauthorized) return (
+    <AuthCheck>
+      <div className={styles.container}>
+        <GlobalNav currentPage="student" />
+        <div style={{ padding: '50px', textAlign: 'center' }}>
+          <p>⛔ 이 학생의 데이터에 접근할 권한이 없습니다. (본인 학급 학생만 가능)</p>
+          <button className={styles.actionBtn} onClick={() => router.push('/')} style={{ marginTop: '1rem' }}>대시보드로 이동</button>
+        </div>
+      </div>
+    </AuthCheck>
+  );
 
   // New State for Analysis Data
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
-import { AuthCheck } from "../../components/AuthProvider";
+import { AuthCheck, useAuth } from "../../components/AuthProvider";
 
 interface BehaviorType {
   name: string;
@@ -49,6 +49,7 @@ const DECISION_OPTIONS = [
 ];
 
 export default function Tier3Report() {
+  const { user, isAdmin } = useAuth();
   const { startDate, endDate } = useDateRange();
   const [data, setData] = useState<Tier3ReportData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,21 +143,21 @@ export default function Tier3Report() {
 
   return (
     <AuthCheck>
-      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" }}>
+      <div style={{ minHeight: "100vh", background: "#f8fafc", color: "#1e293b" }}>
         <GlobalNav />
         <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px 20px" }}>
           {/* Header */}
           <div style={{ marginBottom: "24px" }}>
-            <h1 style={{ color: "#f1f5f9", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
+            <h1 style={{ color: "#0f172a", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
               🔴 T3 리포트 — 위기행동 관리
             </h1>
-            <p style={{ color: "#94a3b8", fontSize: "0.85rem", margin: "4px 0 0" }}>
+            <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "4px 0 0" }}>
               Tier3 대상 학생 위기행동 현황 및 의사결정 지원 {startDate && endDate ? `(${startDate} ~ ${endDate})` : ""}
             </p>
           </div>
 
           {loading && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8" }}>
+            <div style={{ textAlign: "center", padding: "60px 0", color: "#64748b" }}>
               <div style={{ fontSize: "2rem", marginBottom: "12px" }}>⏳</div>
               데이터 로딩 중...
             </div>
@@ -184,17 +185,18 @@ export default function Tier3Report() {
                   { label: "평균 강도", value: data.summary.avg_intensity, unit: "/5", icon: "📈", color: getIntensityColor(data.summary.avg_intensity) },
                 ].map((card, i) => (
                   <div key={i} style={{
-                    background: "rgba(30,41,59,0.8)",
-                    border: `1px solid ${card.color}30`,
+                    background: "#fff",
+                    border: `1px solid ${card.color}20`,
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
                     borderRadius: "12px",
                     padding: "20px",
                     textAlign: "center",
                   }}>
                     <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{card.icon}</div>
                     <div style={{ color: card.color, fontSize: "1.8rem", fontWeight: 700 }}>
-                      {card.value}<span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>{card.unit}</span>
+                      {card.value}<span style={{ fontSize: "0.8rem", color: "#64748b" }}>{card.unit}</span>
                     </div>
-                    <div style={{ color: "#94a3b8", fontSize: "0.75rem", marginTop: "4px" }}>{card.label}</div>
+                    <div style={{ color: "#64748b", fontSize: "0.75rem", marginTop: "4px" }}>{card.label}</div>
                   </div>
                 ))}
               </div>
@@ -202,9 +204,9 @@ export default function Tier3Report() {
               {/* Decision Legend */}
               <div style={{
                 display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "16px",
-                padding: "12px 16px", background: "rgba(30,41,59,0.6)", borderRadius: "8px"
+                padding: "12px 16px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px"
               }}>
-                <span style={{ color: "#94a3b8", fontSize: "0.75rem", alignSelf: "center" }}>의사결정 기준:</span>
+                <span style={{ color: "#64748b", fontSize: "0.75rem", alignSelf: "center" }}>의사결정 기준:</span>
                 {DECISION_OPTIONS.map(opt => (
                   <span key={opt.label} style={{
                     display: "inline-flex", alignItems: "center", gap: "4px",
@@ -223,126 +225,137 @@ export default function Tier3Report() {
               </div>
 
               {/* Student Table */}
-              {data.students.length === 0 ? (
-                <div style={{
-                  textAlign: "center", padding: "40px",
-                  background: "rgba(30,41,59,0.8)", borderRadius: "12px",
-                  color: "#94a3b8"
-                }}>
-                  Tier3 대상 학생이 없습니다.
-                </div>
-              ) : (
-                <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #334155" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                    <thead>
-                      <tr style={{ background: "rgba(51,65,85,0.8)" }}>
-                        {["Tier", "학생코드", "학급", "사건 수", "최대 강도", "평균 강도", "주요 행동", "주간 추이", "시스템 의사결정 제안", "분석"].map(h => (
-                          <th key={h} style={{
-                            padding: "10px 8px", color: "#94a3b8", fontWeight: 600,
-                            borderBottom: "1px solid #334155", textAlign: "left",
-                            whiteSpace: "nowrap",
-                          }}>
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.students.map((s, i) => (
-                        <tr
-                          key={i}
-                          style={{
-                            background: s.tier === "Tier3+"
-                              ? "rgba(124,58,237,0.08)"
-                              : i % 2 === 0 ? "rgba(30,41,59,0.6)" : "rgba(30,41,59,0.3)",
-                            borderBottom: "1px solid #1e293b",
-                          }}
-                        >
-                          <td style={{ padding: "10px 8px" }}>
-                            <span style={{
-                              display: "inline-block", padding: "2px 8px", borderRadius: "4px",
-                              fontSize: "0.7rem", fontWeight: 700,
-                              color: s.tier === "Tier3+" ? "#7c3aed" : "#ef4444",
-                              background: s.tier === "Tier3+" ? "#7c3aed20" : "#ef444420",
-                            }}>
-                              {s.tier}
-                            </span>
+              {(() => {
+                const students = data.students.filter(s => {
+                  if (isAdmin()) return true;
+                  const userClassId = user?.class_id || "";
+                  return s.class && String(s.class).startsWith(String(userClassId));
+                });
 
-                          </td>
-                          <td style={{ padding: "10px 8px", color: "#f1f5f9", fontWeight: 600 }}>{s.code}</td>
-                          <td style={{ padding: "10px 8px", color: "#cbd5e1" }}>{s.class}</td>
-                          <td style={{ padding: "10px 8px", color: s.incidents >= 6 ? "#ef4444" : "#e2e8f0", fontWeight: 700 }}>
-                            {s.incidents}건
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>
-                            {getIntensityBar(s.max_intensity)}{" "}
-                            <span style={{ color: getIntensityColor(s.max_intensity), fontSize: "0.75rem", fontWeight: 600 }}>
-                              {s.max_intensity}
-                            </span>
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>
-                            {getIntensityBar(s.avg_intensity)}{" "}
-                            <span style={{ color: getIntensityColor(s.avg_intensity), fontSize: "0.75rem" }}>
-                              {s.avg_intensity}
-                            </span>
-                          </td>
-                          <td style={{ padding: "10px 8px", color: "#94a3b8", maxWidth: "140px" }}>
-                            {s.behavior_types.length > 0
-                              ? s.behavior_types.slice(0, 2).map(b => b.name).join(", ")
-                              : "-"}
-                          </td>
-                          <td style={{ padding: "8px" }}>
-                            {miniWeeklyChart(s.weekly_trend)}
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>
-                            <span style={{
-                              display: "inline-block", padding: "4px 10px",
-                              borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600,
-                              color: s.decision_color,
-                              background: `${s.decision_color}18`,
-                              border: `1px solid ${s.decision_color}40`,
+                if (students.length === 0) {
+                  return (
+                    <div style={{
+                      textAlign: "center", padding: "40px",
+                      background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px",
+                      color: "#64748b"
+                    }}>
+                      Tier3 대상 학생이 없습니다.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0", background: "#fff", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.80rem" }}>
+                      <thead>
+                        <tr style={{ background: "#f1f5f9" }}>
+                          {["Tier", "학생코드", "학급", "사건 수", "최대 강도", "평균 강도", "주요 행동", "주간 추이", "시스템 의사결정 제안", "분석"].map(h => (
+                            <th key={h} style={{
+                              padding: "12px 8px", color: "#475569", fontWeight: 600,
+                              borderBottom: "1px solid #e2e8f0", textAlign: "left",
                               whiteSpace: "nowrap",
                             }}>
-                              {s.decision}
-                            </span>
-                          </td>
-                          <td style={{ padding: "10px 8px" }}>
-                            <button
-                              onClick={() => window.location.href = `/student/${s.code}`}
-                              style={{
-                                padding: "4px 8px",
-                                background: "#3b82f6",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                fontSize: "0.7rem",
-                                cursor: "pointer"
-                              }}
-                            >
-                              상세
-                            </button>
-                            <button
-                              onClick={() => window.location.href = `/student/${s.code}/bip`}
-                              style={{
-                                padding: "4px 8px",
-                                background: "#8b5cf6",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                fontSize: "0.7rem",
-                                cursor: "pointer",
-                                marginLeft: "5px"
-                              }}
-                            >
-                              BIP
-                            </button>
-                          </td>
+                              {h}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody>
+                        {students.map((s, i) => (
+                          <tr
+                            key={i}
+                            style={{
+                              background: s.tier === "Tier3+"
+                                ? "rgba(124,58,237,0.03)"
+                                : i % 2 === 0 ? "#fff" : "#f8fafc",
+                              borderBottom: "1px solid #f1f5f9",
+                            }}
+                          >
+                            <td style={{ padding: "12px 8px" }}>
+                              <span style={{
+                                display: "inline-block", padding: "2px 8px", borderRadius: "4px",
+                                fontSize: "0.7rem", fontWeight: 700,
+                                color: s.tier === "Tier3+" ? "#7c3aed" : "#ef4444",
+                                background: s.tier === "Tier3+" ? "#7c3aed15" : "#ef444415",
+                              }}>
+                                {s.tier}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px 8px", color: "#0f172a", fontWeight: 600 }}>{s.code}</td>
+                            <td style={{ padding: "12px 8px", color: "#475569" }}>{s.class}</td>
+                            <td style={{ padding: "12px 8px", color: s.incidents >= 6 ? "#ef4444" : "#1e293b", fontWeight: 700 }}>
+                              {s.incidents}건
+                            </td>
+                            <td style={{ padding: "12px 8px" }}>
+                              {getIntensityBar(s.max_intensity)}{" "}
+                              <span style={{ color: getIntensityColor(s.max_intensity), fontSize: "0.75rem", fontWeight: 600 }}>
+                                {s.max_intensity}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px 8px" }}>
+                              {getIntensityBar(s.avg_intensity)}{" "}
+                              <span style={{ color: getIntensityColor(s.avg_intensity), fontSize: "0.75rem" }}>
+                                {s.avg_intensity}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px 8px", color: "#64748b", maxWidth: "140px" }}>
+                              {s.behavior_types.length > 0
+                                ? s.behavior_types.slice(0, 2).map(b => b.name).join(", ")
+                                : "-"}
+                            </td>
+                            <td style={{ padding: "8px" }}>
+                              {miniWeeklyChart(s.weekly_trend)}
+                            </td>
+                            <td style={{ padding: "12px 8px" }}>
+                              <span style={{
+                                display: "inline-block", padding: "4px 10px",
+                                borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600,
+                                color: s.decision_color,
+                                background: `${s.decision_color}12`,
+                                border: `1px solid ${s.decision_color}30`,
+                                whiteSpace: "nowrap",
+                              }}>
+                                {s.decision}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px 8px" }}>
+                              <button
+                                onClick={() => window.location.href = `/student/${s.code}`}
+                                style={{
+                                  padding: "4px 8px",
+                                  background: "#3b82f6",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  fontSize: "0.7rem",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                상세
+                              </button>
+                              <button
+                                onClick={() => window.location.href = `/student/${s.code}/bip`}
+                                style={{
+                                  padding: "4px 8px",
+                                  background: "#8b5cf6",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  fontSize: "0.7rem",
+                                  cursor: "pointer",
+                                  marginLeft: "5px"
+                                }}
+                              >
+                                BIP
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
 
               {/* AI Analysis */}
               <Tier3AIAnalysis apiUrl={apiUrl} startDate={startDate} endDate={endDate} />
@@ -387,22 +400,22 @@ function Tier3AIAnalysis({ apiUrl, startDate, endDate }: { apiUrl: string; start
         </button>
       ) : (
         <div style={{
-          background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)",
+          background: "rgba(124,58,237,0.05)", border: "1px solid rgba(124,58,237,0.2)",
           borderRadius: "12px", padding: "20px", marginTop: "12px"
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <h3 style={{ margin: 0, color: "#a78bfa", fontSize: "1rem" }}>🤖 BCBA AI 분석 — Tier 3 학생 종합</h3>
+            <h3 style={{ margin: 0, color: "#6d28d9", fontSize: "1rem" }}>🤖 BCBA AI 분석 — Tier 3 학생 종합</h3>
             <button onClick={() => setVisible(false)} style={{
-              background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "0.8rem"
+              background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.8rem"
             }}>✕ 닫기</button>
           </div>
           {loading ? (
-            <div style={{ textAlign: "center", padding: "30px", color: "#a78bfa" }}>
+            <div style={{ textAlign: "center", padding: "30px", color: "#7c3aed" }}>
               <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>⏳</div>
               AI가 Tier 3 학생 데이터를 분석하고 있습니다...
             </div>
           ) : (
-            <div style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", lineHeight: "1.7", color: "#e2e8f0" }}>
+            <div style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", lineHeight: "1.7", color: "#334155" }}>
               {analysis}
             </div>
           )}
@@ -451,7 +464,7 @@ function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, m
   };
 
   return (
-    <div style={{ background: "rgba(30,41,59,0.6)", borderRadius: "12px", border: "1px solid #334155", overflow: "hidden" }}>
+    <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}>
       <div
         onClick={() => setExpanded(!expanded)}
         style={{
@@ -475,8 +488,8 @@ function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, m
               placeholder="회의 내용을 비식별화하여 입력하세요..."
               style={{
                 width: "100%", minHeight: "80px", padding: "12px",
-                background: "#0f172a", border: "1px solid #475569",
-                borderRadius: "8px", color: "#f1f5f9", marginBottom: "10px"
+                background: "#f8fafc", border: "1px solid #e2e8f0",
+                borderRadius: "8px", color: "#1e293b", marginBottom: "10px"
               }}
             />
             <button
@@ -499,9 +512,9 @@ function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, m
             ) : (
               <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "200px", overflowY: "auto" }}>
                 {notes.map(n => (
-                  <li key={n.id} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px dashed #334155" }}>
-                    <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginBottom: "4px" }}>{n.date} | {n.author}</div>
-                    <div style={{ fontSize: "0.9rem", color: "#e2e8f0", whiteSpace: "pre-wrap" }}>{n.content}</div>
+                  <li key={n.id} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px dashed #e2e8f0" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "4px" }}>{n.date} | {n.author}</div>
+                    <div style={{ fontSize: "0.9rem", color: "#1e293b", whiteSpace: "pre-wrap" }}>{n.content}</div>
                   </li>
                 ))}
               </ul>

@@ -26,7 +26,7 @@ interface StudentStatus {
 }
 
 export default function TierStatusPage() {
-    const { isAdmin } = useAuth();
+    const { user, isAdmin } = useAuth();
     const router = useRouter();
     const [students, setStudents] = useState<StudentStatus[]>([]);
     const [enrolledCount, setEnrolledCount] = useState(0);
@@ -211,6 +211,14 @@ export default function TierStatusPage() {
 
     // Filter students
     const filteredStudents = students.filter(s => {
+        // Teacher class-filtering
+        if (!isAdmin()) {
+            const userClassId = user?.class_id || "";
+            if (userClassId && !String(s.학생코드).startsWith(String(userClassId))) {
+                 return false;
+            }
+        }
+        
         if (filter !== "all" && getTierLevel(s) !== filter) return false;
         if (courseFilter !== "all" && getCourse(s.학생코드) !== courseFilter) return false;
         return true;

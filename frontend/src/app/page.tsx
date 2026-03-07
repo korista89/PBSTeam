@@ -23,7 +23,7 @@ import {
 } from "recharts";
 
 import { DashboardData, ChartData, RiskStudent, SafetyAlert } from "./types";
-import { AuthCheck } from "./components/AuthProvider";
+import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
 import { DashboardSkeleton } from "./components/DashboardSkeleton";
 import { COLORS, TIER_COLORS } from "./constants";
@@ -32,6 +32,7 @@ export default function Home() {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const { user, isAdmin } = useAuth();
 
     // Date State from GlobalNav (localStorage)
     const { startDate, endDate } = useDateRange();
@@ -280,7 +281,7 @@ export default function Home() {
                         <div className={styles.card}>
                             <h3>총 발생 건수 (ODR)</h3>
                             <p className={styles.statValue}>{summary.total_incidents}</p>
-                            <span className={styles.trendUp}>학교 전체 데이터</span>
+                            <span className={styles.trendUp}>{isAdmin() ? "학교 전체 데이터" : "전체 통계 (참고용)"}</span>
                         </div>
                         <div className={styles.card}>
                             <h3>평균 강도</h3>
@@ -289,8 +290,10 @@ export default function Home() {
                         </div>
                         <div className={styles.card}>
                             <h3>위험군 학생 (Tier 2/3)</h3>
-                            <p className={styles.statValue}>{summary.risk_student_count}</p>
-                            <span className={styles.alert}>집중 모니터링 필요</span>
+                            <p className={styles.statValue}>
+                                {isAdmin() ? summary.risk_student_count : risk_list.filter(s => String(s.class).startsWith(user?.class_id || "")).length}
+                            </p>
+                            <span className={styles.alert}>{isAdmin() ? "집중 모니터링 필요" : "우리 학급 위험군"}</span>
                         </div>
                     </div>
 
@@ -494,7 +497,7 @@ export default function Home() {
 
                     {/* Tier 2: Screening List */}
                     <section className={styles.sectionHeader}>
-                        <h2>🚨 Tier 2/3: 위험군 선별 리스트 (Screening)</h2>
+                        <h2>🚨 Tier 2/3: 위험군 선별 리스트 ({isAdmin() ? "전체" : "우리 학급"})</h2>
                     </section>
 
                     <div className={styles.riskSection}>
@@ -510,30 +513,38 @@ export default function Home() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {risk_list.map((student: RiskStudent, idx: number) => (
-                                    <tr key={idx}>
-                                        <td>
-                                            <span className={styles.tierBadge} style={{ backgroundColor: TIER_COLORS[student.tier as keyof typeof TIER_COLORS] || "#ccc", color: "white" }}>
-                                                {student.tier}
-                                            </span>
-                                        </td>
-                                        <td>{student.name}</td>
-                                        <td>{student.class}</td>
-                                        <td>{student.count}</td>
-                                        <td>{student.max_intensity}</td>
-                                        <td>
-                                            <button
-                                                className={styles.actionBtn}
-                                                onClick={() => window.location.href = `/student/${encodeURIComponent(student.name)}`}
-                                            >
-                                                상세 분석
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {(() => {
+                                    const filteredRiskList = isAdmin() 
+                                        ? risk_list 
+                                        : risk_list.filter(s => String(s.class).startsWith(user?.class_id || ""));
+                                    
+                                    return filteredRiskList.map((student: RiskStudent, idx: number) => (
+                                        <tr key={idx}>
+                                            <td>
+                                                <span className={styles.tierBadge} style={{ backgroundColor: TIER_COLORS[student.tier as keyof typeof TIER_COLORS] || "#ccc", color: "white" }}>
+                                                    {student.tier}
+                                                </span>
+                                            </td>
+                                            <td>{student.name}</td>
+                                            <td>{student.class}</td>
+                                            <td>{student.count}</td>
+                                            <td>{student.max_intensity}</td>
+                                            <td>
+                                                <button
+                                                    className={styles.actionBtn}
+                                                    onClick={() => window.location.href = `/student/${encodeURIComponent(student.name)}`}
+                                                >
+                                                    상세 분석
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ));
+                                })()}
                             </tbody>
                         </table>
-                        {risk_list.length === 0 && <p className={styles.noData}>감지된 위험군 학생이 없습니다.</p>}
+                        {(isAdmin() ? risk_list.length === 0 : risk_list.filter(s => String(s.class).startsWith(user?.class_id || "")).length === 0) && (
+                            <p className={styles.noData}>감지된 위험군 학생이 없습니다.</p>
+                        )}
                     </div>
 
                     {/* Tier 3: Safety Alerts */}
