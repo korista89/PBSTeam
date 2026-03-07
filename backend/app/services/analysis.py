@@ -6,8 +6,17 @@ from app.services.ai_insight import generate_ai_insight, generate_meeting_agent_
 
 def get_analytics_data(start_date: str = None, end_date: str = None, class_id: str = None):
     raw_data = fetch_all_records()
+    
+    empty_res = {
+        "summary": {"total_incidents": 0, "avg_intensity": 0, "risk_student_count": 0},
+        "trends": [], "weekly_trends": [],
+        "big5": {"locations": [], "times": [], "behaviors": [], "weekdays": []},
+        "risk_list": [], "functions": [], "antecedents": [], "consequences": [],
+        "heatmap": [], "safety_alerts": [], "ai_comment": "데이터가 없습니다."
+    }
+
     if not raw_data:
-        return {"error": "No data found"}
+        return empty_res
 
     df = pd.DataFrame(raw_data)
     
@@ -45,13 +54,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             resolved_records.append(new_row)
     
     if not resolved_records:
-        return {
-            "summary": {"total_incidents": 0, "avg_intensity": 0, "risk_student_count": 0},
-            "trends": [], "weekly_trends": [],
-            "big5": {"locations": [], "times": [], "behaviors": [], "weekdays": []},
-            "risk_list": [], "functions": [], "antecedents": [], "consequences": [],
-            "heatmap": [], "safety_alerts": [], "ai_comment": "데이터가 없습니다."
-        }
+        return empty_res
 
     df = pd.DataFrame(resolved_records)
     # Ensure columns exist for downstream logic
@@ -284,7 +287,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 def get_student_analytics(student_name: str, start_date: str = None, end_date: str = None):
     raw_data = fetch_all_records()
     if not raw_data:
-        return {"error": "No data found"}
+        return {
+            "profile": {"name": student_name, "student_code": "-", "class": "-", "tier": "Tier 1", "total_incidents": 0, "avg_intensity": 0},
+            "abc_data": [], "functions": [], "cico_trend": [], "weekly_trend": [],
+            "behavior_types": [], "location_stats": [], "time_stats": [],
+            "weekday_dist": [], "monthly_trend": [], "daily_intensity": [],
+            "separation_stats": [], "daily_report_freq": [], "monthly_report_freq": []
+        }
     
     df = pd.DataFrame(raw_data)
     if '학생명' not in df.columns:
@@ -498,7 +507,11 @@ def analyze_meeting_data(target_date: str = None):
     
     raw_data = fetch_all_records()
     if not raw_data:
-        return {"error": "No data found"}
+        return {
+            "period": f"{start_dt.strftime('%Y-%m-%d')} ~ {end_dt.strftime('%Y-%m-%d')}",
+            "students": [],
+            "summary": {"emergency_count": 0, "tier2_candidate_count": 0}
+        }
 
     df = pd.DataFrame(raw_data)
     

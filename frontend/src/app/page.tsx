@@ -85,407 +85,423 @@ function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sect
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const { user, isAdmin } = useAuth();
   const { startDate, endDate } = useDateRange();
   const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
+  // Stability: track previous params to avoid redundant fetches
+  const lastParamsRef = React.useRef("");
+
   useEffect(() => {
     if (!startDate || !endDate) return;
+    
+    // Memoize params string for comparison
+    const isAdminUser = isAdmin();
+    const params = new URLSearchParams();
+    params.append("start_date", startDate);
+    params.append("end_date", endDate);
+    if (!isAdminUser && user?.class_id) {
+      params.append("class_id", user.class_id);
+    }
+    const currentParams = params.toString();
+
+    // Prevent loop: only fetch if params actually changed
+    if (currentParams === lastParamsRef.current && data !== null) {
+      return;
+    }
+
+    const abortController = new AbortController();
+
     const fetchData = async () => {
       try {
         setLoading(true);
-        let url = `${apiUrl}/api/v1/analytics/dashboard`;
-        const params = new URLSearchParams();
-        params.append("start_date", startDate);
-        params.append("end_date", endDate);
+        setFetchError(null);
+        lastParamsRef.current = currentParams;
+
+        const url = `${apiUrl}/api/v1/analytics/dashboard?${currentParams}`;
+        const response = await axios.get(url, { signal: abortController.signal });
         
-        // Add class_id for non-admins
-        if (!isAdmin() && user?.class_id) {
-          params.append("class_id", user.class_id);
+        if (response.data.error) {
+           setFetchError(response.data.error);
+        } else {
+           setData(response.data);
         }
-        
-        url += `?${params.toString()}`;
-        const response = await axios.get(url);
-        setData(response.data);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        if (!axios.isCancel(err)) {
+          console.error("Dashboard fetch error:", err);
+          setFetchError("데이터를 불러오는 중 오류가 발생했습니다.");
+        }
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
-  }, [startDate, endDate, user, isAdmin]);
+    return () => abortController.abort();
+  }, [startDate, endDate, user?.class_id, user?.id]);
 
-  if (!data) {
-    return (
-      <AuthCheck>
-        <div className="container">
-          <GlobalNav currentPage="dashboard" />
-          <div style={{ padding: '50px', textAlign: 'center' }}>
-            <p>📊 데이터를 불러오는 중...</p>
-          </div>
-        </div>
-      </AuthCheck>
-    );
-  }
-
-  if (data.error) {
-    return (
-      <AuthCheck>
-        <div className="container">
-          <GlobalNav currentPage="dashboard" />
-          <div style={{ padding: '50px', textAlign: 'center', color: '#ef4444' }}>
-            <p>⚠️ {data.error}</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '10px' }}>데이터가 없거나 불러오는데 실패했습니다. 상단 날짜를 조정해보세요.</p>
-          </div>
-        </div>
-      </AuthCheck>
-    );
-  }
-
-  const summary = data.summary || { total_incidents: 0, avg_intensity: 0, risk_student_count: 0 };
-  const big5 = data.big5 || { locations: [], behaviors: [], times: [], weekdays: [] };
-  const riskList = data.risk_list || [];
-  const safetyAlerts = data.safety_alerts || [];
-
+  // State variables derived from data safely
+  const summary = data?.summary || { total_incidents: 0, avg_intensity: 0, risk_student_count: 0 };
+  const big5 = data?.big5 || { locations: [], behaviors: [], times: [], weekdays: [] };
+  const riskList = data?.risk_list || [];
+  const safetyAlerts = data?.safety_alerts || [];
+  
+  // Unified layout to prevent GlobalNav remounting
   return (
     <AuthCheck>
       <div className="container">
         <GlobalNav currentPage="dashboard" />
-        <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '20px auto', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-          <style jsx global>{`
-          @media print {
-              body { background: white; -webkit-print-color-adjust: exact; }
-              .no-print { display: none; }
-              .page-break { page-break-before: always; }
-          }
-          @media (max-width: 768px) {
-              .report-container { padding: 10px !important; margin: 10px !important; }
-              .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
-              .grid-2 { grid-template-columns: 1fr !important; }
-              .chart-box { height: 350px !important; }
-          }
-          .report-section { margin-bottom: 3rem; border-bottom: 1px solid #eee; padding-bottom: 2rem; }
-          h1 { font-size: 26px; font-weight: 800; margin-bottom: 10px; color: #1e3a8a; letter-spacing: -0.5px; }
-          h2 { font-size: 20px; font-weight: 700; color: #1e293b; border-left: 6px solid #3b82f6; padding-left: 12px; margin: 40px 0 24px 0; display: flex; align-items: center; }
-          
-          .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px; }
-          .stat-box { padding: 20px; border-radius: 16px; background: white; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-          .stat-value { font-size: 32px; font-weight: 800; color: #0f172a; line-height: 1.2; }
-          .stat-label { font-size: 13px; font-weight: 600; color: #64748b; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-          
-          /* Grid Layout for Charts */
-          .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
-          .chart-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 420px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
-          .chart-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: #334155; display: flex; align-items: center; gap: 8px; }
-          
-          table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-          th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-          th { background-color: #f8fafc; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
-          td { color: #334155; }
-          tr:last-child td { border-bottom: none; }
-          `}</style>
-
-          {/* Controller */}
-          <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
-            <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🖨️ PDF 저장</button>
+        
+        {loading && !data && (
+          <div style={{ padding: '50px', textAlign: 'center' }}>
+            <p>📊 데이터를 불러오는 중...</p>
           </div>
+        )}
 
-          {/* Header */}
-          <header style={{ textAlign: 'center', marginBottom: '30px' }}>
-            <h1>📊 {isAdmin() ? "학교 행동 지원 종합 리포트 (대시보드)" : `${user?.class_name || '학급'} T1 행동 보고서`}</h1>
-            <p style={{ color: '#666' }}>발행일: {date} | 작성주체: {isAdmin() ? "PBS 리더십팀" : `${user?.class_name || '학급'} 담임교사`}</p>
-          </header>
+        {fetchError && (
+          <div style={{ padding: '50px', textAlign: 'center', color: '#ef4444' }}>
+            <p>⚠️ {fetchError}</p>
+            <p style={{ fontSize: '0.8rem', marginTop: '10px' }}>종료 날짜가 시작 날짜보다 빠른지, 혹은 다른 필터를 확인해보세요.</p>
+          </div>
+        )}
 
-          {/* ===== Section 1: 총괄 현황 ===== */}
-          <section className="report-section">
-            <h2>1. 총괄 현황 (Overview)</h2>
-            <div className="summary-stats">
-              <div className="stat-box">
-                <div className="stat-value">{summary.total_incidents}건</div>
-                <div className="stat-label">총 행동 발생 (ODR)</div>
-              </div>
-              <div className="stat-box">
-                <div className="stat-value">{(summary.avg_intensity || 0).toFixed(2)}</div>
-                <div className="stat-label">평균 행동 강도 (1-5)</div>
-              </div>
-              <div className="stat-box">
-                <div className="stat-value" style={{ color: '#ef4444' }}>{isAdmin() ? summary.risk_student_count : riskList.length}명</div>
-                <div className="stat-label">집중 지원 대상 (Tier 2/3)</div>
-              </div>
+        {data && (
+          <div className="report-container" style={{ padding: '20px', maxWidth: '210mm', margin: '20px auto', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+            <style jsx global>{`
+            @media print {
+                body { background: white; -webkit-print-color-adjust: exact; }
+                .no-print { display: none; }
+                .page-break { page-break-before: always; }
+            }
+            @media (max-width: 768px) {
+                .report-container { padding: 10px !important; margin: 10px !important; }
+                .summary-stats { grid-template-columns: repeat(2, 1fr) !important; }
+                .grid-2 { grid-template-columns: 1fr !important; }
+                .chart-box { height: 350px !important; }
+            }
+            .report-section { margin-bottom: 3rem; border-bottom: 1px solid #eee; padding-bottom: 2rem; }
+            h1 { font-size: 26px; font-weight: 800; margin-bottom: 10px; color: #1e3a8a; letter-spacing: -0.5px; }
+            h2 { font-size: 20px; font-weight: 700; color: #1e293b; border-left: 6px solid #3b82f6; padding-left: 12px; margin: 40px 0 24px 0; display: flex; align-items: center; }
+            
+            .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px; }
+            .stat-box { padding: 20px; border-radius: 16px; background: white; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+            .stat-value { font-size: 32px; font-weight: 800; color: #0f172a; line-height: 1.2; }
+            .stat-label { font-size: 13px; font-weight: 600; color: #64748b; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+            
+            /* Grid Layout for Charts */
+            .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
+            .chart-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 420px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+            .chart-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: #334155; display: flex; align-items: center; gap: 8px; }
+            
+            table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+            th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+            th { background-color: #f8fafc; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+            td { color: #334155; }
+            tr:last-child td { border-bottom: none; }
+            `}</style>
+
+            {/* Controller */}
+            <div className="no-print" style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <span style={{ fontSize: '0.9rem', color: '#666' }}>분석 기간: {startDate} ~ {endDate}</span>
+              <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🖨️ PDF 저장</button>
             </div>
-            <AIAnalysisCard
-              sectionName="총괄 현황"
-              dataContext={{ total_incidents: summary.total_incidents, avg_intensity: summary.avg_intensity, risk_count: riskList.length }}
-              startDate={startDate} endDate={endDate}
-            />
-          </section>
 
-          {/* ===== Section 2: 추이 ===== */}
-          <section className="report-section">
-            <h2>2. 행동 발생 추이 (Trends)</h2>
-            <div className="grid-2">
-              <div className="chart-box">
-                <div className="chart-title">📅 일별 발생 추이</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.trends}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="date" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
-                    <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} name="발생 건수" dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="chart-box">
-                <div className="chart-title">📊 주별 발생 추이</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.weekly_trends || []} barSize={40}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="week" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
-                    <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
-                    <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey="count" position="top" fontSize={12} fill="#6b7280" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <AIAnalysisCard
-              sectionName="행동 발생 추이"
-              dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends || [] }}
-              startDate={startDate} endDate={endDate}
-            />
-          </section>
+            {/* Header */}
+            <header style={{ textAlign: 'center', marginBottom: '30px' }}>
+              <h1>📊 {isAdmin() ? "학교 행동 지원 종합 리포트 (대시보드)" : `${user?.class_name || '학급'} T1 행동 보고서`}</h1>
+              <p style={{ color: '#666' }}>발행일: {date} | 작성주체: {isAdmin() ? "PBS 리더십팀" : `${user?.class_name || '학급'} 담임교사`}</p>
+            </header>
 
-          {/* ===== Section 3: 패턴 분석 ===== */}
-          <section className="report-section">
-            <h2>3. {isAdmin() ? "전체" : "학급"} 패턴 분석 (Big 5 & ABC)</h2>
-
-            <div className="grid-2">
-              <div className="chart-box">
-                <div className="chart-title">📍 주요 발생 장소</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={big5.locations || []} layout="vertical" margin={{ left: 10, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
-                    <Bar dataKey="value" fill="#3b82f6" barSize={24} radius={[0, 4, 4, 0]}>
-                      <LabelList dataKey="value" position="right" fontSize={12} fill="#3b82f6" fontWeight="bold" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+            {/* ===== Section 1: 총괄 현황 ===== */}
+            <section className="report-section">
+              <h2>1. 총괄 현황 (Overview)</h2>
+              <div className="summary-stats">
+                <div className="stat-box">
+                  <div className="stat-value">{summary.total_incidents}건</div>
+                  <div className="stat-label">총 행동 발생 (ODR)</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-value">{(summary.avg_intensity || 0).toFixed(2)}</div>
+                  <div className="stat-label">평균 행동 강도 (1-5)</div>
+                </div>
+                <div className="stat-box">
+                  <div className="stat-value" style={{ color: '#ef4444' }}>{isAdmin() ? summary.risk_student_count : riskList.length}명</div>
+                  <div className="stat-label">집중 지원 대상 (Tier 2/3)</div>
+                </div>
               </div>
-              <div className="chart-box">
-                <div className="chart-title">🤔 주요 행동 유형</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
-                      label={({ name, value }) => `${name} (${value})`}>
-                      {(big5.behaviors || []).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <AIAnalysisCard
+                sectionName="총괄 현황"
+                dataContext={{ total_incidents: summary.total_incidents, avg_intensity: summary.avg_intensity, risk_count: riskList.length }}
+                startDate={startDate} endDate={endDate}
+              />
+            </section>
+
+            {/* ===== Section 2: 추이 ===== */}
+            <section className="report-section">
+              <h2>2. 행동 발생 추이 (Trends)</h2>
+              <div className="grid-2">
+                <div className="chart-box">
+                  <div className="chart-title">📅 일별 발생 추이</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.trends}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="date" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                      <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                      <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                      <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={3} name="발생 건수" dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="chart-box">
+                  <div className="chart-title">📊 주별 발생 추이</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.weekly_trends || []} barSize={40}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="week" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                      <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }} />
+                      <Bar dataKey="count" fill="#8b5cf6" name="발생 건수" radius={[6, 6, 0, 0]}>
+                        <LabelList dataKey="count" position="top" fontSize={12} fill="#6b7280" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <AIAnalysisCard
+                sectionName="행동 발생 추이"
+                dataContext={{ daily_trends: (data.trends || []).slice(-7), weekly_trends: data.weekly_trends || [] }}
+                startDate={startDate} endDate={endDate}
+              />
+            </section>
+
+            {/* ===== Section 3: 패턴 분석 ===== */}
+            <section className="report-section">
+              <h2>3. {isAdmin() ? "전체" : "학급"} 패턴 분석 (Big 5 & ABC)</h2>
+
+              <div className="grid-2">
+                <div className="chart-box">
+                  <div className="chart-title">📍 주요 발생 장소</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={big5.locations || []} layout="vertical" margin={{ left: 10, right: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                      <Bar dataKey="value" fill="#3b82f6" barSize={24} radius={[0, 4, 4, 0]}>
+                        <LabelList dataKey="value" position="right" fontSize={12} fill="#3b82f6" fontWeight="bold" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="chart-box">
+                  <div className="chart-title">🤔 주요 행동 유형</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
+                        label={({ name, value }) => `${name} (${value})`}>
+                        {(big5.behaviors || []).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div className="chart-box">
+                  <div className="chart-title">⏰ 시간대별 패턴</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={big5.times || []} margin={{ top: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
+                      <Tooltip contentStyle={{ borderRadius: '8px' }} />
+                      <Bar dataKey="value" fill="#8b5cf6" barSize={32} radius={[4, 4, 0, 0]}>
+                        <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="chart-box">
+                  <div className="chart-title">📅 요일별 패턴</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={big5.weekdays || []} margin={{ top: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
+                      <Tooltip contentStyle={{ borderRadius: '8px' }} />
+                      <Bar dataKey="value" fill="#f59e0b" barSize={32} radius={[4, 4, 0, 0]}>
+                        <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div className="chart-box">
+                  <div className="chart-title">❓ 행동의 기능 (Why)</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={data.functions || []} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
+                        label={({ name, percent }: any) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}>
+                        {(data.functions || []).map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="chart-box">
+                  <div className="chart-title">⚡ 배경 사건 (When)</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.antecedents || []} layout="vertical" margin={{ left: 20, right: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                      <Bar dataKey="value" fill="#ef4444" barSize={20} radius={[0, 4, 4, 0]}>
+                        <LabelList dataKey="value" position="right" fontSize={11} fill="#ef4444" fontWeight="bold" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="grid-2">
+                <div className="chart-box">
+                  <div className="chart-title">🎁 후속 결과 (Consequence)</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.consequences || []} layout="vertical" margin={{ left: 20, right: 30 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
+                      <Bar dataKey="value" fill="#f59e0b" barSize={20} radius={[0, 4, 4, 0]}>
+                        <LabelList dataKey="value" position="right" fontSize={11} fill="#f59e0b" fontWeight="bold" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="chart-box">
+                  <div className="chart-title">🔥 Hot Spot (장소 x 시간)</div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
+                      <CartesianGrid stroke="#e2e8f0" />
+                      <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} axisLine={false} tickLine={false} />
+                      <ZAxis type="number" dataKey="value" range={[50, 400]} name="빈도" />
+                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px' }} />
+                      <Scatter name="Incidents" data={data.heatmap || []} fill="#e02424" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <AIAnalysisCard
+                sectionName="패턴 분석 (Big 5 & ABC 분석)"
+                dataContext={{
+                  top_locations: big5.locations?.slice(0, 3),
+                  top_behaviors: big5.behaviors?.slice(0, 3),
+                  top_times: big5.times?.slice(0, 3),
+                  functions: (data.functions || [])?.slice(0, 3),
+                }}
+                startDate={startDate} endDate={endDate}
+              />
+            </section>
+
+            <div className="page-break"></div>
+
+            {/* ===== Section 4: Tier 2/3 List ===== */}
+            <section className="report-section">
+              <h2>4. {isAdmin() ? "위험군 및 안전 알림" : "학급 학생 지원 현황"}</h2>
+
+              <h3>🚨 고위험군 안전 알림 (Safety Alerts)</h3>
+              {safetyAlerts.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ marginBottom: '20px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '20%' }}>날짜</th>
+                        <th style={{ width: '20%' }}>학생</th>
+                        <th>내용</th>
+                        <th style={{ width: '10%' }}>강도</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {safetyAlerts.map((alert: SafetyAlert, idx: number) => (
+                        <tr key={idx}>
+                          <td>{alert.date}</td>
+                          <td>{alert.student}</td>
+                          <td>{alert.location}에서 {alert.type}</td>
+                          <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{alert.intensity}</td>
+                        </tr>
                       ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>보고된 고위험(강도 5) 행동이 없습니다.</p>
+              )}
 
-            <div className="grid-2">
-              <div className="chart-box">
-                <div className="chart-title">⏰ 시간대별 패턴</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={big5.times || []} margin={{ top: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
-                    <Tooltip contentStyle={{ borderRadius: '8px' }} />
-                    <Bar dataKey="value" fill="#8b5cf6" barSize={32} radius={[4, 4, 0, 0]}>
-                      <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="chart-box">
-                <div className="chart-title">📅 요일별 패턴</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={big5.weekdays || []} margin={{ top: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="name" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
-                    <Tooltip contentStyle={{ borderRadius: '8px' }} />
-                    <Bar dataKey="value" fill="#f59e0b" barSize={32} radius={[4, 4, 0, 0]}>
-                      <LabelList dataKey="value" position="top" fontSize={12} fill="#6b7280" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="grid-2">
-              <div className="chart-box">
-                <div className="chart-title">❓ 행동의 기능 (Why)</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={data.functions || []} cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={2} dataKey="value"
-                      label={({ name, percent }: any) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}>
-                      {(data.functions || []).map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="bottom" height={36} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="chart-box">
-                <div className="chart-title">⚡ 배경 사건 (When)</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.antecedents || []} layout="vertical" margin={{ left: 20, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
-                    <Bar dataKey="value" fill="#ef4444" barSize={20} radius={[0, 4, 4, 0]}>
-                      <LabelList dataKey="value" position="right" fontSize={11} fill="#ef4444" fontWeight="bold" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="grid-2">
-              <div className="chart-box">
-                <div className="chart-title">🎁 후속 결과 (Consequence)</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.consequences || []} layout="vertical" margin={{ left: 20, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={110} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
-                    <Bar dataKey="value" fill="#f59e0b" barSize={20} radius={[0, 4, 4, 0]}>
-                      <LabelList dataKey="value" position="right" fontSize={11} fill="#f59e0b" fontWeight="bold" />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="chart-box">
-                <div className="chart-title">🔥 Hot Spot (장소 x 시간)</div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
-                    <CartesianGrid stroke="#e2e8f0" />
-                    <XAxis type="category" dataKey="x" name="시간" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 11 }} width={80} axisLine={false} tickLine={false} />
-                    <ZAxis type="number" dataKey="value" range={[50, 400]} name="빈도" />
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px' }} />
-                    <Scatter name="Incidents" data={data.heatmap || []} fill="#e02424" />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <AIAnalysisCard
-              sectionName="패턴 분석 (Big 5 & ABC 분석)"
-              dataContext={{
-                top_locations: big5.locations?.slice(0, 3),
-                top_behaviors: big5.behaviors?.slice(0, 3),
-                top_times: big5.times?.slice(0, 3),
-                functions: (data.functions || [])?.slice(0, 3),
-              }}
-              startDate={startDate} endDate={endDate}
-            />
-          </section>
-
-          <div className="page-break"></div>
-
-          {/* ===== Section 4: Tier 2/3 List ===== */}
-          <section className="report-section">
-            <h2>4. {isAdmin() ? "위험군 및 안전 알림" : "학급 학생 지원 현황"}</h2>
-
-            <h3>🚨 고위험군 안전 알림 (Safety Alerts)</h3>
-            {data.safety_alerts && data.safety_alerts.length > 0 ? (
+              <h3>⚠️ 집중 지원 대상자 (Tier 2/3)</h3>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ marginBottom: '20px' }}>
+                <table>
                   <thead>
                     <tr>
-                      <th style={{ width: '20%' }}>날짜</th>
-                      <th style={{ width: '20%' }}>학생</th>
-                      <th>내용</th>
-                      <th style={{ width: '10%' }}>강도</th>
+                      <th style={{ width: '15%' }}>Tier</th>
+                      <th style={{ width: '20%' }}>학생명</th>
+                      <th style={{ width: '20%' }}>학번/반</th>
+                      <th style={{ width: '15%' }}>발생횟수</th>
+                      <th>상세</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.safety_alerts.map((alert, idx) => (
+                    {riskList.map((s: RiskStudent, idx: number) => (
                       <tr key={idx}>
-                        <td>{alert.date}</td>
-                        <td>{alert.student}</td>
-                        <td>{alert.location}에서 {alert.type}</td>
-                        <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{alert.intensity}</td>
+                        <td>
+                          <span style={{
+                            padding: '2px 6px', borderRadius: '4px', fontSize: '10px',
+                            backgroundColor: s.tier === 'Tier 3' ? '#fee2e2' : '#fef3c7',
+                            color: s.tier === 'Tier 3' ? '#991b1b' : '#92400e'
+                          }}>
+                            {s.tier}
+                          </span>
+                        </td>
+                        <td>{s.name}</td>
+                        <td>{s.class}</td>
+                        <td>{s.count}</td>
+                        <td>
+                          <button
+                            className="no-print"
+                            onClick={() => window.location.href = `/student/${encodeURIComponent(s.name)}`}
+                            style={{ padding: '4px 8px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                          >
+                            분석
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <p style={{ fontSize: '12px', color: '#666', marginBottom: '20px' }}>보고된 고위험(강도 5) 행동이 없습니다.</p>
-            )}
+              {riskList.length === 0 && <p style={{ fontSize: '12px', color: '#666' }}>감지된 위험군 학생이 없습니다.</p>}
+            </section>
 
-            <h3>⚠️ 집중 지원 대상자 (Tier 2/3)</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: '15%' }}>Tier</th>
-                    <th style={{ width: '20%' }}>학생명</th>
-                    <th style={{ width: '20%' }}>학번/반</th>
-                    <th style={{ width: '15%' }}>발생횟수</th>
-                    <th>상세</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {riskList.map((s, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <span style={{
-                          padding: '2px 6px', borderRadius: '4px', fontSize: '10px',
-                          backgroundColor: s.tier === 'Tier 3' ? '#fee2e2' : '#fef3c7',
-                          color: s.tier === 'Tier 3' ? '#991b1b' : '#92400e'
-                        }}>
-                          {s.tier}
-                        </span>
-                      </td>
-                      <td>{s.name}</td>
-                      <td>{s.class}</td>
-                      <td>{s.count}</td>
-                      <td>
-                        <button
-                          className="no-print"
-                          onClick={() => window.location.href = `/student/${encodeURIComponent(s.name)}`}
-                          style={{ padding: '4px 8px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
-                        >
-                          분석
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {riskList.length === 0 && <p style={{ fontSize: '12px', color: '#666' }}>감지된 위험군 학생이 없습니다.</p>}
-          </section>
-
-          {/* ===== Section 5: Action Plan ===== */}
-          <section className="report-section" style={{ borderBottom: 'none' }}>
-            <h2>5. 실행 계획 및 메모 (Action Plan)</h2>
-            <MeetingNotesSection apiUrl={apiUrl} meetingType={isAdmin() ? "tier1" : `class_${user?.class_id}`} title={isAdmin() ? "전체 교직원 회의록" : `${user?.class_name} 실행 계획`} />
-          </section>
-        </div>
+            {/* ===== Section 5: Action Plan ===== */}
+            <section className="report-section" style={{ borderBottom: 'none' }}>
+              <h2>5. 실행 계획 및 메모 (Action Plan)</h2>
+              <MeetingNotesSection apiUrl={apiUrl} meetingType={isAdmin() ? "tier1" : `class_${user?.class_id}`} title={isAdmin() ? "전체 교직원 회의록" : `${user?.class_name} 실행 계획`} />
+            </section>
+          </div>
+        )}
       </div>
     </AuthCheck>
   );
