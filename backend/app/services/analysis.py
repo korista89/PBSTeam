@@ -35,24 +35,24 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     
     # 2. Get BeAble code mapping
     beable_mapping = get_beable_code_mapping()
-    beable_to_info = beable_mapping
     
     # 3. Filter & Map Data
-    # Use '코드번호' (BeAble) as primary, but if not found, try to match via '학생명' or '학생코드' column if they exist
+    # Use '학생코드' (4-digit) as primary, fallback to name
     def resolve_student_info(row):
-        # Try primary BeAble code first
-        code_val = str(row.get('코드번호', '')).strip()
-        if code_val in beable_to_info:
-            return beable_to_info[code_val]
-        
-        # Try Student Code (4-digit) column
+        # Primary Student Code
         s_code = str(row.get('학생코드', '')).strip()
-        if s_code in beable_to_info:
-            return beable_to_info[s_code]
+        
+        # In our updated system, beable_to_info might have BeAble OR student_code as key.
+        # But we know info dict ALWAYS has 'student_code'.
+        # Let's find the matching info directly by its inner 'student_code' property.
+        if s_code:
+            for info in beable_mapping.values():
+                if info.get('student_code') == s_code:
+                    return info
             
-        # Try Name mapping (expensive but thorough fallback)
+        # Fallback to pure Name mapping
         s_name = str(row.get('학생명', '')).strip()
-        for info in beable_to_info.values():
+        for info in beable_mapping.values():
             if info.get('student_name') == s_name:
                 return info
         return None
@@ -149,27 +149,38 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     # 6. At Risk Students (Frequency >= 3 OR Intensity >= 5) - Use 학생코드
     at_risk_list = []
+    # Cache TierStatus for class lookup
+    tier_status_cache = {}
+    try:
+        for s in fetch_student_status():
+            code = str(s.get('학생코드', '')).strip()
+            if code:
+                tier_status_cache[code] = s.get('학급', '-')
+    except Exception:
+        pass
+    
     if '학생코드' in df.columns:
-        # Group by Student Code (4-digit)
+        # Group by Student Code (4-digit), sum 발생빈도 for accurate PBIS incident count
         student_groups = df.groupby('학생코드')
         for student_code, group in student_groups:
-            count = len(group)
+            freq_count = int(group['발생빈도'].sum())  # PBIS: total frequency, not row count
             max_intensity = group['강도'].max()
             
             tier = "Tier 1"
-            if count >= 6 or max_intensity >= 5:
+            if freq_count >= 6 or max_intensity >= 5:
                 tier = "Tier 3"
-            elif count >= 3:
+            elif freq_count >= 3:
                 tier = "Tier 2"
             
             if tier != "Tier 1":
+                student_name_label = group['student_name_labeled'].iloc[0] if 'student_name_labeled' in group.columns else str(student_code)
                 at_risk_list.append({
-                    "name": group['student_name_labeled'].iloc[0] if 'student_name_labeled' in group.columns else str(student_code),
+                    "name": student_name_label,
                     "student_code": str(student_code),
-                    "count": int(count),
+                    "count": freq_count,
                     "max_intensity": int(max_intensity),
                     "tier": tier,
-                    "class": group.get('학급', group.get('코드번호', pd.Series(['-']))).iloc[0]
+                    "class": tier_status_cache.get(str(student_code), '-')
                 })
     
     # Sort risk list by Tier (desc) then Count (desc)
@@ -326,32 +337,28 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     if '학생명' not in df.columns:
         return {"error": "Student name column missing"}
     
-    # Strategy 1: Direct search by 학생명
-    student_df = df[df['학생명'] == student_name].copy()
+    student_df = pd.DataFrame()  # Ensures it's always initialized
     resolved_name = student_name
     resolved_code = "-"
+
+    # Strategy 1: Try exact match on '학생코드' (4-digit code) if input is numeric
+    if student_name.isdigit() and len(student_name) == 4 and '학생코드' in df.columns:
+        student_df = df[df['학생코드'] == student_name].copy()
+        resolved_code = student_name
+        resolved_name = student_df['학생명'].iloc[0] if not student_df.empty else student_name
     
-    # Strategy 2: If name not found, the input might be a student code (e.g. "2611")
-    if student_df.empty and '코드번호' in df.columns:
-        beable_mapping = get_beable_code_mapping()
-        reverse_map = {}
-        for beable_code, info in beable_mapping.items():
-            sc = info.get('student_code', '')
-            if sc:
-                reverse_map[str(sc).strip()] = beable_code
+    # Strategy 2: Direct search by 학생명
+    if student_df is None or student_df.empty:
+        student_df = df[df['학생명'] == student_name].copy()
+        resolved_name = student_name
+        resolved_code = student_df['학생코드'].iloc[0] if not student_df.empty and '학생코드' in student_df.columns else "-"
         
-        beable_code = reverse_map.get(str(student_name).strip(), '')
-        if beable_code:
-            student_df = df[df['코드번호'] == beable_code].copy()
-            resolved_code = str(student_name).strip()
-            if not student_df.empty:
-                resolved_name = student_df['학생명'].iloc[0]
-    
-    # Strategy 3: Try partial match
+    # Strategy 3: Try partial match on 학생명
     if student_df.empty:
         student_df = df[df['학생명'].str.contains(student_name, na=False)].copy()
         if not student_df.empty:
             resolved_name = student_df['학생명'].iloc[0]
+            resolved_code = student_df['학생코드'].iloc[0] if '학생코드' in student_df.columns else "-"
     
     empty_result = {
         "profile": {
@@ -397,7 +404,16 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
         avg_intensity = float(weighted_sum / total_incidents)
     else:
         avg_intensity = 0.0
-    student_class = student_df['코드번호'].iloc[0] if '코드번호' in student_df.columns else "-"
+    # Get class from TierStatus lookup using the resolved 4-digit student code
+    student_class = "-"
+    try:
+        tier_status = fetch_student_status()
+        for s in tier_status:
+            if str(s.get('학생코드', '')).strip() == str(resolved_code).strip():
+                student_class = s.get('학급', '-')
+                break
+    except Exception:
+        pass
     
     tier = "Tier 1"
     if total_incidents >= 6 or student_df['강도'].max() >= 5:
@@ -503,13 +519,12 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
         mr_counts = student_df.groupby('report_month').size().reset_index(name='count')
         monthly_report_freq = [{"month": row['report_month'], "count": int(row['count'])} for _, row in mr_counts.iterrows()]
 
-    # -- Get Student Code --
-    student_code_val = resolved_code if resolved_code != "-" else "-"
-    if student_code_val == "-" and '코드번호' in student_df.columns:
-        beable_mapping = get_beable_code_mapping()
-        beable_code = str(student_df['코드번호'].iloc[0]).strip()
-        if beable_code in beable_mapping:
-            student_code_val = beable_mapping[beable_code]['student_code']
+    # -- Get Student Code (4-digit from 학생코드 column) --
+    student_code_val = resolved_code
+    if student_code_val == "-" and '학생코드' in student_df.columns:
+        candidate = str(student_df['학생코드'].iloc[0]).strip()
+        if candidate:
+            student_code_val = candidate
     
     return {
         "profile": {
