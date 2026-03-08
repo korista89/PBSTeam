@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, ReactNode } from "react";
+import { useEffect, useState, useCallback, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { User } from "../types";
 
@@ -42,7 +42,7 @@ export function useAuth() {
         setUser(null);
     };
 
-    const isAdmin = () => (user?.role || user?.Role)?.toLowerCase() === "admin";
+    const isAdmin = useCallback(() => (user?.role || user?.Role)?.toLowerCase() === "admin", [user?.role, user?.Role]);
 
     return { user, loading, login, logout, isAdmin };
 }
