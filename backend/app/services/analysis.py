@@ -1,8 +1,21 @@
 from app.services.sheets import fetch_all_records, fetch_student_codes, get_beable_code_mapping, fetch_student_status, get_enrolled_student_count
 from app.schemas import BehaviorRecord
 import pandas as pd
+import re
 from typing import List, Dict
 from app.services.ai_insight import generate_ai_insight, generate_meeting_agent_report
+
+def extract_numeric(val, default=0):
+    if pd.isna(val):
+        return default
+    match = re.search(r'^\s*(\d+)', str(val))
+    if match:
+        return float(match.group(1))
+    # Fallback to pure digits anywhere
+    match = re.search(r'(\d+)', str(val))
+    if match:
+        return float(match.group(1))
+    return default
 
 def get_analytics_data(start_date: str = None, end_date: str = None, class_id: str = None):
     raw_data = fetch_all_records()
@@ -47,11 +60,16 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     resolved_records = []
     for _, row in df.iterrows():
         info = resolve_student_info(row)
+        new_row = row.to_dict()
         if info:
-            new_row = row.to_dict()
             new_row['student_code'] = info['student_code']
             new_row['student_name_labeled'] = info.get('student_name', info['student_code'])
-            resolved_records.append(new_row)
+        else:
+            raw_name = str(row.get('학생명', '')).strip()
+            new_row['student_code'] = raw_name if raw_name else "Unknown"
+            new_row['student_name_labeled'] = raw_name if raw_name else "Unknown"
+            
+        resolved_records.append(new_row)
     
     if not resolved_records:
         return empty_res
@@ -61,11 +79,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     if '학생코드' not in df.columns:
         df['학생코드'] = df['student_code']
     
-    # Ensure numeric columns are actually numeric
+    # Ensure numeric columns are actually numeric using regex extraction
     if '강도' in df.columns:
-        df['강도'] = pd.to_numeric(df['강도'], errors='coerce').fillna(0)
+        df['강도'] = df['강도'].apply(lambda x: extract_numeric(x, 0))
     if '발생빈도' in df.columns:
-        df['발생빈도'] = pd.to_numeric(df['발생빈도'], errors='coerce').fillna(1)
+        df['발생빈도'] = df['발생빈도'].apply(lambda x: extract_numeric(x, 1))
+    else:
+        df['발생빈도'] = 1
 
     # --- Date Filtering ---
     if '행동발생 날짜' in df.columns:
@@ -86,7 +106,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         # Group by Month-Year or just Date based on range. Let's do Weekly/Daily for now as requested "Weekly Trend"
         # For the dashboard chart, we often want recent daily trend or monthly trend.
         # Let's provide Daily trend for the last 30 entries or similar
-        date_counts = df['행동발생 날짜'].value_counts().sort_index().to_dict()
+        # Replace value_counts with grouped sum of '발생빈도'
+        date_counts = df.groupby('행동발생 날짜')['발생빈도'].sum().sort_index().to_dict()
         
         # Weekly Trend
         weekly_counts = {}
@@ -94,8 +115,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             df['week'] = df['date_obj'].dt.isocalendar().week.astype(int)
             df['year'] = df['date_obj'].dt.year
             # Create sortable week key "YYYY-WW"
-            # Group by Year-Week
-            w_grouped = df.groupby(['year', 'week']).size()
+            # Group by Year-Week and sum up 발생빈도
+            w_grouped = df.groupby(['year', 'week'])['발생빈도'].sum()
             
             # Convert to list of dicts directly
             # Format: "2025-W10"
@@ -109,20 +130,19 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # 3. Location Stats (Big 5)
     location_stats = []
     if '장소' in df.columns:
-        loc_counts = df['장소'].value_counts()
+        loc_counts = df.groupby('장소')['발생빈도'].sum().sort_values(ascending=False).head(10)
         location_stats = [{"name": k, "value": int(v)} for k, v in loc_counts.items()]
 
     # 4. Time Stats (Big 5)
     time_stats = []
     if '시간대' in df.columns:
-        t_counts = df['시간대'].value_counts()
-        # You might want to sort these logically (1교시, 2교시...) but for now frequency sort or alphanumeric
+        t_counts = df.groupby('시간대')['발생빈도'].sum().sort_values(ascending=False).head(10)
         time_stats = [{"name": k, "value": int(v)} for k, v in t_counts.items()]
 
     # 5. Behavior Type Stats (Big 5)
     behavior_stats = []
     if '행동유형' in df.columns:
-        b_counts = df['행동유형'].value_counts()
+        b_counts = df.groupby('행동유형')['발생빈도'].sum().sort_values(ascending=False).head(5)
         behavior_stats = [{"name": k, "value": int(v)} for k, v in b_counts.items()]
 
     # --- Tier 2: Screening & Hot Spots ---
@@ -158,13 +178,14 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # 7. Function Analysis (Why?)
     function_stats = []
     if '기능' in df.columns:
-        f_counts = df['기능'].value_counts()
+        f_counts = df.groupby('기능')['발생빈도'].sum()
         function_stats = [{"name": k, "value": int(v)} for k, v in f_counts.items()]
 
-    # 8. Heatmap (Location x Time) - Hotspot Analysis
+    # 8. Heatmap (Location x Time) - Hotspot Analysis using sum of '발생빈도'
     heatmap_data = []
     if '장소' in df.columns and '시간대' in df.columns:
-        ct = pd.crosstab(df['장소'], df['시간대'])
+        # Instead of generic crosstab count, we sum the '발생빈도'
+        ct = df.groupby(['장소', '시간대'])['발생빈도'].sum().unstack(fill_value=0)
         for loc in ct.index:
             for time in ct.columns:
                 val = ct.loc[loc, time]
@@ -198,16 +219,22 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     
     # Calculate Summary Stats
-    total_incidents = len(df)
-    avg_intensity = float(df['강도'].mean()) if not df.empty and '강도' in df.columns else 0.0
-
-    # Additional Analysis for T1 Report
+    total_incidents = int(df['발생빈도'].sum())
+    
+    # Calculate weighted average intensity considering frequency
+    if total_incidents > 0 and '강도' in df.columns:
+        weighted_sum = (df['강도'] * df['발생빈도']).sum()
+        avg_intensity = float(weighted_sum / total_incidents)
+    else:
+        avg_intensity = 0.0
+        
+    risk_student_count = len(at_risk_list) # for T1 Report
     # 9. Weekday Analysis
     weekday_stats = []
     weekday_names = ['월', '화', '수', '목', '금', '토', '일']
     if 'date_obj' in df.columns:
         df['weekday'] = df['date_obj'].dt.dayofweek
-        wd_counts = df['weekday'].value_counts().sort_index()
+        wd_counts = df.groupby('weekday')['발생빈도'].sum().sort_index()
         for wd, cnt in wd_counts.items():
              name = weekday_names[int(wd)] if int(wd) < 7 else str(wd)
              weekday_stats.append({"name": name, "value": int(cnt)})
@@ -215,13 +242,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # 10. Antecedent (배경) Analysis
     antecedent_stats = []
     if '배경' in df.columns:
-        a_counts = df['배경'].value_counts().head(10) # Top 10
+        a_counts = df.groupby('배경')['발생빈도'].sum().head(10) # Top 10
         antecedent_stats = [{"name": k, "value": int(v)} for k, v in a_counts.items()]
 
     # 11. Consequence (결과) Analysis
     consequence_stats = []
     if '결과' in df.columns:
-        c_counts = df['결과'].value_counts().head(10) # Top 10
+        c_counts = df.groupby('결과')['발생빈도'].sum().head(10) # Top 10
         consequence_stats = [{"name": k, "value": int(v)} for k, v in c_counts.items()]
 
 
@@ -263,7 +290,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         "summary": {
             "total_incidents": total_incidents,
             "avg_intensity": avg_intensity,
-            "risk_student_count": len(at_risk_list)
+            "risk_student_count": risk_student_count
         },
         "trends": [{"date": k, "count": v} for k, v in date_counts.items()],
         "weekly_trends": [{"week": k, "count": v} for k, v in weekly_counts.items()],
@@ -342,7 +369,11 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
 
     # Numeric conversion
     if '강도' in student_df.columns:
-        student_df['강도'] = pd.to_numeric(student_df['강도'], errors='coerce').fillna(0)
+        student_df['강도'] = student_df['강도'].apply(lambda x: extract_numeric(x, 0))
+    if '발생빈도' in student_df.columns:
+        student_df['발생빈도'] = student_df['발생빈도'].apply(lambda x: extract_numeric(x, 1))
+    else:
+        student_df['발생빈도'] = 1
     
     # Date parsing & filtering
     if '행동발생 날짜' in student_df.columns:
@@ -358,8 +389,14 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
         return empty_result
 
     # -- Profile Info --
-    total_incidents = len(student_df)
-    avg_intensity = float(student_df['강도'].mean()) if not student_df.empty else 0
+    total_incidents = int(student_df['발생빈도'].sum())
+    
+    # Weighted average intensity
+    if total_incidents > 0 and '강도' in student_df.columns:
+        weighted_sum = (student_df['강도'] * student_df['발생빈도']).sum()
+        avg_intensity = float(weighted_sum / total_incidents)
+    else:
+        avg_intensity = 0.0
     student_class = student_df['코드번호'].iloc[0] if '코드번호' in student_df.columns else "-"
     
     tier = "Tier 1"
@@ -382,13 +419,13 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     # -- Function Stats --
     function_stats = []
     if '기능' in student_df.columns:
-        f_counts = student_df['기능'].value_counts()
+        f_counts = student_df.groupby('기능')['발생빈도'].sum()
         function_stats = [{"name": k, "value": int(v)} for k, v in f_counts.items()]
 
     # -- Daily CICO Trend --
     cico_trend = []
     if '행동발생 날짜' in student_df.columns:
-        d_counts = student_df['행동발생 날짜'].value_counts().sort_index()
+        d_counts = student_df.groupby('행동발생 날짜')['발생빈도'].sum().sort_index()
         cico_trend = [{"date": k, "count": int(v)} for k, v in d_counts.items()]
 
     # -- Weekly Trend --
@@ -396,42 +433,46 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     if 'date_obj' in student_df.columns:
         student_df['week'] = student_df['date_obj'].dt.isocalendar().week.astype(int)
         student_df['year'] = student_df['date_obj'].dt.year
-        w_counts = student_df.groupby(['year', 'week']).size().reset_index(name='count')
+        w_counts = student_df.groupby(['year', 'week'])['발생빈도'].sum().reset_index(name='count')
         for _, row in w_counts.iterrows():
             weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
 
-    # -- Behavior Type Stats --
+    # -- Behavior Types --
     behavior_types = []
     if '행동유형' in student_df.columns:
-        b_counts = student_df['행동유형'].value_counts()
+        b_counts = student_df.groupby('행동유형')['발생빈도'].sum()
         behavior_types = [{"name": k, "value": int(v)} for k, v in b_counts.items()]
 
-    # -- Location Stats --
+    # -- Location & Time Stats --
     location_stats = []
     if '장소' in student_df.columns:
-        l_counts = student_df['장소'].value_counts()
+        l_counts = student_df.groupby('장소')['발생빈도'].sum()
         location_stats = [{"name": k, "value": int(v)} for k, v in l_counts.items()]
-
-    # -- Time Distribution --
+        
     time_stats = []
     if '시간대' in student_df.columns:
-        t_counts = student_df['시간대'].value_counts()
+        t_counts = student_df.groupby('시간대')['발생빈도'].sum()
         time_stats = [{"name": k, "value": int(v)} for k, v in t_counts.items()]
 
     # -- Weekday Distribution --
     weekday_dist = []
-    weekday_names = ['월', '화', '수', '목', '금', '토', '일']
+    weekday_names_map = {
+        'Monday': '월', 'Tuesday': '화', 'Wednesday': '수', 'Thursday': '목',
+        'Friday': '금', 'Saturday': '토', 'Sunday': '일'
+    }
     if 'date_obj' in student_df.columns:
-        student_df['weekday'] = student_df['date_obj'].dt.dayofweek
-        wd_counts = student_df['weekday'].value_counts().sort_index()
-        for wd, cnt in wd_counts.items():
-            weekday_dist.append({"name": weekday_names[int(wd)] if int(wd) < 7 else str(wd), "value": int(cnt)})
+        student_df['weekday'] = student_df['date_obj'].dt.day_name()
+        wd_counts = student_df.groupby('weekday')['발생빈도'].sum()
+        weekdays_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        for wd in weekdays_order:
+            if wd in wd_counts:
+                weekday_dist.append({"name": weekday_names_map.get(wd, wd), "value": int(wd_counts[wd])})
 
     # -- Monthly Trend --
     monthly_trend = []
     if 'date_obj' in student_df.columns:
         student_df['month_label'] = student_df['date_obj'].dt.strftime('%Y-%m')
-        m_counts = student_df.groupby('month_label').size().reset_index(name='count')
+        m_counts = student_df.groupby('month_label')['발생빈도'].sum().reset_index(name='count')
         monthly_trend = [{"month": row['month_label'], "count": int(row['count'])} for _, row in m_counts.iterrows()]
 
     # -- Daily Intensity --
