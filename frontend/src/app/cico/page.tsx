@@ -19,6 +19,7 @@ interface CICOStudent {
   번호: string;
   학급: string;
   학생코드: string;
+  학생명: string;
   Tier2: string;
   목표행동: string;
   "목표행동 유형": string;
@@ -334,8 +335,8 @@ export default function CICOGridPage() {
   };
 
   // Meeting Notes State
+  // Meeting Notes State
   const [showMeetNotes, setShowMeetNotes] = useState(false);
-  const [showCharts, setShowCharts] = useState(true);
   const [noteContent, setNoteContent] = useState("");
   const [savedNotes, setSavedNotes] = useState<any[]>([]);
   const [noteLoading, setNoteLoading] = useState(false);
@@ -398,24 +399,6 @@ export default function CICOGridPage() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               {/* Meeting Notes Toggle */}
-              <button
-                onClick={() => setShowCharts(!showCharts)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  backgroundColor: showCharts ? "#eff6ff" : "white",
-                  color: showCharts ? "#2563eb" : "#374151",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
-                }}
-              >
-                📊 실시간 분석 {showCharts ? "접기" : "열기"}
-              </button>
 
               <button
                 onClick={() => setShowMeetNotes(!showMeetNotes)}
@@ -489,103 +472,6 @@ export default function CICOGridPage() {
             </div>
           </div>
 
-          {/* CICO Analytics Section */}
-          {showCharts && data && data.students && data.students.length > 0 && (
-            <div style={{
-              marginBottom: "20px",
-              padding: "20px",
-              background: "white",
-              borderRadius: "16px",
-              border: "1px solid #e5e7eb",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-                <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#111827", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>📈 {month}월 CICO 데이터 인사이트</span>
-                  <span style={{ fontSize: "0.75rem", background: "#f3f4f6", padding: "2px 8px", borderRadius: "12px", color: "#6b7280", fontWeight: "normal" }}>BCBA 최적화 구성</span>
-                </h3>
-              </div>
-              
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-                {/* 1. Student Achievement Rate Bar Chart */}
-                <div style={{ height: "300px", padding: "10px", border: "1px solid #f3f4f6", borderRadius: "12px" }}>
-                  <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", fontWeight: "bold", color: "#374151" }}>👥 학생별 목표 수행률 (%)</p>
-                  <ResponsiveContainer width="100%" height="90%">
-                    <BarChart data={data.students.map(s => ({
-                      name: s.학생코드,
-                      rate: parseFloat(s.수행_발생률.replace('%', '')) || 0,
-                      target: parseFloat(s["목표 달성 기준"].replace(/[^\d]/g, '')) || 80
-                    }))} layout="vertical" margin={{ left: 10, right: 30 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" domain={[0, 100]} fontSize={11} />
-                      <YAxis dataKey="name" type="category" fontSize={11} width={80} />
-                      <Tooltip formatter={(v: any) => [`${v}%`, '수행률']} />
-                      <Bar dataKey="rate" name="수행률" radius={[0, 4, 4, 0]}>
-                        {data.students.map((s, index) => {
-                          const rate = parseFloat(s.수행_발생률.replace('%', '')) || 0;
-                          const target = parseFloat(s["목표 달성 기준"].replace(/[^\d]/g, '')) || 80;
-                          return <Cell key={`cell-${index}`} fill={rate >= target ? "#10b981" : "#f59e0b"} />;
-                        })}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* 2. Achievement Status Summary Pie */}
-                <div style={{ height: "300px", padding: "10px", border: "1px solid #f3f4f6", borderRadius: "12px" }}>
-                  <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", fontWeight: "bold", color: "#374151" }}>🎯 목표 달성 현황</p>
-                  <ResponsiveContainer width="100%" height="90%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: '목표 달성', value: data.students.filter(s => s.목표_달성_여부 === 'O').length },
-                          { name: '달성 미달', value: data.students.filter(s => s.목표_달성_여부 !== 'O').length }
-                        ]}
-                        cx="50%" cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#f59e0b" />
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* 3. Daily Average Progress Line Chart */}
-                <div style={{ height: "300px", padding: "10px", border: "1px solid #f3f4f6", borderRadius: "12px" }}>
-                  <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", fontWeight: "bold", color: "#374151" }}>🕒 일자별 전체 평균 수행 추이 (%)</p>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.day_columns.map(col => {
-                      const values = data.students.map(s => {
-                        const val = s.days[col.label];
-                        if (!val || val === "X") return 0;
-                        if (val === "O") return 100;
-                        const num = parseFloat(val);
-                        if (isNaN(num)) return 0;
-                        if (s.척도.includes("0/1/2")) return (num / 2) * 100;
-                        if (s.척도.includes("0~5")) return (num / 5) * 100;
-                        return num;
-                      }).filter(v => v !== null);
-                      const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                      return { date: col.display || col.label, avg: Math.round(avg) };
-                    }).filter(d => d.avg > 0)}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="date" fontSize={9} />
-                      <YAxis domain={[0, 100]} fontSize={11} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="avg" name="평균 수행률" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Meeting Notes Section */}
           {showMeetNotes && (
@@ -724,11 +610,12 @@ export default function CICOGridPage() {
                       <tr>
                         {/* Fixed columns */}
                         <th style={thStyle}>번호</th>
-                        <th style={{ ...thStyle, minWidth: "100px" }}>학급</th>
+                        <th style={{ ...thStyle, minWidth: "80px" }}>학급</th>
                         <th style={thStyle}>코드</th>
+                        <th style={{ ...thStyle, minWidth: "100px" }}>학회명</th>
                         <th style={{ ...thStyle, minWidth: "120px" }}>목표행동</th>
-                        <th style={{ ...thStyle, minWidth: "90px" }}>유형</th>
-                        <th style={{ ...thStyle, minWidth: "80px" }}>척도</th>
+                        <th style={{ ...thStyle, minWidth: "80px" }}>유형</th>
+                        <th style={{ ...thStyle, minWidth: "70px" }}>척도</th>
                         <th style={{ ...thStyle, minWidth: "70px" }}>달성기준</th>
 
                         {/* Day columns — MM-DD weekday headers */}
@@ -757,6 +644,7 @@ export default function CICOGridPage() {
                           <td style={tdStyle}>{student.번호}</td>
                           <td style={{ ...tdStyle, fontSize: "0.75rem", textAlign: "left" }}>{student.학급}</td>
                           <td style={{ ...tdStyle, fontWeight: "bold", color: "#6366f1" }}>{student.학생코드}</td>
+                          <td style={{ ...tdStyle, fontWeight: "600", color: "#334155" }}>{student.학생명}</td>
 
                           {/* Editable: 목표행동 */}
                           <td

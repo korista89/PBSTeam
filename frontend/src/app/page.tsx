@@ -237,20 +237,19 @@ export default function Home() {
               {/* Monthly Trend */}
               <ChartBox title="📊 월별 보고빈도 추이">
                 <BarChart data={monthlyTrend} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="monthGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" />
+                      <stop offset="100%" stopColor="#60a5fa" />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="month" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={8} />
                   <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="count" name="보고 건수" radius={[6, 6, 0, 0]}
                     fill="url(#monthGrad)"
-                    label={{ position: 'top', fontSize: 11, fill: '#64748b' }}>
-                    <defs>
-                      <linearGradient id="monthGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" />
-                        <stop offset="100%" stopColor="#60a5fa" />
-                      </linearGradient>
-                    </defs>
-                  </Bar>
+                    label={{ position: 'top', fontSize: 11, fill: '#64748b' }} />
                 </BarChart>
               </ChartBox>
             </div>
@@ -336,30 +335,40 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              {/* Antecedents */}
-              <ChartBox title="⚡ 선행사건 (Antecedent)" height={300}>
-                <BarChart data={[...((data as any).antecedents || [])].sort((a: any, b: any) => b.value - a.value).slice(0, 6)} layout="vertical" margin={{ left: 5, right: 40 }}>
+              {/* Intensity Distribution */}
+              <ChartBox title="⚡ 행동 강도 분포 (Intensity)" height={300}>
+                <BarChart data={(data as any).intensity_distribution || []} layout="vertical" margin={{ left: 5, right: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={90} style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" fill="#ef4444" barSize={18} radius={[0, 4, 4, 0]}>
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: '#ef4444', fontWeight: 700 }} />
+                  <Bar dataKey="value" name="건수" barSize={20} radius={[0, 4, 4, 0]}>
+                    {((data as any).intensity_distribution || []).map((entry: any, index: number) => {
+                       const colors = ['#22c55e', '#84cc16', '#f59e0b', '#f97316', '#ef4444'];
+                       const intensity = parseInt(entry.name) || 1;
+                       return <Cell key={index} fill={colors[Math.min(intensity - 1, 4)]} />;
+                    })}
+                    <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 700 }} />
                   </Bar>
                 </BarChart>
               </ChartBox>
 
-              {/* Consequences */}
-              <ChartBox title="🎁 후속 결과 (Consequence)" height={300}>
-                <BarChart data={[...((data as any).consequences || [])].sort((a: any, b: any) => b.value - a.value).slice(0, 6)} layout="vertical" margin={{ left: 5, right: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={90} style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
+              {/* Monthly Intensity Trend */}
+              <ChartBox title="📈 월별 행동 강도 추이" height={300}>
+                <ComposedChart data={(data as any).intensity_trend || []} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="intGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.2}/>
+                      <stop offset="100%" stopColor="#ef4444" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 5]} ticks={[1, 2, 3, 4, 5]} style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" fill="#f59e0b" barSize={18} radius={[0, 4, 4, 0]}>
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: '#f59e0b', fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
+                  <Area type="monotone" dataKey="value" fill="url(#intGrad)" stroke="none" />
+                  <Line type="monotone" dataKey="value" name="평균 강도" stroke="#ef4444" strokeWidth={3} dot={{ stroke: '#ef4444', strokeWidth: 2, r: 4, fill: '#fff' }} />
+                </ComposedChart>
               </ChartBox>
             </div>
 
@@ -386,7 +395,7 @@ export default function Home() {
               </ResponsiveContainer>
             </div>
 
-            <AIAnalysisCard sectionName="ABC 기능 분석" dataContext={{ functions: ((data as any).functions || []).slice(0,3), antecedents: ((data as any).antecedents || []).slice(0,3), consequences: ((data as any).consequences || []).slice(0,3) }} startDate={startDate} endDate={endDate} />
+            <AIAnalysisCard sectionName="ABC 및 강도 분석" dataContext={{ functions: ((data as any).functions || []).slice(0,3), intensity_dist: (data as any).intensity_distribution }} startDate={startDate} endDate={endDate} />
 
             {/* ===== Section 4: 집중 지원 대상 ===== */}
             <div className="section-heading">4. 집중 지원 대상자 현황</div>

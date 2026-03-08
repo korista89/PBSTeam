@@ -13,7 +13,7 @@ interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
 
 interface Tier3Student {
-  code: string; class: string; tier: string; beable_code: string; memo: string;
+  code: string; name: string; class: string; tier: string; beable_code: string; memo: string;
   incidents: number; max_intensity: number; avg_intensity: number;
   behavior_types: BehaviorType[]; weekly_trend: WeeklyTrend[];
   weekly_trend_freq?: WeeklyTrend[];
@@ -205,7 +205,7 @@ export default function Tier3Report() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
                     <thead>
                       <tr style={{ background: "#f8fafc" }}>
-                        {["Tier", "학생코드", "학급", "보고건수", "최대강도", "평균강도", "주요행동", "의사결정 제안", "관리", "상세차트"].map(h => (
+                        {["Tier", "성명", "학생코드", "학급", "보고건수", "최대강도", "평균강도", "주요행동", "의사결정 제안", "관리", "상세차트"].map(h => (
                           <th key={h} style={{ padding: "12px 10px", color: "#475569", fontWeight: 600, borderBottom: "2px solid #e2e8f0", textAlign: "left", whiteSpace: "nowrap", fontSize: '0.78rem' }}>{h}</th>
                         ))}
                       </tr>
@@ -217,7 +217,8 @@ export default function Tier3Report() {
                             <td style={{ padding: "10px" }}>
                               <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700, color: s.tier === "Tier3+" ? "#7c3aed" : "#ef4444", background: s.tier === "Tier3+" ? "#7c3aed15" : "#ef444415" }}>{s.tier}</span>
                             </td>
-                            <td style={{ padding: "10px", fontWeight: 700, color: '#0f172a' }}>{s.code}</td>
+                            <td style={{ padding: "10px", fontWeight: 700, color: '#0f172a' }}>{s.name || "-"}</td>
+                            <td style={{ padding: "10px", color: '#64748b', fontSize: '0.75rem' }}>{s.code}</td>
                             <td style={{ padding: "10px", color: "#64748b", fontSize: '0.75rem' }}>{s.class}</td>
                             <td style={{ padding: "10px", fontWeight: 700, color: s.incidents >= 6 ? "#ef4444" : "#1e293b" }}>{s.incidents}건</td>
                             <td style={{ padding: "10px" }}>

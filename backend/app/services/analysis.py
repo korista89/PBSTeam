@@ -17,6 +17,24 @@ def extract_numeric(val, default=0):
         return float(match.group(1))
     return default
 
+def sort_time_slots(slots):
+    """Sort time slots like '09:00', '10:00', '오전 9시' chronologically."""
+    def parse_time(name):
+        # Extract digits
+        digit_match = re.search(r'(\d+)', name)
+        if not digit_match:
+            return 99 # Push invalid to end
+        hour = int(digit_match.group(1))
+        
+        # Handle Korean AM/PM
+        if '오후' in name and hour < 12:
+            hour += 12
+        elif '오전' in name and hour == 12:
+            hour = 0
+        return hour
+    
+    return sorted(slots, key=lambda x: parse_time(x['name']))
+
 def get_analytics_data(start_date: str = None, end_date: str = None, class_id: str = None):
     raw_data = fetch_all_records()
     
@@ -128,8 +146,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # 4. Time Stats (Big 5) - count submissions per time slot
     time_stats = []
     if '시간대' in df.columns:
-        t_counts = df.groupby('시간대').size().sort_values(ascending=False).head(10)
-        time_stats = [{"name": k, "value": int(v)} for k, v in t_counts.items()]
+        t_counts = df.groupby('시간대').size()
+        time_stats = sort_time_slots([{"name": k, "value": int(v)} for k, v in t_counts.items()])
 
     # 5. Behavior Type Stats (Big 5) - count submissions per behavior type
     behavior_stats = []
@@ -238,17 +256,19 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
              name = weekday_names[int(wd)] if int(wd) < 7 else str(wd)
              weekday_stats.append({"name": name, "value": int(cnt)})
 
-    # 10. Antecedent (배경) Analysis
-    antecedent_stats = []
-    if '배경' in df.columns:
-        a_counts = df.groupby('배경').size().sort_values(ascending=False).head(10)
-        antecedent_stats = [{"name": k, "value": int(v)} for k, v in a_counts.items()]
+    # 10. Intensity Distribution (Replacing Antecedent)
+    intensity_dist = []
+    if '강도' in df.columns:
+        i_counts = df.groupby('강도').size().sort_index()
+        intensity_dist = [{"name": f"강도 {int(k)}", "value": int(v)} for k, v in i_counts.items()]
 
-    # 11. Consequence (결과) Analysis
-    consequence_stats = []
-    if '결과' in df.columns:
-        c_counts = df.groupby('결과').size().sort_values(ascending=False).head(10)
-        consequence_stats = [{"name": k, "value": int(v)} for k, v in c_counts.items()]
+    # 11. Monthly Intensity Trend (Replacing Consequence)
+    intensity_trend = []
+    if 'date_obj' in df.columns and '강도' in df.columns:
+        df['month_label'] = df['date_obj'].dt.strftime('%Y-%m')
+        # Average intensity per month
+        m_intensity = df.groupby('month_label')['강도'].mean().reset_index()
+        intensity_trend = [{"month": row['month_label'], "value": round(float(row['강도']), 2)} for _, row in m_intensity.iterrows()]
 
 
     # Generate AI Insight with enriched tier data
@@ -329,8 +349,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         },
         "risk_list": at_risk_list,
         "functions": function_stats,
-        "antecedents": antecedent_stats,
-        "consequences": consequence_stats,
+        "intensity_distribution": intensity_dist,
+        "intensity_trend": intensity_trend,
         "heatmap": heatmap_data,
         "safety_alerts": safety_alerts,
         "ai_comment": ai_comment,

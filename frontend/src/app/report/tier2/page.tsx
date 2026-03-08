@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line, ComposedChart, Area
+} from "recharts";
 
 interface TrendItem {
   month: string;
@@ -280,6 +284,129 @@ export default function CICOReport() {
                     <div style={{ color: "#64748b", fontSize: "0.75rem" }}>{card.label}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* CICO Data Insights Charts */}
+              <div style={{
+                marginBottom: "24px",
+                padding: "20px",
+                background: "white",
+                borderRadius: "16px",
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+              }}>
+                <h3 style={{ margin: "0 0 20px 0", fontSize: "1.1rem", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>📈 {month}월 CICO 데이터 인사이트</span>
+                  <span style={{ fontSize: "0.75rem", background: "#f1f5f9", padding: "2px 8px", borderRadius: "12px", color: "#64748b", fontWeight: "normal" }}>BCBA 분석 리포트</span>
+                </h3>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+                  {/* 1. Student Achievement Bar Chart */}
+                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
+                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>👤 학생별 목표 수행률 (%)</p>
+                    <ResponsiveContainer width="100%" height="90%">
+                      <BarChart data={data.students.map(s => ({
+                        name: s.code,
+                        rate: s.rate_num || 0,
+                        target: parseInt(s.goal_criteria) || 80
+                      }))} layout="vertical" margin={{ left: -10, right: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                        <XAxis type="number" domain={[0, 100]} fontSize={10} axisLine={false} tickLine={false} />
+                        <YAxis dataKey="name" type="category" fontSize={10} width={60} axisLine={false} tickLine={false} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} />
+                        <Bar dataKey="rate" name="수행률" radius={[0, 4, 4, 0]} barSize={18}>
+                          {data.students.map((s, idx) => {
+                            const rate = s.rate_num || 0;
+                            const target = parseInt(s.goal_criteria) || 80;
+                            return <Cell key={`cell-${idx}`} fill={rate >= target ? "#10b981" : "#f59e0b"} />;
+                          })}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 2. Achievement Status Pie Chart */}
+                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
+                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>🎯 목표 달성 비율</p>
+                    <ResponsiveContainer width="100%" height="90%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: '달성', value: data.summary.achieved_count },
+                            { name: '미달', value: data.summary.not_achieved_count }
+                          ]}
+                          cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value"
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          <Cell fill="#10b981" />
+                          <Cell fill="#f59e0b" />
+                        </Pie>
+                        <Tooltip />
+                        <Legend iconType="circle" />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 3. Average Trend Line Chart */}
+                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
+                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>📈 최근 3개월 평균 수행 추이</p>
+                    <ResponsiveContainer width="100%" height="90%">
+                      <ComposedChart data={(() => {
+                        const monthsMap: { [m: string]: number[] } = {};
+                        data.students.forEach(s => {
+                          s.trend.forEach(t => {
+                            if (!monthsMap[t.month]) monthsMap[t.month] = [];
+                            try {
+                              let r = parseFloat(t.rate.replace("%", ""));
+                              if (r <= 1) r *= 100;
+                              if (!isNaN(r)) monthsMap[t.month].push(r);
+                            } catch {}
+                          });
+                        });
+                        const monthsList = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+                        return Object.keys(monthsMap)
+                          .sort((a, b) => monthsList.indexOf(a) - monthsList.indexOf(b))
+                          .map(m => ({
+                            month: m,
+                            avg: Math.round(monthsMap[m].reduce((a, b) => a + b, 0) / monthsMap[m].length)
+                          }));
+                      })()}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="month" fontSize={10} axisLine={false} tickLine={false} />
+                        <YAxis domain={[0, 100]} fontSize={10} axisLine={false} tickLine={false} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="avg" fill="#6366f110" stroke="none" />
+                        <Line type="monotone" dataKey="avg" name="전체 평균" stroke="#6366f1" strokeWidth={3} dot={{ r: 5, fill: '#6366f1' }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4. Behavior Type Distribution */}
+                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
+                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>🎭 중재 행동 유형 분포</p>
+                    <ResponsiveContainer width="100%" height="90%">
+                      <PieChart>
+                        <Pie
+                          data={(() => {
+                            const counts: { [k: string]: number } = {};
+                            data.students.forEach(s => {
+                              const t = s.behavior_type || "미지정";
+                              counts[t] = (counts[t] || 0) + 1;
+                            });
+                            return Object.keys(counts).map(name => ({ name, value: counts[name] }));
+                          })()}
+                          cx="50%" cy="50%" outerRadius={85} dataKey="value"
+                        >
+                          {['#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6'].map((color, i) => (
+                            <Cell key={`cell-${i}`} fill={color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '11px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
 
               {/* Decision Legend */}

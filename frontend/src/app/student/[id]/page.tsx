@@ -308,6 +308,35 @@ export default function StudentDetail() {
                   </ResponsiveContainer>
                 </div>
               </div>
+
+              {/* Extra Charts: Intensity & Separation */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '30px' }}>
+                <div className={styles.chartContainer}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>일별 강도 추이 (Daily Intensity)</h4>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.daily_intensity}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={11} />
+                      <YAxis domain={[0, 5]} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="intensity" stroke="#ef4444" name="평균 강도" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className={styles.chartContainer}>
+                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>월별 분리지도 발생 (Separation)</h4>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.separation_stats}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" fontSize={11} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#7c3aed" name="분리 건수" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
 
             {/* Row 4: AI Analysis */}

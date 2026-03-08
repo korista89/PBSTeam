@@ -3,6 +3,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 from app.core.config import settings
 import os
 import json
+import pandas as pd
+import re
+import datetime
 
 def get_sheets_client():
     """
@@ -1588,6 +1591,7 @@ def get_monthly_cico_data(month: int):
             "번호": ["번호", "No", "연번"],
             "학급": ["학급", "Class", "반"],
             "학생코드": ["학생코드", "StudentCode", "Code", "코드"],
+            "학생명": ["학생명", "Name", "이름", "학생"],
             "Tier2": ["Tier2", "Tier2(CICO)", "대상자", "CICO", "대상"],
             "목표행동": ["목표행동", "TargetBehavior", "Behavior"],
             "목표행동 유형": ["목표행동유형", "유형", "Type"],
@@ -1653,6 +1657,7 @@ def get_monthly_cico_data(month: int):
                 "번호": row[col_map.get("번호", 0)] if col_map.get("번호", 0) < len(row) else "",
                 "학급": row[col_map.get("학급", 1)] if col_map.get("학급", 1) < len(row) else "",
                 "학생코드": row[col_map.get("학생코드", 2)] if col_map.get("학생코드", 2) < len(row) else "",
+                "학생명": row[col_map.get("학생명", 3)] if col_map.get("학생명", 3) < len(row) else "",
                 "Tier2": is_tier2,
                 "목표행동": row[col_map.get("목표행동", 4)] if col_map.get("목표행동", 4) < len(row) else "",
                 "목표행동 유형": row[col_map.get("목표행동 유형", 5)] if col_map.get("목표행동 유형", 5) < len(row) else "",
@@ -2122,6 +2127,7 @@ def get_cico_report_data(month: int):
             "번호": ["번호", "No"],
             "학급": ["학급", "Class"],
             "학생코드": ["학생코드", "Code"],
+            "학생명": ["학생명", "Name", "이름"],
             "Tier2": ["Tier2", "CICO"],
             "목표행동": ["목표행동", "Target"],
             "목표행동 유형": ["목표행동유형", "Type"],
@@ -2190,6 +2196,7 @@ def get_cico_report_data(month: int):
                 continue
             
             code = str(row[col_idx.get("학생코드", 2)]).strip() if col_idx.get("학생코드", 2) < len(row) else ""
+            name = row[col_idx.get("학생명", 3)] if col_idx.get("학생명", 3) < len(row) else ""
             rate_str = row[col_idx["수행/발생률"]] if "수행/발생률" in col_idx and col_idx["수행/발생률"] < len(row) else ""
             achieved = row[col_idx["목표 달성 여부"]] if "목표 달성 여부" in col_idx and col_idx["목표 달성 여부"] < len(row) else ""
             goal_str = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else ""
@@ -2251,6 +2258,7 @@ def get_cico_report_data(month: int):
             
             students.append({
                 "code": code,
+                "name": name,
                 "class": row[col_idx.get("학급", 1)] if col_idx.get("학급", 1) < len(row) else "",
                 "target_behavior": row[col_idx.get("목표행동", 4)] if col_idx.get("목표행동", 4) < len(row) else "",
                 "behavior_type": row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else "",
@@ -2300,14 +2308,18 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     
     tier3_students = []
     for r in records:
-        if str(r.get("Tier3", "X")).strip() == "O" or str(r.get("Tier3+", "X")).strip() == "O":
-            is_tier3_plus = str(r.get("Tier3+", "X")).strip() == "O"
+        # Check multiple columns for Tier 3 status
+        is_t3 = str(r.get("Tier3", r.get("지원단계", ""))).strip() == "O" or "3" in str(r.get("Tier", r.get("지원단계", "")))
+        is_t3p = str(r.get("Tier3+", "")).strip() == "O" or "3+" in str(r.get("Tier", r.get("지원단계", "")))
+        
+        if is_t3 or is_t3p:
             tier3_students.append({
-                "code": str(r.get("학생코드", "")),
-                "class": str(r.get("학급", "")),
-                "tier": "Tier3+" if is_tier3_plus else "Tier3",
-                "beable_code": str(r.get("BeAble코드", "")),
-                "memo": str(r.get("메모", "")),
+                "code": str(r.get("학생코드", "")).strip(),
+                "name": r.get("학생이름", ""),
+                "class": str(r.get("학급", "")).strip(),
+                "tier": "Tier3+" if is_t3p else "Tier3",
+                "beable_code": str(r.get("BeAble코드", "")).strip(),
+                "memo": str(r.get("메모", "")).strip(),
             })
     
     # Filter by class_id if specified (class managers see only their class)
@@ -2321,7 +2333,6 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         }
     
     # 2. Get behavior data from main sheet
-    import pandas as pd
     raw_data = fetch_all_records()
     if not raw_data:
         # Return students without behavior data
@@ -2344,14 +2355,15 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             df = df[df['date_obj'] <= pd.to_datetime(end_date)]
     
     if '강도' in df.columns:
-        import re
         def _extract_intensity(v):
+            if pd.isna(v) or v == '': return 0
             try:
-                m = re.match(r'^(\d+)', str(v).strip())
-                return int(m.group(1)) if m else 0
+                # Handle cases like "3 (중)"
+                match_val = re.match(r'^(\d+)', str(v).strip())
+                return int(match_val.group(1)) if match_val else 0
             except Exception:
                 return 0
-        df['강도'] = df['강도'].apply(_extract_intensity)
+        df['강도'] = df['강도'].apply(_extract_intensity).fillna(0).astype(int)
     
     # Map BeAble codes to student codes
     beable_mapping = get_beable_code_mapping()
@@ -2399,7 +2411,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             
             # Sum of 발생빈도 per week (발생빈도 - the one specific chart requested)
             if '발생빈도' in s_copy.columns:
-                f_counts = s_copy.groupby(['year', 'week'])['발생빈도'].sum().reset_index(name='freq')
+                s_copy['발생빈도_num'] = pd.to_numeric(s_copy['발생빈도'], errors='coerce').fillna(0)
+                f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
                 for _, row in f_counts.iterrows():
                     weekly_trend_freq.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['freq'])})
         
@@ -2434,6 +2447,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             "avg_intensity": avg_intensity,
             "behavior_types": behavior_types,
             "weekly_trend": weekly_trend,
+            "weekly_trend_freq": weekly_trend_freq,
             "decision": decision,
             "decision_color": decision_color,
         })
