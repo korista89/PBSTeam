@@ -103,23 +103,15 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     
     # --- Tier 1: Big 5 Analysis ---
     if not df.empty:
-        # Group by Month-Year or just Date based on range. Let's do Weekly/Daily for now as requested "Weekly Trend"
-        # For the dashboard chart, we often want recent daily trend or monthly trend.
-        # Let's provide Daily trend for the last 30 entries or similar
-        # Replace value_counts with grouped sum of '발생빈도'
-        date_counts = df.groupby('행동발생 날짜')['발생빈도'].sum().sort_index().to_dict()
+        # Daily trend: count form submissions per date (not frequency sum)
+        date_counts = df.groupby('행동발생 날짜').size().sort_index().to_dict()
         
-        # Weekly Trend
+        # Weekly Trend: count submissions per week
         weekly_counts = {}
         if 'date_obj' in df.columns:
             df['week'] = df['date_obj'].dt.isocalendar().week.astype(int)
             df['year'] = df['date_obj'].dt.year
-            # Create sortable week key "YYYY-WW"
-            # Group by Year-Week and sum up 발생빈도
-            w_grouped = df.groupby(['year', 'week'])['발생빈도'].sum()
-            
-            # Convert to list of dicts directly
-            # Format: "2025-W10"
+            w_grouped = df.groupby(['year', 'week']).size()  # count rows
             for (y, w), count in w_grouped.items():
                 label = f"{y}-W{w:02d}"
                 weekly_counts[label] = int(count)
@@ -127,22 +119,22 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         date_counts = {}
         weekly_counts = {}
 
-    # 3. Location Stats (Big 5)
+    # 3. Location Stats (Big 5) - count submissions per location
     location_stats = []
     if '장소' in df.columns:
-        loc_counts = df.groupby('장소')['발생빈도'].sum().sort_values(ascending=False).head(10)
+        loc_counts = df.groupby('장소').size().sort_values(ascending=False).head(10)
         location_stats = [{"name": k, "value": int(v)} for k, v in loc_counts.items()]
 
-    # 4. Time Stats (Big 5)
+    # 4. Time Stats (Big 5) - count submissions per time slot
     time_stats = []
     if '시간대' in df.columns:
-        t_counts = df.groupby('시간대')['발생빈도'].sum().sort_values(ascending=False).head(10)
+        t_counts = df.groupby('시간대').size().sort_values(ascending=False).head(10)
         time_stats = [{"name": k, "value": int(v)} for k, v in t_counts.items()]
 
-    # 5. Behavior Type Stats (Big 5)
+    # 5. Behavior Type Stats (Big 5) - count submissions per behavior type
     behavior_stats = []
     if '행동유형' in df.columns:
-        b_counts = df.groupby('행동유형')['발생빈도'].sum().sort_values(ascending=False).head(5)
+        b_counts = df.groupby('행동유형').size().sort_values(ascending=False).head(5)
         behavior_stats = [{"name": k, "value": int(v)} for k, v in b_counts.items()]
 
     # --- Tier 2: Screening & Hot Spots ---
@@ -229,18 +221,15 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
 
     
-    # Calculate Summary Stats
-    total_incidents = int(df['발생빈도'].sum())
+    # Summary Stats — use ROW COUNT (= number of form submissions, not frequency sum)
+    total_incidents = len(df)  # 627, not 3419
     
-    # Calculate weighted average intensity considering frequency
-    if total_incidents > 0 and '강도' in df.columns:
-        weighted_sum = (df['강도'] * df['발생빈도']).sum()
-        avg_intensity = float(weighted_sum / total_incidents)
-    else:
-        avg_intensity = 0.0
+    # Unweighted average intensity (mean across all submission rows)
+    avg_intensity = float(df['강도'].mean()) if not df.empty and '강도' in df.columns else 0.0
+    avg_intensity = round(avg_intensity, 2)
         
-    risk_student_count = len(at_risk_list) # for T1 Report
-    # 9. Weekday Analysis
+    risk_student_count = len(at_risk_list)
+    # 9. Weekday Analysis - count submissions per weekday
     weekday_stats = []
     weekday_names = ['월', '화', '수', '목', '금', '토', '일']
     if 'date_obj' in df.columns:
@@ -253,13 +242,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # 10. Antecedent (배경) Analysis
     antecedent_stats = []
     if '배경' in df.columns:
-        a_counts = df.groupby('배경')['발생빈도'].sum().head(10) # Top 10
+        a_counts = df.groupby('배경').size().sort_values(ascending=False).head(10)
         antecedent_stats = [{"name": k, "value": int(v)} for k, v in a_counts.items()]
 
     # 11. Consequence (결과) Analysis
     consequence_stats = []
     if '결과' in df.columns:
-        c_counts = df.groupby('결과')['발생빈도'].sum().head(10) # Top 10
+        c_counts = df.groupby('결과').size().sort_values(ascending=False).head(10)
         consequence_stats = [{"name": k, "value": int(v)} for k, v in c_counts.items()]
 
 
