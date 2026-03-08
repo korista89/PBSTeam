@@ -13,7 +13,7 @@ router = APIRouter()
 # Date filtering helper
 # ============================================================
 def _filter_by_date(records: list, start_date: str = None, end_date: str = None) -> list:
-    """Filter BehaviorLogs by date range. Returns all records if no dates provided."""
+    """Filter BehaviorLogs1 by date range. Returns all records if no dates provided."""
     if not start_date or not end_date:
         return records
     return [
@@ -133,9 +133,9 @@ async def get_meeting_analysis(target_date: str = None):
     return analyze_meeting_data(target_date)
 
 @router.get("/tier3-report")
-async def get_tier3_report(start_date: str = None, end_date: str = None):
-    """Get Tier3 report data for decision making."""
-    data = get_tier3_report_data(start_date, end_date)
+async def get_tier3_report(start_date: str = None, end_date: str = None, class_id: str = None):
+    """Get Tier3 report data for decision making. Supports class_id filter for class managers."""
+    data = get_tier3_report_data(start_date, end_date, class_id)
     if "error" in data:
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=data["error"])
@@ -213,7 +213,7 @@ async def ai_cico_analysis(req: CICOAnalysisRequest):
             return {"analysis": f"데이터 로드 실패: {data['error']}"}
         students = data.get("students", [])
     
-    # Resolve student codes to BeAble codes for BehaviorLogs matching
+    # Resolve student codes to BeAble codes for BehaviorLogs1 matching
     beable_mapping = get_beable_code_mapping()
     reverse_map = {str(v['student_code']).strip(): k for k, v in beable_mapping.items()}
     
@@ -260,7 +260,7 @@ async def ai_tier3_analysis(req: Tier3AnalysisRequest):
     if "error" in t3_data:
         return {"analysis": f"데이터 로드 실패: {t3_data['error']}"}
     
-    # Resolve student codes to BeAble codes for BehaviorLogs
+    # Resolve student codes to BeAble codes for BehaviorLogs1
     beable_mapping = get_beable_code_mapping()
     reverse_map = {str(v['student_code']).strip(): k for k, v in beable_mapping.items()}
     
@@ -292,7 +292,7 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     """Generate BCBA AI analysis for individual student using ALL data sources."""
     from app.services.ai_insight import generate_bcba_student_analysis
     
-    # Resolve BeAble code for BehaviorLogs matching
+    # Resolve BeAble code for BehaviorLogs1 matching
     beable_mapping = get_beable_code_mapping()
     beable_code = ""
     for bc, info in beable_mapping.items():

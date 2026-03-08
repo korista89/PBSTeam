@@ -2283,7 +2283,7 @@ def get_cico_report_data(month: int):
         return {"error": str(e)}
 
 
-def get_tier3_report_data(start_date: str = None, end_date: str = None):
+def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id: str = None):
     """
     Get Tier3 report data for decision making.
     Returns Tier3 student list with crisis behavior stats.
@@ -2309,6 +2309,10 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None):
                 "beable_code": str(r.get("BeAble코드", "")),
                 "memo": str(r.get("메모", "")),
             })
+    
+    # Filter by class_id if specified (class managers see only their class)
+    if class_id:
+        tier3_students = [s for s in tier3_students if str(s["code"]).startswith(str(class_id))]
     
     if not tier3_students:
         return {
@@ -2358,13 +2362,22 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None):
         code = student["code"]
         beable = student["beable_code"]
         
-        # Filter behavior data for this student
-        if '코드번호' in df.columns and beable:
-            s_df = df[df['코드번호'].astype(str) == beable]
+        # Filter behavior data for this student using 학생코드 (4-digit)
+        if '학생코드' in df.columns and code:
+            s_df = df[df['학생코드'].astype(str) == str(code)]
         else:
             s_df = pd.DataFrame()
         
-        incidents = len(s_df)
+        # Parse 발생빈도 — values may be "1회", "2회", etc. — extract numeric part
+        if not s_df.empty and '발생빈도' in s_df.columns:
+            def _freq_num(v):
+                try:
+                    return int(str(v).replace('회', '').strip())
+                except Exception:
+                    return 1
+            incidents = int(s_df['발생빈도'].apply(_freq_num).sum())
+        else:
+            incidents = len(s_df)
         max_intensity = int(s_df['강도'].max()) if not s_df.empty and '강도' in s_df.columns else 0
         avg_intensity = round(float(s_df['강도'].mean()), 1) if not s_df.empty and '강도' in s_df.columns else 0
         

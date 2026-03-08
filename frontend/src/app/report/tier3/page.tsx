@@ -69,6 +69,10 @@ export default function Tier3Report() {
         params.append("start_date", startDate);
         params.append("end_date", endDate);
       }
+      // Filter by class_id for class managers
+      if (!isAdmin() && user?.class_id) {
+        params.append("class_id", user.class_id);
+      }
       const queryString = params.toString();
       const url = queryString
         ? `${apiUrl}/api/v1/analytics/tier3-report?${queryString}`
@@ -81,7 +85,7 @@ export default function Tier3Report() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, apiUrl]);
+  }, [startDate, endDate, apiUrl, user, isAdmin]);
 
   useEffect(() => {
     fetchData();
