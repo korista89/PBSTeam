@@ -615,7 +615,7 @@ def generate_full_bip(
 [Tier 현황]
 {tier_text}
 
-[행동 기록 분석 (BehaviorLogs)]
+[행동 기록 분석 (BehaviorLogs1)]
 {log_summary}
 
 [상담일지/관찰기록 (MeetingNotes)]

@@ -135,11 +135,16 @@ async def get_meeting_analysis(target_date: str = None):
 @router.get("/tier3-report")
 async def get_tier3_report(start_date: str = None, end_date: str = None, class_id: str = None):
     """Get Tier3 report data for decision making. Supports class_id filter for class managers."""
-    data = get_tier3_report_data(start_date, end_date, class_id)
-    if "error" in data:
+    try:
+        data = get_tier3_report_data(start_date, end_date, class_id)
+        if "error" in data:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=500, detail=data["error"])
+        return data
+    except Exception as e:
         from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail=data["error"])
-    return data
+        err_msg = str(e)[:200] if str(e) else "T3 데이터 처리 중 오류 발생"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 @router.post("/dashboard/refresh")

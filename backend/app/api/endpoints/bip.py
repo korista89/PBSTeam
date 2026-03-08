@@ -23,7 +23,7 @@ class BIPData(BaseModel):
 
 def _resolve_beable_code(student_code: str) -> str:
     """Convert student_code (e.g. '2611') to BeAble code (e.g. 'STU000012').
-    BehaviorLogs use '코드번호' (BeAble code), not '학생코드'.
+    BehaviorLogs1 use '코드번호' (BeAble code), not '학생코드'.
     Returns the BeAble code, or empty string if not found."""
     from app.services.sheets import get_beable_code_mapping
     mapping = get_beable_code_mapping()
@@ -35,7 +35,7 @@ def _resolve_beable_code(student_code: str) -> str:
 
 
 def _filter_student_logs(records: list, student_code: str, beable_code: str = "") -> list:
-    """Filter BehaviorLogs for a student by student_code OR BeAble code (코드번호)."""
+    """Filter BehaviorLogs1 for a student by student_code OR BeAble code (코드번호)."""
     codes_to_match = {str(student_code).strip()}
     if beable_code:
         codes_to_match.add(str(beable_code).strip())
@@ -143,10 +143,10 @@ async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
     )
     import datetime
     
-    # Resolve BeAble code for BehaviorLogs matching
+    # Resolve BeAble code for BehaviorLogs1 matching
     beable_code = _resolve_beable_code(student_code)
     
-    # 1) BehaviorLogs for the period
+    # 1) BehaviorLogs1 for the period
     records = fetch_all_records()
     student_logs = _filter_student_logs(records, student_code, beable_code)
     

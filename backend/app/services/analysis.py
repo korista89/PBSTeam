@@ -155,7 +155,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         # Group by Student Code (4-digit), sum 발생빈도 for accurate PBIS incident count
         student_groups = df.groupby('학생코드')
         for student_code, group in student_groups:
-            freq_count = int(group['발생빈도'].sum())  # PBIS: total frequency, not row count
+            freq_count = len(group)  # PBIS: number of submissions (report frequency)
             max_intensity = group['강도'].max()
             
             tier = "Tier 1"
@@ -285,14 +285,42 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     )
     ai_comment = ai_report.get("briefing_text", "")
 
+    # Monthly trend — row count per month (for monthly bar chart)
+    monthly_trend = []
+    if 'date_obj' in df.columns:
+        df['month_label'] = df['date_obj'].dt.strftime('%Y-%m')
+        m_counts = df.groupby('month_label').size().reset_index(name='count')
+        monthly_trend = [{"month": row['month_label'], "count": int(row['count'])} for _, row in m_counts.iterrows()]
+
+    # Build tier_distribution for donut chart
+    tier_distribution = []
+    if tier_stats:
+        enr = tier_stats["enrolled"]
+        t1 = tier_stats["tier1"]["count"]
+        t2c = tier_stats["tier2_cico"]["pure"]
+        t2s = tier_stats["tier2_sst"]["count"]
+        t3 = tier_stats["tier3"]["count"]
+        t3p = tier_stats["tier3_plus"]["count"]
+        tier_distribution = [
+            {"name": "Tier 1 (보편)", "value": t1, "color": "#22c55e"},
+            {"name": "Tier 2-CICO (선별)", "value": t2c, "color": "#f59e0b"},
+            {"name": "Tier 2-SST (집중)", "value": t2s, "color": "#f97316"},
+            {"name": "Tier 3 (개별집중)", "value": t3, "color": "#ef4444"},
+            {"name": "Tier 3+ (위기)", "value": t3p, "color": "#7c3aed"},
+        ]
+        tier_distribution = [t for t in tier_distribution if t["value"] > 0]
+
     return {
         "summary": {
             "total_incidents": total_incidents,
             "avg_intensity": avg_intensity,
-            "risk_student_count": risk_student_count
+            "risk_student_count": risk_student_count,
+            "enrolled_count": tier_stats["enrolled"] if tier_stats else 0,
         },
         "trends": [{"date": k, "count": v} for k, v in date_counts.items()],
         "weekly_trends": [{"week": k, "count": v} for k, v in weekly_counts.items()],
+        "monthly_trend": monthly_trend,
+        "tier_distribution": tier_distribution,
         "big5": {
             "locations": location_stats,
             "times": time_stats,

@@ -2392,10 +2392,16 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             s_copy = s_df.copy().dropna(subset=['date_obj'])
             s_copy['week'] = s_copy['date_obj'].dt.isocalendar().week.astype(int)
             s_copy['year'] = s_copy['date_obj'].dt.year
-            # Row count per week
+            # Row count per week (보고빈도)
             w_counts = s_copy.groupby(['year', 'week']).size().reset_index(name='count')
             for _, row in w_counts.iterrows():
                 weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
+            
+            # Sum of 발생빈도 per week (발생빈도 - the one specific chart requested)
+            if '발생빈도' in s_copy.columns:
+                f_counts = s_copy.groupby(['year', 'week'])['발생빈도'].sum().reset_index(name='freq')
+                for _, row in f_counts.iterrows():
+                    weekly_trend_freq.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['freq'])})
         
         total_incidents += incidents  # sum of row counts across Tier3 students
         if not s_df.empty and '강도' in s_df.columns:
