@@ -1420,7 +1420,7 @@ def create_monthly_cico_sheet(year: int, month: int):
             
         # 2. Prepare Rows
         # Fixed cols: 15
-        fixed_headers = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
+        fixed_headers = ["번호", "학급", "학생코드", "학생명", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
         
         # Day cols
         holidays = get_holidays_from_config()
@@ -1435,6 +1435,7 @@ def create_monthly_cico_sheet(year: int, month: int):
                 s.get('번호', ''),
                 s.get('학급', ''),
                 s.get('학생코드', ''),
+                s.get('학생이름', ''), 
                 "O", # Tier2
                 "", # Target Behavior
                 "증가 목표행동", # Type
@@ -1646,6 +1647,10 @@ def get_monthly_cico_data(month: int):
         students = []
         tier2_idx = col_map.get("Tier2", 3)
         
+        # Mapping for name fallback
+        beable_mapping = get_beable_code_mapping()
+        code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
+        
         for row_idx, row in enumerate(all_values[1:], start=2):  # row_idx = sheet row (1-based)
             if len(row) <= tier2_idx:
                 continue
@@ -1657,7 +1662,7 @@ def get_monthly_cico_data(month: int):
                 "번호": row[col_map.get("번호", 0)] if col_map.get("번호", 0) < len(row) else "",
                 "학급": row[col_map.get("학급", 1)] if col_map.get("학급", 1) < len(row) else "",
                 "학생코드": row[col_map.get("학생코드", 2)] if col_map.get("학생코드", 2) < len(row) else "",
-                "학생명": row[col_map.get("학생명", 3)] if col_map.get("학생명", 3) < len(row) else "",
+                "학생명": row[col_map.get("학생명", 3)] if col_map.get("학생명", 3) < len(row) and row[col_map.get("학생명", 3)] not in ["O", "X", ""] else code_to_name.get(str(row[col_map.get("학생코드", 2)]).strip(), ""),
                 "Tier2": is_tier2,
                 "목표행동": row[col_map.get("목표행동", 4)] if col_map.get("목표행동", 4) < len(row) else "",
                 "목표행동 유형": row[col_map.get("목표행동 유형", 5)] if col_map.get("목표행동 유형", 5) < len(row) else "",
@@ -2189,6 +2194,10 @@ def get_cico_report_data(month: int):
         total_rate_count = 0
         achieved_count = 0
         
+        # Mapping for name fallback
+        beable_mapping = get_beable_code_mapping()
+        code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
+        
         for row in all_values[1:]:
             if tier2_idx < 0 or len(row) <= tier2_idx:
                 continue
@@ -2196,7 +2205,7 @@ def get_cico_report_data(month: int):
                 continue
             
             code = str(row[col_idx.get("학생코드", 2)]).strip() if col_idx.get("학생코드", 2) < len(row) else ""
-            name = row[col_idx.get("학생명", 3)] if col_idx.get("학생명", 3) < len(row) else ""
+            name = row[col_idx.get("학생명", 3)] if col_idx.get("학생명", 3) < len(row) and row[col_idx.get("학생명", 3)] not in ["O", "X", ""] else code_to_name.get(code, "")
             rate_str = row[col_idx["수행/발생률"]] if "수행/발생률" in col_idx and col_idx["수행/발생률"] < len(row) else ""
             achieved = row[col_idx["목표 달성 여부"]] if "목표 달성 여부" in col_idx and col_idx["목표 달성 여부"] < len(row) else ""
             goal_str = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else ""
@@ -2387,8 +2396,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         
         # 보고빈도 = row count (number of form submissions for this student)
         incidents = len(s_df)
-        max_intensity = int(s_df['강도'].max()) if not s_df.empty and '강도' in s_df.columns else 0
-        avg_intensity = round(float(s_df['강도'].mean()), 1) if not s_df.empty and '강도' in s_df.columns else 0
+        max_intensity = int(s_df['강도'].max()) if not s_df.empty and '강도' in s_df.columns and not pd.isna(s_df['강도'].max()) else 0
+        avg_intensity = round(float(s_df['강도'].mean()), 1) if not s_df.empty and '강도' in s_df.columns and not pd.isna(s_df['강도'].mean()) else 0
         
         # Behavior type breakdown
         behavior_types = []

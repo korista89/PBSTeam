@@ -16,6 +16,7 @@ interface TrendItem {
 
 interface CICOStudent {
   code: string;
+  name?: string;
   class: string;
   target_behavior: string;
   behavior_type: string;
@@ -452,7 +453,7 @@ export default function CICOReport() {
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                       <thead>
                         <tr style={{ background: "#f1f5f9" }}>
-                          {["학생코드", "학급", "목표행동", "유형", "척도", "달성기준", "수행률", "달성", "추이", "시스템 의사결정 제안", "팀 협의"].map(h => (
+                          {["학생코드", "학생명", "학급", "목표행동", "유형", "척도", "달성기준", "수행률", "달성", "추이", "시스템 의사결정 제안", "팀 협의"].map(h => (
                             <th key={h} style={{
                               padding: "12px 8px", color: "#475569", fontWeight: 600,
                               borderBottom: "1px solid #e2e8f0", textAlign: "left",
@@ -473,6 +474,7 @@ export default function CICOReport() {
                             }}
                           >
                             <td style={{ padding: "12px 8px", color: "#0f172a", fontWeight: 600 }}>{s.code}</td>
+                            <td style={{ padding: "12px 8px", color: "#334155", fontWeight: 500 }}>{s.name || "-"}</td>
                             <td style={{ padding: "12px 8px", color: "#475569" }}>{s.class}</td>
                             <td style={{ padding: "12px 8px", color: "#1e293b", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {s.target_behavior}

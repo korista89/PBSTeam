@@ -81,7 +81,7 @@ export default function Tier3Report() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, apiUrl, user, isAdmin]);
+  }, [startDate, endDate, apiUrl, user?.class_id, isAdmin]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

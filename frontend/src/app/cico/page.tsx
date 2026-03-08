@@ -612,7 +612,7 @@ export default function CICOGridPage() {
                         <th style={thStyle}>번호</th>
                         <th style={{ ...thStyle, minWidth: "80px" }}>학급</th>
                         <th style={thStyle}>코드</th>
-                        <th style={{ ...thStyle, minWidth: "100px" }}>학회명</th>
+                        <th style={{ ...thStyle, minWidth: "100px" }}>학생명</th>
                         <th style={{ ...thStyle, minWidth: "120px" }}>목표행동</th>
                         <th style={{ ...thStyle, minWidth: "80px" }}>유형</th>
                         <th style={{ ...thStyle, minWidth: "70px" }}>척도</th>
