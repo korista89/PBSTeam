@@ -42,14 +42,13 @@ def get_main_worksheet():
         
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        # Fix: Use explicit "BehaviorLogs" sheet for 2-way sync
+        # Changed to explicit "BehaviorLogs1" sheet
         try:
-            return sheet.worksheet("BehaviorLogs")
+            return sheet.worksheet("BehaviorLogs1")
         except gspread.WorksheetNotFound:
-            # Fallback creation if not exists (should be handled by setup script but good for safety)
-            print("Creating 'BehaviorLogs' worksheet...")
-            headers = ["행동발생 날짜", "시간대", "장소", "강도", "행동유형", "기능", "배경", "결과", "학생명", "학생코드", "코드번호", "입력자", "입력일", "비고"]
-            ws = sheet.add_worksheet(title="BehaviorLogs", rows=1000, cols=20)
+            print("Creating 'BehaviorLogs1' worksheet...")
+            headers = ['타임스탬프', '학생명', '입력교사명', '행동발생날짜', '시간대 (복수)', '행동 발생 장소', '(주요)행동유형', '강도(1~5점 척도)', '기능(이번 행동을 통해 파악된 기능)', '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부', '발생횟수', '특기사항(기타)', '코드번호']
+            ws = sheet.add_worksheet(title="BehaviorLogs1", rows=1000, cols=20)
             ws.append_row(headers)
             return ws
     except Exception as e:
@@ -85,9 +84,60 @@ def fetch_all_records(force_refresh: bool = False):
         return []
     
     try:
-        all_values = worksheet.get_all_records()
-        _cache["records"] = {"data": all_values, "timestamp": now}
-        return all_values
+        raw_values = worksheet.get_all_records()
+        mapped_values = []
+        updates_needed = []
+        beable_map_cache = None
+
+        for idx, row in enumerate(raw_values):
+            code = str(row.get("학생코드", "")).strip()
+            name = str(row.get("학생명", "")).strip()
+            
+            # Auto-populate Column M for Google Forms entries
+            if not code and name:
+                if beable_map_cache is None:
+                    beable_map_cache = get_beable_code_mapping()
+                
+                # Try to resolve code from mapping
+                clean_name = name.replace(" ", "")
+                for k, v in beable_map_cache.items():
+                    if str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
+                        code = k
+                        updates_needed.append({
+                            'range': f'M{idx + 2}', # idx 0 is Row 2 in sheets due to header
+                            'values': [[code]]
+                        })
+                        break
+            
+            mapped_row = {
+                "행동발생 날짜": row.get("행동발생날짜", ""),
+                "시간대": row.get("시간대 (복수)", ""),
+                "장소": row.get("행동 발생 장소", ""),
+                "강도": row.get("강도(1~5점 척도)", ""),
+                "행동유형": row.get("(주요)행동유형", ""),
+                "기능": row.get("기능(이번 행동을 통해 파악된 기능)", ""),
+                "배경": "",
+                "결과": "",
+                "학생명": name,
+                "학생코드": code,
+                "코드번호": row.get("코드번호", ""),
+                "입력자": row.get("입력교사명", ""),
+                "입력일": row.get("타임스탬프", ""),
+                "비고": row.get("특기사항(기타)", ""),
+                "분리지도 여부": row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", ""),
+                "발생빈도": row.get("발생횟수", 1)
+            }
+            mapped_values.append(mapped_row)
+            
+        if updates_needed:
+            try:
+                print(f"Auto-syncing {len(updates_needed)} missing student codes to BehaviorLogs1 (Column M)...")
+                worksheet.batch_update(updates_needed)
+            except Exception as e:
+                print(f"Failed to auto-sync student codes: {e}")
+                
+        _cache["records"] = {"data": mapped_values, "timestamp": now}
+        return mapped_values
     except Exception as e:
         print(f"Error fetching records: {e}")
         return []
