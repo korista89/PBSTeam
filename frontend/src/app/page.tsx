@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
   PieChart, Pie, Cell, Legend, ResponsiveContainer,
   LineChart, Line, Tooltip, ScatterChart, Scatter, ZAxis,
-  AreaChart, Area,
+  AreaChart, Area, ComposedChart
 } from "recharts";
 import { DashboardData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
