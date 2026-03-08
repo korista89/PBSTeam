@@ -2335,7 +2335,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     
     df = pd.DataFrame(raw_data)
     
-    # Date filtering
+    # Always create date_obj for date filtering and trend computation
     if '행동발생 날짜' in df.columns:
         df['date_obj'] = pd.to_datetime(df['행동발생 날짜'], errors='coerce')
         if start_date:
@@ -2344,7 +2344,14 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             df = df[df['date_obj'] <= pd.to_datetime(end_date)]
     
     if '강도' in df.columns:
-        df['강도'] = pd.to_numeric(df['강도'], errors='coerce').fillna(0)
+        import re
+        def _extract_intensity(v):
+            try:
+                m = re.match(r'^(\d+)', str(v).strip())
+                return int(m.group(1)) if m else 0
+            except Exception:
+                return 0
+        df['강도'] = df['강도'].apply(_extract_intensity)
     
     # Map BeAble codes to student codes
     beable_mapping = get_beable_code_mapping()
@@ -2355,12 +2362,10 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     tier3_beable = {b for b, info in beable_mapping.items() if info['student_code'] in tier3_codes}
     
     total_incidents = 0
-    total_intensity_sum = 0
-    total_intensity_count = 0
+    total_intensity_sum_all = 0
     
     for student in tier3_students:
         code = student["code"]
-        beable = student["beable_code"]
         
         # Filter behavior data for this student using 학생코드 (4-digit)
         if '학생코드' in df.columns and code:
@@ -2368,16 +2373,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         else:
             s_df = pd.DataFrame()
         
-        # Parse 발생빈도 — values may be "1회", "2회", etc. — extract numeric part
-        if not s_df.empty and '발생빈도' in s_df.columns:
-            def _freq_num(v):
-                try:
-                    return int(str(v).replace('회', '').strip())
-                except Exception:
-                    return 1
-            incidents = int(s_df['발생빈도'].apply(_freq_num).sum())
-        else:
-            incidents = len(s_df)
+        # 보고빈도 = row count (number of form submissions for this student)
+        incidents = len(s_df)
         max_intensity = int(s_df['강도'].max()) if not s_df.empty and '강도' in s_df.columns else 0
         avg_intensity = round(float(s_df['강도'].mean()), 1) if not s_df.empty and '강도' in s_df.columns else 0
         
@@ -2387,20 +2384,22 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             bt_counts = s_df['행동유형'].value_counts()
             behavior_types = [{"name": k, "value": int(v)} for k, v in bt_counts.items()]
         
-        # Weekly trend
+        # 발생빈도 (weekly: sum of actual occurrences for the one dedicated chart)
+        weekly_trend_freq = []
+        # 보고빈도 weekly (row count per week, for the summary)
         weekly_trend = []
         if not s_df.empty and 'date_obj' in s_df.columns:
-            s_df_copy = s_df.copy()
-            s_df_copy['week'] = s_df_copy['date_obj'].dt.isocalendar().week.astype(int)
-            s_df_copy['year'] = s_df_copy['date_obj'].dt.year
-            w_counts = s_df_copy.groupby(['year', 'week']).size().reset_index(name='count')
+            s_copy = s_df.copy().dropna(subset=['date_obj'])
+            s_copy['week'] = s_copy['date_obj'].dt.isocalendar().week.astype(int)
+            s_copy['year'] = s_copy['date_obj'].dt.year
+            # Row count per week
+            w_counts = s_copy.groupby(['year', 'week']).size().reset_index(name='count')
             for _, row in w_counts.iterrows():
                 weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
         
-        total_incidents += incidents
-        if incidents > 0:
-            total_intensity_sum += avg_intensity * incidents
-            total_intensity_count += incidents
+        total_incidents += incidents  # sum of row counts across Tier3 students
+        if not s_df.empty and '강도' in s_df.columns:
+            total_intensity_sum_all += float(s_df['강도'].sum())
         
         # Decision logic
         decision = "Tier3 유지"
@@ -2424,7 +2423,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             decision_color = "#f59e0b"
         
         student.update({
-            "incidents": incidents,
+            "incidents": incidents,  # 보고빈도 (row count)
             "max_intensity": max_intensity,
             "avg_intensity": avg_intensity,
             "behavior_types": behavior_types,
@@ -2436,13 +2435,13 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     # Sort: Tier3+ first, then by incidents desc
     tier3_students.sort(key=lambda x: (0 if x["tier"] == "Tier3+" else 1, -x["incidents"]))
     
-    overall_avg = round(total_intensity_sum / total_intensity_count, 1) if total_intensity_count > 0 else 0
+    overall_avg = round(total_intensity_sum_all / total_incidents, 1) if total_incidents > 0 else 0
     
     return {
         "students": tier3_students,
         "summary": {
             "total_students": len(tier3_students),
-            "total_incidents": total_incidents,
+            "total_incidents": total_incidents,  # 보고빈도 (row count)
             "avg_intensity": overall_avg,
         },
     }
