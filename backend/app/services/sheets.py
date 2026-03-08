@@ -102,7 +102,7 @@ def fetch_all_records(force_refresh: bool = False):
                 clean_name = name.replace(" ", "")
                 for k, v in beable_map_cache.items():
                     if str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
-                        code = k
+                        code = v.get('student_code', k) # Ensure 4-digit student code from TierStatus
                         updates_needed.append({
                             'range': f'M{idx + 2}', # idx 0 is Row 2 in sheets due to header
                             'values': [[code]]
