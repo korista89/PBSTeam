@@ -2541,7 +2541,15 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 
                 # Sum of 발생빈도 per week (발생빈도 - the one specific chart requested)
                 if '발생빈도' in s_copy.columns:
-                    s_copy['발생빈도_num'] = pd.to_numeric(s_copy['발생빈도'], errors='coerce').fillna(0)
+                    def _extract_val(v):
+                        if pd.isna(v) or v == '': return 1 # Default to 1 if empty
+                        try:
+                            # Extract first digit sequence (e.g., "1회" -> 1)
+                            match = re.search(r'(\d+)', str(v))
+                            return int(match.group(1)) if match else 1
+                        except Exception:
+                            return 1
+                    s_copy['발생빈도_num'] = s_copy['발생빈도'].apply(_extract_val)
                     f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
                     for _, row in f_counts.iterrows():
                         weekly_trend_freq.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['freq'])})
