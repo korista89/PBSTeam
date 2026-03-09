@@ -111,12 +111,7 @@ export default function PictureWordPage() {
   const [classStudents, setClassStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
-  // 학생 추가 모달
-  const [showAddStudent, setShowAddStudent] = useState(false);
-  const [newStudent, setNewStudent] = useState({
-    student_num: "",
-    student_name: "",
-  });
+  // 학생 추가 모달(TierStatus 연동으로 사용안함)
 
   // ── Tab별 데이터 ─────────────────────────────────────────
   const [vocab, setVocab] = useState<VocabRow[]>([]);
@@ -309,29 +304,6 @@ export default function PictureWordPage() {
     }
   };
 
-  // ── 학생 추가 ────────────────────────────────────────────
-  const handleAddStudent = async () => {
-    if (!newStudent.student_name.trim()) {
-      alert("학생 이름을 입력하세요.");
-      return;
-    }
-    try {
-      const classInfo = availableClasses.find((c) => c.id === selectedClassId);
-      await axios.post(`${API}/students`, {
-        class_id: selectedClassId,
-        class_name: classInfo?.name || selectedClassId,
-        student_num:
-          parseInt(newStudent.student_num) || classStudents.length + 1,
-        student_name: newStudent.student_name.trim(),
-      });
-      setShowAddStudent(false);
-      setNewStudent({ student_num: "", student_name: "" });
-      loadStudents();
-    } catch {
-      alert("학생 추가 실패");
-    }
-  };
-
   // ── 스타일 헬퍼 ─────────────────────────────────────────
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: "10px 20px",
@@ -467,108 +439,6 @@ export default function PictureWordPage() {
       </div>
     </div>
   );
-
-  // ── 학생 추가 모달 ───────────────────────────────────────
-  const renderAddStudentModal = () =>
-    showAddStudent ? (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.5)",
-          zIndex: 9999,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            background: "white",
-            borderRadius: "20px",
-            padding: "32px",
-            width: "360px",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-          }}
-        >
-          <h2 style={{ margin: "0 0 20px", color: "#1e3a8a" }}>학생 추가</h2>
-          <label
-            style={{ fontSize: "0.85rem", color: "#475569", fontWeight: 600 }}
-          >
-            번호
-          </label>
-          <input
-            type="number"
-            value={newStudent.student_num}
-            onChange={(e) =>
-              setNewStudent((p) => ({ ...p, student_num: e.target.value }))
-            }
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              margin: "6px 0 14px",
-              boxSizing: "border-box",
-            }}
-          />
-          <label
-            style={{ fontSize: "0.85rem", color: "#475569", fontWeight: 600 }}
-          >
-            이름
-          </label>
-          <input
-            type="text"
-            value={newStudent.student_name}
-            onChange={(e) =>
-              setNewStudent((p) => ({ ...p, student_name: e.target.value }))
-            }
-            placeholder="학생 이름"
-            onKeyDown={(e) => e.key === "Enter" && handleAddStudent()}
-            style={{
-              width: "100%",
-              padding: "10px",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              margin: "6px 0 20px",
-              boxSizing: "border-box",
-            }}
-          />
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => setShowAddStudent(false)}
-              style={{
-                flex: 1,
-                padding: "12px",
-                border: "1px solid #e2e8f0",
-                borderRadius: "10px",
-                cursor: "pointer",
-                background: "white",
-                color: "#64748b",
-                fontWeight: 700,
-              }}
-            >
-              취소
-            </button>
-            <button
-              onClick={handleAddStudent}
-              style={{
-                flex: 1,
-                padding: "12px",
-                border: "none",
-                borderRadius: "10px",
-                cursor: "pointer",
-                background: "#2563eb",
-                color: "white",
-                fontWeight: 700,
-              }}
-            >
-              추가
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null;
 
   // ── 체크리스트 탭 ────────────────────────────────────────
   const renderChecklist = () => {
@@ -2111,9 +1981,6 @@ export default function PictureWordPage() {
           {tab === "lessons" && renderLessons()}
           {tab === "minutes" && renderMinutes()}
         </main>
-
-        {/* 학생 추가 모달 */}
-        {renderAddStudentModal()}
       </div>
     </AuthCheck>
   );

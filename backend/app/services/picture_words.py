@@ -2,6 +2,7 @@ import gspread
 from app.services.sheets import get_sheets_client, settings, fetch_student_status
 from app.core.picture_word_data import DOMAINS, VBS, VOCAB_DATA, LESSON_DATA
 import time
+import threading
 
 # ── 상수 ──────────────────────────────────────────────────────
 VB_COLS = {'청자': 7, '모방': 8, '명명': 9, '매칭': 10, '대화': 11, '요구': 12}
@@ -34,24 +35,39 @@ def get_or_create_worksheet(ss, title: str, rows=200, cols=20):
 # 1. Roster (학생 명부) 관리 기반 - TierStatus 연동으로 변경
 # ─────────────────────────────────────────────────────────────
 
-_pw_cache = {"vocab": {"data": [], "timestamp": 0}}
+_pw_cache = {"vocab": {}}
 PW_CACHE_TTL = 60
 
-def clear_pw_cache():
+def clear_pw_cache(class_id: str = None):
     global _pw_cache
-    _pw_cache["vocab"] = {"data": [], "timestamp": 0}
+    if class_id:
+        _pw_cache["vocab"][class_id] = {"data": [], "timestamp": 0}
+    else:
+        _pw_cache["vocab"] = {}
 
-def fetch_all_vocab_records():
+def get_class_vocab_ws(ss, class_id: str):
+    """학급별 어휘 데이터 시트 확보 및 초기화"""
+    title = f'PW_어휘_{class_id}'
+    try:
+        return ss.worksheet(title)
+    except gspread.WorksheetNotFound:
+        ws = ss.add_worksheet(title=title, rows=2000, cols=16)
+        ws.append_row(VB_HEADERS)
+        time.sleep(1)
+        return ws
+
+def fetch_class_vocab_records(class_id: str):
     global _pw_cache
     now = time.time()
     
-    if _pw_cache["vocab"]["data"] and (now - _pw_cache["vocab"]["timestamp"] < PW_CACHE_TTL):
-        return _pw_cache["vocab"]["data"]
+    cache_entry = _pw_cache["vocab"].get(class_id)
+    if cache_entry and cache_entry["data"] and (now - cache_entry["timestamp"] < PW_CACHE_TTL):
+        return cache_entry["data"]
         
     ss = get_pw_spreadsheet()
     if not ss:
         return []
-    ws = get_global_vocab_ws(ss)
+    ws = get_class_vocab_ws(ss, class_id)
     
     try:
         try:
@@ -71,10 +87,10 @@ def fetch_all_vocab_records():
                             record[h] = row[ci]
                     records.append(record)
                     
-        _pw_cache["vocab"] = {"data": records, "timestamp": now}
+        _pw_cache["vocab"][class_id] = {"data": records, "timestamp": now}
         return records
     except Exception as e:
-        print(f"[PW] Error fetching vocab: {e}")
+        print(f"[PW] Error fetching vocab for {class_id}: {e}")
         return []
 
 
@@ -123,27 +139,22 @@ def delete_student(class_id: str, student_name: str) -> dict:
 # 시트명: PW_어휘데이터
 # ─────────────────────────────────────────────────────────────
 
-def get_global_vocab_ws(ss):
-    """글로벌 어휘 데이터 시트 확보 및 초기화"""
-    try:
-        ws = ss.worksheet('PW_어휘데이터')
-        return ws
-    except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title='PW_어휘데이터', rows=25000, cols=16)
-        ws.append_row(VB_HEADERS)
-        time.sleep(1)
-        return ws
+_vocab_lock = threading.Lock()
 
 def fetch_student_vocab(class_id: str, student_name: str) -> list[dict]:
     """특정 학생의 어휘 체크리스트 반환. 데이터 없으면 초기 데이터 주입."""
+    with _vocab_lock:
+        return _fetch_student_vocab_internal(class_id, student_name)
+
+def _fetch_student_vocab_internal(class_id: str, student_name: str) -> list[dict]:
     ss = get_pw_spreadsheet()
     if not ss:
         return []
         
-    ws = get_global_vocab_ws(ss)
+    ws = get_class_vocab_ws(ss, class_id)
     
     # Use centralized cache to avoid OOM and timeout
-    records = fetch_all_vocab_records()
+    records = fetch_class_vocab_records(class_id)
     
     student_records = []
     max_row_idx = 1 # 헤더 1번
@@ -186,13 +197,14 @@ def fetch_student_vocab(class_id: str, student_name: str) -> list[dict]:
     return sorted(student_records, key=lambda x: int(x.get('번호', 0)))
 
 def update_student_vocab(class_id: str, student_name: str, vocab_id: int, updates: dict) -> dict:
-    """통합 시트 기반 학생 어휘 데이터 업데이트"""
-    ss = get_pw_spreadsheet()
-    if not ss:
-        return {"error": "Sheet not accessible"}
-        
-    ws = get_global_vocab_ws(ss)
-    records = fetch_all_vocab_records()
+    """학급 분할 시트 기반 학생 어휘 데이터 업데이트"""
+    with _vocab_lock:
+        ss = get_pw_spreadsheet()
+        if not ss:
+            return {"error": "Sheet not accessible"}
+            
+        ws = get_class_vocab_ws(ss, class_id)
+        records = fetch_class_vocab_records(class_id)
     
     target_row = None
     # 업데이트할 행 번호 찾기 (선형 탐색 - 나중에 최적화 포인트)
@@ -234,7 +246,7 @@ def update_student_vocab(class_id: str, student_name: str, vocab_id: int, update
     cert_status = fetch_certification_status(class_id, student_name)
     update_tierstatus_certification(student_name, cert_status["total_badges"])
 
-    clear_pw_cache()
+    clear_pw_cache(class_id)
     return {"message": "업데이트 완료", "total_badges": cert_status["total_badges"]}
 
 
@@ -331,7 +343,13 @@ def fetch_class_overview(class_id: str = None) -> list[dict]:
     students = fetch_students_by_class(class_id) if class_id else fetch_all_students()
     results = []
     
-    all_vocab_records = fetch_all_vocab_records()
+    # class_id 없으면 전체 재학생 학급들 각각 로드 (비추천이나, 이전 호환용으로 유지)
+    # Overview는 보통 특정 학급만 보게 되므로 class_id를 우선시.
+    class_ids_to_fetch = [class_id] if class_id else list(set(str(s.get('학급ID', '')) for s in students if s.get('학급ID')))
+    
+    all_vocab_records = []
+    for cid in class_ids_to_fetch:
+        all_vocab_records.extend(fetch_class_vocab_records(cid))
         
     for s in students:
         cid = str(s.get('학급ID', ''))
@@ -403,12 +421,9 @@ def init_picture_word_system() -> dict:
         return {"error": "Sheet not accessible"}
     created = []
     
-    # 더이상 PW_명부 시트는 사용하지 않지만, 기본 틀을 위해 통합 DB 초기화
-    try:
-        ss.worksheet('PW_어휘데이터')
-    except gspread.WorksheetNotFound:
-        get_global_vocab_ws(ss)
-        created.append('PW_어휘데이터')
+    # 개별 시트이므로 초기화 시엔 따로 생성 체크를 안함 (각 학급별 접근 시 생성됨)
+    # 기존 PW_어휘데이터 가 있으면 무시.
+    # 단지 수업가이드와 협의록만 초기화.
         
     get_lesson_ws(ss)
     time.sleep(0.5)
