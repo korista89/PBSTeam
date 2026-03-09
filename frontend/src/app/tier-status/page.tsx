@@ -345,6 +345,7 @@ export default function TierStatusPage() {
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>T3</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>T3+</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>변경일</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '120px' }}>메모</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>상세분석</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>BIP</th>
                                     {isAdmin() && <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>관리</th>}
@@ -439,6 +440,13 @@ export default function TierStatusPage() {
                                                 )}
                                             </td>
                                             <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
+                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'left', fontSize: '0.8rem', color: '#333', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {isEditing ? (
+                                                    <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} style={{ width: '100%', padding: '2px' }} placeholder="메모" />
+                                                ) : (
+                                                    s.메모 || '-'
+                                                )}
+                                            </td>
                                             <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
                                                 <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} style={{ padding: '4px 10px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>📊</button>
                                             </td>

@@ -17,6 +17,11 @@ def extract_numeric(val, default=0):
         return float(match.group(1))
     return default
 
+def robust_parse_dates(date_series):
+    import pandas as pd
+    cleaned = date_series.astype(str).replace(r'[^\d]+', '-', regex=True).str.strip('-')
+    return pd.to_datetime(cleaned, errors='coerce')
+
 def sort_time_slots(slots):
     """Sort time slots like '09:00', '10:00', '오전 9시' chronologically."""
     def parse_time(name):
@@ -107,7 +112,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     # --- Date Filtering ---
     if '행동발생 날짜' in df.columns:
-        df['date_obj'] = pd.to_datetime(df['행동발생 날짜'], errors='coerce')
+        df['date_obj'] = robust_parse_dates(df['행동발생 날짜'])
         
         if start_date:
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
@@ -127,9 +132,11 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         # Weekly Trend: count submissions per week
         weekly_counts = {}
         if 'date_obj' in df.columns:
-            df['week'] = df['date_obj'].dt.isocalendar().week.astype(int)
-            df['year'] = df['date_obj'].dt.year
-            w_grouped = df.groupby(['year', 'week']).size()  # count rows
+            df['week'] = df['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
+            df['year'] = df['date_obj'].dt.year.fillna(-1).astype(int)
+            # Filter valid dates for weekly
+            valid_df = df[df['year'] > 0]
+            w_grouped = valid_df.groupby(['year', 'week']).size()  # count rows
             for (y, w), count in w_grouped.items():
                 label = f"{y}-W{w:02d}"
                 weekly_counts[label] = int(count)
@@ -420,7 +427,7 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     
     # Date parsing & filtering
     if '행동발생 날짜' in student_df.columns:
-        student_df['date_obj'] = pd.to_datetime(student_df['행동발생 날짜'], errors='coerce')
+        student_df['date_obj'] = robust_parse_dates(student_df['행동발생 날짜'])
         if start_date:
             student_df = student_df[student_df['date_obj'] >= pd.to_datetime(start_date)]
         if end_date:
@@ -481,9 +488,10 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     # -- Weekly Trend --
     weekly_trend = []
     if 'date_obj' in student_df.columns:
-        student_df['week'] = student_df['date_obj'].dt.isocalendar().week.astype(int)
-        student_df['year'] = student_df['date_obj'].dt.year
-        w_counts = student_df.groupby(['year', 'week'])['발생빈도'].sum().reset_index(name='count')
+        student_df['week'] = student_df['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
+        student_df['year'] = student_df['date_obj'].dt.year.fillna(-1).astype(int)
+        s_valid = student_df[student_df['year'] > 0]
+        w_counts = s_valid.groupby(['year', 'week'])['발생빈도'].sum().reset_index(name='count')
         for _, row in w_counts.iterrows():
             weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
 
@@ -610,7 +618,7 @@ def analyze_meeting_data(target_date: str = None):
     
     # Preprocessing
     if '행동발생 날짜' in df.columns:
-        df['date_obj'] = pd.to_datetime(df['행동발생 날짜'], errors='coerce')
+        df['date_obj'] = robust_parse_dates(df['행동발생 날짜'])
         # Filter for last 4 weeks
         df = df[(df['date_obj'] >= start_dt) & (df['date_obj'] <= end_dt)]
     

@@ -818,7 +818,7 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
                 })
                 
                 # Update 메모 (column 14 / N)
-                if memo:
+                if memo is not None:
                     batch_updates.append({
                         "range": f"N{row_num}",
                         "values": [[memo]]
@@ -2451,9 +2451,14 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     
     df = pd.DataFrame(raw_data)
     
+    def robust_parse_dates(date_series):
+        import pandas as pd
+        cleaned = date_series.astype(str).replace(r'[^\d]+', '-', regex=True).str.strip('-')
+        return pd.to_datetime(cleaned, errors='coerce')
+
     # Always create date_obj for date filtering and trend computation
     if '행동발생 날짜' in df.columns:
-        df['date_obj'] = pd.to_datetime(df['행동발생 날짜'], errors='coerce')
+        df['date_obj'] = robust_parse_dates(df['행동발생 날짜'])
         if start_date:
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
         if end_date:
