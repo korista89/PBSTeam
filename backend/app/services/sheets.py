@@ -1451,10 +1451,10 @@ def _calculate_cico_rate(student: dict) -> dict:
     if rate_num is not None:
         rate_str = f"{round(rate_num)}%"
     else:
-        rate_str = ""
+        rate_str = None
     
     # Determine achievement (달성 여부)
-    achieved = ""
+    achieved = None
     if rate_num is not None and goal_criteria:
         # Parse goal criteria: "80% 이상", "20% 이하", etc.
         try:
@@ -1466,7 +1466,7 @@ def _calculate_cico_rate(student: dict) -> dict:
             else:  # 이상 (default)
                 achieved = "O" if rate_num >= goal_val else "X"
         except (ValueError, TypeError):
-            achieved = ""
+            achieved = None
     
     return {
         "rate_str": rate_str,
@@ -1969,7 +1969,7 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                     if total_days > 0:
                         rate_val = (success_days / total_days) * 100
                         
-                    final_rate_str = f"{int(rate_val)}%" if total_days > 0 else ""
+                    final_rate_str = f"{int(rate_val)}%" if total_days > 0 else None
                     
                     # Achievement
                     is_achieved = "X"
@@ -1986,7 +1986,7 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                     except:
                         pass
                     
-                    if total_days == 0: is_achieved = ""
+                    if total_days == 0: is_achieved = None
                     
                     cells_to_update.append({
                         "range": f"{_col_letter(rate_idx + 1)}{r_idx}",
