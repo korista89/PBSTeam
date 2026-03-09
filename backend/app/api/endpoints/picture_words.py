@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.services.picture_words import (
     fetch_all_students, fetch_students_by_class,
     add_student, delete_student,
-    fetch_student_vocab, update_student_vocab,
+    fetch_student_vocab, update_student_vocab, batch_update_student_vocab,
     fetch_lessons, update_lesson,
     fetch_minutes, add_minute_entry, delete_minute_entry,
     fetch_class_overview, fetch_certification_status,
@@ -61,6 +61,16 @@ class VocabUpdateRequest(BaseModel):
 @router.patch("/vocab/{class_id}/{student_name}/{vocab_id}")
 def patch_vocab(class_id: str, student_name: str, vocab_id: int, req: VocabUpdateRequest):
     result = update_student_vocab(class_id, student_name, vocab_id, req.updates)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+class VocabBatchUpdateRequest(BaseModel):
+    payload: list[Dict[str, Any]]
+
+@router.patch("/vocab/batch/{class_id}/{student_name}")
+def patch_vocab_batch(class_id: str, student_name: str, req: VocabBatchUpdateRequest):
+    result = batch_update_student_vocab(class_id, student_name, req.payload)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result

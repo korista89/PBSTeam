@@ -45,29 +45,29 @@ def clear_pw_cache(class_id: str = None):
     else:
         _pw_cache["vocab"] = {}
 
-def get_class_vocab_ws(ss, class_id: str):
-    """학급별 어휘 데이터 시트 확보 및 초기화"""
-    title = f'PW_어휘_{class_id}'
+def get_global_vocab_ws(ss):
+    """글로벌 통합 어휘 데이터 시트 (PW_어휘데이터) 확보 및 초기화"""
+    title = 'PW_어휘데이터'
     try:
         return ss.worksheet(title)
     except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title=title, rows=2000, cols=16)
+        ws = ss.add_worksheet(title=title, rows=15000, cols=16)
         ws.append_row(VB_HEADERS)
         time.sleep(1)
         return ws
 
-def fetch_class_vocab_records(class_id: str):
+def fetch_global_vocab_records():
     global _pw_cache
     now = time.time()
     
-    cache_entry = _pw_cache["vocab"].get(class_id)
+    cache_entry = _pw_cache["vocab"].get("GLOBAL")
     if cache_entry and cache_entry["data"] and (now - cache_entry["timestamp"] < PW_CACHE_TTL):
         return cache_entry["data"]
         
     ss = get_pw_spreadsheet()
     if not ss:
         return []
-    ws = get_class_vocab_ws(ss, class_id)
+    ws = get_global_vocab_ws(ss)
     
     try:
         try:
@@ -87,10 +87,10 @@ def fetch_class_vocab_records(class_id: str):
                             record[h] = row[ci]
                     records.append(record)
                     
-        _pw_cache["vocab"][class_id] = {"data": records, "timestamp": now}
+        _pw_cache["vocab"]["GLOBAL"] = {"data": records, "timestamp": now}
         return records
     except Exception as e:
-        print(f"[PW] Error fetching vocab for {class_id}: {e}")
+        print(f"[PW] Error fetching global vocab: {e}")
         return []
 
 
@@ -151,10 +151,10 @@ def _fetch_student_vocab_internal(class_id: str, student_name: str) -> list[dict
     if not ss:
         return []
         
-    ws = get_class_vocab_ws(ss, class_id)
+    ws = get_global_vocab_ws(ss)
     
     # Use centralized cache to avoid OOM and timeout
-    records = fetch_class_vocab_records(class_id)
+    records = fetch_global_vocab_records()
     
     student_records = []
     max_row_idx = 1 # 헤더 1번
@@ -197,17 +197,17 @@ def _fetch_student_vocab_internal(class_id: str, student_name: str) -> list[dict
     return sorted(student_records, key=lambda x: int(x.get('번호', 0)))
 
 def update_student_vocab(class_id: str, student_name: str, vocab_id: int, updates: dict) -> dict:
-    """학급 분할 시트 기반 학생 어휘 데이터 업데이트"""
+    """통합 시트 기반 학생 어휘 데이터 단건 업데이트"""
     with _vocab_lock:
         ss = get_pw_spreadsheet()
         if not ss:
             return {"error": "Sheet not accessible"}
             
-        ws = get_class_vocab_ws(ss, class_id)
-        records = fetch_class_vocab_records(class_id)
+        ws = get_global_vocab_ws(ss)
+        records = fetch_global_vocab_records()
     
     target_row = None
-    # 업데이트할 행 번호 찾기 (선형 탐색 - 나중에 최적화 포인트)
+    # 검색
     for idx, r in enumerate(records):
         if str(r.get('학급ID', '')) == str(class_id) and str(r.get('학생이름', '')) == str(student_name) and int(r.get('번호', -1)) == vocab_id:
             target_row = idx + 2
@@ -246,8 +246,64 @@ def update_student_vocab(class_id: str, student_name: str, vocab_id: int, update
     cert_status = fetch_certification_status(class_id, student_name)
     update_tierstatus_certification(student_name, cert_status["total_badges"])
 
-    clear_pw_cache(class_id)
+    clear_pw_cache()
     return {"message": "업데이트 완료", "total_badges": cert_status["total_badges"]}
+
+def batch_update_student_vocab(class_id: str, student_name: str, payload: list[dict]) -> dict:
+    """통합 시트 기반 학생 어휘 데이터 일괄 업데이트 (Debouncing용)
+    payload = [{"vocab_id": 1, "updates": {"청자": True}}, ...]
+    """
+    with _vocab_lock:
+        ss = get_pw_spreadsheet()
+        if not ss:
+            return {"error": "Sheet not accessible"}
+            
+        ws = get_global_vocab_ws(ss)
+        records = fetch_global_vocab_records()
+        
+    # VB_COLS (1-based col index) mapping
+    col_map = {
+        '청자': 7, '모방': 8, '명명': 9, '매칭': 10, '대화': 11, '요구': 12,
+        '협의내용': 14, '협의날짜': 15
+    }
+    
+    batch_requests = []
+    
+    for item in payload:
+        vocab_id = item["vocab_id"]
+        updates = item["updates"]
+        
+        target_row = None
+        for idx, r in enumerate(records):
+            if str(r.get('학급ID', '')) == str(class_id) and str(r.get('학생이름', '')) == str(student_name) and int(r.get('번호', -1)) == vocab_id:
+                target_row = idx + 2
+                break
+                
+        if not target_row:
+            continue
+            
+        for key, val in updates.items():
+            if key in col_map:
+                col_idx = col_map[key]
+                val_str = 'TRUE' if val else 'FALSE' if isinstance(val, bool) else str(val)
+                # Range calculation like G2:G2
+                col_letter = chr(64 + col_idx) # works up to Z, which is fine (max is 15 -> O)
+                batch_requests.append({
+                    "range": f"{col_letter}{target_row}",
+                    "values": [[val_str]]
+                })
+                
+    if batch_requests:
+        ws.batch_update(batch_requests)
+        
+    clear_pw_cache()
+    
+    # Update total score via formulas or just triggering certification recalculate is handled async if needed
+    from app.services.sheets import update_tierstatus_certification
+    cert_status = fetch_certification_status(class_id, student_name)
+    update_tierstatus_certification(student_name, cert_status["total_badges"])
+    
+    return {"message": f"{len(batch_requests)} cells updated via batch", "total_badges": cert_status["total_badges"]}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -347,9 +403,7 @@ def fetch_class_overview(class_id: str = None) -> list[dict]:
     # Overview는 보통 특정 학급만 보게 되므로 class_id를 우선시.
     class_ids_to_fetch = [class_id] if class_id else list(set(str(s.get('학급ID', '')) for s in students if s.get('학급ID')))
     
-    all_vocab_records = []
-    for cid in class_ids_to_fetch:
-        all_vocab_records.extend(fetch_class_vocab_records(cid))
+    all_vocab_records = fetch_global_vocab_records()
         
     for s in students:
         cid = str(s.get('학급ID', ''))

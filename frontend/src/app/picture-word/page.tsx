@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import GlobalNav from "../components/GlobalNav";
 import { AuthCheck } from "../components/AuthProvider";
@@ -235,6 +235,9 @@ export default function PictureWordPage() {
     });
 
   // ── 어휘 업데이트 ────────────────────────────────────────
+  const updateQueueRef = useRef<{vocabId: number, field: string, value: any}[]>([]);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleVocabUpdate = async (
     vocabId: number,
     field: string,
@@ -253,15 +256,38 @@ export default function PictureWordPage() {
         return updated;
       }),
     );
-    try {
-      await axios.patch(
-        `${API}/vocab/${selectedStudent.학급ID}/${encodeURIComponent(selectedStudent.학생이름)}/${vocabId}`,
-        { updates: { [field]: value } },
-      );
-    } catch {
-      alert("업데이트 실패");
-      loadVocab();
-    }
+    
+    // 배치 큐에 저장
+    updateQueueRef.current.push({ vocabId, field, value });
+    
+    if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+    
+    updateTimeoutRef.current = setTimeout(async () => {
+      const queue = [...updateQueueRef.current];
+      updateQueueRef.current = [];
+      if (queue.length === 0) return;
+      
+      const merged: Record<number, Record<string, any>> = {};
+      for (const item of queue) {
+        if (!merged[item.vocabId]) merged[item.vocabId] = {};
+        merged[item.vocabId][item.field] = item.value;
+      }
+      
+      const payload = Object.entries(merged).map(([vid, updates]) => ({
+        vocab_id: parseInt(vid),
+        updates
+      }));
+      
+      try {
+        await axios.patch(
+          `${API}/vocab/batch/${selectedStudent.학급ID}/${encodeURIComponent(selectedStudent.학생이름)}`,
+          { payload }
+        );
+      } catch {
+        alert("업데이트 실패: 동기화에 문제가 발생했습니다.");
+        loadVocab();
+      }
+    }, 1500);
   };
 
   // ── 수업 가이드 업데이트 ─────────────────────────────────
