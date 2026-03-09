@@ -1550,50 +1550,50 @@ def create_monthly_cico_sheet(year: int, month: int):
             start_row = 2
             end_row = len(rows)
             
-            # Column D: Tier2 (O/X)
+            # Column E: Tier2 (O/X)
             ws.add_validation(
-                f'D{start_row}:D{end_row}',
+                f'E{start_row}:E{end_row}',
                 ValidationConditionType.one_of_list,
                 ['O', 'X'],
                 showCustomUi=True
             )
             
-            # Column F: 목표행동 유형
+            # Column G: 목표행동 유형
             ws.add_validation(
-                f'F{start_row}:F{end_row}',
+                f'G{start_row}:G{end_row}',
                 ValidationConditionType.one_of_list,
                 ['증가 목표행동', '감소 목표행동'],
                 showCustomUi=True
             )
             
-            # Column G: 척도
+            # Column H: 척도
             ws.add_validation(
-                f'G{start_row}:G{end_row}',
+                f'H{start_row}:H{end_row}',
                 ValidationConditionType.one_of_list,
                 ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'],
                 showCustomUi=True
             )
             
-            # Column I: 목표 달성 기준
+            # Column J: 목표 달성 기준
             ws.add_validation(
-                f'I{start_row}:I{end_row}',
+                f'J{start_row}:J{end_row}',
                 ValidationConditionType.one_of_list,
                 ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
                  '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'],
                 showCustomUi=True
             )
             
-            # Column K: 목표 달성 여부
+            # Column L: 목표 달성 여부
             ws.add_validation(
-                f'K{start_row}:K{end_row}',
+                f'L{start_row}:L{end_row}',
                 ValidationConditionType.one_of_list,
                 ['O', 'X'],
                 showCustomUi=True
             )
             
-            # Column O: 차월 대상여부
+            # Column P: 차월 대상여부
             ws.add_validation(
-                f'O{start_row}:O{end_row}',
+                f'P{start_row}:P{end_row}',
                 ValidationConditionType.one_of_list,
                 ['유지', '종료', '상향', '하향'],
                 showCustomUi=True
@@ -2710,12 +2710,14 @@ def refresh_dashboard_data(sheet, dashboard_ws):
                 if len(row) > 3 and row[3] == "O":
                     code = str(row[2]).strip()
                     # Basic Info: No, Class, Code, Target, Type, Scale, Standard, Status(CICO)
+                    # New indices based on fixed_headers:
+                    # 5: 목표행동, 6: 목표행동 유형, 7: 척도, 8: 입력 기준
                     basic_info = [
                         row[0], row[1], row[2], 
-                        row[4] if len(row)>4 else "", 
                         row[5] if len(row)>5 else "", 
                         row[6] if len(row)>6 else "", 
                         row[7] if len(row)>7 else "", 
+                        row[8] if len(row)>8 else "", 
                         "CICO" # Status
                     ]
                     
