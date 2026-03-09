@@ -55,22 +55,22 @@ def remove_student(class_id: str, student_name: str):
 def get_vocab(class_id: str, student_name: str):
     return fetch_student_vocab(class_id, student_name)
 
-class VocabUpdateRequest(BaseModel):
-    updates: Dict[str, Any]
-
-@router.patch("/vocab/{class_id}/{student_name}/{vocab_id}")
-def patch_vocab(class_id: str, student_name: str, vocab_id: int, req: VocabUpdateRequest):
-    result = update_student_vocab(class_id, student_name, vocab_id, req.updates)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
-
 class VocabBatchUpdateRequest(BaseModel):
     payload: list[Dict[str, Any]]
 
 @router.patch("/vocab/batch/{class_id}/{student_name}")
 def patch_vocab_batch(class_id: str, student_name: str, req: VocabBatchUpdateRequest):
     result = batch_update_student_vocab(class_id, student_name, req.payload)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+class VocabUpdateRequest(BaseModel):
+    updates: Dict[str, Any]
+
+@router.patch("/vocab/{class_id}/{student_name}/{vocab_id}")
+def patch_vocab(class_id: str, student_name: str, vocab_id: int, req: VocabUpdateRequest):
+    result = update_student_vocab(class_id, student_name, vocab_id, req.updates)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
