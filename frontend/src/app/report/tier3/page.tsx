@@ -165,7 +165,12 @@ export default function Tier3Report() {
                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                   <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '16px', color: '#0f172a' }}>📊 Tier3 학생별 보고빈도 비교</div>
                   <ResponsiveContainer width="100%" height={Math.max(200, students.length * 42)}>
-                    <BarChart data={students.map(s => ({ name: s.code, 보고건수: s.incidents, class: s.class, tier: s.tier }))} layout="vertical" margin={{ left: 10, right: 60 }}>
+                    <BarChart data={students.map(s => ({
+                      name: s.name ? `${s.name} (${s.code})` : s.code,
+                      보고건수: s.incidents,
+                      class: s.class,
+                      tier: s.tier
+                    }))} layout="vertical" margin={{ left: 10, right: 60 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                       <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
                       <YAxis dataKey="name" type="category" width={70} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
