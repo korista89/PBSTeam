@@ -207,6 +207,7 @@ export default function Tier3Report() {
                 </div>
               ) : (
                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                  <div style={{ overflowX: 'auto', width: '100%' }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
                     <thead>
                       <tr style={{ background: "#f8fafc" }}>
@@ -340,6 +341,7 @@ export default function Tier3Report() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
 

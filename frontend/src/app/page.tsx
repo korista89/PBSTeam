@@ -415,6 +415,7 @@ export default function Home() {
 
             {/* At-risk table */}
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ overflowX: 'auto', width: '100%' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
                   <tr style={{ background: '#f8fafc' }}>
@@ -450,6 +451,7 @@ export default function Home() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
 
             {/* ===== Section 5: 실행 계획 ===== */}

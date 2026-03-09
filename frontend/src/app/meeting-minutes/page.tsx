@@ -171,6 +171,7 @@ export default function MeetingMinutesPage() {
                     <section>
                         <h2>3. Tier 2 & 3: 개별 지원 대상자 협의</h2>
                         {/* Risk List Table */}
+                        <div style={{ overflowX: 'auto', width: '100%' }}>
                         <table style={{ fontSize: '9pt' }}>
                             <thead>
                                 <tr>
@@ -193,6 +194,7 @@ export default function MeetingMinutesPage() {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
 
                         <div className="grid-2">
                             <div className="note-box">
