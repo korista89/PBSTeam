@@ -273,32 +273,55 @@ def batch_update_student_vocab(class_id: str, student_name: str, payload: list[d
         vocab_id = item["vocab_id"]
         updates = item["updates"]
         
-        target_row = None
+        target_row_idx = None
+        target_record = None
         for idx, r in enumerate(records):
             if str(r.get('학급ID', '')) == str(class_id) and str(r.get('학생이름', '')) == str(student_name) and int(r.get('번호', -1)) == vocab_id:
-                target_row = idx + 2
+                target_row_idx = idx + 2
+                target_record = r
                 break
                 
-        if not target_row:
+        if not target_row_idx or not target_record:
             continue
             
+        # 1. Update individual fields
         for key, val in updates.items():
             if key in col_map:
                 col_idx = col_map[key]
-                val_str = 'TRUE' if val else 'FALSE' if isinstance(val, bool) else str(val)
-                # Range calculation like G2:G2
-                col_letter = chr(64 + col_idx) # works up to Z, which is fine (max is 15 -> O)
+                
+                # Fix: Strictly check boolean type so text strings don't turn into 'TRUE'
+                if isinstance(val, bool):
+                    val_str = 'TRUE' if val else 'FALSE'
+                else:
+                    val_str = str(val) if val is not None else ""
+                
+                # Apply locally to memory to compute the new total right after
+                target_record[key] = val_str
+                
+                col_letter = chr(64 + col_idx) # works up to Z
                 batch_requests.append({
-                    "range": f"{col_letter}{target_row}",
+                    "range": f"{col_letter}{target_row_idx}",
                     "values": [[val_str]]
                 })
                 
+        # 2. Recalculate and append "합계" (Total) column (Col 13 / M)
+        calculated_total = 0
+        for b_key in ['청자', '모방', '명명', '매칭', '대화', '요구']:
+            if str(target_record.get(b_key, '')).upper() == 'TRUE':
+                calculated_total += 1
+                
+        batch_requests.append({
+            "range": f"M{target_row_idx}",
+            "values": [[calculated_total]]
+        })
+                
     if batch_requests:
+        # Note: Depending on the gspread version, batch_update might complain if the ranges are completely out of order?
+        # Actually gspread batch_update just sends all "updateCells" requests sequentially to the Google API.
         ws.batch_update(batch_requests)
         
     clear_pw_cache()
     
-    # Update total score via formulas or just triggering certification recalculate is handled async if needed
     from app.services.sheets import update_tierstatus_certification
     cert_status = fetch_certification_status(class_id, student_name)
     update_tierstatus_certification(student_name, cert_status["total_badges"])
