@@ -87,6 +87,9 @@ def clear_cache(key: str = None):
     # Also explicitly support 'tierstatus' since it was added later
     if key == "tierstatus" and "tierstatus" not in _cache:
         _cache["tierstatus"] = {"data": [], "timestamp": 0}
+        
+    if key == "daily_cico" and "daily_cico" not in _cache:
+        _cache["daily_cico"] = {"data": [], "timestamp": 0}
 
 def fetch_all_records(force_refresh: bool = False):
     global _cache
@@ -100,7 +103,23 @@ def fetch_all_records(force_refresh: bool = False):
         return []
     
     try:
-        raw_values = worksheet.get_all_records()
+        try:
+            raw_values = worksheet.get_all_records()
+        except Exception as e:
+            print(f"Fallback to get_all_values for BehaviorLogs1 (likely due to size or empty headers): {e}")
+            all_vals = worksheet.get_all_values()
+            if len(all_vals) < 2:
+                raw_values = []
+            else:
+                headers = all_vals[0]
+                raw_values = []
+                for row in all_vals[1:]:
+                    record = {}
+                    for ci, h in enumerate(headers):
+                        if ci < len(row) and h:
+                            record[h] = row[ci]
+                    raw_values.append(record)
+
         mapped_values = []
         updates_needed = []
         beable_map_cache = None
@@ -932,27 +951,51 @@ def get_cico_daily_worksheet():
         return None
 
 def fetch_cico_daily(student_code: str = None, start_date: str = None, end_date: str = None):
-    ws = get_cico_daily_worksheet()
-    if not ws:
-        return []
+    global _cache
+    now = time.time()
     
-    try:
-        records = ws.get_all_records()
-        filtered = records
+    if "daily_cico" not in _cache:
+        _cache["daily_cico"] = {"data": [], "timestamp": 0}
         
-        if student_code:
-            filtered = [r for r in filtered if str(r.get('StudentCode')) == str(student_code)]
+    if _cache["daily_cico"]["data"] and now - _cache["daily_cico"]["timestamp"] < CACHE_TTL:
+        records = _cache["daily_cico"]["data"]
+    else:
+        ws = get_cico_daily_worksheet()
+        if not ws:
+            return []
         
-        if start_date:
-            filtered = [r for r in filtered if r.get('Date', '') >= start_date]
-        
-        if end_date:
-            filtered = [r for r in filtered if r.get('Date', '') <= end_date]
-        
-        return filtered
-    except Exception as e:
-        print(f"Error fetching CICO daily: {e}")
-        return []
+        try:
+            try:
+                records = ws.get_all_records()
+            except Exception as e:
+                print(f"Fallback to get_all_values for CICODaily: {e}")
+                all_vals = ws.get_all_values()
+                if len(all_vals) < 2:
+                    records = []
+                else:
+                    headers = all_vals[0]
+                    records = []
+                    for row in all_vals[1:]:
+                        record = {}
+                        for ci, h in enumerate(headers):
+                            if ci < len(row) and h:
+                                record[h] = row[ci]
+                        records.append(record)
+            _cache["daily_cico"] = {"data": records, "timestamp": now}
+        except Exception as e:
+            print(f"Error fetching CICO daily: {e}")
+            return []
+
+    # apply filters
+    filtered = records
+    if student_code:
+        filtered = [r for r in filtered if str(r.get('StudentCode')) == str(student_code)]
+    if start_date:
+        filtered = [r for r in filtered if r.get('Date', '') >= start_date]
+    if end_date:
+        filtered = [r for r in filtered if r.get('Date', '') <= end_date]
+    
+    return filtered
 
 def add_cico_daily(data: dict):
     ws = get_cico_daily_worksheet()
@@ -972,7 +1015,6 @@ def add_cico_daily(data: dict):
             data.get('entered_by', '')
         ]
         ws.append_row(row)
-        
         # Trigger recalculation
         try:
             sync_result = sync_daily_entry_to_monthly(
@@ -983,7 +1025,9 @@ def add_cico_daily(data: dict):
             )
             print(f"DEBUG: Sync result: {sync_result}")
         except Exception as e:
-            print(f"DEBUG: Failed to sync to monthly sheet: {e}")
+             print(f"Error syncing CICO daily to monthly (continuing): {e}")
+
+        clear_cache("daily_cico")
 
         return {"message": "CICO daily record added"}
     except Exception as e:

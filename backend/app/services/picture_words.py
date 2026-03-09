@@ -34,6 +34,50 @@ def get_or_create_worksheet(ss, title: str, rows=200, cols=20):
 # 1. Roster (학생 명부) 관리 기반 - TierStatus 연동으로 변경
 # ─────────────────────────────────────────────────────────────
 
+_pw_cache = {"vocab": {"data": [], "timestamp": 0}}
+PW_CACHE_TTL = 60
+
+def clear_pw_cache():
+    global _pw_cache
+    _pw_cache["vocab"] = {"data": [], "timestamp": 0}
+
+def fetch_all_vocab_records():
+    global _pw_cache
+    now = time.time()
+    
+    if _pw_cache["vocab"]["data"] and (now - _pw_cache["vocab"]["timestamp"] < PW_CACHE_TTL):
+        return _pw_cache["vocab"]["data"]
+        
+    ss = get_pw_spreadsheet()
+    if not ss:
+        return []
+    ws = get_global_vocab_ws(ss)
+    
+    try:
+        try:
+            records = ws.get_all_records()
+        except Exception as e:
+            print(f"[PW] Fallback to get_all_values: {e}")
+            all_vals = ws.get_all_values()
+            if len(all_vals) < 2:
+                records = []
+            else:
+                headers = all_vals[0]
+                records = []
+                for row in all_vals[1:]:
+                    record = {}
+                    for ci, h in enumerate(headers):
+                        if ci < len(row) and h:
+                            record[h] = row[ci]
+                    records.append(record)
+                    
+        _pw_cache["vocab"] = {"data": records, "timestamp": now}
+        return records
+    except Exception as e:
+        print(f"[PW] Error fetching vocab: {e}")
+        return []
+
+
 def fetch_all_students() -> list[dict]:
     """TierStatus 시트에서 전체 재학 중인 학생 목록 반환"""
     # TierStatus 데이터 가져오기 (sheets.py 함수 활용)
@@ -98,9 +142,8 @@ def fetch_student_vocab(class_id: str, student_name: str) -> list[dict]:
         
     ws = get_global_vocab_ws(ss)
     
-    # 캐시/최적화 없이 전체 가져오기.
-    # TODO: 데이터가 25,000줄이 넘어가면 get_all_records() 호출에 시간이 걸릴 수 있습니다.
-    records = ws.get_all_records()
+    # Use centralized cache to avoid OOM and timeout
+    records = fetch_all_vocab_records()
     
     student_records = []
     max_row_idx = 1 # 헤더 1번
@@ -111,13 +154,14 @@ def fetch_student_vocab(class_id: str, student_name: str) -> list[dict]:
         
         if str(r.get('학급ID', '')) == str(class_id) and str(r.get('학생이름', '')) == str(student_name):
             # 체크리스트 값 가공
+            r_copy = dict(r) # Don't mutate the cached dictionary
             for vb in VBS:
-                val = str(r.get(vb, '')).strip().upper()
-                r[vb] = val in ('TRUE', '1', 'YES', '✓', 'O')
+                val = str(r_copy.get(vb, '')).strip().upper()
+                r_copy[vb] = val in ('TRUE', '1', 'YES', '✓', 'O')
             # 합계 재계산
-            r['합계'] = sum(1 for vb in VBS if r[vb])
-            r['row_index'] = idx + 2 # 업데이트를 위한 실제 시트 행 번호
-            student_records.append(r)
+            r_copy['합계'] = sum(1 for vb in VBS if r_copy[vb])
+            r_copy['row_index'] = idx + 2 # 업데이트를 위한 실제 시트 행 번호
+            student_records.append(r_copy)
             
     # 데이터가 없다면 초기 어휘 123개 주입
     if not student_records:
@@ -148,7 +192,7 @@ def update_student_vocab(class_id: str, student_name: str, vocab_id: int, update
         return {"error": "Sheet not accessible"}
         
     ws = get_global_vocab_ws(ss)
-    records = ws.get_all_records()
+    records = fetch_all_vocab_records()
     
     target_row = None
     # 업데이트할 행 번호 찾기 (선형 탐색 - 나중에 최적화 포인트)
@@ -190,17 +234,9 @@ def update_student_vocab(class_id: str, student_name: str, vocab_id: int, update
     cert_status = fetch_certification_status(class_id, student_name)
     update_tierstatus_certification(student_name, cert_status["total_badges"])
 
+    clear_pw_cache()
     return {"message": "업데이트 완료", "total_badges": cert_status["total_badges"]}
-    row_data = ws.row_values(target_row) # 0-based 리스트 반환
-    total = 0
-    # 열 범위: D~I 가 아니고 G~L 이므로 cols index = 6~11
-    for col in range(6, 12):
-        if col < len(row_data) and str(row_data[col]).upper() == 'TRUE':
-            total += 1
-            
-    ws.update_cell(target_row, 13, total) # 13: 합계 열
 
-    return {"message": "업데이트 완료"}
 
 # ─────────────────────────────────────────────────────────────
 # 3. 수업 가이드
@@ -295,18 +331,7 @@ def fetch_class_overview(class_id: str = None) -> list[dict]:
     students = fetch_students_by_class(class_id) if class_id else fetch_all_students()
     results = []
     
-    # 미리 모든 데이터를 한 번 읽어옵니다. (매 학생마다 API 호출을 피하기 위함)
-    ss = get_pw_spreadsheet()
-    if not ss:
-        return []
-        
-    try:
-        # DB에서 어휘 시트를 로드하고 한방에 캐싱
-        ws = ss.worksheet('PW_어휘데이터')
-        all_vocab_records = ws.get_all_records()
-    except gspread.WorksheetNotFound:
-        # 데이터가 아직 아예 없으면
-        all_vocab_records = []
+    all_vocab_records = fetch_all_vocab_records()
         
     for s in students:
         cid = str(s.get('학급ID', ''))
