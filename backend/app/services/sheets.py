@@ -146,10 +146,10 @@ def fetch_all_records(force_refresh: bool = False):
             
             mapped_row = {
                 "행동발생 날짜": row.get("행동발생날짜", ""),
-                "시간대": row.get("시간대 (복수)", ""),
+                "시간대": row.get("시간대", ""),
                 "장소": row.get("행동 발생 장소", ""),
                 "강도": row.get("강도(1~5점 척도)", ""),
-                "행동유형": row.get("(주요)행동유형", ""),
+                "행동유형": row.get("행동유형(핵심행동으로택1)", ""),
                 "기능": row.get("기능(이번 행동을 통해 파악된 기능)", ""),
                 "배경": "",
                 "결과": "",
@@ -160,7 +160,7 @@ def fetch_all_records(force_refresh: bool = False):
                 "입력일": row.get("타임스탬프", ""),
                 "비고": row.get("특기사항(기타)", ""),
                 "분리지도 여부": row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", ""),
-                "발생빈도": row.get("발생횟수", 1)
+                "발생빈도": row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", 1)
             }
             mapped_values.append(mapped_row)
             
