@@ -2313,18 +2313,47 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     try:
         records = ws.get_all_records()
     except Exception as e:
-        return {"error": str(e)}
+        # Fallback: get_all_records() crashes on duplicate/empty headers
+        print(f"get_all_records failed for TierStatus, falling back to get_all_values: {e}")
+        try:
+            all_vals = ws.get_all_values()
+            if len(all_vals) < 2:
+                return {"error": "TierStatus sheet is empty"}
+            headers = all_vals[0]
+            records = []
+            for row in all_vals[1:]:
+                record = {}
+                for ci, h in enumerate(headers):
+                    if ci < len(row) and h:  # skip empty headers
+                        record[h] = row[ci]
+                records.append(record)
+        except Exception as e2:
+            return {"error": f"TierStatus 데이터 로드 실패: {str(e2)[:100]}"}
     
     tier3_students = []
+    seen_codes = set()  # Prevent duplicate entries
     for r in records:
-        # Check multiple columns for Tier 3 status
-        is_t3 = str(r.get("Tier3", r.get("지원단계", ""))).strip() == "O" or "3" in str(r.get("Tier", r.get("지원단계", "")))
-        is_t3p = str(r.get("Tier3+", "")).strip() == "O" or "3+" in str(r.get("Tier", r.get("지원단계", "")))
+        student_code = str(r.get("학생코드", "")).strip()
+        if not student_code or student_code in seen_codes:
+            continue
+        
+        # Check Tier3+ FIRST (more specific), then Tier3
+        is_t3p = str(r.get("Tier3+", "")).strip() == "O"
+        is_t3 = str(r.get("Tier3", "")).strip() == "O"
+        
+        # Fallback: check legacy "Tier" or "지원단계" column
+        if not is_t3 and not is_t3p:
+            tier_val = str(r.get("Tier", r.get("지원단계", ""))).strip()
+            if "3+" in tier_val:
+                is_t3p = True
+            elif "3" in tier_val:
+                is_t3 = True
         
         if is_t3 or is_t3p:
+            seen_codes.add(student_code)
             tier3_students.append({
-                "code": str(r.get("학생코드", "")).strip(),
-                "name": r.get("학생이름", ""),
+                "code": student_code,
+                "name": str(r.get("학생이름", "")).strip(),
                 "class": str(r.get("학급", "")).strip(),
                 "tier": "Tier3+" if is_t3p else "Tier3",
                 "beable_code": str(r.get("BeAble코드", "")).strip(),
@@ -2347,7 +2376,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         # Return students without behavior data
         for s in tier3_students:
             s.update({"incidents": 0, "max_intensity": 0, "avg_intensity": 0,
-                      "behavior_types": [], "decision": "Tier3 유지", "decision_color": "#ef4444"})
+                      "behavior_types": [], "weekly_trend": [], "weekly_trend_freq": [],
+                      "decision": "Tier3 유지", "decision_color": "#ef4444"})
         return {
             "students": tier3_students,
             "summary": {"total_students": len(tier3_students), "total_incidents": 0, "avg_intensity": 0},
@@ -2376,23 +2406,42 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     
     # Map BeAble codes to student codes
     beable_mapping = get_beable_code_mapping()
-    beable_to_code = {k: v['student_code'] for k, v in beable_mapping.items()}
+    # Build reverse map: student_code -> set of all codes (student_code + beable codes)
+    code_to_all_codes = {}
+    for beable_key, info in beable_mapping.items():
+        sc = str(info.get('student_code', '')).strip()
+        if sc:
+            if sc not in code_to_all_codes:
+                code_to_all_codes[sc] = {sc}
+            if beable_key and beable_key != sc:
+                code_to_all_codes[sc].add(str(beable_key).strip())
     
-    # Build code set for Tier3 students
-    tier3_codes = {s["code"] for s in tier3_students}
-    tier3_beable = {b for b, info in beable_mapping.items() if info['student_code'] in tier3_codes}
+    # Normalize string columns for matching
+    if '학생코드' in df.columns:
+        df['학생코드'] = df['학생코드'].astype(str).str.strip()
+    if '코드번호' in df.columns:
+        df['코드번호'] = df['코드번호'].astype(str).str.strip()
     
     total_incidents = 0
     total_intensity_sum_all = 0
     
     for student in tier3_students:
         code = student["code"]
+        beable_code = student.get("beable_code", "")
         
-        # Filter behavior data for this student using 학생코드 (4-digit)
-        if '학생코드' in df.columns and code:
-            s_df = df[df['학생코드'].astype(str) == str(code)]
-        else:
-            s_df = pd.DataFrame()
+        # Build set of all codes this student might appear under
+        all_codes = code_to_all_codes.get(code, {code})
+        if beable_code:
+            all_codes.add(beable_code)
+        all_codes.add(code)  # Always include the primary code
+        
+        # Filter behavior data matching ANY of the student's codes
+        mask = pd.Series(False, index=df.index)
+        if '학생코드' in df.columns:
+            mask = mask | df['학생코드'].isin(all_codes)
+        if '코드번호' in df.columns:
+            mask = mask | df['코드번호'].isin(all_codes)
+        s_df = df[mask]
         
         # 보고빈도 = row count (number of form submissions for this student)
         incidents = len(s_df)
@@ -2403,7 +2452,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         behavior_types = []
         if not s_df.empty and '행동유형' in s_df.columns:
             bt_counts = s_df['행동유형'].value_counts()
-            behavior_types = [{"name": k, "value": int(v)} for k, v in bt_counts.items()]
+            behavior_types = [{"name": str(k), "value": int(v)} for k, v in bt_counts.items() if str(k).strip()]
         
         # 발생빈도 (weekly: sum of actual occurrences for the one dedicated chart)
         weekly_trend_freq = []
@@ -2411,19 +2460,20 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         weekly_trend = []
         if not s_df.empty and 'date_obj' in s_df.columns:
             s_copy = s_df.copy().dropna(subset=['date_obj'])
-            s_copy['week'] = s_copy['date_obj'].dt.isocalendar().week.astype(int)
-            s_copy['year'] = s_copy['date_obj'].dt.year
-            # Row count per week (보고빈도)
-            w_counts = s_copy.groupby(['year', 'week']).size().reset_index(name='count')
-            for _, row in w_counts.iterrows():
-                weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
-            
-            # Sum of 발생빈도 per week (발생빈도 - the one specific chart requested)
-            if '발생빈도' in s_copy.columns:
-                s_copy['발생빈도_num'] = pd.to_numeric(s_copy['발생빈도'], errors='coerce').fillna(0)
-                f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
-                for _, row in f_counts.iterrows():
-                    weekly_trend_freq.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['freq'])})
+            if not s_copy.empty:
+                s_copy['week'] = s_copy['date_obj'].dt.isocalendar().week.astype(int)
+                s_copy['year'] = s_copy['date_obj'].dt.year
+                # Row count per week (보고빈도)
+                w_counts = s_copy.groupby(['year', 'week']).size().reset_index(name='count')
+                for _, row in w_counts.iterrows():
+                    weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
+                
+                # Sum of 발생빈도 per week (발생빈도 - the one specific chart requested)
+                if '발생빈도' in s_copy.columns:
+                    s_copy['발생빈도_num'] = pd.to_numeric(s_copy['발생빈도'], errors='coerce').fillna(0)
+                    f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
+                    for _, row in f_counts.iterrows():
+                        weekly_trend_freq.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['freq'])})
         
         total_incidents += incidents  # sum of row counts across Tier3 students
         if not s_df.empty and '강도' in s_df.columns:
