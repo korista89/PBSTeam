@@ -7,12 +7,19 @@ import pandas as pd
 import re
 import datetime
 
+_sheets_client = None
+
 def get_sheets_client():
     """
     Auhtenticates with Google Sheets API and returns the client.
     Prioritizes 'GOOGLE_SERVICE_ACCOUNT_JSON' env var (for Production/Render).
     Fallbacks to 'service_account.json' file (for Local Dev).
+    Note: Token logic handles refresh automatically.
     """
+    global _sheets_client
+    if _sheets_client is not None:
+        return _sheets_client
+
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     
     # 1. Try Environment Variable (Production)
@@ -21,7 +28,8 @@ def get_sheets_client():
         try:
             creds_dict = json.loads(env_creds)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            return gspread.authorize(creds)
+            _sheets_client = gspread.authorize(creds)
+            return _sheets_client
         except Exception as e:
             print(f"Error loading credentials from env: {e}")
             return None
@@ -29,7 +37,8 @@ def get_sheets_client():
     # 2. Try Local File (Development)
     if os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
         creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
-        return gspread.authorize(creds)
+        _sheets_client = gspread.authorize(creds)
+        return _sheets_client
         
     print(f"Warning: Credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
     return None
@@ -66,7 +75,7 @@ _cache = {
     "users": {"data": [], "timestamp": 0},
     "board": {"data": [], "timestamp": 0}
 }
-CACHE_TTL = 10  # 10 seconds for near real-time
+CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
 
 def clear_cache(key: str = None):
     if key and key in _cache:
@@ -74,6 +83,10 @@ def clear_cache(key: str = None):
     elif key is None:
         for k in _cache:
             _cache[k] = {"data": [], "timestamp": 0}
+            
+    # Also explicitly support 'tierstatus' since it was added later
+    if key == "tierstatus" and "tierstatus" not in _cache:
+        _cache["tierstatus"] = {"data": [], "timestamp": 0}
 
 def fetch_all_records(force_refresh: bool = False):
     global _cache
@@ -624,19 +637,43 @@ def reset_tier_status_sheet():
 
 
 def fetch_student_status():
-    """Fetch all student tier status records"""
+    """Fetch all student tier status records with caching and fallback for duplicate headers"""
+    now = time.time()
+    if "tierstatus" not in _cache:
+        _cache["tierstatus"] = {"data": [], "timestamp": 0}
+        
+    if _cache["tierstatus"]["data"] and now - _cache["tierstatus"]["timestamp"] < CACHE_TTL:
+        return _cache["tierstatus"]["data"]
+        
     ws = get_student_status_worksheet()
     if not ws:
         return []
     
     try:
-        records = ws.get_all_records()
+        try:
+            records = ws.get_all_records()
+        except Exception as e:
+            print(f"get_all_records failed for TierStatus, falling back to get_all_values: {e}")
+            all_vals = ws.get_all_values()
+            if len(all_vals) < 2:
+                return []
+            headers = all_vals[0]
+            records = []
+            for row in all_vals[1:]:
+                record = {}
+                for ci, h in enumerate(headers):
+                    if ci < len(row) and h:
+                        record[h] = row[ci]
+                records.append(record)
+                
         # Add row_index for updates
         for idx, record in enumerate(records):
             record['row_index'] = idx + 2  # +2 for header and 1-indexing
             # Ensure student code is string
             if '학생코드' in record:
                 record['학생코드'] = str(record['학생코드'])
+                
+        _cache["tierstatus"] = {"data": records, "timestamp": now}
         return records
     except Exception as e:
         print(f"Error fetching status: {e}")
@@ -658,31 +695,36 @@ def update_student_tier(code: str, tier_values: dict, memo: str = ""):
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         
-        # Column mapping (1-indexed)
+        # Column mapping (A=1, B=2, etc. H=8)
         tier_columns = {
-            'Tier1': 8,
-            'Tier2(CICO)': 9,
-            'Tier2(SST)': 10,
-            'Tier3': 11,
-            'Tier3+': 12,
+            'Tier1': 'H',
+            'Tier2(CICO)': 'I',
+            'Tier2(SST)': 'J',
+            'Tier3': 'K',
+            'Tier3+': 'L',
         }
         
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2  # +2 for header and 1-indexing
+                batch_updates = []
                 
                 # Update each tier column
-                for tier_name, col_num in tier_columns.items():
+                for tier_name, col_letter in tier_columns.items():
                     if tier_name in tier_values:
                         value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
-                        ws.update_cell(row_num, col_num, value)
+                        batch_updates.append({"range": f"{col_letter}{row_num}", "values": [[value]]})
                 
-                # Update 변경일 (column 13)
-                ws.update_cell(row_num, 13, today)
+                # Update 변경일 (column 13 -> M)
+                batch_updates.append({"range": f"M{row_num}", "values": [[today]]})
                 
-                # Update 메모 (column 14)
+                # Update 메모 (column 14 -> N)
                 if memo:
-                    ws.update_cell(row_num, 14, memo)
+                    batch_updates.append({"range": f"N{row_num}", "values": [[memo]]})
+                
+                if batch_updates:
+                    ws.batch_update(batch_updates)
+                clear_cache("tierstatus") # Invalidate cache if implemented
                 
                 return {"message": f"Tier updated for {code}", "code": code, "tiers": tier_values}
         
@@ -2306,29 +2348,9 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     Returns Tier3 student list with crisis behavior stats.
     """
     # 1. Get Tier3 students from TierStatus
-    ws = get_student_status_worksheet()
-    if not ws:
-        return {"error": "TierStatus sheet not accessible"}
-    
-    try:
-        records = ws.get_all_records()
-    except Exception as e:
-        # Fallback: get_all_records() crashes on duplicate/empty headers
-        print(f"get_all_records failed for TierStatus, falling back to get_all_values: {e}")
-        try:
-            all_vals = ws.get_all_values()
-            if len(all_vals) < 2:
-                return {"error": "TierStatus sheet is empty"}
-            headers = all_vals[0]
-            records = []
-            for row in all_vals[1:]:
-                record = {}
-                for ci, h in enumerate(headers):
-                    if ci < len(row) and h:  # skip empty headers
-                        record[h] = row[ci]
-                records.append(record)
-        except Exception as e2:
-            return {"error": f"TierStatus 데이터 로드 실패: {str(e2)[:100]}"}
+    records = fetch_student_status()
+    if not records:
+         return {"error": "TierStatus sheet not accessible or empty"}
     
     tier3_students = []
     seen_codes = set()  # Prevent duplicate entries
