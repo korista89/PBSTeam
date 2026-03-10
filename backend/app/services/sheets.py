@@ -2410,7 +2410,7 @@ def get_cico_report_data(month: int):
             "month": month_name,
             "students": students,
             "summary": {
-                "total_students": len(students),
+                "total_students": len(set(s["code"] for s in students)), # Count unique students
                 "avg_rate": avg_rate,
                 "achieved_count": achieved_count,
                 "not_achieved_count": len(students) - achieved_count,
@@ -2482,7 +2482,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                       "decision": "Tier3 유지", "decision_color": "#ef4444"})
         return {
             "students": tier3_students,
-            "summary": {"total_students": len(tier3_students), "total_incidents": 0, "avg_intensity": 0},
+            "summary": {"total_students": len(set(s["code"] for s in tier3_students)), "total_incidents": 0, "avg_intensity": 0},
         }
     
     df = pd.DataFrame(raw_data)
@@ -2634,7 +2634,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     return {
         "students": tier3_students,
         "summary": {
-            "total_students": len(tier3_students),
+            "total_students": len(set(s["code"] for s in tier3_students)),
             "total_incidents": total_incidents,  # 보고빈도 (row count)
             "avg_intensity": overall_avg,
         },

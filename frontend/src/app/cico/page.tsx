@@ -292,7 +292,7 @@ export default function CICOGridPage() {
         return {
           ...prev,
           students: prev.students.map(s =>
-            s.학생코드 === studentCode
+            s.row === student.row
               ? { ...s, [field]: value }
               : s
           ),
@@ -645,7 +645,7 @@ export default function CICOGridPage() {
                     </thead>
                     <tbody>
                       {filteredData.students.map(student => (
-                        <tr key={student.학생코드} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                        <tr key={`${student.학생코드}-${student.row}`} style={{ borderBottom: "1px solid #e5e7eb" }}>
                           {/* Fixed info cells */}
                           <td style={tdStyle}>{student.번호}</td>
                           <td style={{ ...tdStyle, fontSize: "0.75rem", textAlign: "left" }}>{student.학급}</td>
