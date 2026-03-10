@@ -91,6 +91,22 @@ def clear_cache(key: str = None):
     if key == "daily_cico" and "daily_cico" not in _cache:
         _cache["daily_cico"] = {"data": [], "timestamp": 0}
 
+def normalize_date_string(date_str: str) -> str:
+    """Normalize typical forms date format 'YYYY. M. D.' or similar to 'YYYY-MM-DD'."""
+    if not date_str:
+        return ""
+    date_str = str(date_str).strip()
+    import re
+    match = re.search(r'(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})', date_str)
+    if match:
+        return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+    
+    m2 = re.search(r'^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$', date_str)
+    if m2:
+        return f"{m2.group(1)}-{int(m2.group(2)):02d}-{int(m2.group(3)):02d}"
+        
+    return date_str
+
 def fetch_all_records(force_refresh: bool = False):
     global _cache
     now = time.time()
@@ -145,7 +161,7 @@ def fetch_all_records(force_refresh: bool = False):
                         break
             
             mapped_row = {
-                "행동발생 날짜": row.get("행동발생날짜", ""),
+                "행동발생 날짜": normalize_date_string(row.get("행동발생날짜", "")),
                 "시간대": row.get("시간대", ""),
                 "장소": row.get("행동 발생 장소", ""),
                 "강도": row.get("강도(1~5점 척도)", ""),

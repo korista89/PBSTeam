@@ -1,10 +1,12 @@
+from datetime import datetime
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, List
 from app.services.analysis import get_analytics_data
 from app.services.sheets import (
     fetch_all_records, get_beable_code_mapping, get_tier3_report_data,
-    fetch_student_status, fetch_meeting_notes, get_monthly_cico_data
+    fetch_student_status, fetch_meeting_notes, get_monthly_cico_data,
+    normalize_date_string
 )
 
 router = APIRouter()
@@ -16,10 +18,18 @@ def _filter_by_date(records: list, start_date: str = None, end_date: str = None)
     """Filter BehaviorLogs1 by date range. Returns all records if no dates provided."""
     if not start_date or not end_date:
         return records
-    return [
-        r for r in records
-        if start_date <= str(r.get("행동발생 날짜", "")) <= end_date
-    ]
+    
+    # Normalize inputs to YYYY-MM-DD
+    sd = normalize_date_string(start_date)
+    ed = normalize_date_string(end_date)
+    
+    filtered = []
+    for r in records:
+        # Normalize record date for comparison
+        rd = normalize_date_string(r.get("행동발생 날짜", ""))
+        if rd and sd <= rd <= ed:
+            filtered.append(r)
+    return filtered
 
 
 class MeetingMinutesRequest(BaseModel):
@@ -56,7 +66,6 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
     total_incidents = len(records)
     
     # Calculate daily average
-    from datetime import datetime
     try:
         d1 = datetime.strptime(req.start_date, "%Y-%m-%d")
         d2 = datetime.strptime(req.end_date, "%Y-%m-%d")

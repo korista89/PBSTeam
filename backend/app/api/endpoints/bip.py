@@ -139,7 +139,8 @@ async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
     from app.services.ai_insight import generate_full_bip
     from app.services.sheets import (
         fetch_all_records, fetch_student_status,
-        fetch_meeting_notes, get_monthly_cico_data
+        fetch_meeting_notes, get_monthly_cico_data,
+        normalize_date_string
     )
     import datetime
     
@@ -152,9 +153,11 @@ async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
     
     # Filter by date if provided
     if req.start_date and req.end_date:
+        sd = normalize_date_string(req.start_date)
+        ed = normalize_date_string(req.end_date)
         student_logs = [
             r for r in student_logs
-            if req.start_date <= str(r.get("행동발생 날짜", "")) <= req.end_date
+            if sd <= normalize_date_string(r.get("행동발생 날짜", "")) <= ed
         ]
     
     # 2) TierStatus
