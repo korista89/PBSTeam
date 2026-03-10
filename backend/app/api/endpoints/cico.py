@@ -98,12 +98,13 @@ class SettingsUpdateRequest(BaseModel):
     month: int
     student_code: str
     settings: dict  # key-value pairs like {"목표행동": "착석 유지", "목표행동 유형": "증가 목표행동"}
+    row_index: Optional[int] = None
 
 
 @router.post("/settings")
 async def update_settings(req: SettingsUpdateRequest):
     """Update CICO settings for a student."""
-    result = update_student_cico_settings(req.month, req.student_code, req.settings)
+    result = update_student_cico_settings(req.month, req.student_code, req.settings, req.row_index)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result

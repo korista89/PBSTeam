@@ -1449,19 +1449,33 @@ def _calculate_cico_rate(student: dict) -> dict:
                 rate_num = ((max_possible - total_score) / max_possible) * 100
     
     else:
-        # Free input (1~100회 or 1~100분) — use average directly as rate
+        # Free input (1~100회 or 1~100분 or 0점/1점/2점 with unit)
         total_score = 0
         count = 0
         for v in filled_values:
             try:
-                s = float(v)
+                # Remove common units before conversion
+                v_clean = str(v).replace("점", "").replace("회", "").replace("분", "").strip()
+                s = float(v_clean)
                 total_score += s
                 count += 1
             except (ValueError, TypeError):
                 continue
+        
         if count > 0:
-            avg = total_score / count
-            rate_num = avg  # The average IS the rate for free-input scales
+            if scale == "1~100회" or scale == "1~100분":
+                # For count/time, rate is average
+                rate_num = total_score / count
+            elif scale == "0점/1점/2점":
+                # Handle units in 0/1/2점
+                max_possible = count * 2
+                if behavior_type == "증가 목표행동":
+                    rate_num = (total_score / max_possible) * 100
+                else:
+                    rate_num = ((max_possible - total_score) / max_possible) * 100
+            else:
+                # Fallback
+                rate_num = (total_score / count)
     
     # Format rate string
     if rate_num is not None:
@@ -1589,6 +1603,9 @@ def create_monthly_cico_sheet(year: int, month: int):
                 ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'],
                 showCustomUi=True
             )
+            
+            # Initial validation for daily columns logic is handled by Apps Script onEdit
+            # But we can set a default behavior here if needed.
             
             # Column J: 목표 달성 기준
             ws.add_validation(
@@ -2033,10 +2050,11 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
         return {"error": str(e)}
 
 
-def update_student_cico_settings(month: int, student_code: str, settings_data: dict):
+def update_student_cico_settings(month: int, student_code: str, settings_data: dict, row_index: int = None):
     """
     Update CICO settings for a student in a monthly sheet.
     settings_data can include: 목표행동, 목표행동 유형, 척도, 입력 기준, 목표 달성 기준
+    If row_index is provided, it targets that specific row.
     """
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
@@ -2054,16 +2072,18 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         all_values = ws.get_all_values()
         headers = all_values[0]
         
-        # Find student row
-        code_idx = headers.index("학생코드") if "학생코드" in headers else 2
-        target_row = None
-        for i, row in enumerate(all_values[1:], start=2):
-            if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
-                target_row = i
-                break
+        target_row = row_index
         
         if not target_row:
-            return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
+            # Find student row by code if row_index not provided
+            code_idx = headers.index("학생코드") if "학생코드" in headers else 2
+            for i, row in enumerate(all_values[1:], start=2):
+                if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
+                    target_row = i
+                    break
+        
+        if not target_row:
+            return {"error": f"학생코드 {student_code} 또는 행번호 {row_index}를 찾을 수 없습니다."}
         
         # Update settings columns
         updates = []
@@ -2075,7 +2095,7 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         if updates:
             ws.batch_update(updates)
         
-        return {"message": f"Settings updated for {student_code}"}
+        return {"message": f"Settings updated for {student_code} at row {target_row}"}
     
     except Exception as e:
         print(f"Error updating CICO settings: {e}")

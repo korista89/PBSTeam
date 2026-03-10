@@ -54,9 +54,13 @@ function getInputOptions(scale: string): string[] {
   const normParams = scale?.trim() || "";
 
   if (normParams.includes("O/X")) return ["O", "X"];
-  if (normParams.includes("0점/1점/2점") || normParams.includes("0/1/2")) return ["0", "1", "2"];
+  if (normParams.includes("0점/1점/2점")) return ["0점", "1점", "2점"];
   if (normParams.includes("0~5")) return ["0", "1", "2", "3", "4", "5"];
   if (normParams.includes("0~7")) return ["0", "1", "2", "3", "4", "5", "6", "7"];
+  
+  // For 100 items, nested dropdown might be better, but let's keep it clean
+  if (normParams.includes("1~100회")) return []; // Use numeric input
+  if (normParams.includes("1~100분")) return []; // Use numeric input
 
   return []; // Free input
 }
@@ -272,12 +276,14 @@ export default function CICOGridPage() {
   };
 
   // Handle settings change (목표행동, 유형, 척도, etc.)
-  const handleSettingsChange = async (studentCode: string, field: string, value: string) => {
+  const handleSettingsChange = async (student: CICOStudent, field: string, value: string) => {
+    const studentCode = student.학생코드;
     try {
       await axios.post(`${apiUrl}/api/v1/cico/settings`, {
         month,
         student_code: studentCode,
         settings: { [field]: value },
+        row_index: student.row // Pass the row index to target uniquely
       });
 
       // Update local state
@@ -655,7 +661,7 @@ export default function CICOGridPage() {
                               <input
                                 autoFocus
                                 defaultValue={student.목표행동}
-                                onBlur={e => handleSettingsChange(student.학생코드, "목표행동", e.target.value)}
+                                onBlur={e => handleSettingsChange(student, "목표행동", e.target.value)}
                                 onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                                 style={{ width: "100%", padding: "2px 4px", border: "1px solid #6366f1", borderRadius: "4px", fontSize: "0.8rem" }}
                               />
@@ -668,7 +674,7 @@ export default function CICOGridPage() {
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
                               value={student["목표행동 유형"]}
-                              onChange={e => handleSettingsChange(student.학생코드, "목표행동 유형", e.target.value)}
+                              onChange={e => handleSettingsChange(student, "목표행동 유형", e.target.value)}
                               style={{ border: "none", background: "transparent", fontSize: "0.75rem", cursor: "pointer", width: "100%" }}
                             >
                               {TYPE_OPTIONS.map(opt => (
@@ -681,7 +687,7 @@ export default function CICOGridPage() {
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
                               value={student.척도}
-                              onChange={e => handleSettingsChange(student.학생코드, "척도", e.target.value)}
+                              onChange={e => handleSettingsChange(student, "척도", e.target.value)}
                               style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
                             >
                               {SCALE_OPTIONS.map(opt => (
@@ -694,7 +700,7 @@ export default function CICOGridPage() {
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
                               value={student["목표 달성 기준"]}
-                              onChange={e => handleSettingsChange(student.학생코드, "목표 달성 기준", e.target.value)}
+                              onChange={e => handleSettingsChange(student, "목표 달성 기준", e.target.value)}
                               style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
                             >
                               {(student["목표행동 유형"] === "감소 목표행동" ? CRITERIA_DECREASE : CRITERIA_INCREASE).map(opt => (
