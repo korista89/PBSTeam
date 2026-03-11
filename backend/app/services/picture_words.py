@@ -392,11 +392,44 @@ def fetch_minutes(class_id: str = None) -> list[dict]:
     ss = get_pw_spreadsheet()
     if not ss:
         return []
-    ws = get_minutes_ws(ss)
-    records = ws.get_all_records()
+    
+    # 1. PW_협의록 데이터
+    ws_min = get_minutes_ws(ss)
+    records_min = ws_min.get_all_records()
+    minutes = []
+    for idx, r in enumerate(records_min):
+        minutes.append({
+            "날짜": str(r.get('날짜', '')),
+            "구분": str(r.get('구분', '')),
+            "출처(학생/차시)": str(r.get('출처(학생/차시)', '')),
+            "내용": str(r.get('내용', '')),
+            "학급ID": str(r.get('학급ID', '')),
+            "학급명": str(r.get('학급명', '')),
+            "source_type": "minutes",
+            "row_index": idx + 2
+        })
+    
+    # 2. PW_수업가이드의 '준비협의내용' 가져오기
+    ws_lesson = get_lesson_ws(ss)
+    records_lesson = ws_lesson.get_all_records()
+    for idx, r in enumerate(records_lesson):
+        prep_content = str(r.get('준비협의내용', '')).strip()
+        if prep_content:
+            minutes.append({
+                "날짜": str(r.get('협의날짜', '')),
+                "구분": "수업준비",
+                "출처(학생/차시)": f"{r.get('차시', '')}차시({r.get('영역','')})",
+                "내용": prep_content,
+                "학급ID": "G", # Global or Lesson
+                "학급명": "수업가이드",
+                "source_type": "lessons",
+                "row_index": idx + 2
+            })
+
     if class_id:
-        records = [r for r in records if str(r.get('학급ID', '')) == str(class_id)]
-    return sorted(records, key=lambda x: str(x.get('날짜', '')), reverse=True)
+        minutes = [r for r in minutes if str(r.get('학급ID', '')) == str(class_id) or r.get("source_type") == "lessons"]
+    
+    return sorted(minutes, key=lambda x: str(x.get('날짜', '')), reverse=True)
 
 def add_minute_entry(date: str, kind: str, source: str, content: str, class_id: str = '', class_name: str = '') -> dict:
     ss = get_pw_spreadsheet()
@@ -404,15 +437,46 @@ def add_minute_entry(date: str, kind: str, source: str, content: str, class_id: 
         return {"error": "Sheet not accessible"}
     ws = get_minutes_ws(ss)
     ws.append_row([date, kind, source, content, class_id, class_name])
+    clear_pw_cache()
     return {"message": "협의록 추가 완료"}
 
-def delete_minute_entry(row_index: int) -> dict:
+def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict:
     ss = get_pw_spreadsheet()
     if not ss:
         return {"error": "Sheet not accessible"}
-    ws = get_minutes_ws(ss)
-    ws.delete_rows(row_index + 1)
-    return {"message": "삭제 완료"}
+        
+    if source_type == "minutes":
+        ws = get_minutes_ws(ss)
+        col_map = {"날짜": 1, "구분": 2, "출처(학생/차시)": 3, "내용": 4, "학급ID": 5, "학급명": 6}
+    elif source_type == "lessons":
+        ws = get_lesson_ws(ss)
+        col_map = {"내용": 7, "날짜": 8} # 수업가이드에서는 내용=준비협의내용(col 7), 날짜=협의날짜(col 8)
+    else:
+        return {"error": "Invalid source_type"}
+
+    for key, val in updates.items():
+        if key in col_map:
+            ws.update_cell(row_index, col_map[key], str(val))
+    
+    return {"message": "업데이트 완료"}
+
+def delete_minute_entry(source_type: str, row_index: int) -> dict:
+    ss = get_pw_spreadsheet()
+    if not ss:
+        return {"error": "Sheet not accessible"}
+        
+    if source_type == "minutes":
+        ws = get_minutes_ws(ss)
+        ws.delete_rows(row_index)
+    elif source_type == "lessons":
+        ws = get_lesson_ws(ss)
+        # 수업가이드는 행 자체를 지우면 안됨. 내용만 비움.
+        ws.update_cell(row_index, 7, "")
+        ws.update_cell(row_index, 8, "")
+    else:
+        return {"error": "Invalid source_type"}
+        
+    return {"message": "삭제/초기화 완료"}
 
 # ─────────────────────────────────────────────────────────────
 # 5. 학급 현황 (Overview)
@@ -437,13 +501,13 @@ def fetch_class_overview(class_id: str = None) -> list[dict]:
         vocab = [r for r in all_vocab_records if str(r.get('학급ID', '')) == cid and str(r.get('학생이름', '')) == sname]
         
         if not vocab:
-            # 아직 데이터 활성화가 안된 학생 (한번도 클릭조차 안한 상태)
-            continue
-            
-        domain_counts = {}
-        for domain in DOMAINS:
-            count = sum(1 for v in vocab if v.get('범주') == domain and any(v.get(vb, False) for vb in VBS))
-            domain_counts[domain] = count
+            # 아직 데이터 활성화가 안된 학생도 Overview에 포함 (진행률 0%)
+            domain_counts = {domain: 0 for domain in DOMAINS}
+        else:
+            domain_counts = {}
+            for domain in DOMAINS:
+                count = sum(1 for v in vocab if v.get('범주') == domain and any(v.get(vb, False) for vb in VBS))
+                domain_counts[domain] = count
             
         results.append({
             "class_id": cid,

@@ -47,6 +47,8 @@ interface MinuteRow {
   "출처(학생/차시)": string;
   내용: string;
   학급ID: string;
+  source_type: string;
+  row_index: number;
 }
 interface OverviewRow {
   class_id: string;
@@ -176,7 +178,7 @@ export default function PictureWordPage() {
     if (tab === "lessons") loadLessons();
     if (tab === "minutes") loadMinutes();
     if (tab === "overview") loadOverview();
-  }, [tab]);
+  }, [tab, selectedClassId]);
 
   useEffect(() => {
     if (tab === "checklist" && selectedStudent) loadVocab();
@@ -212,9 +214,10 @@ export default function PictureWordPage() {
 
   const loadOverview = () =>
     withLoading(async () => {
-      const url = isAdmin
-        ? `${API}/overview`
-        : `${API}/overview?class_id=${userClassId}`;
+      const classIdToUse = isAdmin ? selectedClassId : userClassId;
+      const url = classIdToUse
+        ? `${API}/overview?class_id=${classIdToUse}`
+        : `${API}/overview`;
       const res = await axios.get(url);
       setOverview(res.data);
     });
@@ -227,9 +230,10 @@ export default function PictureWordPage() {
 
   const loadMinutes = () =>
     withLoading(async () => {
-      const url = isAdmin
-        ? `${API}/minutes`
-        : `${API}/minutes?class_id=${userClassId}`;
+      const classIdToUse = isAdmin ? selectedClassId : userClassId;
+      const url = classIdToUse
+        ? `${API}/minutes?class_id=${classIdToUse}`
+        : `${API}/minutes`;
       const res = await axios.get(url);
       setMinutes(res.data);
     });
@@ -330,6 +334,20 @@ export default function PictureWordPage() {
     }
   };
 
+  const handleMinuteUpdate = async (sourceType: string, rowIndex: number, field: string, value: string) => {
+    try {
+      await axios.patch(`${API}/minutes`, {
+        source_type: sourceType,
+        row_index: rowIndex,
+        updates: { [field]: value }
+      });
+      // 낙관적 업데이트 생략하고 다시 로드
+      loadMinutes();
+    } catch {
+      alert("협의록 수정 실패");
+    }
+  };
+
   // ── 스타일 헬퍼 ─────────────────────────────────────────
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: "10px 20px",
@@ -374,37 +392,22 @@ export default function PictureWordPage() {
   const renderStudentPanel = () => (
     <div style={{ width: "220px", flexShrink: 0 }}>
       <div style={cardStyle}>
-        {isAdmin && (
-          <>
-            <div
-              style={{
-                fontWeight: 700,
-                color: "#1e3a8a",
-                marginBottom: "12px",
-                fontSize: "0.95rem",
-              }}
-            >
-              📚 학급 선택
-            </div>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "8px",
-                border: "1px solid #e2e8f0",
-                marginBottom: "16px",
-                fontSize: "0.9rem",
-              }}
-            >
-              {availableClasses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.id})
-                </option>
-              ))}
-            </select>
-          </>
+        {/* 학급 정보 표시 (교사용) */}
+        {!isAdmin && (
+          <div
+            style={{
+              padding: "10px",
+              background: "#f0f9ff",
+              borderRadius: "8px",
+              marginBottom: "16px",
+              textAlign: "center",
+              fontWeight: 700,
+              color: "#0369a1",
+              fontSize: "0.85rem"
+            }}
+          >
+            🏫 {availableClasses.find((c) => c.id === String(selectedClassId))?.name || "내 학급"}
+          </div>
         )}
 
         <div
@@ -1818,14 +1821,19 @@ export default function PictureWordPage() {
             ) : (
               minutes.map((m, i) => (
                 <tr
-                  key={i}
+                  key={`${m.source_type}-${m.row_index}`}
                   style={{
                     borderBottom: "1px solid #f1f5f9",
                     background: i % 2 === 0 ? "white" : "#fafafa",
                   }}
                 >
-                  <td style={{ padding: "14px 16px", color: "#64748b" }}>
-                    {m.날짜}
+                  <td style={{ padding: 0 }}>
+                    <input 
+                       type="date"
+                       defaultValue={m.날짜}
+                       onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "날짜", e.target.value)}
+                       style={{ width: "100%", border: "none", padding: "14px 16px", background: "transparent", fontSize: "0.85rem", color: "#64748b" }}
+                    />
                   </td>
                   <td style={{ padding: "14px 12px", textAlign: "center" }}>
                     <span
@@ -1839,13 +1847,17 @@ export default function PictureWordPage() {
                             ? "#e0f2fe"
                             : m.구분 === "평가협의"
                               ? "#fef9c3"
-                              : "#f1f5f9",
+                              : m.구분 === "수업준비"
+                                ? "#dcfce7"
+                                : "#f1f5f9",
                         color:
                           m.구분 === "수업협의"
                             ? "#0369a1"
                             : m.구분 === "평가협의"
                               ? "#a16207"
-                              : "#475569",
+                              : m.구분 === "수업준비"
+                                ? "#15803d"
+                                : "#475569",
                       }}
                     >
                       {m.구분}
@@ -1862,12 +1874,15 @@ export default function PictureWordPage() {
                   </td>
                   <td
                     style={{
-                      padding: "14px 16px",
-                      color: "#334155",
-                      lineHeight: 1.6,
+                      padding: 0,
                     }}
                   >
-                    {m.내용}
+                    <textarea 
+                       defaultValue={m.내용}
+                       onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "내용", e.target.value)}
+                       rows={1}
+                       style={{ width: "100%", border: "none", padding: "14px 16px", background: "transparent", fontSize: "0.87rem", color: "#334155", lineHeight: 1.6, resize: "vertical" }}
+                    />
                   </td>
                   {isAdmin && (
                     <td
@@ -1878,14 +1893,15 @@ export default function PictureWordPage() {
                         fontSize: "0.8rem",
                       }}
                     >
-                      {m.학급ID}
+                      {m.학급ID === "G" ? "글로벌" : m.학급ID}
                     </td>
                   )}
                   <td style={{ padding: "14px 12px", textAlign: "center" }}>
                     <button
                       onClick={async () => {
-                        if (confirm("삭제하시겠습니까?")) {
-                          await axios.delete(`${API}/minutes/${i + 1}`);
+                        const msg = m.source_type === "lessons" ? "수업가이드의 협의내용을 초기화하시겠습니까?" : "삭제하시겠습니까?";
+                        if (confirm(msg)) {
+                          await axios.delete(`${API}/minutes/${m.source_type}/${m.row_index}`);
                           loadMinutes();
                         }
                       }}
@@ -1899,7 +1915,7 @@ export default function PictureWordPage() {
                         fontSize: "0.78rem",
                       }}
                     >
-                      삭제
+                      {m.source_type === "lessons" ? "초기화" : "삭제"}
                     </button>
                   </td>
                 </tr>
@@ -1999,6 +2015,52 @@ export default function PictureWordPage() {
               </button>
             ))}
           </div>
+
+          {/* 학급 선택 (관리자 전용 글로벌 필터) */}
+          {isAdmin && (
+            <div
+              style={{
+                ...cardStyle,
+                marginBottom: "20px",
+                padding: "12px 20px",
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                background: "#eff6ff",
+                border: "1px solid #dbeafe",
+              }}
+            >
+              <span style={{ fontWeight: 800, color: "#1e40af", fontSize: "0.9rem" }}>
+                🏫 학급 선택:
+              </span>
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "10px",
+                  border: "1px solid #bfdbfe",
+                  fontSize: "0.9rem",
+                  fontWeight: 700,
+                  color: "#1e40af",
+                  cursor: "pointer",
+                  background: "white",
+                  outline: "none",
+                }}
+              >
+                {availableClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <div style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#60a5fa", fontWeight: 600 }}>
+                {tab === "overview" && "📊 선택한 학급의 현황을 조회합니다."}
+                {tab === "minutes" && "📋 선택한 학급의 협의록을 조회합니다."}
+                {(tab === "checklist" || tab === "certification") && "💡 왼쪽 패널에서 학생을 선택하세요."}
+              </div>
+            </div>
+          )}
 
           {/* 탭 콘텐츠 */}
           {tab === "checklist" && renderChecklist()}
