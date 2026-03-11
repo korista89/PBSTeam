@@ -21,10 +21,11 @@ interface CICOStudent {
   학생코드: string;
   학생명: string;
   Tier2: string;
+  Tier3: string; // [v3]
   목표행동: string;
   "목표행동 유형": string;
   척도: string;
-  "입력 기준": string;
+  "입력 기준": string; // [v3] Baseline
   "목표 달성 기준": string;
   수행_발생률: string;
   목표_달성_여부: string;
@@ -49,6 +50,16 @@ const SCALE_OPTIONS = ["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "1~1
 const TYPE_OPTIONS = ["증가 목표행동", "감소 목표행동"];
 const CRITERIA_INCREASE = ["90% 이상", "80% 이상", "70% 이상", "60% 이상", "50% 이상"];
 const CRITERIA_DECREASE = ["10% 이하", "20% 이하", "30% 이하", "40% 이하", "50% 이하"];
+
+// [v3] Behavior Presets
+const BEHAVIOR_PRESETS = [
+    { label: "직접 입력", value: "manual" },
+    { label: "[공통] 수업 참여율(OX)", behavior: "수업 참여율", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
+    { label: "[공통] 규칙 준수율(012)", behavior: "규칙 준수율", type: "증가 목표행동", scale: "0점/1점/2점", criteria: "80% 이상" },
+    { label: "[증가] 과제 완수", behavior: "과제 완수", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
+    { label: "[감소] 위기행동(빈도)", behavior: "위기행동", type: "감소 목표행동", scale: "1~100회", criteria: "20% 이하" },
+    { label: "[감소] 수업 이탈(시간)", behavior: "수업 이탈", type: "감소 목표행동", scale: "1~100분", criteria: "20% 이하" },
+];
 
 function getInputOptions(scale: string): string[] {
   const normParams = scale?.trim() || "";
@@ -124,28 +135,28 @@ export default function CICOGridPage() {
 
       (monthlyData.day_columns as DayColumn[]).forEach(col => {
         const label = col.label;
-        let display = "";
-        let isValidDate = false;
+        let display = label;
+        let isVisible = false;
 
-        // Check 1: Label matches MM-DD format directly
-        if (/^\d{1,2}-\d{1,2}$/.test(label)) {
-          // Verify if this date is in our business days list
-          // businessDays format is "MM-DD"
+        // [v3] session columns "1회차", "2회차" ... are always visible
+        if (label.includes("회차")) {
+          isVisible = true;
+          display = label.replace("회차", ""); // Display just number for space
+        } else if (/^\d{1,2}-\d{1,2}$/.test(label)) {
+          // Date format MM-DD
           if (businessDays.includes(label)) {
-            display = label;
-            isValidDate = true;
+            isVisible = true;
           }
         } else {
-          // Legacy/Integer Check: Try to treat as day number
+          // Legacy day numbers
           const dayNum = parseInt(label, 10);
           if (!isNaN(dayNum) && businessDayMap[dayNum]) {
+            isVisible = true;
             display = businessDayMap[dayNum];
-            isValidDate = true;
           }
         }
 
-        // Only add if it's a valid business day (or if it's a special column? No, strictly business days for now)
-        if (isValidDate && !usedLabels.has(col.index)) {
+        if (isVisible && !usedLabels.has(col.index)) {
           filteredCols.push({
             index: col.index,
             label: col.label,
@@ -155,7 +166,6 @@ export default function CICOGridPage() {
         }
       });
 
-      // Always update columns with our processed list
       if (filteredCols.length > 0) {
         monthlyData.day_columns = filteredCols;
       }
@@ -276,13 +286,13 @@ export default function CICOGridPage() {
   };
 
   // Handle settings change (목표행동, 유형, 척도, etc.)
-  const handleSettingsChange = async (student: CICOStudent, field: string, value: string) => {
+  const handleSettingsChange = async (student: CICOStudent, updates: { [field: string]: string }) => {
     const studentCode = student.학생코드;
     try {
       await axios.post(`${apiUrl}/api/v1/cico/settings`, {
         month,
         student_code: studentCode,
-        settings: { [field]: value },
+        settings: updates,
         row_index: student.row // Pass the row index to target uniquely
       });
 
@@ -293,7 +303,7 @@ export default function CICOGridPage() {
           ...prev,
           students: prev.students.map(s =>
             s.row === student.row
-              ? { ...s, [field]: value }
+              ? { ...s, ...updates }
               : s
           ),
         };
@@ -619,9 +629,11 @@ export default function CICOGridPage() {
                         <th style={{ ...thStyle, minWidth: "80px" }}>학급</th>
                         <th style={thStyle}>코드</th>
                         <th style={{ ...thStyle, minWidth: "100px" }}>학생명</th>
-                        <th style={{ ...thStyle, minWidth: "120px" }}>목표행동</th>
+                        <th style={{ ...thStyle, minWidth: "120px" }}>목표행동(프리셋)</th>
+                        <th style={{ ...thStyle, minWidth: "50px" }}>T3</th>
                         <th style={{ ...thStyle, minWidth: "80px" }}>유형</th>
                         <th style={{ ...thStyle, minWidth: "70px" }}>척도</th>
+                        <th style={{ ...thStyle, minWidth: "60px" }}>기준값</th>
                         <th style={{ ...thStyle, minWidth: "70px" }}>달성기준</th>
 
                         {/* Day columns — MM-DD weekday headers */}
@@ -652,29 +664,55 @@ export default function CICOGridPage() {
                           <td style={{ ...tdStyle, fontWeight: "bold", color: "#6366f1" }}>{student.학생코드}</td>
                           <td style={{ ...tdStyle, fontWeight: "600", color: "#334155" }}>{student.학생명}</td>
 
-                          {/* Editable: 목표행동 */}
-                          <td
-                            style={{ ...tdStyle, cursor: "pointer", textAlign: "left" }}
-                            onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}
-                          >
-                            {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
-                              <input
-                                autoFocus
-                                defaultValue={student.목표행동}
-                                onBlur={e => handleSettingsChange(student, "목표행동", e.target.value)}
-                                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                                style={{ width: "100%", padding: "2px 4px", border: "1px solid #6366f1", borderRadius: "4px", fontSize: "0.8rem" }}
-                              />
-                            ) : (
-                              student.목표행동 || <span style={{ color: "#ccc" }}>클릭하여 입력</span>
-                            )}
+                          {/* Editable: 목표행동 & Preset */}
+                          <td style={{ ...tdStyle, textAlign: "left", padding: "4px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                <select 
+                                    style={{ fontSize: "0.65rem", padding: "2px", borderRadius: "4px", border: "1px solid #d1d5db" }}
+                                    onChange={(e) => {
+                                        const preset = BEHAVIOR_PRESETS.find(p => p.behavior === e.target.value);
+                                        if (preset && preset.value !== "manual") {
+                                            handleSettingsChange(student, {
+                                                "목표행동": preset.behavior!,
+                                                "목표행동 유형": preset.type!,
+                                                "척도": preset.scale!,
+                                                "목표 달성 기준": preset.criteria!
+                                            });
+                                        }
+                                    }}
+                                    value={BEHAVIOR_PRESETS.find(p => p.behavior === student.목표행동)?.behavior || "manual"}
+                                >
+                                    {BEHAVIOR_PRESETS.map(p => (
+                                        <option key={p.label} value={p.value === "manual" ? "manual" : p.behavior}>{p.label}</option>
+                                    ))}
+                                </select>
+                                <div 
+                                    style={{ cursor: "pointer", border: "1px solid #eee", padding: "2px 4px", borderRadius: "4px", minHeight: "1.2rem", fontSize: "0.75rem" }}
+                                    onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}
+                                >
+                                    {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
+                                    <input
+                                        autoFocus
+                                        defaultValue={student.목표행동}
+                                        onBlur={e => handleSettingsChange(student, { "목표행동": e.target.value })}
+                                        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                        style={{ width: "100%", padding: "1px 2px", border: "1px solid #6366f1", borderRadius: "2px", fontSize: "0.75rem" }}
+                                    />
+                                    ) : (
+                                    student.목표행동 || <span style={{ color: "#ccc" }}>직접 입력</span>
+                                    )}
+                                </div>
+                            </div>
                           </td>
+
+                          {/* Tier3 Indicator */}
+                          <td style={{ ...tdStyle, fontWeight: "bold", color: student.Tier3 === "O" ? "#ef4444" : "#ccc" }}>{student.Tier3}</td>
 
                           {/* Editable: 유형 */}
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
                               value={student["목표행동 유형"]}
-                              onChange={e => handleSettingsChange(student, "목표행동 유형", e.target.value)}
+                              onChange={e => handleSettingsChange(student, { "목표행동 유형": e.target.value })}
                               style={{ border: "none", background: "transparent", fontSize: "0.75rem", cursor: "pointer", width: "100%" }}
                             >
                               {TYPE_OPTIONS.map(opt => (
@@ -687,7 +725,7 @@ export default function CICOGridPage() {
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
                               value={student.척도}
-                              onChange={e => handleSettingsChange(student, "척도", e.target.value)}
+                              onChange={e => handleSettingsChange(student, { "척도": e.target.value })}
                               style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
                             >
                               {SCALE_OPTIONS.map(opt => (
@@ -696,11 +734,30 @@ export default function CICOGridPage() {
                             </select>
                           </td>
 
+                          {/* [v3] Editable: 입력 기준 (Baseline) */}
+                          <td
+                             style={{ ...tdStyle, cursor: "pointer" }}
+                             onClick={() => setEditingSettings({ row: student.row, field: "입력 기준" })}
+                          >
+                             {editingSettings?.row === student.row && editingSettings?.field === "입력 기준" ? (
+                               <input
+                                 autoFocus
+                                 type="number"
+                                 defaultValue={student["입력 기준"]}
+                                 onBlur={e => handleSettingsChange(student, { "입력 기준": e.target.value })}
+                                 onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                 style={{ width: "100%", textAlign: "center", border: "1px solid #6366f1", borderRadius: "4px", fontSize: "0.75rem" }}
+                               />
+                             ) : (
+                               student["입력 기준"] || "0"
+                             )}
+                          </td>
+
                           {/* Editable: 달성기준 */}
                           <td style={{ ...tdStyle, cursor: "pointer" }}>
                             <select
                               value={student["목표 달성 기준"]}
-                              onChange={e => handleSettingsChange(student, "목표 달성 기준", e.target.value)}
+                              onChange={e => handleSettingsChange(student, { "목표 달성 기준": e.target.value })}
                               style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
                             >
                               {(student["목표행동 유형"] === "감소 목표행동" ? CRITERIA_DECREASE : CRITERIA_INCREASE).map(opt => (

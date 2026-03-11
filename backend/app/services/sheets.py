@@ -1366,12 +1366,14 @@ def _calculate_cico_rate(student: dict) -> dict:
     scale = student.get("척도", "O/X(발생)")
     behavior_type = student.get("목표행동 유형", "증가 목표행동")
     goal_criteria = student.get("목표 달성 기준", "80% 이상")
+    baseline = student.get("입력 기준", 0) # Baseline (v3 I column)
     
     # Collect non-empty day values
     filled_values = []
+    # In v3, days might be "1회차", "2회차" ... or legacy dates if mixed
     for day_label, val in days.items():
         val = str(val).strip()
-        if val and val != "-" and val != "·":
+        if val and val not in ["", "-", "·"]:
             filled_values.append(val)
     
     if not filled_values:
@@ -1383,110 +1385,76 @@ def _calculate_cico_rate(student: dict) -> dict:
     # Calculate rate based on scale type
     rate_num = None
     
+    # Helper to clean numeric strings
+    def clean_num(v):
+        try:
+            return float(str(v).replace("점", "").replace("회", "").replace("분", "").strip())
+        except (ValueError, TypeError):
+            return 0.0
+
     if scale == "O/X(발생)":
-        # Count O's and X's
-        o_count = sum(1 for v in filled_values if v.upper() == "O")
+        o_count = sum(1 for v in filled_values if str(v).upper() == "O")
         total = len(filled_values)
         if total > 0:
-            if behavior_type == "증가 목표행동":
-                # O = success for increase targets
-                rate_num = (o_count / total) * 100
-            else:
-                # X = success for decrease targets (no occurrence)
-                x_count = total - o_count
-                rate_num = (x_count / total) * 100
+            rate_num = (o_count / total) * 100
     
     elif scale == "0점/1점/2점":
-        # Max per entry = 2
-        total_score = 0
-        count = 0
-        for v in filled_values:
-            try:
-                s = float(v)
-                total_score += s
-                count += 1
-            except (ValueError, TypeError):
-                continue
+        total_score = sum(clean_num(v) for v in filled_values)
+        count = len(filled_values)
         if count > 0:
             max_possible = count * 2
-            if behavior_type == "증가 목표행동":
-                rate_num = (total_score / max_possible) * 100
-            else:
-                rate_num = ((max_possible - total_score) / max_possible) * 100
+            rate_num = (total_score / max_possible) * 100
     
     elif scale == "0~5":
-        total_score = 0
-        count = 0
-        for v in filled_values:
-            try:
-                s = float(v)
-                total_score += s
-                count += 1
-            except (ValueError, TypeError):
-                continue
+        total_score = sum(clean_num(v) for v in filled_values)
+        count = len(filled_values)
         if count > 0:
             max_possible = count * 5
-            if behavior_type == "증가 목표행동":
-                rate_num = (total_score / max_possible) * 100
-            else:
-                rate_num = ((max_possible - total_score) / max_possible) * 100
+            rate_num = (total_score / max_possible) * 100
     
     elif scale == "0~7교시":
-        total_score = 0
-        count = 0
-        for v in filled_values:
-            try:
-                s = float(v)
-                total_score += s
-                count += 1
-            except (ValueError, TypeError):
-                continue
+        total_score = sum(clean_num(v) for v in filled_values)
+        count = len(filled_values)
         if count > 0:
             max_possible = count * 7
-            if behavior_type == "증가 목표행동":
-                rate_num = (total_score / max_possible) * 100
+            rate_num = (total_score / max_possible) * 100
+    
+    elif scale == "1~100회" or scale == "1~100분":
+        total_score = sum(clean_num(v) for v in filled_values)
+        count = len(filled_values)
+        if count > 0:
+            avg_val = total_score / count
+            if behavior_type == "감소 목표행동":
+                # Use Baseline from I column
+                try:
+                    bl_val = float(str(baseline).replace("회", "").replace("분", "").strip())
+                except (ValueError, TypeError):
+                    bl_val = 100.0 # Fallback
+                
+                if bl_val > 0:
+                    rate_num = (avg_val / bl_val) * 100
+                else:
+                    rate_num = avg_val # Fallback
             else:
-                rate_num = ((max_possible - total_score) / max_possible) * 100
+                # Increase: base is 100
+                rate_num = (avg_val / 100) * 100
     
     else:
-        # Free input (1~100회 or 1~100분 or 0점/1점/2점 with unit)
-        total_score = 0
-        count = 0
-        for v in filled_values:
-            try:
-                # Remove common units before conversion
-                v_clean = str(v).replace("점", "").replace("회", "").replace("분", "").strip()
-                s = float(v_clean)
-                total_score += s
-                count += 1
-            except (ValueError, TypeError):
-                continue
-        
+        # Fallback
+        total_score = sum(clean_num(v) for v in filled_values)
+        count = len(filled_values)
         if count > 0:
-            if scale == "1~100회" or scale == "1~100분":
-                # For count/time, rate is average
-                rate_num = total_score / count
-            elif scale == "0점/1점/2점":
-                # Handle units in 0/1/2점
-                max_possible = count * 2
-                if behavior_type == "증가 목표행동":
-                    rate_num = (total_score / max_possible) * 100
-                else:
-                    rate_num = ((max_possible - total_score) / max_possible) * 100
-            else:
-                # Fallback
-                rate_num = (total_score / count)
+            rate_num = (total_score / count)
     
     # Format rate string
     if rate_num is not None:
         rate_str = f"{round(rate_num)}%"
     else:
-        rate_str = None
+        rate_str = ""
     
     # Determine achievement (달성 여부)
-    achieved = None
+    achieved = ""
     if rate_num is not None and goal_criteria:
-        # Parse goal criteria: "80% 이상", "20% 이하", etc.
         try:
             goal_str = goal_criteria.replace("%", "").replace("이상", "").replace("이하", "").strip()
             goal_val = float(goal_str)
@@ -1496,7 +1464,15 @@ def _calculate_cico_rate(student: dict) -> dict:
             else:  # 이상 (default)
                 achieved = "O" if rate_num >= goal_val else "X"
         except (ValueError, TypeError):
-            achieved = None
+            achieved = ""
+    
+    return {
+        "rate_str": rate_str,
+        "achieved": achieved,
+        "rate_num": round(rate_num, 1) if rate_num is not None else None,
+        "input_days": input_days,
+        "total_days": total_days
+    }
     
     return {
         "rate_str": rate_str,
@@ -1534,116 +1510,67 @@ def create_monthly_cico_sheet(year: int, month: int):
         if not cico_students:
             return {"error": "No students marked for CICO in TierStatus."}
             
-        # 2. Prepare Rows
-        # Fixed cols: 15
-        fixed_headers = ["번호", "학급", "학생코드", "학생명", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
+        # 2. Prepare Rows (CICO v3 Layout)
+        # 1: 번호, 2: 학급, 3: 학생명(코드), 4: Tier2, 5: Tier3, 6: 목표행동, 7: 목표행동 유형, 8: 척도, 9: 입력 기준, 10: 목표 달성 기준
+        fixed_headers = ["번호", "학급", "학생명(코드)", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준(베이스라인)", "목표 달성 기준"]
         
-        # Day cols
-        holidays = get_holidays_from_config()
-        day_headers = get_business_days(year, month, holidays)
+        # 11~35: 25 Sessions (1회차 ~ 25회차)
+        session_headers = [f"{i}회차" for i in range(1, 26)]
         
-        headers = fixed_headers + day_headers
+        # 36~41: Stats and others
+        tail_headers = ["수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
+        
+        headers = fixed_headers + session_headers + tail_headers
         
         rows = [headers]
         
-        for s in cico_students:
+        for idx, s in enumerate(cico_students, 1):
+            name_code = f"{s.get('학생이름', '')}({s.get('학생코드', '')})"
             row = [
-                s.get('번호', ''),
+                idx, # 번호
                 s.get('학급', ''),
-                s.get('학생코드', ''),
-                s.get('학생이름', ''), 
+                name_code,
                 "O", # Tier2
-                "", # Target Behavior
-                "증가 목표행동", # Type
-                "O/X(발생)", # Scale — 기본값 O/X
-                "", # Input Criteria
-                "80% 이상", # Goal Criteria
-                "", # Rate
-                "", # Achieved
-                "", # Memo
-                "", # Entered By
-                "", # Team Discussion
-                ""  # Next Month
+                "X", # Tier3 Default
+                "",  # 목표행동
+                "증가 목표행동", # 유형
+                "O/X(발생)", # 척도
+                "", # 입력 기준 (Baseline)
+                "80% 이상", # 목표 달성 기준
             ]
-            # Add empty days make sure length matches
-            row += [""] * len(day_headers)
+            # 25 session columns
+            row += [""] * 25
+            
+            # stats + others
+            row += ["-", "-", "", "", "", ""]
             rows.append(row)
             
         # 3. Create Sheet
-        ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+5)
+        ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+2)
         ws.update(rows)
         
-        # 4. Add Dropdowns (Data Validation) using gspread native API
+        # 4. Add Dropdowns (Data Validation) matching v3 indices
         try:
             from gspread.utils import ValidationConditionType
             
             start_row = 2
             end_row = len(rows)
             
-            # Column E: Tier2 (O/X)
-            ws.add_validation(
-                f'E{start_row}:E{end_row}',
-                ValidationConditionType.one_of_list,
-                ['O', 'X'],
-                showCustomUi=True
-            )
-            
-            # Column G: 목표행동 유형
-            ws.add_validation(
-                f'G{start_row}:G{end_row}',
-                ValidationConditionType.one_of_list,
-                ['증가 목표행동', '감소 목표행동'],
-                showCustomUi=True
-            )
-            
+            # Column D: Tier2 (O/X)
+            ws.add_validation(f'D{start_row}:D{end_row}', ValidationConditionType.one_of_list, ['O', 'X'], showCustomUi=True)
+            # Column E: Tier3 (O/X)
+            ws.add_validation(f'E{start_row}:E{end_row}', ValidationConditionType.one_of_list, ['O', 'X'], showCustomUi=True)
+            # Column G: 유형
+            ws.add_validation(f'G{start_row}:G{end_row}', ValidationConditionType.one_of_list, ['증가 목표행동', '감소 목표행동'], showCustomUi=True)
             # Column H: 척도
-            ws.add_validation(
-                f'H{start_row}:H{end_row}',
-                ValidationConditionType.one_of_list,
-                ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'],
-                showCustomUi=True
-            )
-            
-            # Initial validation for daily columns logic is handled by Apps Script onEdit
-            # But we can set a default behavior here if needed.
-            
-            # Column J: 목표 달성 기준
-            ws.add_validation(
-                f'J{start_row}:J{end_row}',
-                ValidationConditionType.one_of_list,
-                ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
-                 '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'],
-                showCustomUi=True
-            )
-            
-            # Column L: 목표 달성 여부
-            ws.add_validation(
-                f'L{start_row}:L{end_row}',
-                ValidationConditionType.one_of_list,
-                ['O', 'X'],
-                showCustomUi=True
-            )
-            
-            # Column P: 차월 대상여부
-            ws.add_validation(
-                f'P{start_row}:P{end_row}',
-                ValidationConditionType.one_of_list,
-                ['유지', '종료', '상향', '하향'],
-                showCustomUi=True
-            )
-            
-            # Day columns: Default O/X for daily data entry
-            if day_headers:
-                num_fixed = len(fixed_headers)
-                from gspread.utils import rowcol_to_a1
-                day_start_col = rowcol_to_a1(1, num_fixed + 1).rstrip('1')
-                day_end_col = rowcol_to_a1(1, num_fixed + len(day_headers)).rstrip('1')
-                ws.add_validation(
-                    f'{day_start_col}{start_row}:{day_end_col}{end_row}',
-                    ValidationConditionType.one_of_list,
-                    ['O', 'X'],
-                    showCustomUi=True
-                )
+            ws.add_validation(f'H{start_row}:H{end_row}', ValidationConditionType.one_of_list, ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'], showCustomUi=True)
+            # Column J: 달성기준
+            ws.add_validation(f'J{start_row}:J{end_row}', ValidationConditionType.one_of_list, 
+                             ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
+                              '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'], showCustomUi=True)
+            # Column AO (41): 차월대상
+            # AO is 41st column. A1 notation: AO
+            ws.add_validation(f'AO{start_row}:AO{end_row}', ValidationConditionType.one_of_list, ['유지', '종료', '상향', '하향'], showCustomUi=True)
                 
         except Exception as e:
             print(f"Warning: Failed to set data validation: {e}")
@@ -1726,80 +1653,102 @@ def get_monthly_cico_data(month: int):
             "차월 대상여부": ["차월대상여부", "차월", "NextMonth"]
         }
         
+        # v3 Synonyms and Index mapping
+        synonyms = {
+            "번호": ["번호", "No"],
+            "학급": ["학급", "Class", "Grade"],
+            "학생명": ["학생명", "Name", "Student"],
+            "학생코드": ["학생코드", "Code", "ID"], # Might be merged in Name(Code)
+            "Tier2": ["Tier2", "T2", "CICO"],
+            "Tier3": ["Tier3", "T3", "BIP"],
+            "목표행동": ["목표행동", "Target", "Behavior"],
+            "목표행동 유형": ["목표행동 유형", "유형", "Type"],
+            "척도": ["척도", "Scale"],
+            "입력 기준": ["입력 기준", "베이스라인", "Baseline"],
+            "목표 달성 기준": ["목표 달성 기준", "기준", "Criterion"],
+            "수행/발생률": ["수행/발생률", "수행률", "발생률", "Rate"],
+            "목표 달성 여부": ["목표 달성 여부", "달성여부", "Achieved"],
+            "교사메모": ["교사메모", "Memo", "비고"],
+            "입력자": ["입력자", "Writer", "Author"],
+            "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk"],
+            "차월 대상여부": ["차월대상여부", "차월", "next"],
+        }
+        
         for key, candidates in synonyms.items():
             idx = find_col_fuzzy(headers, candidates)
             if idx != -1:
                 col_map[key] = idx
         
-        # Ensure essential columns found
-        if "학생코드" not in col_map: col_map["학생코드"] = 2
-        if "Tier2" not in col_map: col_map["Tier2"] = 3
-        
-        # Find day columns (columns between "목표 달성 기준" and "수행/발생률")
-        # Find day columns: Check for "1".."31" or "MM-DD"
+        # v3 Specific: If session starts at indexed 11, we look for "회차"
         day_columns = []
-        
         for i, h in enumerate(headers):
             h_str = str(h).strip()
-            is_day = False
-            
-            # Check for integer day (1-31)
-            if h_str.isdigit() and 1 <= int(h_str) <= 31:
-                is_day = True
-            # Check for MM-DD format
+            # session columns: "1회차", "2회차" ... or legacy date formats
+            if "회차" in h_str:
+                day_columns.append({"index": i, "label": h_str})
+            elif h_str.isdigit() and 1 <= int(h_str) <= 31:
+                day_columns.append({"index": i, "label": h_str})
             elif "-" in h_str and len(h_str) == 5:
-                # Basic check, maybe refine regex if needed but this usually works
-                is_day = True
-            
-            # Additional safety: Don't include "Code-1" if that existed
-            # And ensure it's not one of the known key text columns (by index)
-            if i in col_map.values():
-                is_day = False
-                
-            if is_day:
-                day_columns.append({
-                    "index": i,
-                    "label": h_str
-                })
-        
-        # Build student rows (only Tier2='O')
-        students = []
+                day_columns.append({"index": i, "label": h_str})
+
+        # Tier2 and Tier3 check columns
         tier2_idx = col_map.get("Tier2", 3)
+        tier3_idx = col_map.get("Tier3", 4)
         
-        # Mapping for name fallback
-        beable_mapping = get_beable_code_mapping()
-        code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
+        # Student code extraction if merged in column C: Name(Code)
+        import re
         
-        for row_idx, row in enumerate(all_values[1:], start=2):  # row_idx = sheet row (1-based)
-            if len(row) <= tier2_idx:
+        # Build student rows
+        students = []
+        
+        for row_idx, row in enumerate(all_values[1:], start=2):
+            if len(row) <= max(tier2_idx, tier3_idx, col_map.get("학생명", 2)):
                 continue
             
             is_tier2 = str(row[tier2_idx]).strip()
+            # We treat CICO students as those with Tier2='O'
+            if is_tier2 != "O":
+                continue
+
+            raw_name = str(row[col_map.get("학생명", 2)]).strip()
+            # Extract code from "Name(Code)" if name column has it
+            extracted_code = ""
+            name_only = raw_name
+            code_match = re.search(r'\((.*?)\)', raw_name)
+            if code_match:
+                extracted_code = code_match.group(1).strip()
+                name_only = raw_name.replace(f"({extracted_code})", "").strip()
             
+            # Use explicit code column if found and not empty
+            code_val = str(row[col_map["학생코드"]]).strip() if "학생코드" in col_map and col_map["학생코드"] < len(row) else ""
+            if not code_val:
+                code_val = extracted_code
+
             student = {
                 "row": row_idx,
                 "번호": row[col_map.get("번호", 0)] if col_map.get("번호", 0) < len(row) else "",
                 "학급": row[col_map.get("학급", 1)] if col_map.get("학급", 1) < len(row) else "",
-                "학생코드": row[col_map.get("학생코드", 2)] if col_map.get("학생코드", 2) < len(row) else "",
-                "학생명": row[col_map.get("학생명", 3)] if col_map.get("학생명", 3) < len(row) and row[col_map.get("학생명", 3)] not in ["O", "X", ""] else code_to_name.get(str(row[col_map.get("학생코드", 2)]).strip(), ""),
+                "학생코드": code_val,
+                "학생명": name_only,
                 "Tier2": is_tier2,
-                "목표행동": row[col_map.get("목표행동", 4)] if col_map.get("목표행동", 4) < len(row) else "",
-                "목표행동 유형": row[col_map.get("목표행동 유형", 5)] if col_map.get("목표행동 유형", 5) < len(row) else "",
-                "척도": row[col_map.get("척도", 6)] if col_map.get("척도", 6) < len(row) else "",
-                "입력 기준": row[col_map.get("입력 기준", 7)] if col_map.get("입력 기준", 7) < len(row) else "",
-                "목표 달성 기준": row[col_map.get("목표 달성 기준", 8)] if col_map.get("목표 달성 기준", 8) < len(row) else "",
-                "수행_발생률": row[col_map.get("수행/발생률", -1)] if col_map.get("수행/발생률", -1) >= 0 and col_map.get("수행/발생률", -1) < len(row) else "",
-                "목표_달성_여부": row[col_map.get("목표 달성 여부", -1)] if col_map.get("목표 달성 여부", -1) >= 0 and col_map.get("목표 달성 여부", -1) < len(row) else "",
+                "Tier3": str(row[tier3_idx]).strip() if tier3_idx < len(row) else "X",
+                "목표행동": row[col_map.get("목표행동", 5)] if col_map.get("목표행동", 5) < len(row) else "",
+                "목표행동 유형": row[col_map.get("목표행동 유형", 6)] if col_map.get("목표행동 유형", 6) < len(row) else "",
+                "척도": row[col_map.get("척도", 7)] if col_map.get("척도", 7) < len(row) else "",
+                "입력 기준": row[col_map.get("입력 기준", 8)] if col_map.get("입력 기준", 8) < len(row) else "",
+                "목표 달성 기준": row[col_map.get("목표 달성 기준", 9)] if col_map.get("목표 달성 기준", 9) < len(row) else "",
+                "수행_발생률": "", # Recalculated below
+                "목표_달성_여부": "",
                 "days": {}
             }
             
-            # Fill day values
+            # Fill day/session values
             for dc in day_columns:
                 idx = dc["index"]
                 val = row[idx] if idx < len(row) else ""
                 student["days"][dc["label"]] = val
             
-            # ===== Auto-calculate 수행/발생률 and 달성 여부 =====
+            # Auto-calculate rate
             calc_result = _calculate_cico_rate(student)
             student["수행_발생률"] = calc_result["rate_str"]
             student["목표_달성_여부"] = calc_result["achieved"]
@@ -1807,8 +1756,7 @@ def get_monthly_cico_data(month: int):
             student["input_days"] = calc_result["input_days"]
             student["total_days"] = calc_result["total_days"]
             
-            if is_tier2 == "O":
-                students.append(student)
+            students.append(student)
         
         return {
             "month": month_name,
@@ -1846,16 +1794,19 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
         all_values = ws.get_all_values() 
         
         # Determine student_code column index for override lookup
-        # Look for "학생코드", "Student Code", "Code"
+        # Check for v3 column "학생명(코드)" or explicit "학생코드"
         code_col_idx = -1
         for idx, h in enumerate(headers):
-            if "학생코드" in str(h) or "Code" in str(h):
+            h_str = str(h).strip()
+            if "학생코드" in h_str or "Code" in h_str or "(코드)" in h_str:
                 code_col_idx = idx # 0-based
                 break
         
         # Build batch update
         cells_to_update = []
         rows_to_recalc = set()
+
+        import re
 
         for u in updates:
             row = u.get("row")
@@ -1864,24 +1815,25 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             
             # If row is None, try to find by student_code_override
             if row is None and student_code_override and code_col_idx != -1:
-                # Search for student code in the code column
                 found_row = -1
                 for r_idx, r_val in enumerate(all_values):
-                    # headers is r_idx 0 (row 1)
                     if r_idx == 0: continue
                     
                     if len(r_val) > code_col_idx:
-                        # Compare stringified codes
-                        if str(r_val[code_col_idx]).strip() == str(student_code_override).strip():
-                            found_row = r_idx + 1 # 1-based row
+                        cell_val = str(r_val[code_col_idx]).strip()
+                        # Direct match or extract from "Name(Code)"
+                        if cell_val == str(student_code_override).strip():
+                            found_row = r_idx + 1
+                            break
+                        
+                        # Check inside parentheses
+                        match = re.search(r'\((.*?)\)', cell_val)
+                        if match and match.group(1).strip() == str(student_code_override).strip():
+                            found_row = r_idx + 1
                             break
                 
                 if found_row != -1:
                     row = found_row
-                    print(f"DEBUG: Found row {row} for student {student_code_override}")
-                else:
-                    print(f"DEBUG: Student code {student_code_override} not found in monthly sheet")
-                    continue
             
             if not row:
                 print("DEBUG: Row not specified and could not be resolved.")
@@ -1890,19 +1842,34 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             # If col is a string (header name), convert to column index
             if isinstance(col, str):
                 col_idx = -1
-                # 1. Exact match
+                # 1. Exact or Fuzzy match
+                # Use synonyms similar to get_monthly_cico_data
+                synonym_candidates = {
+                    "수행/발생률": ["수행/발생률", "수행률", "발생률", "Rate"],
+                    "목표 달성 여부": ["목표 달성 여부", "달성여부", "Achieved"],
+                }
+                
                 if col in headers:
                     col_idx = headers.index(col) + 1
                 else:
-                    # 2. Flexible match for Days (1, 1일, 01, 1(월)) using Regex
+                    # Check synonyms
+                    for formal_key, cands in synonym_candidates.items():
+                        if col == formal_key:
+                            col_to_find = cands
+                            idx = find_col_fuzzy(headers, col_to_find)
+                            if idx != -1:
+                                col_idx = idx + 1
+                                break
+
+                if col_idx == -1:
+                    # 2. Flexible match for Sessions (1회차, 1일, 1...)
                     import re
-                    # Check if col is a day number
-                    if col.isdigit():
-                        day_num = int(col)
+                    match = re.search(r'^(\d+)', str(col))
+                    if match:
+                        num = int(match.group(1))
                         for idx, h in enumerate(headers):
-                            # Extract first number from header
-                            match = re.search(r'^(\d+)', str(h))
-                            if match and int(match.group(1)) == day_num:
+                            h_match = re.search(r'^(\d+)', str(h))
+                            if h_match and int(h_match.group(1)) == num:
                                 col_idx = idx + 1
                                 break
                 
@@ -2076,11 +2043,27 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         
         if not target_row:
             # Find student row by code if row_index not provided
-            code_idx = headers.index("학생코드") if "학생코드" in headers else 2
-            for i, row in enumerate(all_values[1:], start=2):
-                if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
-                    target_row = i
+            # Robust lookup for v3
+            import re
+            code_idx = -1
+            for idx, h in enumerate(headers):
+                h_str = str(h).strip()
+                if "학생코드" in h_str or "Code" in h_str or "(코드)" in h_str:
+                    code_idx = idx
                     break
+                    
+            if code_idx != -1:
+                for i, row in enumerate(all_values[1:], start=2):
+                    if len(row) > code_idx:
+                        cell_val = str(row[code_idx]).strip()
+                        if cell_val == str(student_code).strip():
+                            target_row = i
+                            break
+                        # Check "Name(Code)"
+                        match = re.search(r'\((.*?)\)', cell_val)
+                        if match and match.group(1).strip() == str(student_code).strip():
+                            target_row = i
+                            break
         
         if not target_row:
             return {"error": f"학생코드 {student_code} 또는 행번호 {row_index}를 찾을 수 없습니다."}
