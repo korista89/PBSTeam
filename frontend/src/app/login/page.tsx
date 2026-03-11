@@ -138,9 +138,8 @@ export default function LoginPage() {
                     justifyContent: 'center',
                     background: 'white'
                 }}>
-                    <div style={{ textAlign: 'center', marginBottom: '40px' }}>
                         <h1 style={{ margin: '0 0 10px', color: '#1e3a8a', fontSize: '2.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <img src="/logo/school-logo.png" alt="경은학교 로고" style={{ height: '56px', marginRight: '15px' }} />
+                            <img src="/logo/school-logo.png" alt="경은학교 로고" style={{ height: '64px', marginRight: '15px', borderRadius: '50%', backgroundColor: 'white' }} />
                             경은PBST
                         </h1>
                         <p style={{ margin: 0, color: '#64748b', fontSize: '1rem', fontWeight: 500 }}>
