@@ -83,7 +83,7 @@ export default function LoginPage() {
                 maxWidth: '400px'
             }}>
                 <h1 style={{ textAlign: 'center', marginBottom: '10px', color: '#333', fontSize: '1.8rem' }}>
-                    🏫 특수학교 PBIS
+                    🏫 경은PBST
                 </h1>
                 <p style={{ textAlign: 'center', marginBottom: '30px', color: '#666' }}>
                     통합관리플랫폼 로그인
@@ -194,7 +194,7 @@ export default function LoginPage() {
 
                 <div style={{ textAlign: 'center', marginTop: '30px', borderTop: '1px solid #f3f4f6', paddingTop: '20px' }}>
                     <p style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
-                        Designed by <b>PBS Team</b>
+                        Designed by <b>경은PBST Team</b>
                     </p>
                 </div>
             </div>

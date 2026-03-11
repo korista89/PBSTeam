@@ -57,7 +57,7 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
     },
     {
         key: "EvaluationPlan", num: 8, title: "평가 계획(Tier3 졸업 기준 포함)", color: "#64748b",
-        placeholder: "예:\n• 데이터 수집: 매일 행동 발생 빈도/지속시간 기록 (PBIS 행동관찰 시스템 활용)\n• 평가 주기: 격주 1회 데이터 검토, 월 1회 행동중재지원팀 회의\n• 졸업 기준: 4주 연속 표적행동 주 1회 이하 + 대체행동 주 4회 이상\n• 중재 수정 기준: 2주간 개선 없으면 전략 수정"
+        placeholder: "예:\n• 데이터 수집: 매일 행동 발생 빈도/지속시간 기록 (경은PBST 행동관찰 시스템 활용)\n• 평가 주기: 격주 1회 데이터 검토, 월 1회 행동중재지원팀 회의\n• 졸업 기준: 4주 연속 표적행동 주 1회 이하 + 대체행동 주 4회 이상\n• 중재 수정 기준: 2주간 개선 없으면 전략 수정"
     },
     {
         key: "MedicationStatus", num: 9, title: "약물 복용 현황", color: "#0891b2",

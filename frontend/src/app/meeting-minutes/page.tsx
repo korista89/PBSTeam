@@ -106,8 +106,8 @@ export default function MeetingMinutesPage() {
             `}</style>
 
                     <header style={{ textAlign: 'center', marginBottom: '30px' }}>
-                        <h1 style={{ border: 'none', marginBottom: '5px' }}>학교행동중재지원팀(PBIS) 정기 협의록</h1>
-                        <p>일시: {date} | 장소: 다목적 협의실 | 참석: PBIS 팀원 전원</p>
+                        <h1 style={{ border: 'none', marginBottom: '5px' }}>학교행동중재지원팀(경은PBST) 정기 협의록</h1>
+                        <p>일시: {date} | 장소: 다목적 협의실 | 참석: 경은PBST 팀원 전원</p>
                         <div style={{ borderTop: '2px solid #1e3a8a', width: '100%', marginTop: '10px' }}></div>
                     </header>
 

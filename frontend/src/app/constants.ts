@@ -1,4 +1,4 @@
-// Shared constants for the PBIS platform
+// Shared constants for the 경은PBST platform
 
 // Chart color palette
 export const COLORS = [

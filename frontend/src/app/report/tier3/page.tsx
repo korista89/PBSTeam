@@ -279,7 +279,7 @@ export default function Tier3Report() {
 
                                   {/* Weekly Trend (Occurrence Frequency - The ONE specific chart) */}
                                   <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>📈 주간 발생빈도 추이 (PBIS 핵심지표)</div>
+                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>📈 주간 발생빈도 추이 (경은PBST 핵심지표)</div>
                                     {s.weekly_trend_freq && s.weekly_trend_freq.length > 0 ? (
                                       <ResponsiveContainer width="100%" height={160}>
                                         <LineChart data={s.weekly_trend_freq.slice(-12)}>

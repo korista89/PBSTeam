@@ -184,7 +184,7 @@ export default function Home() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
-                  📊 {isAdmin() ? "PBS 행동 지원 종합 대시보드" : `${user?.class_name || '학급'} 행동 지원 리포트`}
+                  📊 {isAdmin() ? "경은PBST 행동 지원 종합 대시보드" : `${user?.class_name || '학급'} 행동 지원 리포트`}
                 </h1>
                 <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.85rem' }}>
                   {startDate} ~ {endDate} | {date}
@@ -211,11 +211,11 @@ export default function Home() {
               ))}
             </div>
 
-            {/* ===== Section 1: PBIS Tier 분포 + 월별 추이 ===== */}
-            <div className="section-heading">1. PBIS Tier 분포 및 행동 추이</div>
+            {/* ===== Section 1: 경은PBST Tier 분포 + 월별 추이 ===== */}
+            <div className="section-heading">1. 경은PBST Tier 분포 및 행동 추이</div>
             <div className="grid-2">
               {/* Tier Distribution Donut */}
-              <ChartBox title="🎯 PBIS Tier 분포 (재학생 기준)">
+              <ChartBox title="🎯 경은PBST Tier 분포 (재학생 기준)">
                 <PieChart>
                   <Pie data={tierDist} cx="45%" cy="50%" outerRadius={110} innerRadius={65} paddingAngle={3} dataKey="value"
                     label={({ name, value, cx, x, y, midAngle }: any) => {
@@ -254,7 +254,7 @@ export default function Home() {
               </ChartBox>
             </div>
 
-            <AIAnalysisCard sectionName="PBIS Tier 분포 및 추이" dataContext={{ tier_distribution: tierDist, monthly_trend: monthlyTrend }} startDate={startDate} endDate={endDate} />
+            <AIAnalysisCard sectionName="경은PBST Tier 분포 및 추이" dataContext={{ tier_distribution: tierDist, monthly_trend: monthlyTrend }} startDate={startDate} endDate={endDate} />
 
             {/* ===== Section 2: Big 5 행동 패턴 ===== */}
             <div className="section-heading">2. 행동 패턴 분석 (Big 5)</div>
