@@ -348,10 +348,11 @@ export default function PictureWordPage() {
       // 낙관적 업데이트 생략하고 다시 로드
       loadMinutes();
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      const errorMsg = detail ? ` (상세: ${JSON.stringify(detail)})` : "";
-      alert(`협의록 수정 실패${errorMsg}\n수정하시려는 행(${rowIndex})이 유효한지 확인해주세요.`);
-      console.error("Minute Update Error:", err);
+      console.error("Minute Update Error Raw:", err);
+      const resData = err.response?.data;
+      const detail = resData?.detail || resData;
+      const errorMsg = detail ? `\n(상세: ${JSON.stringify(detail)})` : "";
+      alert(`[V2] 협의록 수정 실패${errorMsg}\n\n수정하시려는 행(${rowIndex})이 유효한지 확인해주세요.`);
     }
   };
 
