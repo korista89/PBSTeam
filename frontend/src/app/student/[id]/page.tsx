@@ -48,7 +48,6 @@ export default function StudentDetail() {
           : `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}`;
         const response = await axios.get(url);
         setData(response.data);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error(err);
         setError(err.response?.status === 404 ? "학생을 찾을 수 없습니다." : "데이터 로딩 실패");
@@ -223,7 +222,6 @@ export default function StudentDetail() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                         outerRadius={80}
                         fill="#0088FE"
