@@ -434,7 +434,8 @@ def fetch_minutes(class_id: str = None) -> list[dict]:
                     "학급ID": "G",
                     "학급명": "수업가이드",
                     "source_type": "lessons",
-                    "row_index": r_idx
+                    "row_index": r_idx,
+                    "lesson_num": str(r.get('차시', '')) # ID 기반 업데이트를 위해 추가
                 })
 
     if class_id:
@@ -465,18 +466,29 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
             if source_type == "minutes":
                 ws = get_minutes_ws(ss)
                 col_map = {"날짜": 1, "구분": 2, "출처(학생/차시)": 3, "내용": 4, "학급ID": 5, "학급명": 6}
+                target_row = row_index
             elif source_type == "lessons":
                 ws = get_lesson_ws(ss)
                 col_map = {"내용": 7, "날짜": 8} # 수업가이드에서는 내용=준비협의내용(col 7), 날짜=협의날짜(col 8)
+                
+                # Robust Update: lesson_num이 있다면 row_index 대신 시트에서 직접 찾음
+                lesson_num = updates.get("lesson_num")
+                if lesson_num:
+                    records = get_all_records_with_row_index(ws)
+                    target_row = next((r["_row_index"] for r in records if str(r.get("차시")) == str(lesson_num)), None)
+                    if not target_row:
+                        return {"error": f"차시 {lesson_num}를 시트에서 찾을 수 없습니다."}
+                else:
+                    target_row = row_index
             else:
                 return {"error": f"Invalid source_type: {source_type}"}
 
-            print(f"[PW] Updating {source_type} row {row_index} with {updates} (Attempt {attempt+1})")
+            print(f"[PW] Updating {source_type} row {target_row} with {updates} (Attempt {attempt+1})")
             
             for key, val in updates.items():
                 if key in col_map:
                     col_idx = col_map[key]
-                    ws.update_cell(row_index, col_idx, str(val))
+                    ws.update_cell(target_row, col_idx, str(val))
             
             clear_pw_cache()
             return {"message": "업데이트 완료"}

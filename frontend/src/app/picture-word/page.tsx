@@ -334,12 +334,15 @@ export default function PictureWordPage() {
     }
   };
 
-  const handleMinuteUpdate = async (sourceType: string, rowIndex: number, field: string, value: string) => {
+  const handleMinuteUpdate = async (sourceType: string, rowIndex: number, field: string, value: string, lessonNum?: string) => {
     try {
       await axios.patch(`${API}/minutes`, {
         source_type: sourceType,
         row_index: rowIndex,
-        updates: { [field]: value }
+        updates: { 
+          [field]: value,
+          lesson_num: lessonNum // Robust Update를 위해 추가
+        }
       });
       // 낙관적 업데이트 생략하고 다시 로드
       loadMinutes();
@@ -1834,7 +1837,7 @@ export default function PictureWordPage() {
                     <input 
                        type="date"
                        defaultValue={m.날짜}
-                       onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "날짜", e.target.value)}
+                       onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "날짜", e.target.value, m.lesson_num)}
                        style={{ width: "100%", border: "none", padding: "14px 16px", background: "transparent", fontSize: "0.85rem", color: "#64748b" }}
                     />
                   </td>
@@ -1882,7 +1885,7 @@ export default function PictureWordPage() {
                   >
                     <textarea 
                        defaultValue={m.내용}
-                       onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "내용", e.target.value)}
+                       onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "내용", e.target.value, m.lesson_num)}
                        rows={1}
                        style={{ width: "100%", border: "none", padding: "14px 16px", background: "transparent", fontSize: "0.87rem", color: "#334155", lineHeight: 1.6, resize: "vertical" }}
                     />
