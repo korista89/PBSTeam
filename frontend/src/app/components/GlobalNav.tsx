@@ -202,6 +202,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
 
             <nav className="gnav">
                 {/* Top Row: Logo + Hamburger + User (mobile) */}
+                <div className="gnav-top-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <a href="/" className="gnav-logo" style={{ display: 'flex', alignItems: 'center' }}>
                         <img src="/logo/school-logo.png" alt="경은학교 로고" style={{ height: '36px', marginRight: '10px', borderRadius: '50%', backgroundColor: 'white' }} />
                         경은PBST
