@@ -6,7 +6,7 @@ from app.services.picture_words import (
     add_student, delete_student,
     fetch_student_vocab, update_student_vocab, batch_update_student_vocab,
     fetch_lessons, update_lesson,
-    fetch_minutes, add_minute_entry, delete_minute_entry,
+    fetch_minutes, add_minute_entry, update_minute_entry, delete_minute_entry,
     fetch_class_overview, fetch_certification_status,
     init_picture_word_system
 )
@@ -121,17 +121,29 @@ class MinuteUpdateRequest(BaseModel):
 
 @router.patch("/minutes")
 def patch_minute(req: MinuteUpdateRequest):
-    result = update_minute_entry(req.source_type, req.row_index, req.updates)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result)
-    return result
+    try:
+        result = update_minute_entry(req.source_type, req.row_index, req.updates)
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail={"error": "API Error", "message": str(e), "trace": traceback.format_exc()})
 
 @router.delete("/minutes/{source_type}/{row_index}")
 def remove_minute(source_type: str, row_index: int):
-    result = delete_minute_entry(source_type, row_index)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result)
-    return result
+    try:
+        result = delete_minute_entry(source_type, row_index)
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail={"error": "API Error", "message": str(e), "trace": traceback.format_exc()})
 
 # ─────────────────────────────────────────────────────────────
 # 학급 현황
