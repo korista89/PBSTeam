@@ -49,6 +49,7 @@ interface MinuteRow {
   학급ID: string;
   source_type: string;
   row_index: number;
+  lesson_num?: string;
 }
 interface OverviewRow {
   class_id: string;
