@@ -28,7 +28,7 @@ export default function RootLayout({
     <html lang="ko">
       <body className={inter.className}>
         {children}
-        <footer style={{ textAlign: "center", padding: "20px", backgroundColor: "#f8f9fa", color: "#6c757d", fontSize: "14px", letter-spacing: "0.5px" } as any}>
+        <footer style={{ textAlign: "center", padding: "20px", backgroundColor: "#f8f9fa", color: "#6c757d", fontSize: "14px", letterSpacing: "0.5px" }}>
             &copy; 2026 Jong Ho Park, Special Educator, BCBA. All rights reserved.
         </footer>
       </body>
