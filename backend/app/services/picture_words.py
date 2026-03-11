@@ -441,24 +441,30 @@ def add_minute_entry(date: str, kind: str, source: str, content: str, class_id: 
     return {"message": "협의록 추가 완료"}
 
 def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict:
-    ss = get_pw_spreadsheet()
-    if not ss:
-        return {"error": "Sheet not accessible"}
-        
-    if source_type == "minutes":
-        ws = get_minutes_ws(ss)
-        col_map = {"날짜": 1, "구분": 2, "출처(학생/차시)": 3, "내용": 4, "학급ID": 5, "학급명": 6}
-    elif source_type == "lessons":
-        ws = get_lesson_ws(ss)
-        col_map = {"내용": 7, "날짜": 8} # 수업가이드에서는 내용=준비협의내용(col 7), 날짜=협의날짜(col 8)
-    else:
-        return {"error": "Invalid source_type"}
+    try:
+        ss = get_pw_spreadsheet()
+        if not ss:
+            return {"error": "Sheet not accessible"}
+            
+        if source_type == "minutes":
+            ws = get_minutes_ws(ss)
+            col_map = {"날짜": 1, "구분": 2, "출처(학생/차시)": 3, "내용": 4, "학급ID": 5, "학급명": 6}
+        elif source_type == "lessons":
+            ws = get_lesson_ws(ss)
+            col_map = {"내용": 7, "날짜": 8} # 수업가이드에서는 내용=준비협의내용(col 7), 날짜=협의날짜(col 8)
+        else:
+            return {"error": f"Invalid source_type: {source_type}"}
 
-    for key, val in updates.items():
-        if key in col_map:
-            ws.update_cell(row_index, col_map[key], str(val))
-    
-    return {"message": "업데이트 완료"}
+        # cell 단위 업데이트 대신 범위 업데이트 고려 가능하나, 여기서는 안정성을 위해 try-except 추가
+        for key, val in updates.items():
+            if key in col_map:
+                ws.update_cell(row_index, col_map[key], str(val))
+        
+        clear_pw_cache()
+        return {"message": "업데이트 완료"}
+    except Exception as e:
+        print(f"[PW] Update Error: {e}")
+        return {"error": str(e)}
 
 def delete_minute_entry(source_type: str, row_index: int) -> dict:
     ss = get_pw_spreadsheet()

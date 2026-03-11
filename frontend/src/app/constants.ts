@@ -36,6 +36,7 @@ export const CLASS_LIST = [
     { code: "221", name: "초등 2학년 1반", id: "초2-1관리자" }, // 222 missing in original but let's be safe or just follow original
     { code: "222", name: "초등 2학년 2반", id: "초2-2관리자" },
     { code: "231", name: "초등 3학년 1반", id: "초3-1관리자" },
+    { code: "232", name: "초등 3학년 2반", id: "초3-2관리자" },
     { code: "241", name: "초등 4학년 1반", id: "초4-1관리자" },
     { code: "242", name: "초등 4학년 2반", id: "초4-2관리자" },
     { code: "251", name: "초등 5학년 1반", id: "초5-1관리자" },
