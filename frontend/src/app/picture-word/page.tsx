@@ -287,8 +287,8 @@ export default function PictureWordPage() {
           `${API}/vocab/batch/${selectedStudent.학급ID}/${encodeURIComponent(selectedStudent.학생이름)}`,
           { payload }
         );
-      } catch {
-        alert("업데이트 실패: 동기화에 문제가 발생했습니다.");
+      } catch (err: any) {
+        alert(`업데이트 실패: ${err.response?.data?.detail || "동기화에 문제가 발생했습니다."}`);
         loadVocab();
       }
     }, 1500);
@@ -307,8 +307,8 @@ export default function PictureWordPage() {
       setLessons((prev) =>
         prev.map((l) => (l.차시 === lessonNum ? { ...l, [field]: value } : l)),
       );
-    } catch {
-      alert("업데이트 실패");
+    } catch (err: any) {
+      alert(`업데이트 실패: ${err.response?.data?.detail || "알 수 없는 오류"}`);
     }
   };
 
@@ -329,8 +329,8 @@ export default function PictureWordPage() {
       });
       setNewMinute({ date: "", kind: "수업협의", source: "", content: "" });
       loadMinutes();
-    } catch {
-      alert("협의록 추가 실패");
+    } catch (err: any) {
+      alert(`협의록 추가 실패: ${err.response?.data?.detail || "알 수 없는 오류"}`);
     }
   };
 

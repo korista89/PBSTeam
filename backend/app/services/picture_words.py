@@ -1,3 +1,4 @@
+from typing import Optional
 import gspread
 from app.services.sheets import get_sheets_client, settings, fetch_student_status
 from app.core.picture_word_data import DOMAINS, VBS, VOCAB_DATA, LESSON_DATA
@@ -38,7 +39,7 @@ def get_or_create_worksheet(ss, title: str, rows=200, cols=20):
 _pw_cache = {"vocab": {}}
 PW_CACHE_TTL = 60
 
-def clear_pw_cache(class_id: str = None):
+def clear_pw_cache(class_id: Optional[str] = None):
     global _pw_cache
     if class_id:
         _pw_cache["vocab"][class_id] = {"data": [], "timestamp": 0}
