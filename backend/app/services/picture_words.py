@@ -457,11 +457,13 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
     max_retries = 2
     last_error = None
     
+    print(f"[PW] update_minute_entry(source_type={source_type}, row_index={row_index}, updates_keys={list(updates.keys())})")
+    
     for attempt in range(max_retries + 1):
         try:
             ss = get_pw_spreadsheet()
             if not ss:
-                return {"error": "Sheet not accessible"}
+                return {"error": "구글 시트에 접근할 수 없습니다."}
                 
             if source_type == "minutes":
                 ws = get_minutes_ws(ss)
@@ -469,38 +471,50 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
                 target_row = row_index
             elif source_type == "lessons":
                 ws = get_lesson_ws(ss)
-                col_map = {"내용": 7, "날짜": 8} # 수업가이드에서는 내용=준비협의내용(col 7), 날짜=협의날짜(col 8)
+                col_map = {"내용": 7, "날짜": 8}
                 
-                # Robust Update: lesson_num이 있다면 row_index 대신 시트에서 직접 찾음
                 lesson_num = updates.get("lesson_num")
                 if lesson_num:
                     records = get_all_records_with_row_index(ws)
-                    target_row = next((r["_row_index"] for r in records if str(r.get("차시")) == str(lesson_num)), None)
+                    target_row = next((r["_row_index"] for r in records if str(r.get("차시")).strip() == str(lesson_num).strip()), None)
                     if not target_row:
-                        return {"error": f"차시 {lesson_num}를 시트에서 찾을 수 없습니다."}
+                        print(f"[PW] Lesson {lesson_num} not found. Fallback to row_index {row_index}")
+                        target_row = row_index
                 else:
                     target_row = row_index
             else:
-                return {"error": f"Invalid source_type: {source_type}"}
+                return {"error": f"지원하지 않는 소스 타입입니다: {source_type}"}
 
-            print(f"[PW] Updating {source_type} row {target_row} with {updates} (Attempt {attempt+1})")
+            if not target_row or target_row < 2:
+                return {"error": f"유효하지 않은 행 번호입니다: {target_row}"}
+
+            print(f"[PW] Updating {source_type} at absolute row {target_row}...")
             
             for key, val in updates.items():
                 if key in col_map:
                     col_idx = col_map[key]
+                    print(f"[PW]   -> col {col_idx} ({key}) = '{val}'")
                     ws.update_cell(target_row, col_idx, str(val))
             
             clear_pw_cache()
-            return {"message": "업데이트 완료"}
+            return {"message": "업데이트 완료", "row": target_row}
+            
         except Exception as e:
             last_error = e
             print(f"[PW] Update Error (Attempt {attempt+1}): {e}")
             if attempt < max_retries:
-                time.sleep(1) # Wait before retry
+                time.sleep(1)
                 continue
             break
             
-    return {"error": f"최종 실패: {str(last_error)}", "details": {"row_index": row_index, "source": source_type}}
+    return {
+        "error": f"업데이트 실패: {str(last_error)}", 
+        "details": {
+            "source": source_type,
+            "tried_row": target_row if 'target_row' in locals() else row_index,
+            "updates_count": len(updates)
+        }
+    }
 
 def delete_minute_entry(source_type: str, row_index: int) -> dict:
     ss = get_pw_spreadsheet()

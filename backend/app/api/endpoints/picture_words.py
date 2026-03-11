@@ -123,14 +123,14 @@ class MinuteUpdateRequest(BaseModel):
 def patch_minute(req: MinuteUpdateRequest):
     result = update_minute_entry(req.source_type, req.row_index, req.updates)
     if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
+        raise HTTPException(status_code=500, detail=result)
     return result
 
 @router.delete("/minutes/{source_type}/{row_index}")
 def remove_minute(source_type: str, row_index: int):
     result = delete_minute_entry(source_type, row_index)
     if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
+        raise HTTPException(status_code=500, detail=result)
     return result
 
 # ─────────────────────────────────────────────────────────────
