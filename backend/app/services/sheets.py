@@ -914,12 +914,11 @@ def update_student_beable_code(code: str, beable_code: str):
 
 def get_beable_code_mapping():
     """Get mapping of BeAble codes to student codes for data analysis"""
-    ws = get_student_status_worksheet()
-    if not ws:
-        return {}
-    
     try:
-        records = ws.get_all_records()
+        records = fetch_student_status()
+        if not records:
+            return {}
+        
         mapping = {}
         for r in records:
             beable = str(r.get('BeAble코드', '')).strip()
@@ -958,12 +957,8 @@ def get_beable_code_mapping():
 
 def get_enrolled_student_count():
     """Get count of enrolled students (재학여부 = O)"""
-    ws = get_student_status_worksheet()
-    if not ws:
-        return 0
-    
     try:
-        records = ws.get_all_records()
+        records = fetch_student_status()
         return sum(1 for r in records if str(r.get('재학여부', 'O')).strip() == 'O')
     except Exception as e:
         return 0

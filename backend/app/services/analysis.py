@@ -196,7 +196,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
                     "student_code": str(student_code),
                     "count": freq_count,
                     "max_intensity": int(max_intensity),
-                    "tier": tier_string,
+                    "tier": tier,
                     "class": tier_status_cache.get(str(student_code), '-')
                 })
     
