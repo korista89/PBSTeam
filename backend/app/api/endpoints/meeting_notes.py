@@ -84,7 +84,8 @@ async def update_note(note_id: str, request: UpdateMeetingNoteRequest):
     """Update a meeting note with permission check"""
     # 1. Fetch the note to check author
     all_notes = fetch_meeting_notes()
-    note = next((n for n in all_notes if str(n.get("id")) == str(note_id)), None)
+    # Robust matching: check 'id', 'uuid', or 'created_at' (legacy)
+    note = next((n for n in all_notes if str(n.get("id")) == str(note_id) or str(n.get("uuid")) == str(note_id) or str(n.get("created_at")) == str(note_id)), None)
     
     if not note:
         raise HTTPException(status_code=404, detail="회의록을 찾을 수 없습니다.")
@@ -107,7 +108,7 @@ async def delete_note(note_id: str, user_id: str, role: str):
     """Delete a meeting note with permission check"""
     # 1. Fetch the note to check author
     all_notes = fetch_meeting_notes()
-    note = next((n for n in all_notes if str(n.get("id")) == str(note_id)), None)
+    note = next((n for n in all_notes if str(n.get("id")) == str(note_id) or str(n.get("uuid")) == str(note_id) or str(n.get("created_at")) == str(note_id)), None)
     
     if not note:
         raise HTTPException(status_code=404, detail="회의록을 찾을 수 없습니다.")

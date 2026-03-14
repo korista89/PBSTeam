@@ -149,9 +149,9 @@ export default function StudentDetail() {
                </h3>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                   {[
-                    { title: "Antecedent (배경)", value: `${data.location_stats?.[0]?.name || '-'} / ${data.time_stats?.[0]?.name || '-'}`, bg: '#eff6ff', color: '#1d4ed8' },
-                    { title: "Behavior (행동)", value: data.behavior_types?.[0]?.name || '-', bg: '#fff1f2', color: '#be123c' },
-                    { title: "Function (기능)", value: data.functions?.[0]?.name || '-', bg: '#f0fdf4', color: '#15803d' }
+                    { title: "Antecedent (배경)", value: `${(data.location_stats || [])?.[0]?.name || '-'} / ${(data.time_stats || [])?.[0]?.name || '-'}`, bg: '#eff6ff', color: '#1d4ed8' },
+                    { title: "Behavior (행동)", value: (data.behavior_types || [])?.[0]?.name || '-', bg: '#fff1f2', color: '#be123c' },
+                    { title: "Function (기능)", value: (data.functions || [])?.[0]?.name || '-', bg: '#f0fdf4', color: '#15803d' }
                   ].map((f, i) => (
                     <div key={i} style={{ padding: '24px', borderRadius: '20px', background: f.bg }}>
                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: f.color, marginBottom: '8px', opacity: 0.7 }}>{f.title}</div>

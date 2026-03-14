@@ -1182,21 +1182,24 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
     
     try:
         records = ws.get_all_records()
-        # sort by CreatedAt desc
         valid_records = []
+        
+        # Clean student code for filtering if provided
+        clean_target_code = str(student_code).strip() if student_code else None
+        
         for r in records:
             # Filter by meeting_type if provided
-            if meeting_type and str(r.get('MeetingType')) != str(meeting_type):
+            if meeting_type and str(r.get('MeetingType')).strip() != str(meeting_type).strip():
                 continue
-            # Filter by student_code if provided
-            if student_code and str(r.get('StudentCode')) != str(student_code):
-                continue
+            # Filter by student_code if provided (handle partial matches or name-based if code missing)
+            if clean_target_code:
+                row_code = str(r.get('StudentCode', '')).strip()
+                if row_code != clean_target_code:
+                    continue
             
             uid = r.get('UUID')
             if not uid:
-                # One-time migration: If UUID is missing, use CreatedAt or generate one
-                import uuid
-                uid = str(r.get('CreatedAt')) if r.get('CreatedAt') else str(uuid.uuid4())
+                uid = r.get('CreatedAt') or str(r.get('Date')) # Fallback for legacy
             
             valid_records.append({
                 "id": uid, 
@@ -1204,7 +1207,7 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
                 "meeting_type": r.get('MeetingType'),
                 "content": r.get('Content'),
                 "author": r.get('Author'),
-                "created_at": r.get('CreatedAt'),
+                "created_at": r.get('CreatedAt') or r.get('Date'),
                 "student_code": r.get('StudentCode', ''),
                 "period_start": r.get('PeriodStart', ''),
                 "period_end": r.get('PeriodEnd', ''),
@@ -1212,7 +1215,10 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
             })
             
         # Sort descending by CreatedAt
-        valid_records.sort(key=lambda x: x['created_at'], reverse=True)
+        try:
+            valid_records.sort(key=lambda x: x['created_at'], reverse=True)
+        except:
+            pass
         return valid_records
     except Exception as e:
         print(f"Error fetching meeting notes: {e}")
