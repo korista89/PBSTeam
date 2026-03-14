@@ -269,7 +269,10 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
         role: isAdmin() ? "admin" : "teacher"
       });
       setEditingId(null); fetchNotes();
-    } catch (e) { alert("수정 실패"); }
+    } catch (e: any) { 
+      const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
+      alert("수정 실패: " + errorMsg); 
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -282,7 +285,10 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
         }
       });
       fetchNotes();
-    } catch (e) { alert("삭제 실패"); }
+    } catch (e: any) { 
+      const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
+      alert("삭제 실패: " + errorMsg); 
+    }
   };
 
   const handleSave = async () => {
@@ -294,7 +300,10 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
         content, author: user?.id || "Admin", student_code: studentCode
       });
       setContent(""); fetchNotes();
-    } catch (e) { alert("저장 실패"); } finally { setLoading(false); }
+    } catch (e: any) { 
+      const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
+      alert("저장 실패: " + errorMsg); 
+    } finally { setLoading(false); }
   };
 
   return (

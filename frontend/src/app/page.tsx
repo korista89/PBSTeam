@@ -451,7 +451,10 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
             });
             setContent("");
             fetchNotes();
-        } catch (e) { alert("저장 실패"); } finally { setLoading(true); setLoading(false); }
+        } catch (e: any) { 
+            const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
+            alert("저장 실패: " + errorMsg); 
+        } finally { setLoading(false); }
     };
 
     const handleUpdate = async (id: string) => {
@@ -463,7 +466,10 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
              });
              setEditingId(null);
              fetchNotes();
-        } catch (e) { alert("수정 실패"); }
+        } catch (e: any) { 
+            const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
+            alert("수정 실패: " + errorMsg); 
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -476,7 +482,10 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
                  }
              });
              fetchNotes();
-        } catch (e) { alert("삭제 실패"); }
+        } catch (e: any) { 
+            const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
+            alert("삭제 실패: " + errorMsg); 
+        }
     };
 
     return (

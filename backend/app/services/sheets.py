@@ -1257,22 +1257,29 @@ def add_meeting_note(data: dict):
         return {"error": str(e)}
 
 def update_meeting_note(note_id: str, content: str):
-    """Update a meeting note content by its UUID"""
+    """Update a meeting note content by its UUID or CreatedAt (fallback)"""
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
     
     try:
-        # Search for UUID in Column 9
-        cell = ws.find(note_id, in_column=9)
-        if not cell:
-            # Fallback search in Column 5 (CreatedAt) for older records without UUID
-            cell = ws.find(note_id, in_column=5)
-            if not cell:
-                return {"error": "Note not found"}
+        records = ws.get_all_records()
+        row_idx = -1
+        
+        # Search for note_id in UUID or ID/CreatedAt (legacy)
+        for i, r in enumerate(records):
+            # Column 9 is UUID, Column 5 is CreatedAt
+            if str(r.get('UUID', '')).strip() == str(note_id).strip() or \
+               str(r.get('id', '')).strip() == str(note_id).strip() or \
+               str(r.get('CreatedAt', '')).strip() == str(note_id).strip():
+                row_idx = i + 2 # +2 for header offset
+                break
+        
+        if row_idx == -1:
+            return {"error": f"Note not found with ID: {note_id}"}
         
         # Update content (Column 3)
-        ws.update_cell(cell.row, 3, content)
+        ws.update_cell(row_idx, 3, content)
         clear_cache("meeting_notes")
         return {"message": "Note updated"}
     except Exception as e:
@@ -1280,24 +1287,31 @@ def update_meeting_note(note_id: str, content: str):
         return {"error": str(e)}
 
 def delete_meeting_note(note_id: str):
-    """Delete a meeting note by its UUID"""
+    """Delete a meeting note by its UUID or CreatedAt (fallback)"""
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
     
     try:
-        # Search for UUID in Column 9
-        cell = ws.find(note_id, in_column=9)
-        if not cell:
-            # Fallback search in Column 5 (CreatedAt) for older records without UUID
-            cell = ws.find(note_id, in_column=5)
-            if not cell:
-                return {"error": "Note not found"}
+        records = ws.get_all_records()
+        row_idx = -1
         
-        ws.delete_rows(cell.row)
+        for i, r in enumerate(records):
+            if str(r.get('UUID', '')).strip() == str(note_id).strip() or \
+               str(r.get('id', '')).strip() == str(note_id).strip() or \
+               str(r.get('CreatedAt', '')).strip() == str(note_id).strip():
+                row_idx = i + 2
+                break
+                
+        if row_idx == -1:
+            return {"error": f"Note not found with ID: {note_id}"}
+        
+        ws.delete_rows(row_idx)
         clear_cache("meeting_notes")
         return {"message": "Note deleted"}
     except Exception as e:
+        print(f"Error deleting meeting note: {e}")
+        return {"error": str(e)}
         print(f"Error deleting meeting note: {e}")
         return {"error": str(e)}
 
