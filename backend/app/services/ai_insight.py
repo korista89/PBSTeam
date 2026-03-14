@@ -771,3 +771,69 @@ def _top_items(counts: dict, n: int = 5) -> str:
         return "(없음)"
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:n]
     return ", ".join([f"{k}({v}건)" for k, v in sorted_items])
+
+def generate_bcba_comprehensive_analysis(
+    start_date: str,
+    end_date: str,
+    analytics_data: dict,
+    cico_data: dict,
+    tier3_data: dict
+) -> str:
+    """Generate a holistic BCBA report for the entire school based on dashboard data."""
+    
+    # Format analytics context
+    summary = analytics_data.get("summary", {})
+    charts = analytics_data.get("charts", {})
+    
+    behavior_types = ", ".join([f"{item['name']}({item['value']})" for item in charts.get("behavior_types", [])[:5]])
+    time_slots = ", ".join([f"{item['name']}({item['value']})" for item in charts.get("time_slots", [])[:5]])
+    locations = ", ".join([f"{item['name']}({item['value']})" for item in charts.get("locations", [])[:5]])
+    
+    risk_list = analytics_data.get("risk_list", [])
+    risk_text = "\n".join([f"- {r['name']}: {r['count']}건" for r in risk_list[:5]]) if risk_list else "없음"
+    
+    # Format CICO context
+    cico_summary = cico_data.get("summary", {})
+    cico_text = f"- 대상 학생: {cico_summary.get('total_students', 0)}명\n" \
+                f"- 평균 수행률: {cico_summary.get('avg_rate', 0)}%\n" \
+                f"- 목표 달성: {cico_summary.get('achieved_count', 0)}명 / 미달성: {cico_summary.get('not_achieved_count', 0)}명"
+    
+    # Format Tier 3 context
+    t3_students = tier3_data.get("students", [])
+    t3_text = "\n".join([f"- {s['code']}({s['name']}): {s.get('incidents', 0)}건 발생" for s in t3_students[:5]]) if t3_students else "없음"
+    
+    prompt = f"""[분석 기간]: {start_date} ~ {end_date}
+
+[1. 전체 행동 발생 통계]
+- 총 발생 건수: {summary.get('total_incidents', 0)}건
+- 일평균 발생: {summary.get('daily_avg', 0)}건
+- 주요 행동 유형: {behavior_types}
+- 주요 발생 시간대: {time_slots}
+- 주요 발생 장소: {locations}
+
+[2. 집중 지원 대상 학생 (High Risk)]
+{risk_text}
+
+[3. Tier 2 (CICO) 운영 현황]
+{cico_text}
+
+[4. Tier 3 (집중지원/위기관리) 학생 현황]
+{t3_text}
+
+[지시사항]
+당신은 특수학교 PBS 전문가(BCBA)입니다. 위 데이터를 바탕으로 학교 전체의 PBS 운영 현황을 진단하고 개선 방향을 제시하는 '학교 PBS 운영 종합 분석 보고서'를 작성하세요.
+
+보고서 구성:
+1. **행동 현황 총평**: 기간 내 행동 발생 추이와 전반적인 학교 분위기 분석
+2. **데이터 기반 환경 분석**: 시간, 장소, 유형 데이터를 통해 도출된 환경적 수정이 필요한 포인트 제안
+3. **효과성 진단**: CICO 수행률과 Tier 3 학생들의 추이를 통해 현재 지원 체계의 효과성 평가
+4. **고위험군 개입 전략**: 주의 요망 학생들에 대한 팀 차원의 즉각적인 대응 방안 권고
+5. **종합 제언**: 학교 PBS 시스템을 한 단계 업그레이드하기 위한 BCBA로서의 전문적 제언
+
+작성 규칙:
+- 전문적이면서도 현장 교사들이 실천 가능한 구체적인 언어를 사용하세요.
+- 데이터 기반의 분석임을 명확히 하세요.
+- 개조식과 서술식을 적절히 섞어 가독성 있게 작성하세요.
+- 분량은 1000~1500자 내외로 충분한 깊이의 분석을 제공하세요."""
+
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2000)

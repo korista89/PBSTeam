@@ -387,3 +387,33 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
         cico_data=cico_data
     )
     return {"analysis": result}
+
+class ComprehensiveAnalysisRequest(BaseModel):
+    start_date: str
+    end_date: str
+
+@router.post("/ai-comprehensive-analysis")
+async def ai_comprehensive_analysis(req: ComprehensiveAnalysisRequest):
+    """Generate holistic BCBA AI analysis for the entire school's PBS operation."""
+    from app.services.ai_insight import generate_bcba_comprehensive_analysis
+    from app.services.analysis import get_analytics_data
+    
+    # 1. Fetch Dashboard Analytics Data
+    analytics_data = get_analytics_data(req.start_date, req.end_date)
+    
+    # 2. Fetch CICO Data for current month
+    import datetime
+    current_month = datetime.datetime.now().month
+    cico_data = get_monthly_cico_data(current_month)
+    
+    # 3. Fetch Tier 3 Report
+    t3_data = get_tier3_report_data(req.start_date, req.end_date)
+    
+    result = generate_bcba_comprehensive_analysis(
+        req.start_date, 
+        req.end_date,
+        analytics_data,
+        cico_data,
+        t3_data
+    )
+    return {"analysis": result}

@@ -123,7 +123,7 @@ export default function LoginPage() {
                             lineHeight: '1.4',
                             letterSpacing: '0.5px'
                         }}>
-                            Jong Ho Park<br />
+                            Jongho Park<br />
                             Special Educator · BCBA
                         </div>
                     </div>

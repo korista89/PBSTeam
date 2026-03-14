@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
@@ -15,15 +15,15 @@ import GlobalNav, { useDateRange } from "./components/GlobalNav";
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
 const TIER_COLORS: Record<string, string> = {
-  "Tier 1 (보편)": "#22c55e",
+  "Tier 1 (보편)": "#10b981",
   "Tier 2-CICO (선별)": "#f59e0b",
   "Tier 2-SST (집중)": "#f97316",
   "Tier 3 (개별집중)": "#ef4444",
-  "Tier 3+ (위기)": "#7c3aed",
+  "Tier 3+ (위기)": "#8b5cf6",
 };
 
-// ====== AI Analysis Card Component ======
-function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sectionName: string; dataContext: any; startDate?: string; endDate?: string }) {
+// ====== AI Comprehensive Analysis Component ======
+function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; endDate: string }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -32,39 +32,75 @@ function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sect
     setLoading(true);
     setVisible(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
-        section_name: sectionName,
-        data_context: dataContext || {},
-        start_date: startDate || null,
-        end_date: endDate || null
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-comprehensive-analysis`, {
+        start_date: startDate,
+        end_date: endDate
       });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch (e) {
-      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+      setAnalysis("⚠️ 학교 전체 PBS 종합 분석 요청 실패. 잠시 후 다시 시도해주세요.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="no-print" style={{ marginTop: '15px' }}>
+    <div className="no-print" style={{ marginBottom: '32px' }}>
       {!visible ? (
         <button onClick={requestAnalysis} style={{
-          padding: '8px 16px', backgroundColor: '#7c3aed', color: 'white',
-          border: 'none', borderRadius: '8px', cursor: 'pointer',
-          fontSize: '0.85rem', fontWeight: '600',
-          boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
-        }}>🤖 BCBA AI 분석 요청</button>
+          width: '100%', padding: '24px', 
+          background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', 
+          color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer',
+          fontSize: '1.2rem', fontWeight: '800',
+          boxShadow: '0 10px 25px rgba(99, 102, 241, 0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+          transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+          letterSpacing: '-0.02em'
+        }}
+        onMouseOver={e => {
+            e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
+            e.currentTarget.style.boxShadow = '0 15px 35px rgba(99, 102, 241, 0.5)';
+        }}
+        onMouseOut={e => {
+            e.currentTarget.style.transform = 'scale(1) translateY(0)';
+            e.currentTarget.style.boxShadow = '0 10px 25px rgba(99, 102, 241, 0.4)';
+        }}>
+          <span style={{ fontSize: '1.6rem' }}>🧙‍♂️</span> BCBA AI 학교 전체 PBS 운영 정밀 분석 리포트 생성
+        </button>
       ) : (
-        <div style={{ backgroundColor: '#f5f3ff', padding: '16px', borderRadius: '10px', border: '1px solid #ddd5f5', marginTop: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h4 style={{ margin: 0, color: '#6d28d9', fontSize: '0.9rem' }}>🤖 BCBA AI 분석 — {sectionName}</h4>
-            <button onClick={() => setVisible(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#9ca3af' }}>✕ 닫기</button>
+        <div style={{ 
+            background: 'rgba(255, 255, 255, 0.9)', 
+            backdropFilter: 'blur(10px)',
+            padding: '32px', borderRadius: '24px', 
+            border: '1px solid rgba(99, 102, 241, 0.2)', 
+            boxShadow: '0 20px 50px rgba(0,0,0,0.1)' 
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '1.3rem', fontWeight: 900 }}>🤖 AI Specialist Analysis</h3>
+            <div style={{ display: 'flex', gap: '12px' }}>
+               <button onClick={requestAnalysis} style={{ padding: '6px 14px', borderRadius: '10px', background: '#f5f3ff', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: '#6366f1', fontWeight: 700, transition: 'background 0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#ede9fe'} onMouseOut={e=>e.currentTarget.style.background='#f5f3ff'}>🔄 Refresh</button>
+               <button onClick={() => setVisible(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#94a3b8' }}>✕</button>
+            </div>
           </div>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#7c3aed' }}>⏳ AI가 데이터를 분석하고 있습니다...</div>
+            <div style={{ textAlign: 'center', padding: '60px', color: '#6366f1' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '20px', animation: 'pulse 2s infinite' }}>🧠</div>
+              <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Expert is synthesizing all school-wide data...</p>
+              <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '8px' }}>Tier 1-3, CICO, Behavior Logs, Meeting Notes integrated.</p>
+            </div>
           ) : (
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: '1.6', color: '#334155' }}>{analysis}</div>
+            <div style={{ 
+              whiteSpace: 'pre-wrap', 
+              fontSize: '1rem', 
+              lineHeight: '1.9', 
+              color: '#334155',
+              maxHeight: '650px',
+              overflowY: 'auto',
+              paddingRight: '15px',
+              textAlign: 'justify'
+            }} className="custom-scrollbar">
+              {analysis}
+            </div>
           )}
         </div>
       )}
@@ -76,10 +112,14 @@ function AIAnalysisCard({ sectionName, dataContext, startDate, endDate }: { sect
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-        <p style={{ margin: 0, fontWeight: 600, color: '#1e293b', fontSize: '0.85rem' }}>{label}</p>
+      <div style={{ background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(4px)', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px rgba(0,0,0,0.05)' }}>
+        <p style={{ margin: '0 0 8px 0', fontWeight: 800, color: '#1e293b', fontSize: '0.9rem' }}>{label}</p>
         {payload.map((p: any, i: number) => (
-          <p key={i} style={{ margin: '2px 0', color: p.color || '#3b82f6', fontSize: '0.8rem' }}>{p.name}: <strong>{p.value}</strong></p>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: p.color || '#3b82f6' }} />
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{p.name}:</span>
+            <span style={{ color: '#1e293b', fontWeight: 800, fontSize: '0.85rem' }}>{p.value}</span>
+          </div>
         ))}
       </div>
     );
@@ -90,8 +130,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 // Chart wrapper
 function ChartBox({ title, children, height = 340 }: { title: string; children: React.ReactNode; height?: number }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>{title}</div>
+    <div style={{ 
+        background: 'rgba(255, 255, 255, 0.8)', 
+        backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(226, 232, 240, 0.8)', 
+        borderRadius: '24px', 
+        padding: '28px', 
+        boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
+        transition: 'transform 0.3s'
+    }}
+    onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+    onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '4px', height: '18px', background: '#6366f1', borderRadius: '2px' }} />
+          {title}
+      </div>
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           {children as React.ReactElement}
@@ -141,322 +194,226 @@ export default function Home() {
     return () => abortController.abort();
   }, [startDate, endDate, user?.class_id, user?.id]);
 
+  useEffect(() => {
+    if (!data || !isAdmin()) return;
+    // Log for internal telemetry
+    console.log("Dashboard data refreshed", new Date().toISOString());
+  }, [data, isAdmin]);
+
   const summary = data?.summary || { total_incidents: 0, avg_intensity: 0, risk_student_count: 0, enrolled_count: 0 };
   const big5 = data?.big5 || { locations: [], behaviors: [], times: [], weekdays: [] };
   const riskList = data?.risk_list || [];
   const safetyAlerts = data?.safety_alerts || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const monthlyTrend: any[] = (data as any)?.monthly_trend || [];
-
-  // Calculate total for tier % display
   const tierTotal = tierDist.reduce((s: number, t: any) => s + t.value, 0);
 
   return (
     <AuthCheck>
-      <div className="container">
+      <div className="container" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '60px' }}>
         <GlobalNav currentPage="dashboard" />
 
+        {/* Dynamic Background decorations */}
+        <div style={{ position: 'fixed', top: -100, right: -100, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'fixed', bottom: -100, left: -100, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,85,247,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
         {loading && !data && (
-          <div style={{ padding: '50px', textAlign: 'center', color: '#64748b' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
-            <p>데이터를 불러오는 중...</p>
+          <div style={{ padding: '100px', textAlign: 'center', color: '#64748b' }}>
+            <div className="loading-spinner" style={{ fontSize: '3rem', marginBottom: '20px', animation: 'spin 2s linear infinite' }}>📀</div>
+            <p style={{ fontWeight: 700, fontSize: '1.2rem' }}>심층 분석 데이터를 구성하고 있습니다...</p>
           </div>
         )}
 
         {fetchError && (
-          <div style={{ padding: '50px', textAlign: 'center', color: '#ef4444' }}>
-            <p>⚠️ {fetchError}</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '10px', color: '#64748b' }}>날짜 필터를 조정해보세요.</p>
+          <div style={{ padding: '60px', textAlign: 'center', color: '#ef4444' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
+            <p style={{ fontWeight: 800 }}>{fetchError}</p>
+            <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}>다시 시도</button>
           </div>
         )}
 
         {data && (
-          <div style={{ padding: '20px', maxWidth: '1400px', margin: '20px auto' }}>
+          <div style={{ padding: '24px', maxWidth: '1500px', margin: '0 auto', position: 'relative' }}>
             <style jsx global>{`
-              @media print { body { background: white; -webkit-print-color-adjust: exact; } .no-print { display: none; } }
-              @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr !important; } .grid-3 { grid-template-columns: 1fr !important; } }
-              .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
-              .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
-              .section-heading { font-size: 1.1rem; font-weight: 700; color: #0f172a; border-left: 4px solid #3b82f6; padding-left: 12px; margin: 32px 0 16px 0; display: flex; align-items: center; gap: 8px; }
+              @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+              @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+              @media print { body { background: white; } .no-print { display: none; } .container { background: white !important; } }
+              .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
+              .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
+              @media (max-width: 1024px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+              @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+              .section-heading { font-size: 1.3rem; font-weight: 900; color: #0f172a; margin: 48px 0 24px 0; display: flex; align-items: center; gap: 12px; }
+              .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, #e2e8f0, transparent); }
+              .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+              .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+              .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
             `}</style>
 
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
               <div>
-                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
-                  📊 {isAdmin() ? "경은PBST 행동 지원 종합 대시보드" : `${user?.class_name || '학급'} 행동 지원 리포트`}
+                <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 950, color: '#0f172a', letterSpacing: '-0.03em' }}>
+                    {isAdmin() ? "경은PBST 종합 통계 분석" : "Hub 지원 리포트"}
                 </h1>
-                <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.85rem' }}>
-                  {startDate} ~ {endDate} | {date}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                    <span style={{ padding: '3px 10px', background: '#e0f2fe', color: '#0369a1', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800 }}>{user?.class_name || 'Admin'}</span>
+                    <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 500 }}>{startDate} ~ {endDate} 기준</span>
+                </div>
               </div>
-              <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => window.print()} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>🖨️ PDF 저장</button>
+              <div className="no-print" style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => window.print()} style={{ padding: '12px 24px', background: '#fff', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '14px', cursor: 'pointer', fontWeight: '700', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>📄</span> Export PDF
+                </button>
               </div>
             </div>
 
             {/* ===== KPI Cards ===== */}
-            <div className="grid-3" style={{ marginBottom: '24px' }}>
+            <div className="grid-3">
               {[
-                { label: "보고된 행동 건수", value: `${summary.total_incidents}건`, sub: "구글폼 제출 기준", color: "#3b82f6", icon: "📋" },
-                { label: "평균 행동 강도", value: `${(summary.avg_intensity || 0).toFixed(1)}/5`, sub: "강도 1(경미) ~ 5(위기)", color: summary.avg_intensity >= 4 ? "#ef4444" : summary.avg_intensity >= 3 ? "#f59e0b" : "#22c55e", icon: "⚡" },
-                { label: isAdmin() ? "집중 지원 대상자" : "학급 위험군", value: `${isAdmin() ? summary.risk_student_count : riskList.length}명`, sub: "Tier 2/3 해당 학생", color: "#ef4444", icon: "🚨" },
+                { label: "총 보고 빈도", value: `${summary.total_incidents}건`, sub: "입력된 전체 로그", color: "#6366f1", icon: "📊", grad: "linear-gradient(135deg, #e0e7ff 0%, #ffffff 100%)" },
+                { label: "평균 행동 강도", value: `${(summary.avg_intensity || 0).toFixed(1)}/5`, sub: "전체 행동 강도 평균", color: summary.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b", icon: "⚡", grad: "linear-gradient(135deg, #fff7ed 0%, #ffffff 100%)" },
+                { label: "심층 지원 대상", value: `${isAdmin() ? summary.risk_student_count : riskList.length}명`, sub: "Tier 2/3 위기군", color: "#ef4444", icon: "🚨", grad: "linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)" },
               ].map((card, i) => (
-                <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '1.5rem', opacity: 0.2 }}>{card.icon}</div>
-                  <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{card.label}</div>
-                  <div style={{ color: card.color, fontSize: '2rem', fontWeight: 800, margin: '4px 0' }}>{card.value}</div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{card.sub}</div>
+                <div key={i} style={{ 
+                    background: card.grad, border: '1px solid rgba(0,0,0,0.05)', borderRadius: '28px', 
+                    padding: '28px', boxShadow: '0 10px 20px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' 
+                }}>
+                  <div style={{ position: 'absolute', top: '24px', right: '28px', fontSize: '2rem', opacity: 0.15 }}>{card.icon}</div>
+                  <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>{card.label}</div>
+                  <div style={{ color: card.color, fontSize: '2.5rem', fontWeight: 950, letterSpacing: '-0.02em' }}>{card.value}</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 500, marginTop: '4px' }}>{card.sub}</div>
                 </div>
               ))}
             </div>
 
-            {/* ===== Section 1: 경은PBST Tier 분포 + 월별 추이 ===== */}
-            <div className="section-heading">1. 경은PBST Tier 분포 및 행동 추이</div>
+            {/* Section 1 */}
+            <div className="section-heading"><span>01</span> Tier Structure & Trends</div>
             <div className="grid-2">
-              {/* Tier Distribution Donut */}
-              <ChartBox title="🎯 경은PBST Tier 분포 (재학생 기준)">
+              <ChartBox title="🎯 Tier Distribution">
                 <PieChart>
-                  <Pie data={tierDist} cx="45%" cy="50%" outerRadius={110} innerRadius={65} paddingAngle={3} dataKey="value"
-                    label={({ name, value, cx, x, y, midAngle }: any) => {
-                      const pct = tierTotal > 0 ? Math.round(value / tierTotal * 100) : 0;
-                      return <text x={x} y={y} fill={TIER_COLORS[name] || '#333'} fontSize={11} fontWeight={700} textAnchor={x > cx ? 'start' : 'end'}>{pct}%</text>;
-                    }}>
+                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={120} innerRadius={80} paddingAngle={4} dataKey="value" stroke="none">
                     {tierDist.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.color || TIER_COLORS[entry.name] || '#ccc'} />
+                      <Cell key={index} fill={TIER_COLORS[entry.name] || '#cbd5e1'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(val: any, name: any) => [`${val}명 (${tierTotal > 0 ? Math.round(val / tierTotal * 100) : 0}%)`, name]} />
-                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} formatter={(value: any) => {
-                    const t = tierDist.find((d: any) => d.name === value);
-                    return `${value}: ${t?.value || 0}명`;
-                  }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" />
                 </PieChart>
               </ChartBox>
 
-              {/* Monthly Trend */}
-              <ChartBox title="📊 월별 보고빈도 추이">
-                <BarChart data={monthlyTrend} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="monthGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="100%" stopColor="#60a5fa" />
-                    </linearGradient>
-                  </defs>
+              <ChartBox title="📈 Incident frequency by Month">
+                <BarChart data={monthlyTrend} margin={{ top: 20, right: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="month" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} dy={8} />
-                  <YAxis style={{ fontSize: '11px' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="count" name="보고 건수" radius={[6, 6, 0, 0]}
-                    fill="url(#monthGrad)"
-                    label={{ position: 'top', fontSize: 11, fill: '#64748b' }} />
+                  <Bar dataKey="count" name="보고 건수" radius={[10, 10, 10, 10]} barSize={24}>
+                    {monthlyTrend.map((_, i) => <Cell key={i} fill="#6366f1" />)}
+                    <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 800, fill: '#6366f1' }} />
+                  </Bar>
                 </BarChart>
               </ChartBox>
             </div>
 
-            <AIAnalysisCard sectionName="경은PBST Tier 분포 및 추이" dataContext={{ tier_distribution: tierDist, monthly_trend: monthlyTrend }} startDate={startDate} endDate={endDate} />
-
-            {/* ===== Section 2: Big 5 행동 패턴 ===== */}
-            <div className="section-heading">2. 행동 패턴 분석 (Big 5)</div>
+            {/* Section 2 */}
+            <div className="section-heading"><span>02</span> Big 5 Pattern Analysis</div>
             <div className="grid-2">
-              {/* Location */}
-              <ChartBox title="📍 주요 발생 장소 (Top 장소)">
-                <BarChart
-                  data={[...(big5.locations || [])].sort((a: any, b: any) => b.value - a.value).slice(0, 8)}
-                  layout="vertical" margin={{ left: 5, right: 50 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+              <ChartBox title="📍 Location Analytics">
+                <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 60 }}>
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="보고 건수" fill="#3b82f6" barSize={22} radius={[0, 6, 6, 0]}>
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 11, fill: '#3b82f6', fontWeight: 700 }}
-                      formatter={(v: number) => `${v}건 (${big5.locations ? Math.round(v / summary.total_incidents * 100) : 0}%)`} />
+                  <Bar dataKey="value" name="건수" radius={[0, 10, 10, 0]} fill="#6366f1" barSize={18}>
+                      <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 800, fill: '#6366f1' }} formatter={(v:any)=>`${v}건`} />
                   </Bar>
                 </BarChart>
               </ChartBox>
-
-              {/* Behavior Types Pie */}
-              <ChartBox title="🎭 주요 행동 유형">
+              <ChartBox title="🎭 Behavior Profile">
                 <PieChart>
-                  <Pie data={big5.behaviors || []} cx="45%" cy="50%" outerRadius={105} innerRadius={55} paddingAngle={3} dataKey="value">
-                    {(big5.behaviors || []).map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316'][index % 7]} />
-                    ))}
+                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={110} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={4}>
+                    {(big5.behaviors || []).map((_, i) => <Cell key={i} fill={['#6366f1','#8b5cf6','#d946ef','#f43f5e','#f97316','#f59e0b'][i%6]} />)}
                   </Pie>
-                  <Tooltip formatter={(val: any) => [`${val}건 (${summary.total_incidents > 0 ? Math.round(val / summary.total_incidents * 100) : 0}%)`, '']} />
-                  <Legend wrapperStyle={{ fontSize: '11px' }} formatter={(v: any, e: any) => `${v}: ${e.payload?.value || 0}건`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" />
                 </PieChart>
               </ChartBox>
             </div>
 
-            <div className="grid-2">
-              {/* Time Slots */}
-              <ChartBox title="⏰ 시간대별 발생 패턴">
-                <BarChart data={big5.times || []} margin={{ top: 10, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" style={{ fontSize: '10px' }} axisLine={false} tickLine={false} dy={8} />
-                  <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="보고 건수" fill="#8b5cf6" barSize={30} radius={[6, 6, 0, 0]}>
-                    <LabelList dataKey="value" position="top" style={{ fontSize: 11, fill: '#6b7280' }} />
-                  </Bar>
-                </BarChart>
-              </ChartBox>
-
-              {/* Weekday */}
-              <ChartBox title="📅 요일별 발생 패턴">
-                <BarChart data={(big5.weekdays || []).filter((d: any) => !['토', '일'].includes(d.name))} margin={{ top: 10, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" style={{ fontSize: '12px' }} axisLine={false} tickLine={false} dy={8} />
-                  <YAxis axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="보고 건수" fill="#f59e0b" barSize={36} radius={[6, 6, 0, 0]}>
-                    <LabelList dataKey="value" position="top" style={{ fontSize: 11, fill: '#6b7280' }} />
-                  </Bar>
-                </BarChart>
-              </ChartBox>
-            </div>
-
-            <AIAnalysisCard sectionName="행동 패턴 분석 (Big 5)" dataContext={{ top_locations: (big5.locations || []).slice(0,3), top_behaviors: (big5.behaviors || []).slice(0,3), top_times: (big5.times || []).slice(0,3) }} startDate={startDate} endDate={endDate} />
-
-            {/* ===== Section 3: ABC 기능 분석 ===== */}
-            <div className="section-heading">3. ABC 기능 분석 (FBA 기반 중재 설계)</div>
+            {/* Section 3 */}
+            <div className="section-heading"><span>03</span> ABC Functional Assessment</div>
             <div className="grid-3">
-              {/* Function (Why) */}
-              <ChartBox title="❓ 행동의 기능 (Why)" height={300}>
+              <ChartBox title="❓ Function of Behavior" height={280}>
                 <PieChart>
-                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={95} innerRadius={50} paddingAngle={3} dataKey="value">
-                    {((data as any).functions || []).map((_: any, index: number) => (
-                      <Cell key={index} fill={['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4'][index % 6]} />
-                    ))}
+                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={90} innerRadius={60} dataKey="value">
+                      {((data as any).functions || []).map((_, i) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: any) => [`${v}건`, '']} />
-                  <Legend wrapperStyle={{ fontSize: '10px' }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" />
                 </PieChart>
               </ChartBox>
-
-              {/* Intensity Distribution */}
-              <ChartBox title="⚡ 행동 강도 분포 (Intensity)" height={300}>
-                <BarChart data={(data as any).intensity_distribution || []} layout="vertical" margin={{ left: 5, right: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" barSize={20} radius={[0, 4, 4, 0]}>
-                    {((data as any).intensity_distribution || []).map((entry: any, index: number) => {
-                       const colors = ['#22c55e', '#84cc16', '#f59e0b', '#f97316', '#ef4444'];
-                       const intensity = parseInt(entry.name) || 1;
-                       return <Cell key={index} fill={colors[Math.min(intensity - 1, 4)]} />;
-                    })}
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 700 }} />
-                  </Bar>
+              <ChartBox title="⚡ Intensity Heat" height={280}>
+                <BarChart data={(data as any).intensity_distribution || []}>
+                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                   <Bar dataKey="value" radius={[8,8,8,8]}>
+                       {((data as any).intensity_distribution || []).map((e:any, i:number) => {
+                           const colors = ['#10b981', '#fbbf24', '#f59e0b', '#ef4444', '#7f1d1d'];
+                           return <Cell key={i} fill={colors[parseInt(e.name)-1] || '#ccc'} />;
+                       })}
+                   </Bar>
                 </BarChart>
               </ChartBox>
-
-              {/* Monthly Intensity Trend */}
-              <ChartBox title="📈 월별 행동 강도 추이" height={300}>
-                <ComposedChart data={(data as any).intensity_trend || []} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="intGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.2}/>
-                      <stop offset="100%" stopColor="#ef4444" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="month" style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0, 5]} ticks={[1, 2, 3, 4, 5]} style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
+              <ChartBox title="⏰ Timeline Insight" height={280}>
+                <LineChart data={(data as any).intensity_trend || []}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 5]} hide />
+                  <Line type="monotone" dataKey="value" stroke="#ef4444" strokeWidth={4} dot={{ r: 6, fill: '#fa3f5e', stroke: '#fff', strokeWidth: 3 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="value" fill="url(#intGrad)" stroke="none" />
-                  <Line type="monotone" dataKey="value" name="평균 강도" stroke="#ef4444" strokeWidth={3} dot={{ stroke: '#ef4444', strokeWidth: 2, r: 4, fill: '#fff' }} />
-                </ComposedChart>
+                </LineChart>
               </ChartBox>
             </div>
 
-            {/* Hot Spot */}
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginBottom: '20px' }}>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', marginBottom: '16px' }}>🔥 행동 Hot Spot — 장소 × 시간대</div>
-              <ResponsiveContainer width="100%" height={260}>
-                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 60 }}>
-                  <CartesianGrid stroke="#f1f5f9" />
-                  <XAxis type="category" dataKey="x" name="시간대" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="y" name="장소" tick={{ fontSize: 10 }} width={90} axisLine={false} tickLine={false} />
-                  <ZAxis type="number" dataKey="value" range={[60, 500]} name="건수" />
-                  <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }: any) => {
-                    if (active && payload && payload.length) {
-                      const d = payload[0].payload;
-                      return <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', fontSize: '12px' }}>
-                        <b>{d.y}</b> × <b>{d.x}</b><br />{d.value}건
-                      </div>;
-                    }
-                    return null;
-                  }} />
-                  <Scatter name="행동 발생" data={(data as any).heatmap || []} fill="#ef4444" opacity={0.7} />
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-
-            <AIAnalysisCard sectionName="ABC 및 강도 분석" dataContext={{ functions: ((data as any).functions || []).slice(0,3), intensity_dist: (data as any).intensity_distribution }} startDate={startDate} endDate={endDate} />
-
-            {/* ===== Section 4: 집중 지원 대상 ===== */}
-            <div className="section-heading">4. 집중 지원 대상자 현황</div>
-
-            {safetyAlerts.length > 0 && (
-              <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', marginBottom: '16px' }}>
-                <div style={{ fontWeight: 700, color: '#dc2626', marginBottom: '8px', fontSize: '0.9rem' }}>🚨 고강도 행동 알림 (강도 5)</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {safetyAlerts.slice(0, 5).map((alert: SafetyAlert, idx: number) => (
-                    <div key={idx} style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: '6px', padding: '6px 10px', fontSize: '0.8rem' }}>
-                      <span style={{ color: '#64748b' }}>{alert.date}</span> | <span style={{ fontWeight: 600 }}>{alert.student}</span> | {alert.location} | {alert.type}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* At-risk table */}
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-              <div style={{ overflowX: 'auto', width: '100%' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    {['Tier', '학생', '학급', '보고 건수', '빈도 막대', '상세'].map(h => (
-                      <th key={h} style={{ padding: '12px 16px', color: '#475569', fontWeight: 600, borderBottom: '2px solid #e2e8f0', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+            {/* Section 4 */}
+            <div className="section-heading"><span>04</span> Intensive Support Student List</div>
+            <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
+                  <tr>
+                    {['Priority', 'Student', 'Class', 'Frequency', 'Risk Level', 'Action'].map(h => (
+                      <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontWeight: 800, color: '#475569', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {riskList.length === 0 ? (
-                    <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>감지된 집중 지원 대상이 없습니다.</td></tr>
-                  ) : riskList.map((s: RiskStudent, idx: number) => {
-                    const maxCount = Math.max(...riskList.map((r: RiskStudent) => r.count || 0), 1);
-                    return (
-                      <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
-                        <td style={{ padding: '10px 16px' }}>
-                          <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, background: s.tier === 'Tier 3' ? '#fee2e2' : '#fef3c7', color: s.tier === 'Tier 3' ? '#991b1b' : '#92400e' }}>{s.tier}</span>
-                        </td>
-                        <td style={{ padding: '10px 16px', fontWeight: 600 }}>{s.name}</td>
-                        <td style={{ padding: '10px 16px', color: '#64748b' }}>{s.class}</td>
-                        <td style={{ padding: '10px 16px', fontWeight: 700, color: s.count >= 10 ? '#ef4444' : '#1e293b' }}>{s.count}건</td>
-                        <td style={{ padding: '10px 16px' }}>
-                          <div style={{ background: '#f1f5f9', borderRadius: '4px', height: '8px', width: '120px', overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.min(100, (s.count / maxCount) * 100)}%`, height: '100%', background: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b', borderRadius: '4px', transition: 'width 0.5s' }} />
-                          </div>
-                        </td>
-                        <td style={{ padding: '10px 16px' }}>
-                          <button className="no-print" onClick={() => window.location.href = `/student/${encodeURIComponent(s.name)}`}
-                            style={{ padding: '4px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem' }}>분석</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {riskList.map((s: any, idx: number) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+                      <td style={{ padding: '16px 24px' }}>
+                        <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, background: s.tier === 'Tier 3' ? '#fee2e2' : '#fff7ed', color: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b' }}>{s.tier}</span>
+                      </td>
+                      <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{s.name}</td>
+                      <td style={{ padding: '16px 24px', color: '#64748b', fontWeight: 500 }}>{s.class}</td>
+                      <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Logs</span></td>
+                      <td style={{ padding: '16px 24px' }}>
+                         <div style={{ width: '100px', height: '6px', background: '#e2e8f0', borderRadius: '10px' }}>
+                             <div style={{ width: `${Math.min(100, (s.count / 15) * 100)}%`, height: '100%', background: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b', borderRadius: '10px' }} />
+                         </div>
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <button onClick={()=>window.location.href=`/student/${s.name}`} style={{ padding: '6px 14px', borderRadius: '10px', background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', color: '#475569', transition: 'all 0.2s' }} onMouseOver={e=>{e.currentTarget.style.background='#1e293b'; e.currentTarget.style.color='#fff'}} onMouseOut={e=>{e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.color='#475569'}}>View Insight</button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-              </div>
             </div>
 
-            {/* ===== Section 5: 실행 계획 ===== */}
-            <div className="section-heading">5. 실행 계획 및 회의록</div>
-            <MeetingNotesSection apiUrl={apiUrl} meetingType={isAdmin() ? "tier1" : `class_${user?.class_id}`} title={isAdmin() ? "전체 교직원 회의록" : `${user?.class_name} 실행 계획`} />
+            {/* Section 5 */}
+            <div className="section-heading"><span>05</span> Action Plan & Meeting Records</div>
+            <AIComprehensiveAnalysis startDate={startDate} endDate={endDate} />
+            <div className="grid-2">
+                <MeetingNotesContainer title="전체 교직원 협의록" type="tier1" />
+                <MeetingNotesContainer title="Tier 2/3 운영위원회" type="tier2" />
+            </div>
           </div>
         )}
       </div>
@@ -464,53 +421,95 @@ export default function Home() {
   );
 }
 
-// Meeting Notes Component
-function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, meetingType: string, title: string }) {
-  const [expanded, setExpanded] = useState(true);
-  const [content, setContent] = useState("");
-  const [notes, setNotes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+// Rewritten Meeting Notes Component with Modern glassmorphism
+function MeetingNotesContainer({ title, type }: { title: string, type: string }) {
+    const [notes, setNotes] = useState<any[]>([]);
+    const [content, setContent] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editContent, setEditContent] = useState("");
+    const { user, isAdmin } = useAuth();
 
-  useEffect(() => { fetchNotes(); }, [meetingType]);
+    const fetchNotes = useCallback(async () => {
+        try {
+            const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${type}`);
+            setNotes(res.data.notes || []);
+        } catch (e) { console.error(e); }
+    }, [type]);
 
-  const fetchNotes = async () => {
-    try {
-      const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${meetingType}`);
-      setNotes(res.data.notes || []);
-    } catch (e) { }
-  };
+    useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
-  const saveNote = async () => {
-    if (!content.trim()) return;
-    setLoading(true);
-    try {
-      await axios.post(`${apiUrl}/api/v1/meeting-notes`, { meeting_type: meetingType, date: new Date().toISOString().split('T')[0], content, author: "User" });
-      setContent(""); fetchNotes(); alert("저장되었습니다.");
-    } catch (e) { alert("저장 실패"); } finally { setLoading(false); }
-  };
+    const handleSave = async () => {
+        if (!content.trim()) return;
+        setLoading(true);
+        try {
+            await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+                meeting_type: type,
+                date: new Date().toISOString().split('T')[0],
+                content,
+                author: user?.id || "Teacher"
+            });
+            setContent("");
+            fetchNotes();
+        } catch (e) { alert("저장 실패"); } finally { setLoading(true); setLoading(false); }
+    };
 
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-      <div onClick={() => setExpanded(!expanded)} style={{ padding: '14px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
-        <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>📝 {title}</h3>
-        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{expanded ? '▲ 접기' : '▼ 펼치기'}</span>
-      </div>
-      {expanded && (
-        <div style={{ padding: '20px' }}>
-          <div className="no-print" style={{ marginBottom: '16px' }}>
-            <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="내용을 입력하세요..." style={{ width: '100%', minHeight: '80px', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '8px', fontFamily: 'inherit', fontSize: '0.9rem' }} />
-            <button onClick={saveNote} disabled={loading || !content.trim()} style={{ padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>{loading ? '저장 중...' : '저장하기'}</button>
-          </div>
-          <div>
-            {notes.length === 0 ? <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>기록된 내용이 없습니다.</p> : notes.map(n => (
-              <div key={n.id} style={{ paddingBottom: '12px', marginBottom: '12px', borderBottom: '1px dashed #e2e8f0' }}>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>📅 {n.date} | ✍️ {n.author}</div>
-                <div style={{ fontSize: '0.9rem', color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.content}</div>
-              </div>
-            ))}
-          </div>
+    const handleUpdate = async (id: string) => {
+        try {
+             await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { content: editContent });
+             setEditingId(null);
+             fetchNotes();
+        } catch (e) { alert("수정 실패"); }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("삭제하시겠습니까?")) return;
+        try {
+             await axios.delete(`${apiUrl}/api/v1/meeting-notes/${id}`);
+             fetchNotes();
+        } catch (e) { alert("삭제 실패"); }
+    };
+
+    return (
+        <div style={{ background: '#fff', borderRadius: '24px', padding: '28px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.4rem' }}>📒</span> {title}
+            </h3>
+            
+            <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="회의 결과를 기록하십시오..." style={{ width: '100%', minHeight: '100px', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.9rem', outline: 'none', transition: 'all 0.2s', boxSizing: 'border-box' }} onFocus={e=>e.currentTarget.style.borderColor='#6366f1'} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button onClick={handleSave} disabled={loading || !content.trim()} style={{ padding: '10px 24px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>저장</button>
+            </div>
+
+            <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto' }} className="custom-scrollbar">
+                {notes.map((n, i) => (
+                    <div key={i} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>{n.date}</span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {(isAdmin() || n.author === user?.id) && (
+                                    <>
+                                        <button onClick={()=>{setEditingId(n.created_at); setEditContent(n.content);}} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 800 }}>수정</button>
+                                        <button onClick={()=>handleDelete(n.created_at)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 800 }}>삭제</button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        {editingId === n.created_at ? (
+                            <div>
+                                <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #6366f1', fontSize: '0.9rem' }} />
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                    <button onClick={()=>handleUpdate(n.created_at)} style={{ padding: '4px 12px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>Save</button>
+                                    <button onClick={()=>setEditingId(null)} style={{ padding: '4px 12px', background: '#94a3b8', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{n.content}</p>
+                        )}
+                        <div style={{ marginTop: '8px', textAlign: 'right', fontSize: '0.7rem', color: '#94a3b8' }}>by {n.author}</div>
+                    </div>
+                ))}
+            </div>
         </div>
-      )}
-    </div>
-  );
+    );
 }

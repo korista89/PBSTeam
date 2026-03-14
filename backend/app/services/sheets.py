@@ -11,7 +11,7 @@ _sheets_client = None
 
 def get_sheets_client():
     """
-    Auhtenticates with Google Sheets API and returns the client.
+    Authenticates with Google Sheets API and returns the client.
     Prioritizes 'GOOGLE_SERVICE_ACCOUNT_JSON' env var (for Production/Render).
     Fallbacks to 'service_account.json' file (for Local Dev).
     Note: Token logic handles refresh automatically.
@@ -77,12 +77,14 @@ _cache = {
 }
 CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
 
-def clear_cache(key: str = None):
+from typing import Optional, List, Dict, Any, Union
+
+def clear_cache(key: Optional[str] = None):
     if key and key in _cache:
-        _cache[key] = {"data": [], "timestamp": 0}
+        _cache[key] = {"data": [], "timestamp": 0.0}
     elif key is None:
         for k in _cache:
-            _cache[k] = {"data": [], "timestamp": 0}
+            _cache[k] = {"data": [], "timestamp": 0.0}
             
     # Also explicitly support 'tierstatus' since it was added later
     if key == "tierstatus" and "tierstatus" not in _cache:
@@ -111,7 +113,8 @@ def fetch_all_records(force_refresh: bool = False):
     global _cache
     now = time.time()
     
-    if not force_refresh and _cache["records"]["data"] and (now - _cache["records"]["timestamp"] < CACHE_TTL):
+    cached_ts = _cache["records"].get("timestamp", 0.0)
+    if not force_refresh and _cache["records"]["data"] and isinstance(cached_ts, (int, float)) and (now - cached_ts < CACHE_TTL):
         return _cache["records"]["data"]
 
     worksheet = get_main_worksheet()
@@ -151,8 +154,8 @@ def fetch_all_records(force_refresh: bool = False):
                 
                 # Try to resolve code from mapping
                 clean_name = name.replace(" ", "")
-                for k, v in beable_map_cache.items():
-                    if str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
+                for k, v in (beable_map_cache or {}).items():
+                    if isinstance(v, dict) and str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
                         code = v.get('student_code', k) # Ensure 4-digit student code from TierStatus
                         updates_needed.append({
                             'range': f'M{idx + 2}', # idx 0 is Row 2 in sheets due to header
@@ -206,7 +209,7 @@ def get_student_codes_worksheet():
         except gspread.WorksheetNotFound:
             print("Creating 'StudentCodes' worksheet...")
             # Create with headers: Code, Name, Memo
-            ws = sheet.add_worksheet(title="StudentCodes", rows=300, cols=5)
+            ws = sheet.add_worksheet(title="StudentCodes", rows=500, cols=10)
             ws.append_row(["Code", "Name", "Memo"]) 
             return ws
     except Exception as e:
@@ -1234,6 +1237,45 @@ def add_meeting_note(data: dict):
         return {"message": "Meeting note added", "created_at": created_at}
     except Exception as e:
         print(f"Error adding meeting note: {e}")
+        return {"error": str(e)}
+
+def update_meeting_note(note_id: str, content: str):
+    """Update a meeting note content by its CreatedAt timestamp (ID)"""
+    ws = get_meeting_notes_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        # Find the row with the given ID (CreatedAt)
+        # CreatedAt is in Column 5
+        cell = ws.find(note_id, in_column=5)
+        if not cell:
+            return {"error": "Note not found"}
+        
+        # Update content (Column 3)
+        ws.update_cell(cell.row, 3, content)
+        clear_cache("meeting_notes")
+        return {"message": "Note updated"}
+    except Exception as e:
+        print(f"Error updating meeting note: {e}")
+        return {"error": str(e)}
+
+def delete_meeting_note(note_id: str):
+    """Delete a meeting note by its CreatedAt timestamp (ID)"""
+    ws = get_meeting_notes_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        cell = ws.find(note_id, in_column=5)
+        if not cell:
+            return {"error": "Note not found"}
+        
+        ws.delete_rows(cell.row)
+        clear_cache("meeting_notes")
+        return {"message": "Note deleted"}
+    except Exception as e:
+        print(f"Error deleting meeting note: {e}")
         return {"error": str(e)}
 
 
@@ -2943,6 +2985,26 @@ def add_board_post(title: str, content: str, author: str):
         return {"message": "Post added", "post_id": post_id}
     except Exception as e:
         print(f"Error adding board post: {e}")
+        return {"error": str(e)}
+
+def update_board_post(post_id: str, title: str, content: str):
+    """Update a board post"""
+    ws = get_board_worksheet()
+    if not ws:
+        return {"error": "Sheet not accessible"}
+    
+    try:
+        cell = ws.find(post_id, in_column=1)
+        if not cell:
+            return {"error": "Post not found"}
+        
+        # Title (Col 2), Content (Col 3)
+        ws.update_cell(cell.row, 2, title)
+        ws.update_cell(cell.row, 3, content)
+        clear_cache("board")
+        return {"message": "Post updated"}
+    except Exception as e:
+        print(f"Error updating board post: {e}")
         return {"error": str(e)}
 
 def delete_board_post(post_id: str):

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -26,485 +26,332 @@ export default function StudentDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // New State for Analysis Data
-  const [analysisData, setAnalysisData] = useState<{ history: { month: string; rate: string }[], team_talk: string } | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const sparams = new URLSearchParams();
+      if (startDate && endDate) {
+        sparams.append("start_date", startDate);
+        sparams.append("end_date", endDate);
+      }
+      const queryString = sparams.toString();
+      const url = `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}?${queryString}`;
+      const response = await axios.get(url);
+      setData(response.data);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.status === 404 ? "학생을 찾을 수 없습니다." : "데이터 로딩 실패");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUrl, studentName, startDate, endDate]);
 
   useEffect(() => {
-    if (!studentName) return;
-
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-        const params = new URLSearchParams();
-        if (startDate && endDate) {
-          params.append("start_date", startDate);
-          params.append("end_date", endDate);
-        }
-        const queryString = params.toString();
-        const url = queryString
-          ? `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}?${queryString}`
-          : `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}`;
-        const response = await axios.get(url);
-        setData(response.data);
-      } catch (err: any) {
-        console.error(err);
-        setError(err.response?.status === 404 ? "학생을 찾을 수 없습니다." : "데이터 로딩 실패");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [studentName, startDate, endDate]);
-
-  useEffect(() => {
-    if (!data?.profile?.student_code) return;
-    const fetchAnalysis = async () => {
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-        const res = await axios.get(`${apiUrl}/api/v1/students/${data.profile.student_code}/analysis`);
-        setAnalysisData(res.data);
-      } catch (e) {
-        console.error("Analysis fetch error", e);
-      } finally {
-        setAnalysisLoading(false);
-      }
-    };
-    fetchAnalysis();
-  }, [data]);
+    if (studentName) fetchData();
+  }, [fetchData, studentName]);
 
   if (loading) return (
     <AuthCheck>
-      <div className={styles.container}>
+      <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
         <GlobalNav currentPage="student" />
-        <div style={{ padding: '50px', textAlign: 'center' }}>학생 데이터 분석 중... 🔍</div>
-      </div>
-    </AuthCheck>
-  );
-
-  if (error) return (
-    <AuthCheck>
-      <div className={styles.container}>
-        <GlobalNav currentPage="student" />
-        <div style={{ padding: '50px', textAlign: 'center' }}>
-          <p>{error}</p>
-          <button className={styles.actionBtn} onClick={() => router.push('/')} style={{ marginTop: '1rem' }}>돌아가기</button>
+        <div style={{ padding: '100px', textAlign: 'center', color: '#64748b' }}>
+           <div style={{ fontSize: '3rem', animation: 'spin 2s linear infinite', marginBottom: '20px' }}>💿</div>
+           <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>{studentName} 학생의 데이터를 심층 분석하고 있습니다...</p>
         </div>
       </div>
     </AuthCheck>
   );
-  if (!data) return null;
+
+  if (error || !data) return (
+    <AuthCheck>
+      <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+        <GlobalNav currentPage="student" />
+        <div style={{ padding: '100px', textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
+          <p style={{ fontWeight: 800, color: '#ef4444' }}>{error || "데이터가 없습니다."}</p>
+          <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700 }}>대시보드로 돌아가기</button>
+        </div>
+      </div>
+    </AuthCheck>
+  );
 
   const { profile, abc_data, functions, cico_trend } = data;
-
-  // Access Control check for Teacher
   const isUnauthorized = !isAdmin() && user?.class_id && profile?.student_code && !profile.student_code.startsWith(user.class_id);
 
   if (isUnauthorized) return (
     <AuthCheck>
-      <div className={styles.container}>
+      <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
         <GlobalNav currentPage="student" />
-        <div style={{ padding: '50px', textAlign: 'center' }}>
-          <p>⛔ 이 학생의 데이터에 접근할 권한이 없습니다. (본인 학급 학생만 가능)</p>
-          <button className={styles.actionBtn} onClick={() => router.push('/')} style={{ marginTop: '1rem' }}>대시보드로 이동</button>
+        <div style={{ padding: '100px', textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⛔</div>
+          <p style={{ fontWeight: 800 }}>이 학생의 데이터에 접근할 권한이 없습니다.</p>
+          <p style={{ color: '#64748b', marginTop: '8px' }}>본인 학급 학생의 데이터만 열람 가능합니다.</p>
+          <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700 }}>홈으로 이동</button>
         </div>
       </div>
     </AuthCheck>
   );
 
-  // New State for Analysis Data
-
-
   return (
     <AuthCheck>
-      <div className={styles.container}>
+      <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '80px' }}>
         <GlobalNav currentPage="student" />
-
-        <div style={{ padding: '20px' }}>
-          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        
+        <div style={{ padding: '32px', maxWidth: '1400px', margin: '0 auto' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
             <div>
-              <h2 style={{ margin: 0 }}>📊 {profile.name} 학생 상세 분석</h2>
-              <p style={{ color: '#666', margin: '5px 0 0 0' }}>
-                {profile.class} | 행동지원 등급: <span style={{ color: TIER_COLORS[profile.tier] || '#666', fontWeight: 'bold' }}>{profile.tier}</span>
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 950, color: '#1e293b', letterSpacing: '-0.04em' }}>{profile.name}</h1>
+                <span style={{ padding: '4px 14px', background: TIER_COLORS[profile.tier] || '#64748b', color: '#fff', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 900 }}>{profile.tier}</span>
+              </div>
+              <p style={{ margin: '8px 0 0 0', color: '#64748b', fontWeight: 600 }}>{profile.class} | 행동 지원 프로파일</p>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                className={styles.actionBtn}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
                 onClick={() => router.push(`/student/${encodeURIComponent(studentName)}/bip`)}
-                style={{ backgroundColor: '#8b5cf6' }}
+                style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '14px', cursor: 'pointer', fontWeight: 800, boxShadow: '0 4px 12px rgba(124, 58, 237, 0.2)', transition: 'transform 0.2s' }}
+                onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'}
+                onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}
               >
-                📝 BIP 작성/수정
+                📝 Support Plan (BIP)
               </button>
-              <button className={styles.actionBtn} onClick={() => router.back()}>← 뒤로</button>
+              <button onClick={() => router.back()} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}>Back</button>
             </div>
           </div>
 
-          <main className={styles.main}>
-            {/* Profile Stats */}
-            <div className={styles.statGrid}>
-              <div className={styles.card}>
-                <h3>총 발생 (Total)</h3>
-                <p className={styles.statValue}>{profile.total_incidents}</p>
-              </div>
-              <div className={styles.card}>
-                <h3>평균 강도 (Intensity)</h3>
-                <p className={styles.statValue}>{profile.avg_intensity.toFixed(1)}</p>
-              </div>
-              <div className={styles.card} style={{ borderColor: TIER_COLORS[profile.tier], borderWidth: 2 }}>
-                <h3>현재 단계 (Target Tier)</h3>
-                <p className={styles.statValue} style={{ color: TIER_COLORS[profile.tier] }}>{profile.tier}</p>
-              </div>
+          <main style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            {/* KPI Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+               {[
+                 { label: "총 행동 발생", value: `${profile.total_incidents}건`, icon: "📈", color: "#6366f1" },
+                 { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), icon: "⚡", color: profile.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b" },
+                 { label: "위험 수준", value: profile.tier.includes("3") ? "High" : "Moderate", icon: "🚨", color: profile.tier.includes("3") ? "#ef4444" : "#10b981" }
+               ].map((c, i) => (
+                 <div key={i} style={{ background: '#fff', padding: '28px', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '16px' }}>{c.icon}</div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>{c.label}</div>
+                    <div style={{ fontSize: '2.2rem', fontWeight: 950, color: c.color }}>{c.value}</div>
+                 </div>
+               ))}
             </div>
 
-            {/* Row 1: FBA Summary Table (New) */}
-            <div className={styles.chartSection} style={{ marginBottom: '20px', borderLeft: '4px solid #8b5cf6' }}>
-              <h3>🧠 행동 기능 평가 (FBA) 요약</h3>
-              <p className={styles.subtitle}>데이터 기반으로 추정된 행동 가설입니다.</p>
+            {/* FBA Summary */}
+            <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 4px 25px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)' }}>
+               <h3 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.5rem' }}>🧠</span> Behavior Hypothesis (FBA Summary)
+               </h3>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+                  {[
+                    { title: "Antecedent (배경)", value: `${data.location_stats?.[0]?.name || '-'} / ${data.time_stats?.[0]?.name || '-'}`, bg: '#eff6ff', color: '#1d4ed8' },
+                    { title: "Behavior (행동)", value: data.behavior_types?.[0]?.name || '-', bg: '#fff1f2', color: '#be123c' },
+                    { title: "Function (기능)", value: data.functions?.[0]?.name || '-', bg: '#f0fdf4', color: '#15803d' }
+                  ].map((f, i) => (
+                    <div key={i} style={{ padding: '24px', borderRadius: '20px', background: f.bg }}>
+                       <div style={{ fontSize: '0.8rem', fontWeight: 800, color: f.color, marginBottom: '8px', opacity: 0.7 }}>{f.title}</div>
+                       <div style={{ fontSize: '1.2rem', fontWeight: 900, color: f.color }}>{f.value}</div>
+                    </div>
+                  ))}
+               </div>
+            </section>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginTop: '15px' }}>
-                <div style={{ padding: '15px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                  <h4 style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '5px' }}>1. 배경 (Antecedent)</h4>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#334155' }}>
-                    {data.location_stats?.[0]?.name || '-'} / {data.time_stats?.[0]?.name || '-'}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>주요 발생 장소 및 시간</div>
-                </div>
-                <div style={{ padding: '15px', backgroundColor: '#fff1f2', borderRadius: '8px' }}>
-                  <h4 style={{ color: '#9f1239', fontSize: '0.9rem', marginBottom: '5px' }}>2. 행동 (Behavior)</h4>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#881337' }}>
-                    {data.behavior_types?.[0]?.name || '-'}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#fb7185' }}>가장 빈번한 행동 유형</div>
-                </div>
-                <div style={{ padding: '15px', backgroundColor: '#f0f9ff', borderRadius: '8px' }}>
-                  <h4 style={{ color: '#075985', fontSize: '0.9rem', marginBottom: '5px' }}>3. 기능 (Consequence/Function)</h4>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#0c4a6e' }}>
-                    {data.functions?.[0]?.name || '-'}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#38bdf8' }}>행동의 주된 원인/기능</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Row 2: Charts Grid */}
-            <div className={styles.chartGrid}>
-              <div className={styles.chartSection}>
-                <h3>🧩 ABC 패턴 분석 (Time x Place x Intensity)</h3>
-                <p className={styles.subtitle}>원은 강도를 의미합니다. (크면 심각)</p>
-                <div className={styles.chartContainer}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                      <CartesianGrid />
-                      <XAxis type="category" dataKey="x" name="시간">
-                        <Label value="시간" offset={0} position="insideBottom" />
-                      </XAxis>
-                      <YAxis type="category" dataKey="y" name="장소">
-                        <Label value="장소" angle={-90} position="insideLeft" />
-                      </YAxis>
-                      <ZAxis type="number" dataKey="z" range={[100, 600]} name="강도" />
+            {/* Charts Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+                <ChartSection title="📍 ABC Pattern Map (Place x Time x Intensity)">
+                  <ResponsiveContainer>
+                    <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                      <XAxis type="category" dataKey="x" name="Time" />
+                      <YAxis type="category" dataKey="y" name="Location" width={100} />
+                      <ZAxis type="number" dataKey="z" range={[100, 800]} />
                       <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                      <Scatter name="Behavior" data={abc_data} fill="#8884d8" />
+                      <Scatter name="Behavior" data={abc_data} fill="#6366f1" opacity={0.6} />
                     </ScatterChart>
                   </ResponsiveContainer>
-                </div>
-              </div>
+                </ChartSection>
 
-              <div className={styles.chartSection}>
-                <h3>🤔 행동 기능 (Function) 비율</h3>
-                <div className={styles.chartContainer}>
-                  <ResponsiveContainer width="100%" height="100%">
+                <ChartSection title="🎭 Behavior Function Distribution">
+                  <ResponsiveContainer>
                     <PieChart>
-                      <Pie
-                        data={functions}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#0088FE"
-                        dataKey="value"
-                      >
-                        {functions.map((entry: ChartData, index: number) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
+                      <Pie data={functions} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
+                        {functions.map((_, i) => <Cell key={i} fill={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5]} />)}
                       </Pie>
                       <Tooltip />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
-                </div>
-              </div>
+                </ChartSection>
             </div>
 
-            {/* Row 3: CICO & Trends */}
-            <div className={styles.chartSection}>
-              <h3>📉 행동 빈도 추이 (Frequency Trend)</h3>
-              <p className={styles.subtitle}>중재 효과를 확인하기 위한 시계열 그래프입니다.</p>
+            {/* Trend Analysis */}
+            <ChartSection title="📉 Intervention Effectiveness (Trend Analysis)" height={400}>
+               <ResponsiveContainer>
+                  <ComposedChart data={cico_trend}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="count" fill="#e0e7ff" stroke="#6366f1" strokeWidth={3} />
+                    <Bar dataKey="count" fill="#6366f1" barSize={10} radius={[5,5,0,0]} />
+                  </ComposedChart>
+               </ResponsiveContainer>
+            </ChartSection>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                {/* Daily Trend */}
-                <div className={styles.chartContainer}>
-                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>일별 추이 (Daily)</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={cico_trend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" fontSize={11} />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="count" stroke="#82ca9d" name="발생 횟수" strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Weekly Trend */}
-                <div className={styles.chartContainer}>
-                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>주별 추이 (Weekly)</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.weekly_trend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" fontSize={11} />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#8884d8" name="주별 발생" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '30px' }}>
-                {/* Monthly Trend */}
-                <div className={styles.chartContainer}>
-                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>월별 추이 (Monthly)</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.monthly_trend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" fontSize={11} />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#4f46e5" name="월별 발생" barSize={30} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Weekday Distribution */}
-                <div className={styles.chartContainer}>
-                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>요일별 분포 (Weekday)</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.weekday_dist}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" fontSize={11} />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#f59e0b" name="발생 건수">
-                        <LabelList dataKey="value" position="top" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Extra Charts: Intensity & Separation */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '30px' }}>
-                <div className={styles.chartContainer}>
-                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>일별 강도 추이 (Daily Intensity)</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.daily_intensity}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" fontSize={11} />
-                      <YAxis domain={[0, 5]} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="intensity" stroke="#ef4444" name="평균 강도" strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className={styles.chartContainer}>
-                  <h4 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '0.9rem' }}>월별 분리지도 발생 (Separation)</h4>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.separation_stats}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" fontSize={11} />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#7c3aed" name="분리 건수" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+            {/* AI Insights and Logs */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
+               <ConsultationLog studentCode={profile.student_code} studentName={profile.name} />
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
+                  <ChartSection title="📅 Weekday Patterns" height={300}>
+                    <ResponsiveContainer>
+                        <BarChart data={data.weekday_dist}>
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
+                            <Tooltip />
+                            <Bar dataKey="value" fill="#f59e0b" radius={[10, 10, 10, 10]} barSize={20}>
+                                <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 800, fill: '#f59e0b' }} />
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                  </ChartSection>
+               </div>
             </div>
-
-            {/* Row 4: AI Analysis */}
-            <div style={{ marginTop: '30px' }}>
-              <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
-            </div>
-
-            {/* Row 5: Consultation Log (Teacher Feedback) */}
-            <div style={{ marginTop: '30px' }}>
-              <ConsultationLog studentCode={profile.student_code} studentName={profile.name} />
-            </div>
-
           </main>
         </div>
       </div>
+      <style jsx global>{`
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+      `}</style>
     </AuthCheck>
   );
 }
 
-// Sub-component for Consultation Log
+function ChartSection({ title, children, height = 340 }: { title: string, children: React.ReactNode, height?: number }) {
+  return (
+    <section style={{ background: '#fff', padding: '28px', borderRadius: '28px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)' }}>
+       <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: 800, color: '#475569' }}>{title}</h3>
+       <div style={{ height }}>
+          {children}
+       </div>
+    </section>
+  );
+}
+
 function ConsultationLog({ studentCode, studentName }: { studentCode: string, studentName: string }) {
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const { user, isAdmin } = useAuth();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
-  useEffect(() => {
-    if (studentCode && studentCode !== "-") {
-      fetchNotes();
-    }
-  }, [studentCode]);
-
-  const fetchNotes = async () => {
+  const fetchNotes = useCallback(async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?student_code=${studentCode}&meeting_type=consultation`);
       setNotes(res.data.notes || []);
-    } catch (e) { console.error("Consultation fetch error", e); }
+    } catch (e) { }
+  }, [apiUrl, studentCode]);
+
+  useEffect(() => { if (studentCode) fetchNotes(); }, [studentCode, fetchNotes]);
+
+  const handleUpdate = async (id: string) => {
+    try {
+      await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { content: editContent });
+      setEditingId(null); fetchNotes();
+    } catch (e) { alert("Error updating"); }
   };
 
-  const saveNote = async () => {
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this log?")) return;
+    try {
+      await axios.delete(`${apiUrl}/api/v1/meeting-notes/${id}`);
+      fetchNotes();
+    } catch (e) { alert("Error deleting"); }
+  };
+
+  const handleSave = async () => {
     if (!content.trim()) return;
     setLoading(true);
     try {
       await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
-        meeting_type: "consultation",
-        date: new Date().toISOString().split('T')[0],
-        content,
-        author: "Teacher", // In real app, get from auth context
-        student_code: studentCode
+        meeting_type: "consultation", date: new Date().toISOString().split('T')[0],
+        content, author: user?.id || "Admin", student_code: studentCode
       });
-      setContent("");
-      fetchNotes();
-      alert("상담 일지가 저장되었습니다.");
-    } catch (e) {
-      console.error(e);
-      alert("저장 실패");
-    } finally {
-      setLoading(false);
-    }
+      setContent(""); fetchNotes();
+    } catch (e) { alert("Error saving"); } finally { setLoading(false); }
   };
 
   return (
-    <div className={styles.chartSection} style={{ borderTop: '4px solid #f59e0b' }}>
-      <h3>📝 담임교사 상담 일지 & 관찰 기록</h3>
-      <p className={styles.subtitle}>{studentName}({studentCode}) 학생에 대한 관찰 내용이나 학부모 상담 내용을 기록하세요.</p>
+    <div style={{ background: '#fff', padding: '32px', borderRadius: '28px', border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
+      <h3 style={{ margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 900 }}>📝 Consultation & Observation Log</h3>
+      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Record student observations or parent consultations..." style={{ width: '100%', minHeight: '120px', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.95rem', boxSizing: 'border-box', outline: 'none' }} />
+      <div style={{ textAlign: 'right', marginTop: '12px' }}>
+          <button onClick={handleSave} disabled={loading || !content.trim()} style={{ padding: '12px 28px', borderRadius: '14px', background: '#1e293b', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer' }}>Save Log</button>
+      </div>
 
-      <div style={{ display: 'flex', gap: '20px', flexDirection: 'column' }}>
-        {/* Input Area */}
-        <div style={{ backgroundColor: '#fffbeb', padding: '15px', borderRadius: '8px', border: '1px solid #fcd34d' }}>
-          <textarea
-            value={content}
-            onChange={e => setContent(e.target.value)}
-            placeholder="오늘의 특이사항, 상담 내용, 중재 반응 등을 입력하세요..."
-            style={{
-              width: '100%', minHeight: '80px', padding: '10px',
-              borderRadius: '4px', border: '1px solid #e2e8f0', marginBottom: '10px'
-            }}
-          />
-          <div style={{ textAlign: 'right' }}>
-            <button
-              onClick={saveNote}
-              disabled={loading || !content.trim()}
-              style={{
-                padding: '8px 16px', backgroundColor: '#d97706', color: 'white',
-                border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold'
-              }}
-            >
-              {loading ? "저장 중..." : "기록 저장"}
-            </button>
-          </div>
-        </div>
-
-        {/* List Area */}
-        <div>
-          <h4 style={{ margin: '0 0 10px 0', color: '#475569' }}>📋 기록 히스토리</h4>
-          {notes.length === 0 ? (
-            <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>아직 등록된 기록이 없습니다.</p>
-          ) : (
-            <ul style={{ listStyle: 'none', padding: 0, maxHeight: '300px', overflowY: 'auto' }}>
-              {notes.map(note => (
-                <li key={note.id} style={{ padding: '12px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fff' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>
-                    📅 {note.date} | ✍️ {note.author}
-                  </div>
-                  <div style={{ whiteSpace: 'pre-wrap', color: '#1e293b', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                    {note.content}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
+         {notes.map((n, i) => (
+           <div key={i} style={{ padding: '16px', borderRadius: '20px', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                 <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>📅 {n.date}</span>
+                 <div style={{ display: 'flex', gap: '10px' }}>
+                    {(isAdmin() || n.author === user?.id) && (
+                      <>
+                        <button onClick={()=>{setEditingId(n.created_at); setEditContent(n.content);}} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem' }}>Edit</button>
+                        <button onClick={()=>handleDelete(n.created_at)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem' }}>Delete</button>
+                      </>
+                    )}
+                 </div>
+              </div>
+              {editingId === n.created_at ? (
+                <div>
+                   <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #6366f1', borderRadius: '12px' }} />
+                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      <button onClick={()=>handleUpdate(n.created_at)} style={{ padding: '6px 12px', background: '#6366f1', color: '#fff', borderRadius: '6px', border: 'none', fontWeight: 700 }}>Save</button>
+                      <button onClick={()=>setEditingId(null)} style={{ padding: '6px 12px', background: '#94a3b8', color: '#fff', borderRadius: '6px', border: 'none' }}>Cancel</button>
+                   </div>
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: '0.95rem', color: '#334155', lineHeight: 1.6 }}>{n.content}</p>
+              )}
+           </div>
+         ))}
       </div>
     </div>
   );
 }
 
-function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string; apiUrl: string }) {
+function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUrl: string }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
 
   const requestAnalysis = async () => {
-    setLoading(true);
-    setVisible(true);
+    setLoading(true); setVisible(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, {
-        student_code: studentCode
-      });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch {
-      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
-    } finally {
-      setLoading(false);
-    }
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode });
+      setAnalysis(res.data.analysis || "No analysis available.");
+    } catch { setAnalysis("⚠️ AI Request Failed."); } finally { setLoading(false); }
   };
 
   return (
-    <div>
-      {!visible ? (
-        <button onClick={requestAnalysis} style={{
-          padding: '10px 20px', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-          color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer',
-          fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(124,58,237,0.3)'
-        }}>
-          🤖 BCBA AI 종합 분석
-        </button>
-      ) : (
-        <div style={{
-          background: '#f5f3ff', border: '1px solid #ddd5f5',
-          borderRadius: '12px', padding: '20px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0, color: '#6d28d9', fontSize: '1rem' }}>🤖 BCBA AI 종합 분석</h3>
-            <button onClick={() => setVisible(false)} style={{
-              background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '0.8rem'
-            }}>✕ 닫기</button>
-          </div>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '30px', color: '#7c3aed' }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>⏳</div>
-              AI가 학생 데이터를 종합 분석하고 있습니다...
+    <div style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+       {!visible ? (
+         <button onClick={requestAnalysis} style={{ width: '100%', padding: '16px', background: '#6366f1', color: '#fff', borderRadius: '14px', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>🤖 Generate AI Comprehensive Report</button>
+       ) : (
+         <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, color: '#4338ca', fontWeight: 900 }}>🤖 AI Specialist Insight</h4>
+                <button onClick={()=>setVisible(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
             </div>
-          ) : (
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: '1.7', color: '#334155' }}>
-              {analysis}
-            </div>
-          )}
-        </div>
-      )}
+            {loading ? (
+                <div style={{ color: '#6366f1', fontWeight: 700, textAlign: 'center', padding: '20px' }}>Synthesizing patterns... 🧠</div>
+            ) : (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.8', color: '#312e81', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">{analysis}</div>
+            )}
+         </div>
+       )}
     </div>
   );
 }
