@@ -8,7 +8,7 @@ from app.services.picture_words import (
     fetch_lessons, update_lesson,
     fetch_minutes, add_minute_entry, update_minute_entry, delete_minute_entry,
     fetch_class_overview, fetch_certification_status,
-    init_picture_word_system
+    init_picture_word_system, get_evaluation_sentences
 )
 
 router = APIRouter()
@@ -158,3 +158,10 @@ def get_overview(class_id: Optional[str] = Query(None)):
 @router.get("/certification/{class_id}/{student_name}")
 def get_certification(class_id: str, student_name: str):
     return fetch_certification_status(class_id, student_name)
+
+# ─────────────────────────────────────────────────────────────
+# 평가문장 (마우스오버 툴팁용)
+# ─────────────────────────────────────────────────────────────
+@router.get("/evaluation-sentences")
+def get_sentences():
+    return get_evaluation_sentences()

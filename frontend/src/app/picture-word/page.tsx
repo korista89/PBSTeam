@@ -58,6 +58,13 @@ interface OverviewRow {
   domain_progress: Record<string, number>;
   total_learned: number;
 }
+interface EvaluationSentence {
+  번호: number;
+  영역: string;
+  어휘: string;
+  언어행동: string;
+  "평가 문장": string;
+}
 
 // ── 색상 헬퍼 ────────────────────────────────────────────────
 const domainColor = (idx: number) => {
@@ -133,6 +140,9 @@ export default function PictureWordPage() {
     content: "",
   });
 
+  // 평가문장 (툴팁용)
+  const [sentencesMap, setSentencesMap] = useState<Record<string, Record<string, string>>>({});
+
   // ── 초기 데이터 로드 ─────────────────────────────────────
   useEffect(() => {
     // userRole가 로드된 후에만 실행
@@ -140,7 +150,23 @@ export default function PictureWordPage() {
     // 교사인데 classId가 없으면 로드 안 함
     if (!isAdmin && !userClassId) return;
     loadStudents();
+    loadSentences();
   }, [userClassId, userRole]);
+
+  const loadSentences = async () => {
+    try {
+      const res = await axios.get(`${API}/evaluation-sentences`);
+      const data: EvaluationSentence[] = res.data;
+      const smap: Record<string, Record<string, string>> = {};
+      data.forEach(s => {
+        if (!smap[s.어휘]) smap[s.어휘] = {};
+        smap[s.어휘][s.언어행동] = s["평가 문장"];
+      });
+      setSentencesMap(smap);
+    } catch (e) {
+      console.error("Failed to load evaluation sentences:", e);
+    }
+  };
 
   const loadStudents = useCallback(async () => {
     try {
@@ -757,6 +783,7 @@ export default function PictureWordPage() {
                                   <input
                                     type="checkbox"
                                     checked={!!v[vb as keyof VocabRow]}
+                                      title={sentencesMap[v.어휘]?.[vb] || ""}
                                     onChange={(e) =>
                                       handleVocabUpdate(
                                         v.번호,

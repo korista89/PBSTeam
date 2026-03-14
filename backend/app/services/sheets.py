@@ -67,13 +67,34 @@ def get_main_worksheet():
         print(f"Error connecting to sheet: {e}")
         return None
 
+def fetch_evaluation_sentences():
+    """Fetch all records from '평가문장' worksheet with caching."""
+    global _cache
+    now = time.time()
+    if _cache["evaluation_sentences"]["data"] and (now - _cache["evaluation_sentences"]["timestamp"] < 300):
+        return _cache["evaluation_sentences"]["data"]
+        
+    client = get_sheets_client()
+    if not client:
+        return []
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        ws = sheet.worksheet("평가문장")
+        records = ws.get_all_records()
+        _cache["evaluation_sentences"] = {"data": records, "timestamp": now}
+        return records
+    except Exception as e:
+        print(f"Error fetching evaluation sentences: {e}")
+        return []
+
 import time
 
 # Simple in-memory cache
 _cache = {
     "records": {"data": [], "timestamp": 0},
     "users": {"data": [], "timestamp": 0},
-    "board": {"data": [], "timestamp": 0}
+    "board": {"data": [], "timestamp": 0},
+    "evaluation_sentences": {"data": [], "timestamp": 0}
 }
 CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
 

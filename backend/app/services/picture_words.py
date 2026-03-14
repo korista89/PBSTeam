@@ -1,6 +1,9 @@
 from typing import Optional
 import gspread
-from app.services.sheets import get_sheets_client, settings, fetch_student_status
+from app.services.sheets import (
+    get_sheets_client, settings, fetch_student_status,
+    fetch_evaluation_sentences
+)
 from app.core.picture_word_data import DOMAINS, VBS, VOCAB_DATA, LESSON_DATA
 import time
 import threading
@@ -626,3 +629,7 @@ def init_picture_word_system() -> dict:
     time.sleep(0.5)
     get_minutes_ws(ss)
     return {"message": "초기화 완료 (단일 통합 시트 기반)", "sheets_created": created}
+
+def get_evaluation_sentences():
+    """Fetch all evaluation sentences from central sheet service."""
+    return fetch_evaluation_sentences()
