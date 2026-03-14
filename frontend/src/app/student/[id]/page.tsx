@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis, Label,
-  BarChart, Bar, LabelList
+  BarChart, Bar, LabelList, ComposedChart, Area
 } from "recharts";
 import styles from "../../page.module.css";
 import { StudentData, ChartData } from "../../types";
@@ -75,7 +75,13 @@ export default function StudentDetail() {
     </AuthCheck>
   );
 
-  const { profile, abc_data, functions, cico_trend } = data;
+  if (!data) return null; // Should be handled by error check above but being safe
+
+  const profile = data.profile || { name: studentName, student_code: "-", class: "-", tier: "Tier 1", total_incidents: 0, avg_intensity: 0 };
+  const abc_data = data.abc_data || [];
+  const functions = data.functions || [];
+  const cico_trend = data.cico_trend || [];
+  
   const isUnauthorized = !isAdmin() && user?.class_id && profile?.student_code && !profile.student_code.startsWith(user.class_id);
 
   if (isUnauthorized) return (
@@ -114,9 +120,9 @@ export default function StudentDetail() {
                 onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'}
                 onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}
               >
-                📝 Support Plan (BIP)
+                📝 개별화행동지원계획 (BIP)
               </button>
-              <button onClick={() => router.back()} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}>Back</button>
+              <button onClick={() => router.back()} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}>뒤로가기</button>
             </div>
           </div>
 
@@ -124,9 +130,9 @@ export default function StudentDetail() {
             {/* KPI Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
                {[
-                 { label: "총 행동 발생", value: `${profile.total_incidents}건`, icon: "📈", color: "#6366f1" },
-                 { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), icon: "⚡", color: profile.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b" },
-                 { label: "위험 수준", value: profile.tier.includes("3") ? "High" : "Moderate", icon: "🚨", color: profile.tier.includes("3") ? "#ef4444" : "#10b981" }
+                { label: "총 행동 발생", value: `${profile.total_incidents}건`, icon: "📈", color: "#6366f1" },
+                { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), icon: "⚡", color: profile.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b" },
+                { label: "위험 수준", value: profile.tier.includes("3") ? "높음" : "보통", icon: "🚨", color: profile.tier.includes("3") ? "#ef4444" : "#10b981" }
                ].map((c, i) => (
                  <div key={i} style={{ background: '#fff', padding: '28px', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '16px' }}>{c.icon}</div>
@@ -139,7 +145,7 @@ export default function StudentDetail() {
             {/* FBA Summary */}
             <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 4px 25px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)' }}>
                <h3 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>🧠</span> Behavior Hypothesis (FBA Summary)
+                  <span style={{ fontSize: '1.5rem' }}>🧠</span> 행동 가설 요약 (FBA Summary)
                </h3>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                   {[
@@ -157,23 +163,23 @@ export default function StudentDetail() {
 
             {/* Charts Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                <ChartSection title="📍 ABC Pattern Map (Place x Time x Intensity)">
+                <ChartSection title="📍 ABC 패턴 맵 (장소 x 시간 x 강도)">
                   <ResponsiveContainer>
                     <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
-                      <XAxis type="category" dataKey="x" name="Time" />
-                      <YAxis type="category" dataKey="y" name="Location" width={100} />
+                      <XAxis type="category" dataKey="x" name="시간" />
+                      <YAxis type="category" dataKey="y" name="장소" width={100} tick={{fontSize: 10}} />
                       <ZAxis type="number" dataKey="z" range={[100, 800]} />
                       <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                      <Scatter name="Behavior" data={abc_data} fill="#6366f1" opacity={0.6} />
+                      <Scatter name="행동" data={abc_data} fill="#6366f1" opacity={0.6} />
                     </ScatterChart>
                   </ResponsiveContainer>
                 </ChartSection>
 
-                <ChartSection title="🎭 Behavior Function Distribution">
+                <ChartSection title="🎭 행동 기능 분포">
                   <ResponsiveContainer>
                     <PieChart>
                       <Pie data={functions} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
-                        {functions.map((_, i) => <Cell key={i} fill={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5]} />)}
+                        {Array.isArray(functions) && functions.length > 0 && functions.map((_, i) => <Cell key={i} fill={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5]} />)}
                       </Pie>
                       <Tooltip />
                       <Legend />
@@ -183,7 +189,7 @@ export default function StudentDetail() {
             </div>
 
             {/* Trend Analysis */}
-            <ChartSection title="📉 Intervention Effectiveness (Trend Analysis)" height={400}>
+            <ChartSection title="📉 중재 효과성 및 행동 발생 추이" height={400}>
                <ResponsiveContainer>
                   <ComposedChart data={cico_trend}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -201,9 +207,9 @@ export default function StudentDetail() {
                <ConsultationLog studentCode={profile.student_code} studentName={profile.name} />
                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
-                  <ChartSection title="📅 Weekday Patterns" height={300}>
+                  <ChartSection title="📅 요일별 발생 패턴" height={300}>
                     <ResponsiveContainer>
-                        <BarChart data={data.weekday_dist}>
+                        <BarChart data={data.weekday_dist || []}>
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
                             <Tooltip />
                             <Bar dataKey="value" fill="#f59e0b" radius={[10, 10, 10, 10]} barSize={20}>
@@ -250,24 +256,33 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
     try {
       const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?student_code=${studentCode}&meeting_type=consultation`);
       setNotes(res.data.notes || []);
-    } catch (e) { }
+    } catch (e) { console.error(e); }
   }, [apiUrl, studentCode]);
 
   useEffect(() => { if (studentCode) fetchNotes(); }, [studentCode, fetchNotes]);
 
   const handleUpdate = async (id: string) => {
     try {
-      await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { content: editContent });
+      await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { 
+        content: editContent,
+        user_id: user?.id || "Teacher",
+        role: isAdmin() ? "admin" : "teacher"
+      });
       setEditingId(null); fetchNotes();
-    } catch (e) { alert("Error updating"); }
+    } catch (e) { alert("수정 실패"); }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this log?")) return;
+    if (!confirm("이 기록을 삭제하시겠습니까?")) return;
     try {
-      await axios.delete(`${apiUrl}/api/v1/meeting-notes/${id}`);
+      await axios.delete(`${apiUrl}/api/v1/meeting-notes/${id}`, {
+        params: {
+          user_id: user?.id || "Teacher",
+          role: isAdmin() ? "admin" : "teacher"
+        }
+      });
       fetchNotes();
-    } catch (e) { alert("Error deleting"); }
+    } catch (e) { alert("삭제 실패"); }
   };
 
   const handleSave = async () => {
@@ -279,42 +294,43 @@ function ConsultationLog({ studentCode, studentName }: { studentCode: string, st
         content, author: user?.id || "Admin", student_code: studentCode
       });
       setContent(""); fetchNotes();
-    } catch (e) { alert("Error saving"); } finally { setLoading(false); }
+    } catch (e) { alert("저장 실패"); } finally { setLoading(false); }
   };
 
   return (
     <div style={{ background: '#fff', padding: '32px', borderRadius: '28px', border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-      <h3 style={{ margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 900 }}>📝 Consultation & Observation Log</h3>
-      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Record student observations or parent consultations..." style={{ width: '100%', minHeight: '120px', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.95rem', boxSizing: 'border-box', outline: 'none' }} />
+      <h3 style={{ margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 900 }}>📝 상담 및 관찰 기록</h3>
+      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="학생 관찰 내용이나 학부모 상담 내용을 기록하십시오..." style={{ width: '100%', minHeight: '120px', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.95rem', boxSizing: 'border-box', outline: 'none' }} />
       <div style={{ textAlign: 'right', marginTop: '12px' }}>
-          <button onClick={handleSave} disabled={loading || !content.trim()} style={{ padding: '12px 28px', borderRadius: '14px', background: '#1e293b', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer' }}>Save Log</button>
+          <button onClick={handleSave} disabled={loading || !content.trim()} style={{ padding: '12px 28px', borderRadius: '14px', background: '#1e293b', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer' }}>기록 저장</button>
       </div>
 
       <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
          {notes.map((n, i) => (
-           <div key={i} style={{ padding: '16px', borderRadius: '20px', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.02)' }}>
+           <div key={n.id || i} style={{ padding: '16px', borderRadius: '20px', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.02)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>📅 {n.date}</span>
                  <div style={{ display: 'flex', gap: '10px' }}>
                     {(isAdmin() || n.author === user?.id) && (
                       <>
-                        <button onClick={()=>{setEditingId(n.created_at); setEditContent(n.content);}} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem' }}>Edit</button>
-                        <button onClick={()=>handleDelete(n.created_at)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem' }}>Delete</button>
+                        <button onClick={()=>{setEditingId(n.id); setEditContent(n.content);}} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem' }}>수정</button>
+                        <button onClick={()=>handleDelete(n.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 800, fontSize: '0.75rem' }}>삭제</button>
                       </>
                     )}
                  </div>
               </div>
-              {editingId === n.created_at ? (
+              {editingId === n.id ? (
                 <div>
                    <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} style={{ width: '100%', padding: '12px', border: '1px solid #6366f1', borderRadius: '12px' }} />
                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                      <button onClick={()=>handleUpdate(n.created_at)} style={{ padding: '6px 12px', background: '#6366f1', color: '#fff', borderRadius: '6px', border: 'none', fontWeight: 700 }}>Save</button>
-                      <button onClick={()=>setEditingId(null)} style={{ padding: '6px 12px', background: '#94a3b8', color: '#fff', borderRadius: '6px', border: 'none' }}>Cancel</button>
+                      <button onClick={()=>handleUpdate(n.id)} style={{ padding: '6px 12px', background: '#6366f1', color: '#fff', borderRadius: '6px', border: 'none', fontWeight: 700 }}>저장</button>
+                      <button onClick={()=>setEditingId(null)} style={{ padding: '6px 12px', background: '#94a3b8', color: '#fff', borderRadius: '6px', border: 'none' }}>취소</button>
                    </div>
                 </div>
               ) : (
-                <p style={{ margin: 0, fontSize: '0.95rem', color: '#334155', lineHeight: 1.6 }}>{n.content}</p>
+                <p style={{ margin: 0, fontSize: '0.95rem', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{n.content}</p>
               )}
+              <div style={{ marginTop: '8px', textAlign: 'right', fontSize: '0.7rem', color: '#94a3b8' }}>작성자: {n.author}</div>
            </div>
          ))}
       </div>
@@ -331,22 +347,22 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
     setLoading(true); setVisible(true);
     try {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode });
-      setAnalysis(res.data.analysis || "No analysis available.");
-    } catch { setAnalysis("⚠️ AI Request Failed."); } finally { setLoading(false); }
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch { setAnalysis("⚠️ AI 전문가 분석 요청 실패."); } finally { setLoading(false); }
   };
 
   return (
     <div style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
        {!visible ? (
-         <button onClick={requestAnalysis} style={{ width: '100%', padding: '16px', background: '#6366f1', color: '#fff', borderRadius: '14px', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>🤖 Generate AI Comprehensive Report</button>
+         <button onClick={requestAnalysis} style={{ width: '100%', padding: '16px', background: '#6366f1', color: '#fff', borderRadius: '14px', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>🤖 AI 종합 분석 리포트 생성</button>
        ) : (
          <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h4 style={{ margin: 0, color: '#4338ca', fontWeight: 900 }}>🤖 AI Specialist Insight</h4>
+                <h4 style={{ margin: 0, color: '#4338ca', fontWeight: 900 }}>🤖 AI 전문가 정밀 분석</h4>
                 <button onClick={()=>setVisible(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
             </div>
             {loading ? (
-                <div style={{ color: '#6366f1', fontWeight: 700, textAlign: 'center', padding: '20px' }}>Synthesizing patterns... 🧠</div>
+                <div style={{ color: '#6366f1', fontWeight: 700, textAlign: 'center', padding: '20px' }}>패턴 분석 및 데이터 요약 중... 🧠</div>
             ) : (
                 <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.8', color: '#312e81', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">{analysis}</div>
             )}

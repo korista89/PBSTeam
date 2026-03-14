@@ -17,11 +17,15 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 if GOOGLE_API_KEY and _GENAI_AVAILABLE:
     genai.configure(api_key=GOOGLE_API_KEY)
 
-BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격을 가진 특수학교 행동 분석 전문가입니다.
-학교차원 긍정적 행동지원(SW-PBIS) 프레임워크에 기반하여 데이터를 분석하고, 
-학교 행동중재지원팀의 의사결정을 돕는 전문적인 분석 결과를 제공합니다.
-분석은 항상 한국어로, 정중한 '해요체'로 작성합니다.
-ABA(응용행동분석) 원리에 기반한 분석을 합니다."""
+BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격을 가진 특수교육 및 행동 분석 전문가입니다.
+학교차원 긍정적 행동지원(SW-PBIS) 프레임워크와 ABA(응용행동분석) 원리에 기반하여 정밀하게 데이터를 분석합니다. 
+학교 행동중재지원팀(SST)의 의사결정을 돕기 위해 데이터 기반의 실제적이고 전문적인 분석 결과를 제공하는 것이 목표입니다.
+
+[작성 가이드라인]
+1. 어조: 전문적이고 객관적이되, 현장 교사들이 이해하기 쉬운 한국어(정중한 '해요체')로 작성합니다.
+2. 핵심: 현상 나열보다는 '왜(기능)' 그런 일이 일어나는지, 어떤 '증거기반실제(EBP)'를 적용해야 하는지에 집중합니다.
+3. 근거: 반드시 제공된 수치와 데이터를 근거로 분석을 수행합니다.
+4. 구조: 가독성을 위해 Markdown 서식(볼드, 목록, 필요시 테이블)을 적극적으로 활용합니다."""
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
     """Shared Google Gemini API call wrapper."""
@@ -48,21 +52,24 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) ->
 
 
 def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
-    """Generate AI insight for dashboard."""
-    prompt = f"""다음 데이터를 바탕으로 교직원 회의에서 사용할 '행동 중재 회의 브리핑'을 작성해주세요.
+    """Generate professional BCBA insight for school-wide dashboard."""
+    risk_text = ", ".join([f"{r.get('name', r.get('학생명', 'N/A'))} ({r.get('count', 0)}건)" for r in risk_list[:3]]) if risk_list else "없음"
     
-[데이터 요약]
-- 총 행동 발생 건수: {summary.get('total_incidents', 0)}건
-- 고위험 학생 수: {len(risk_list)}명
-
-[고위험 학생 목록 (Top 3)]
-{', '.join([f"{r.get('name', r.get('학생명', 'N/A'))} ({r.get('count', 0)}건)" for r in risk_list[:3]])}
+    prompt = f"""[학교 전체 데이터 요약]
+- 분석 기간 총 행동 발생: {summary.get('total_incidents', 0)}건
+- 일평균 발생율: {summary.get('daily_avg', '데이터 없음')}
+- 고위험(Risk) 학생군: {summary.get('risk_student_count', 0)}명
+- 집중 관리 대상자: {risk_text}
 
 [지시사항]
-1. 학교 전체의 행동 발생 추이와 심각도를 분석하고, 긍정적인 변화나 우려되는 점을 명확히 짚어주세요.
-2. 고위험 학생들에 대해 구체적인 중재 방향(기능 평가 필요성, 환경 수정 등)을 제안하세요.
-3. 선생님들에게 격려와 구체적인 행동 가이드(예: 칭찬 강화, 예방적 접근)를 포함하세요.
-4. 분량은 300~500자 내외로 핵심만 요약하세요."""
+BCBA로서 위 데이터를 바탕으로 '학교 행동중재지원팀(SST) 주간 브리핑'을 작성하세요.
+
+1. **상태 진단**: 전체적인 행동 발생 현황이 안정적인지, 아니면 특정 요인(날짜, 이벤트 등)으로 인해 악화 중인지 진단하세요.
+2. **패턴 분석**: 고위험 학생들의 발생 빈도와 심각도를 고려할 때, 학급 차원의 환경 수정이 필요한지 아니면 개별화된 FBA(기능평가)가 우선인지 제안하세요.
+3. **EBP 제안**: 교직원이 즉시 실천할 수 있는 보편적 지원(Tier 1) 전략(예: 칭찬 강화 비율 확대, 시각적 일과표 정비 등)을 전문 용어와 함께 제시하세요.
+4. **결론**: 이번 주 가장 시급하게 추진해야 할 행동 지원 액션 플랜을 1가지만 명확히 짚어주세요.
+
+*분량: 400~600자 내외 핵심 요약*"""
     
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
 
@@ -242,63 +249,50 @@ def generate_meeting_agent_report(
 # ============================================================
 
 def generate_bcba_section_analysis(section_name: str, data_context: dict) -> str:
-    """Generate BCBA analysis for a specific T1 report section."""
+    """Generate professional BCBA analysis for school-wide report sections."""
     prompt = f"""[분석 대상 섹션]: {section_name}
-
-[데이터]:
+[관련 데이터]:
 {_format_dict(data_context)}
 
 [지시사항]
-BCBA로서 위 데이터를 분석하여 학교 행동중재지원팀의 의사결정을 도와주세요.
+BCBA로서 학급 및 학교 전체 보고서의 해당 섹션에 대한 임상적 분석을 수행하세요.
 
-1. 데이터에서 발견되는 핵심 패턴과 트렌드를 요약하세요.
-2. 데이터 기반으로 우려할 점 또는 긍정적 변화를 짚어주세요.
-3. 학교 차원에서 취해야 할 구체적인 의사결정 포인트(2~3가지)를 제안하세요.
-4. 300~500자 이내로 작성하세요.
-5. 전문적이되 교사가 이해하기 쉬운 표현을 사용하세요."""
+1. **데이터 인사이트**: 단순히 수치를 나열하지 말고, 해당 데이터가 학교 차원의 PBIS 운영에 주는 의미를 찾으세요. (예: 특정 시간대 집중 발생 시 인력 배치 이슈 제안)
+2. **EBP 연계**: 분석 결과를 바탕으로 T1(보편), T2(선별) 단계에서 적용할 수 있는 증거기반실제(EBP) 전략을 권고하세요.
+3. **의사결정 가이드**: 관리자와 교사들이 어떤 방향으로 중재 계획을 수정해야 할지 2~3가지 핵심 포인트로 정리하세요.
+
+*정교한 한국어로 400~600자 분량으로 작성하세요.*"""
     
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
 
 
 def generate_bcba_cico_analysis(students_data: list, behavior_logs: list = None, tier_info: list = None) -> str:
-    """Generate BCBA analysis for CICO report — per-student analysis with enriched data."""
+    """Generate clinical BCBA analysis for CICO (Tier 2) reports."""
     student_summaries = []
     for s in students_data[:15]:
         student_summaries.append(
-            f"- {s.get('code','?')}: 목표행동={s.get('target_behavior','')}, "
-            f"척도={s.get('scale','')}, 기준={s.get('goal_criteria','')}, "
-            f"수행률={s.get('rate','')}, 달성={s.get('achieved','')}, "
-            f"유형={s.get('behavior_type','')}"
+            f"- {s.get('code','?')}: 목표={s.get('target_behavior','')}, 수행률={s.get('rate','')}, 달성={s.get('achieved','')}"
         )
     
-    # Add enriched behavior log context
     behavior_context = ""
     if behavior_logs:
         from collections import Counter
-        types = Counter(str(r.get("행동유형", r.get("type", ""))) for r in behavior_logs if r.get("행동유형") or r.get("type"))
-        behavior_context = f"\n[CICO 학생들의 행동 기록 ({len(behavior_logs)}건)]\n- 유형별: {dict(types.most_common(5))}\n"
+        types = Counter(str(r.get("행동유형", r.get("type", ""))) for r in behavior_logs)
+        behavior_context = f"\n[CICO 학생들의 병행 행동 기록]\n- 빈발 유형: {dict(types.most_common(5))}\n"
     
-    tier_context = ""
-    if tier_info:
-        tier_lines = []
-        for t in tier_info[:15]:
-            tier_lines.append(f"- {t.get('학생코드','')}: Tier상태 T1={t.get('Tier1','')}, T2-C={t.get('Tier2(CICO)','')}, T3={t.get('Tier3','')}")
-        tier_context = f"\n[Tier 현황]\n" + "\n".join(tier_lines) + "\n"
-    
-    prompt = f"""[이번 달 CICO 학생 데이터]
+    prompt = f"""[이번 달 CICO 대상자 데이터]
 {chr(10).join(student_summaries)}
 {behavior_context}
-{tier_context}
-[지시사항]
-BCBA로서 이번 달 CICO 입력 결과를 종합적으로 분석하여, 학교 행동중재지원팀의 의사결정을 지원하세요.
 
-1. 각 학생의 목표행동, 척도, 기준, 수행률, 달성여부를 고려하여 학생별로 분석하세요.
-2. 행동 기록 데이터가 있으면 CICO 수행률과 교차 분석하세요.
-3. CICO 수행률 패턴에서 의미있는 점(향상, 정체, 악화 등)을 찾아주세요.
-4. Tier 조정이 필요한 학생이 있다면 구체적으로 제안하세요.
-   - 2개월 연속 목표 달성 → Tier 1 하향 권장
-   - 3개월 연속 미달성 → Tier 3 상향 또는 CICO 수정 검토
-5. 학생별 1~2줄 핵심 분석 + 전체 요약을 제공하세요."""
+[지시사항]
+BCBA로서 이번 달 CICO 성과를 분석하고 Tier 조정 및 중재 수정을 제안하세요.
+
+1. **성과 평가**: 목표 달성률과 실제 행동 발생 기록 간의 상관관계를 분석하세요. (CICO 만족도는 높은데 행동 발생이 여전하다면 중재 수정 필요)
+2. **트렌드 분류**: 학생들을 '자력 회복(Tier 1 복귀 가능)', '유지/정체', '심화(Tier 3 검토)' 그룹으로 분류하고 근거를 제시하세요.
+3. **Tier 조정 권고**: 
+   - 2개월 연속 목표 80% 이상 달성 시: Tier 1 하향 및 사후 관리 전환
+   - 3개월 연속 미달성 시: 중재 강화(Intensification) 또는 FBA 실시 후 Tier 3 상향
+4. **결론**: 담당 교사들을 위한 CICO 운영 팁을 간략히 포함하세요."""
     
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
@@ -315,112 +309,72 @@ def generate_bcba_meeting_minutes(
     context_summary: dict = None,
     context_risk_list: list = None
 ) -> str:
-    """Generate comprehensive meeting minutes for principal reporting with comparative analysis."""
+    """Generate professional comparative meeting minutes for the principal and behavior team."""
+    focus_risk_text = "\n".join([f"- {r.get('name', '')}: {r.get('count', 0)}건 (Tier {r.get('tier', '?')})" for r in risk_list[:5]]) if risk_list else "없음"
     
-    # 1. Format Focus Data
-    focus_risk_text = "기록 없음"
-    if risk_list:
-        lines = []
-        for r in risk_list[:5]:
-            lines.append(f"- {r.get('name', r.get('학생명', ''))}: {r.get('count', 0)}건 (Tier {r.get('tier', '?')})")
-        focus_risk_text = "\n".join(lines)
+    cico_total = cico_stats.get('total_students', 0) if cico_stats else 0
+    cico_avg = cico_stats.get('avg_rate', 0) if cico_stats else 0
+    cico_text = f"- CICO 대상: {cico_total}명, 달성률 {cico_avg}%" if cico_stats else "데이터 없음"
+    
+    t3_text = "\n".join([f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 기능={s.get('top_function', '')}" for s in tier3_stats[:5]]) if tier3_stats else "데이터 없음"
 
-    cico_text = "데이터 없음"
-    if cico_stats:
-        cico_text = f"- CICO 대상: {cico_stats.get('total_students', 0)}명\n- 평균 수행률: {cico_stats.get('avg_rate', 0)}%\n- 목표 달성: {cico_stats.get('achieved_count', 0)}명 / 미달성: {cico_stats.get('not_achieved_count', 0)}명"
-
-    t3_text = "데이터 없음"
-    if tier3_stats:
-        lines = []
-        for s in tier3_stats[:5]:
-            lines.append(f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 주된기능={s.get('top_function', '')}")
-        t3_text = "\n".join(lines)
-
-    # 2. Format Context Data (Comparative)
-    context_text = "(비교 데이터 없음)"
+    context_text = ""
     if context_summary:
-        context_incidents = context_summary.get('total_incidents', 0)
-        context_avg = context_summary.get('daily_avg', 0)
-        
-        # Calculate Trend
-        focus_daily = summary.get('daily_avg', 0)
-        trend = "유사"
-        if focus_daily > context_avg * 1.2: trend = "급증 (악화)"
-        elif focus_daily > context_avg * 1.05: trend = "증가"
-        elif focus_daily < context_avg * 0.8: trend = "급감 (개선)"
-        elif focus_daily < context_avg * 0.95: trend = "감소"
-        
-        context_text = f"""- 비교 기간 총 행동 발생: {context_incidents}건
-- 비교 기간 일평균 발생: {context_avg}건
-- [추세 분석]: 비교 기간 대비 집중 기간의 일평균 발생이 '**{trend}**'함 ({context_avg} -> {focus_daily})"""
+        f_avg = summary.get('daily_avg', 0)
+        c_avg = context_summary.get('daily_avg', 0)
+        trend = "안정"
+        try:
+            f_avg_val = float(f_avg)
+            c_avg_val = float(c_avg)
+            if f_avg_val > c_avg_val * 1.1: trend = "상승(우려)"
+            elif f_avg_val < c_avg_val * 0.9: trend = "하락(개선)"
+        except:
+            pass
+        context_text = f"\n[비교 데이터 ({context_start} ~ {context_end})]\n- 일평균 발생 비교: {c_avg} -> {f_avg} ({trend})\n"
 
-    prompt = f"""[집중 분석 기간]: {start_date} ~ {end_date}
-
-[집중 기간 전체 현황]
-- 총 행동 발생: {summary.get('total_incidents', 0)}건
-- 일평균 발생: {summary.get('daily_avg', 0)}건
-
-[비교/전체 기간]: {context_start} ~ {context_end}
+    prompt = f"""[분석 대상 기간]: {start_date} ~ {end_date}
 {context_text}
-
-[고위험 학생 (Risk Group) - 집중 기간 Top 5]
-{focus_risk_text}
-
-[Tier 2 (CICO) 현황]
-{cico_text}
-
-[Tier 3 (집중지원) 현황]
-{t3_text}
+[주요 데이터 현황]
+- 총 행동 발생: {summary.get('total_incidents', 0)}건
+- 고위험군: {focus_risk_text}
+- CICO(Tier 2): {cico_text}
+- 집중지원(Tier 3): {t3_text}
 
 [지시사항]
-당신은 BCBA이자 학교행동중재지원팀 전문가입니다. 위 데이터를 바탕으로 학교장에게 보고할 '행동중재지원팀 정기 협의록'을 작성하세요.
-특히 '비교 기간'과 '집중 기간'을 상세히 비교하여 트렌드를 분석하는 것이 중요합니다.
+BCBA이자 학교행동중재지원팀(SST) 전문가로서 학교장 보고용 '정기 행동중재 협의록'을 작성하세요.
 
-목차:
-1. 개요 (일시, 분석 기간, 비교 기간, 총평)
-2. 데이터 비교 분석 (집중 기간 vs 전체/비교 기간 추이, 증감 원인 추정)
-3. Tier별 현황 및 변동 (Tier 1 효과성, CICO 수행률, Tier 3 집중관리)
-4. 학생별 논의 (고위험군 및 신규 의뢰)
-5. 종합 제언 및 향후 계획 (행정적 지원 요청 포함)
+1. **종합 총평**: 비교 기간 대비 행동 발생 추이의 변화를 데이터 기반으로 분석하고, 전반적인 PBIS 운영 상태를 평가하세요.
+2. **Tier별 성과**: 보편적 지원(T1)의 효과성과 소집단/개별 중재(T2/T3)의 성과를 구분하여 기술하세요.
+3. **핵심 안건**: 고위험 학생들에 대한 개별 중재 현황과 향후 추진 계획을 명시하세요.
+4. **종합 추천**: 학교 환경 수정이나 인력 배치 등 행정적 지원이 필요한 포인트가 있다면 제안하세요.
 
-작성 규칙:
-- 개조식(bullet points)으로 명확하게 작성.
-- 수치를 인용하여 근거 제시 (예: 일평균 2.5건 → 1.2건으로 감소).
-- 긍정적인 변화와 우려되는 점을 균형 있게 기술.
-- 분량: A4 1페이지 분량 (약 1500자 내외)."""
+*형식: 공문서 스타일로 개조식 구성 (수치를 적극 활용하여 1500자 내외로 상세히 작성)*"""
 
     return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
-    """Generate BCBA analysis for T3 report."""
-    student_info = []
-    for s in tier3_students[:10]:
-        student_info.append(
-            f"- {s.get('code','')}: 학급={s.get('class','')}, "
-            f"행동발생={s.get('incidents',0)}건, 최고강도={s.get('max_intensity','')}, "
-            f"주요유형={s.get('top_type','')}, 주요기능={s.get('top_function','')}"
-        )
-    
+    """Generate professional BCBA analysis for individual intensive (Tier 3) reports."""
+    student_info = "\n".join([f"- {s.get('code','')}: 빈도 {s.get('incidents',0)}건, 강도 {s.get('max_intensity','')}, 기능 {s.get('top_function','')}" for s in tier3_students[:10]])
     log_summary = _summarize_behavior_logs(behavior_logs)
     
-    prompt = f"""[Tier 3 학생 현황]
-{chr(10).join(student_info)}
+    prompt = f"""[Tier 3 관리 대상자 현황]
+{student_info}
 
-[행동 기록 요약]
+[행동 패턴 요약]
 {log_summary}
 
-{f"[CICO 데이터 요약]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
-
 [지시사항]
-BCBA로서 이번 달 Tier 3 학생들의 행동 데이터를 종합 분석하세요.
+BCBA로서 이번 달 Tier 3 학생들의 행동 양상을 정밀 분석하고 임상적 의견을 제시하세요.
 
-1. 각 학생의 행동 형태, 기능, 빈도, 강도, 발생 패턴(날짜, 요일, 시간대)을 고려하세요.
-2. 분석 결과에서 알 수 있는 핵심 시사점을 제시하세요.
-3. 각 학생에게 필요한 지원(BIP 수정, 환경 수정, 강화 전략 변경 등)을 구체적으로 추천하세요.
-4. 외부 연계(Tier 3+)가 필요한 학생이 있다면 근거와 함께 제안하세요."""
-    
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
+1. **개별 맞춤 분석**: 각 학생의 행동 형태와 기능, 발생 패턴(Context)을 교차 분석하여 BIP의 유효성을 평가하세요.
+2. **중재 정교화**: 데이터상 BIP가 효과적이지 않은 학생(빈도/강도 유지 또는 상승)을 식별하고, 특정 EBP(예: 기능적 의사소통 훈련, 환경의 정비 등) 보완을 권고하세요.
+3. **위기 관리**: 자·타해 등 위험도가 높은 학생의 고수위 행동에 대한 위기관리 계획(Crisis Plan)의 적절성을 검토하세요.
+4. **졸업 및 전환**: 중재 효과가 뚜렷하여 Tier 2로 하향 조정이 가능하거나, 반대로 외부 연계(Tier 3+)가 필요한 학생을 선별하세요.
+
+*전문가적인 식견이 담긴 한국어로 상세히 작성하세요(1000자 내외).*"""
+
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1500)
 
 
 def generate_bcba_student_analysis(
@@ -430,45 +384,40 @@ def generate_bcba_student_analysis(
     teacher_notes: list = None,
     meeting_notes: list = None
 ) -> str:
-    """Generate BCBA analysis for individual student detail page."""
+    """Generate a deep BCBA clinical analysis for an individual student."""
     log_summary = _summarize_behavior_logs(behavior_logs)
-    
-    # Merge teacher_notes and meeting_notes
     all_notes = (teacher_notes or []) + (meeting_notes or [])
     notes_text = ""
     if all_notes:
         notes_lines = []
         for n in all_notes[:10]:
-            date = n.get('date', n.get('날짜', ''))
-            content = n.get('content', n.get('내용', ''))
-            if content:
-                notes_lines.append(f"- [{date}] {content[:200]}")
-        if notes_lines:
-            notes_text = "\n[상담일지/관찰 기록]\n" + "\n".join(notes_lines)
+            notes_lines.append(f"- [{n.get('date', '')}] {n.get('content', '')[:150]}")
+        notes_text = "\n[교사/상담 기록 서술형 정보]\n" + "\n".join(notes_lines)
     
-    prompt = f"""[학생 정보]
-- 학생코드: {student_info.get('code', '')}
+    prompt = f"""[학생 정밀 데이터]
+- 학생: {student_info.get('code', '')} (Tier {student_info.get('tier', '')})
 - 학급: {student_info.get('class', '')}
-- 현재 Tier: {student_info.get('tier', '')}
 
-[행동 기록 요약]
+[행동 데이터 패턴 요약]
 {log_summary}
 
-{f"[CICO 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
-
+{f"[CICO 수행 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
 {notes_text}
 
 [지시사항]
-BCBA로서 이 학생의 행동 데이터를 종합적으로 분석하세요.
+BCBA 전문가로서 이 학생의 중재 전략 수립을 위한 심층 분석을 수행하세요.
 
-1. 행동의 형태, 기능, 빈도, 강도, 지속시간, 발생 패턴(날짜, 요일, 시간대)을 고려하세요.
-2. 상담일지나 관찰 기록이 있다면 반드시 참고하여 분석에 반영하세요.
-3. CICO 데이터가 있다면 수행률 추이와 행동 기록의 상관관계를 분석하세요.
-4. 분석 결과에서 알 수 있는 핵심 시사점을 제시하세요.
-5. 이 학생에게 필요한 구체적인 지원 방향을 추천하세요.
-6. Tier 조정이 필요하다면 근거와 함께 제안하세요."""
-    
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
+1. **기능적 가설(Functional Hypothesis)**: 행동의 형태(Topography)가 아닌 기능(Function: 정적/부적 강화)에 집중하여 가설을 도출하세요. 상담 기록에 나타난 전조(Antecedent)와 결과를 데이터와 연결하세요.
+2. **트렌드 및 상관분석**: 시간대별, 요일별 발생 패턴과 CICO 수행률 및 교사 기록 사이의 상관관계가 있는지 분석하세요.
+3. **증거기반실제(EBP) 추천**: 
+   - 예방: 선행사건 수정(NCR, 환경 재구조화 등)
+   - 기술: 대체행동 교수(BST, 사회적 상황 이야기 등)
+   - 결과: 차별강화(DRA, DRO 등)
+4. **Tier 조정 제안**: 현재의 지원 단계(Tier)가 적절한지, 아니면 위기 대응(Tier 3+)이나 단계적 하향이 필요한지 근거와 함께 제시하세요.
+
+*정교한 한국어로 가독성 있게 작성하세요(800~1000자).*"""
+
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1500)
 
 
 def generate_bip_hypothesis(
@@ -783,11 +732,11 @@ def generate_bcba_comprehensive_analysis(
     
     # Format analytics context
     summary = analytics_data.get("summary", {})
-    charts = analytics_data.get("charts", {})
+    big5 = analytics_data.get("big5", {})
     
-    behavior_types = ", ".join([f"{item['name']}({item['value']})" for item in charts.get("behavior_types", [])[:5]])
-    time_slots = ", ".join([f"{item['name']}({item['value']})" for item in charts.get("time_slots", [])[:5]])
-    locations = ", ".join([f"{item['name']}({item['value']})" for item in charts.get("locations", [])[:5]])
+    behavior_types = ", ".join([f"{item['name']}({item['value']})" for item in big5.get("behaviors", [])[:5]])
+    time_slots = ", ".join([f"{item['name']}({item['value']})" for item in big5.get("times", [])[:5]])
+    locations = ", ".join([f"{item['name']}({item['value']})" for item in big5.get("locations", [])[:5]])
     
     risk_list = analytics_data.get("risk_list", [])
     risk_text = "\n".join([f"- {r['name']}: {r['count']}건" for r in risk_list[:5]]) if risk_list else "없음"
@@ -825,15 +774,10 @@ def generate_bcba_comprehensive_analysis(
 
 보고서 구성:
 1. **행동 현황 총평**: 기간 내 행동 발생 추이와 전반적인 학교 분위기 분석
-2. **데이터 기반 환경 분석**: 시간, 장소, 유형 데이터를 통해 도출된 환경적 수정이 필요한 포인트 제안
-3. **효과성 진단**: CICO 수행률과 Tier 3 학생들의 추이를 통해 현재 지원 체계의 효과성 평가
-4. **고위험군 개입 전략**: 주의 요망 학생들에 대한 팀 차원의 즉각적인 대응 방안 권고
-5. **종합 제언**: 학교 PBS 시스템을 한 단계 업그레이드하기 위한 BCBA로서의 전문적 제언
+2. **Tier별 운영 효과성**: 보편적 지원(T1)이 잘 작동하고 있는지, 2/3단계 지원이 필요한 학생들에게 적절히 제공되고 있는지 평가
+3. **핵심 위기 요인**: 고위험 학생군과 빈발 장소/시간대를 연계한 환경적 위험 요소 분석
+4. **전문적 제언**: 차기 운영 기간 동안 강화해야 할 PBIS 전략 및 행정적 지원 요청 사항
 
-작성 규칙:
-- 전문적이면서도 현장 교사들이 실천 가능한 구체적인 언어를 사용하세요.
-- 데이터 기반의 분석임을 명확히 하세요.
-- 개조식과 서술식을 적절히 섞어 가독성 있게 작성하세요.
-- 분량은 1000~1500자 내외로 충분한 깊이의 분석을 제공하세요."""
-
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2000)
+*분량: 1500자 내외로 상세하고 전문적으로 작성*"""
+    
+    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 3000)

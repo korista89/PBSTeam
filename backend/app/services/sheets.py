@@ -1167,9 +1167,9 @@ def get_meeting_notes_worksheet():
             return sheet.worksheet("MeetingNotes")
         except gspread.WorksheetNotFound:
             print("Creating 'MeetingNotes' worksheet...")
-            ws = sheet.add_worksheet(title="MeetingNotes", rows=500, cols=8)
-            # Headers including StudentCode for individual consultation logs
-            ws.append_row(["Date", "MeetingType", "Content", "Author", "CreatedAt", "StudentCode", "PeriodStart", "PeriodEnd"])
+            ws = sheet.add_worksheet(title="MeetingNotes", rows=500, cols=9)
+            # Headers including StudentCode and UUID
+            ws.append_row(["Date", "MeetingType", "Content", "Author", "CreatedAt", "StudentCode", "PeriodStart", "PeriodEnd", "UUID"])
             return ws
     except Exception as e:
         print(f"Error accessing MeetingNotes worksheet: {e}")
@@ -1192,8 +1192,14 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
             if student_code and str(r.get('StudentCode')) != str(student_code):
                 continue
             
+            uid = r.get('UUID')
+            if not uid:
+                # One-time migration: If UUID is missing, use CreatedAt or generate one
+                import uuid
+                uid = str(r.get('CreatedAt')) if r.get('CreatedAt') else str(uuid.uuid4())
+            
             valid_records.append({
-                "id": str(r.get('CreatedAt')), # Use CreatedAt as ID for now
+                "id": uid, 
                 "date": r.get('Date'),
                 "meeting_type": r.get('MeetingType'),
                 "content": r.get('Content'),
@@ -1201,7 +1207,8 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
                 "created_at": r.get('CreatedAt'),
                 "student_code": r.get('StudentCode', ''),
                 "period_start": r.get('PeriodStart', ''),
-                "period_end": r.get('PeriodEnd', '')
+                "period_end": r.get('PeriodEnd', ''),
+                "uuid": uid
             })
             
         # Sort descending by CreatedAt
@@ -1220,6 +1227,9 @@ def add_meeting_note(data: dict):
         from datetime import datetime
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        import uuid
+        note_uuid = str(uuid.uuid4())
+        
         row = [
             data.get('date', datetime.now().strftime("%Y-%m-%d")),
             data.get('meeting_type', 'tier1'),
@@ -1228,29 +1238,32 @@ def add_meeting_note(data: dict):
             created_at,
             data.get('student_code', ''),
             data.get('period_start', ''),
-            data.get('period_end', '')
+            data.get('period_end', ''),
+            note_uuid
         ]
         print(f"DEBUG: Appending meeting note: {row}")
         ws.append_row(row)
         clear_cache("meeting_notes") # Invalidate cache
         print("DEBUG: Meeting note added successfully")
-        return {"message": "Meeting note added", "created_at": created_at}
+        return {"message": "Meeting note added", "created_at": created_at, "uuid": note_uuid}
     except Exception as e:
         print(f"Error adding meeting note: {e}")
         return {"error": str(e)}
 
 def update_meeting_note(note_id: str, content: str):
-    """Update a meeting note content by its CreatedAt timestamp (ID)"""
+    """Update a meeting note content by its UUID"""
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
     
     try:
-        # Find the row with the given ID (CreatedAt)
-        # CreatedAt is in Column 5
-        cell = ws.find(note_id, in_column=5)
+        # Search for UUID in Column 9
+        cell = ws.find(note_id, in_column=9)
         if not cell:
-            return {"error": "Note not found"}
+            # Fallback search in Column 5 (CreatedAt) for older records without UUID
+            cell = ws.find(note_id, in_column=5)
+            if not cell:
+                return {"error": "Note not found"}
         
         # Update content (Column 3)
         ws.update_cell(cell.row, 3, content)
@@ -1261,15 +1274,19 @@ def update_meeting_note(note_id: str, content: str):
         return {"error": str(e)}
 
 def delete_meeting_note(note_id: str):
-    """Delete a meeting note by its CreatedAt timestamp (ID)"""
+    """Delete a meeting note by its UUID"""
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
     
     try:
-        cell = ws.find(note_id, in_column=5)
+        # Search for UUID in Column 9
+        cell = ws.find(note_id, in_column=9)
         if not cell:
-            return {"error": "Note not found"}
+            # Fallback search in Column 5 (CreatedAt) for older records without UUID
+            cell = ws.find(note_id, in_column=5)
+            if not cell:
+                return {"error": "Note not found"}
         
         ws.delete_rows(cell.row)
         clear_cache("meeting_notes")

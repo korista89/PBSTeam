@@ -287,9 +287,9 @@ export default function Home() {
             </div>
 
             {/* Section 1 */}
-            <div className="section-heading"><span>01</span> Tier Structure & Trends</div>
+            <div className="section-heading"><span>01</span> 단계별 구조 및 추이</div>
             <div className="grid-2">
-              <ChartBox title="🎯 Tier Distribution">
+              <ChartBox title="🎯 지원 단계별 분포">
                 <PieChart>
                   <Pie data={tierDist} cx="50%" cy="50%" outerRadius={120} innerRadius={80} paddingAngle={4} dataKey="value" stroke="none">
                     {tierDist.map((entry: any, index: number) => (
@@ -301,7 +301,7 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <ChartBox title="📈 Incident frequency by Month">
+              <ChartBox title="📈 월별 행동 발생 추이">
                 <BarChart data={monthlyTrend} margin={{ top: 20, right: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} />
@@ -316,9 +316,9 @@ export default function Home() {
             </div>
 
             {/* Section 2 */}
-            <div className="section-heading"><span>02</span> Big 5 Pattern Analysis</div>
+            <div className="section-heading"><span>02</span> Big 5 패턴 분석</div>
             <div className="grid-2">
-              <ChartBox title="📍 Location Analytics">
+              <ChartBox title="📍 장소별 분석">
                 <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 60 }}>
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
@@ -328,7 +328,7 @@ export default function Home() {
                   </Bar>
                 </BarChart>
               </ChartBox>
-              <ChartBox title="🎭 Behavior Profile">
+              <ChartBox title="🎭 행동 유형별 프로필">
                 <PieChart>
                   <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={110} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={4}>
                     {(big5.behaviors || []).map((_, i) => <Cell key={i} fill={['#6366f1','#8b5cf6','#d946ef','#f43f5e','#f97316','#f59e0b'][i%6]} />)}
@@ -340,9 +340,9 @@ export default function Home() {
             </div>
 
             {/* Section 3 */}
-            <div className="section-heading"><span>03</span> ABC Functional Assessment</div>
+            <div className="section-heading"><span>03</span> ABC 기능 평가</div>
             <div className="grid-3">
-              <ChartBox title="❓ Function of Behavior" height={280}>
+              <ChartBox title="❓ 행동의 기능 분석" height={280}>
                 <PieChart>
                   <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={90} innerRadius={60} dataKey="value">
                       {((data as any).functions || []).map((_, i) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
@@ -351,7 +351,7 @@ export default function Home() {
                   <Legend iconType="circle" />
                 </PieChart>
               </ChartBox>
-              <ChartBox title="⚡ Intensity Heat" height={280}>
+              <ChartBox title="⚡ 행동 강도 분포" height={280}>
                 <BarChart data={(data as any).intensity_distribution || []}>
                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                    <Bar dataKey="value" radius={[8,8,8,8]}>
@@ -362,7 +362,7 @@ export default function Home() {
                    </Bar>
                 </BarChart>
               </ChartBox>
-              <ChartBox title="⏰ Timeline Insight" height={280}>
+              <ChartBox title="⏰ 심각도 시계열 분석" height={280}>
                 <LineChart data={(data as any).intensity_trend || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
@@ -374,12 +374,12 @@ export default function Home() {
             </div>
 
             {/* Section 4 */}
-            <div className="section-heading"><span>04</span> Intensive Support Student List</div>
+            <div className="section-heading"><span>04</span> 집중 지원 대상자 명단</div>
             <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                 <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
                   <tr>
-                    {['Priority', 'Student', 'Class', 'Frequency', 'Risk Level', 'Action'].map(h => (
+                    {['우선순위', '학생명', '학급', '누적 빈도', '위험도', '관리'].map(h => (
                       <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontWeight: 800, color: '#475569', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
                     ))}
                   </tr>
@@ -392,14 +392,14 @@ export default function Home() {
                       </td>
                       <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{s.name}</td>
                       <td style={{ padding: '16px 24px', color: '#64748b', fontWeight: 500 }}>{s.class}</td>
-                      <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Logs</span></td>
+                      <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>회</span></td>
                       <td style={{ padding: '16px 24px' }}>
                          <div style={{ width: '100px', height: '6px', background: '#e2e8f0', borderRadius: '10px' }}>
                              <div style={{ width: `${Math.min(100, (s.count / 15) * 100)}%`, height: '100%', background: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b', borderRadius: '10px' }} />
                          </div>
                       </td>
                       <td style={{ padding: '16px 24px' }}>
-                        <button onClick={()=>window.location.href=`/student/${s.name}`} style={{ padding: '6px 14px', borderRadius: '10px', background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', color: '#475569', transition: 'all 0.2s' }} onMouseOver={e=>{e.currentTarget.style.background='#1e293b'; e.currentTarget.style.color='#fff'}} onMouseOut={e=>{e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.color='#475569'}}>View Insight</button>
+                        <button onClick={()=>window.location.href=`/student/${s.name}`} style={{ padding: '6px 14px', borderRadius: '10px', background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', color: '#475569', transition: 'all 0.2s' }} onMouseOver={e=>{e.currentTarget.style.background='#1e293b'; e.currentTarget.style.color='#fff'}} onMouseOut={e=>{e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.color='#475569'}}>세부 분석</button>
                       </td>
                     </tr>
                   ))}
@@ -408,7 +408,7 @@ export default function Home() {
             </div>
 
             {/* Section 5 */}
-            <div className="section-heading"><span>05</span> Action Plan & Meeting Records</div>
+            <div className="section-heading"><span>05</span> 실행 계획 및 운영 협의록</div>
             <AIComprehensiveAnalysis startDate={startDate} endDate={endDate} />
             <div className="grid-2">
                 <MeetingNotesContainer title="전체 교직원 협의록" type="tier1" />
@@ -456,7 +456,11 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
 
     const handleUpdate = async (id: string) => {
         try {
-             await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { content: editContent });
+             await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { 
+                 content: editContent,
+                 user_id: user?.id || "Teacher",
+                 role: isAdmin() ? "admin" : "teacher"
+             });
              setEditingId(null);
              fetchNotes();
         } catch (e) { alert("수정 실패"); }
@@ -465,7 +469,12 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
     const handleDelete = async (id: string) => {
         if (!confirm("삭제하시겠습니까?")) return;
         try {
-             await axios.delete(`${apiUrl}/api/v1/meeting-notes/${id}`);
+             await axios.delete(`${apiUrl}/api/v1/meeting-notes/${id}`, {
+                 params: {
+                     user_id: user?.id || "Teacher",
+                     role: isAdmin() ? "admin" : "teacher"
+                 }
+             });
              fetchNotes();
         } catch (e) { alert("삭제 실패"); }
     };
@@ -489,18 +498,18 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 {(isAdmin() || n.author === user?.id) && (
                                     <>
-                                        <button onClick={()=>{setEditingId(n.created_at); setEditContent(n.content);}} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 800 }}>수정</button>
-                                        <button onClick={()=>handleDelete(n.created_at)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 800 }}>삭제</button>
+                                        <button onClick={()=>{setEditingId(n.id); setEditContent(n.content);}} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 800 }}>수정</button>
+                                        <button onClick={()=>handleDelete(n.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 800 }}>삭제</button>
                                     </>
                                 )}
                             </div>
                         </div>
-                        {editingId === n.created_at ? (
+                        {editingId === n.id ? (
                             <div>
                                 <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #6366f1', fontSize: '0.9rem' }} />
                                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                                    <button onClick={()=>handleUpdate(n.created_at)} style={{ padding: '4px 12px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>Save</button>
-                                    <button onClick={()=>setEditingId(null)} style={{ padding: '4px 12px', background: '#94a3b8', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>Cancel</button>
+                                    <button onClick={()=>handleUpdate(n.id)} style={{ padding: '4px 12px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>저장</button>
+                                    <button onClick={()=>setEditingId(null)} style={{ padding: '4px 12px', background: '#94a3b8', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>취소</button>
                                 </div>
                             </div>
                         ) : (
