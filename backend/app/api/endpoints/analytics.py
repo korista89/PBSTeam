@@ -43,63 +43,18 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
     """Generate comprehensive AI meeting minutes using ALL school data."""
     from app.services.ai_insight import generate_bcba_meeting_minutes
     
-    # 1. Fetch all records and filter by date
-    all_records = fetch_all_records()
-    records = _filter_by_date(all_records, req.start_date, req.end_date)
+    # 1. Fetch current and context analytics using centralized service
+    analytics = get_analytics_data(req.start_date, req.end_date)
+    summary = analytics["summary"]
+    risk_list = analytics["risk_list"]
     
     context_summary = None
     if req.context_start_date and req.context_end_date:
-        context_records = _filter_by_date(all_records, req.context_start_date, req.context_end_date)
-        c_total = len(context_records)
-        try:
-            cd1 = datetime.strptime(req.context_start_date, "%Y-%m-%d")
-            cd2 = datetime.strptime(req.context_end_date, "%Y-%m-%d")
-            cdays = (cd2 - cd1).days + 1
-            c_avg = round(c_total / cdays, 1) if cdays > 0 else 0
-        except:
-            c_avg = 0
-        context_summary = {
-            "total_incidents": c_total,
-            "daily_avg": c_avg
-        }
-    
-    total_incidents = len(records)
-    
-    # Calculate daily average
-    try:
-        d1 = datetime.strptime(req.start_date, "%Y-%m-%d")
-        d2 = datetime.strptime(req.end_date, "%Y-%m-%d")
-        days = (d2 - d1).days + 1
-        daily_avg = round(total_incidents / days, 1) if days > 0 else 0
-    except:
-        daily_avg = 0
-        
-    summary = {
-        "total_incidents": total_incidents,
-        "daily_avg": daily_avg
-    }
-    
-    # 2. Identify Risk Students (Status records)
-    status_records = fetch_student_status()
-    risk_list = []
-    for s in status_records:
-        # Simple heuristic: if mentioned in logs highly
-        # Or check 'Tier' column
-        tier = str(s.get("Tier", s.get("지원단계", "")))
-        if "3" in tier or "2" in tier: # Tier 2 or 3
-            # Count incidents for this student in the filtered logs
-            scode = str(s.get("학생코드", "")).strip()
-            count = sum(1 for r in records if str(r.get("학생코드", "")).strip() == scode or str(r.get("코드번호", "")).strip() == scode)
-            if count > 0:
-                risk_list.append({
-                    "name": s.get("성명", s.get("이름", "")),
-                    "code": scode,
-                    "tier": tier,
-                    "count": count
-                })
+        context_analytics = get_analytics_data(req.context_start_date, req.context_end_date)
+        context_summary = context_analytics["summary"]
     
     # Sort by count desc
-    risk_list.sort(key=lambda x: x["count"], reverse=True)
+    risk_list.sort(key=lambda x: x.get("count", 0), reverse=True)
     
     # 3. CICO Stats (fetch month from end_date)
     import datetime

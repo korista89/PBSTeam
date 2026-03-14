@@ -319,18 +319,23 @@ def generate_bcba_meeting_minutes(
     t3_text = "\n".join([f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 기능={s.get('top_function', '')}" for s in tier3_stats[:5]]) if tier3_stats else "데이터 없음"
 
     context_text = ""
-    if context_summary:
+    if context_summary and context_summary.get('total_incidents', 0) > 0:
         f_avg = summary.get('daily_avg', 0)
         c_avg = context_summary.get('daily_avg', 0)
         trend = "안정"
         try:
             f_avg_val = float(f_avg)
             c_avg_val = float(c_avg)
-            if f_avg_val > c_avg_val * 1.1: trend = "상승(우려)"
-            elif f_avg_val < c_avg_val * 0.9: trend = "하락(개선)"
+            if c_avg_val > 0:
+                if f_avg_val > c_avg_val * 1.1: trend = "상승(우려)"
+                elif f_avg_val < c_avg_val * 0.9: trend = "하락(개선)"
+            else:
+                trend = "신규 데이터"
         except:
             pass
         context_text = f"\n[비교 데이터 ({context_start} ~ {context_end})]\n- 일평균 발생 비교: {c_avg} -> {f_avg} ({trend})\n"
+    elif context_summary:
+        context_text = f"\n[비교 데이터 ({context_start} ~ {context_end})]\n- 해당 기간에 기록된 행동 발생 내역이 없습니다.\n"
 
     prompt = f"""[분석 대상 기간]: {start_date} ~ {end_date}
 {context_text}

@@ -246,8 +246,25 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     
     # Summary Stats — use ROW COUNT (= number of form submissions, not frequency sum)
-    total_incidents = len(df)  # 627, not 3419
+    total_incidents = len(df)
     
+    # Calculate daily average
+    daily_avg = 0.0
+    if start_date and end_date:
+        try:
+            d1 = pd.to_datetime(start_date)
+            d2 = pd.to_datetime(end_date)
+            days = (d2 - d1).days + 1
+            if days > 0:
+                daily_avg = round(total_incidents / days, 1)
+        except Exception:
+            pass
+    elif not df.empty and 'date_obj' in df.columns:
+        # Fallback to unique dates if range not provided
+        days = df['date_obj'].nunique()
+        if days > 0:
+            daily_avg = round(total_incidents / days, 1)
+
     # Unweighted average intensity (mean across all submission rows)
     avg_intensity = float(df['강도'].mean()) if not df.empty and '강도' in df.columns else 0.0
     avg_intensity = round(avg_intensity, 2)
@@ -340,6 +357,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     return {
         "summary": {
             "total_incidents": total_incidents,
+            "daily_avg": daily_avg,
             "avg_intensity": avg_intensity,
             "risk_student_count": risk_student_count,
             "enrolled_count": tier_stats["enrolled"] if tier_stats else 0,
