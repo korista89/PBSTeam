@@ -401,7 +401,7 @@ def generate_bcba_student_analysis(
 [행동 데이터 패턴 요약]
 {log_summary}
 
-{f"[CICO 수행 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
+{f"[CICO 수행 데이터 (수행률 및 달성여부)]\n{_format_cico_for_ai(cico_data[:5])}" if cico_data else ""}
 {notes_text}
 
 [지시사항]
@@ -634,6 +634,19 @@ BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 
 # ============================================================
 # Utility Functions
 # ============================================================
+
+def _format_cico_for_ai(cico_list: list) -> str:
+    """Format CICO student data for better AI readability."""
+    if not cico_list:
+        return "(데이터 없음)"
+    lines = []
+    for c in cico_list:
+        rate = c.get("수행_발생률", c.get("rate", "?"))
+        achieved = c.get("목표_달성_여부", c.get("achieved", "?"))
+        target = c.get("목표행동", c.get("target_behavior", "?"))
+        lines.append(f"- 행동: {target} / 수행률: {rate} / 달성: {achieved}")
+    return "\n".join(lines)
+
 
 def _format_dict(d: dict) -> str:
     """Format a dict for prompt inclusion."""

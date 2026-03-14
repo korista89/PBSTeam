@@ -105,15 +105,8 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
     import datetime
     current_month = datetime.datetime.now().month
     cico_data = get_monthly_cico_data(current_month)
-    cico_stats = {}
-    if isinstance(cico_data, dict) and "students" in cico_data:
-        students = cico_data["students"]
-        cico_stats = {
-            "total_students": len(students),
-            "avg_rate": round(sum(float(s.get("rate", 0)) for s in students) / len(students), 1) if students else 0,
-            "achieved_count": sum(1 for s in students if s.get("achieved", "") == "O"),
-            "not_achieved_count": sum(1 for s in students if s.get("achieved", "") == "X")
-        }
+    if isinstance(cico_data, dict) and "summary" in cico_data:
+        cico_stats = cico_data["summary"]
         
     # 4. Tier 3 Data
     t3_data = get_tier3_report_data(req.start_date, req.end_date)
@@ -375,8 +368,8 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
         cico_result = get_monthly_cico_data(month)
         if isinstance(cico_result, dict) and "students" in cico_result:
             for cs in cico_result["students"]:
-                cs_code = str(cs.get("code", cs.get("student_code", cs.get("학생코드", "")))).strip()
-                if cs_code in codes_to_match:
+                cs_code = str(cs.get("학생코드", cs.get("code", cs.get("student_code", "")))).strip()
+                if cs_code in codes_to_match or any(c in cs_code for c in codes_to_match):
                     cico_data.append(cs)
     except Exception as e:
         print(f"CICO fetch error for student analysis: {e}")

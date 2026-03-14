@@ -1709,48 +1709,24 @@ def get_monthly_cico_data(month: int):
         headers = all_values[0]
         
         # Find key column indices
-        # Find key column indices with synonyms
-        col_map = {}
-        
-        # Define synonyms
         synonyms = {
             "번호": ["번호", "No", "연번"],
-            "학급": ["학급", "Class", "반"],
-            "학생코드": ["학생코드", "StudentCode", "Code", "코드"],
+            "학급": ["학급", "Class", "반", "Grade"],
             "학생명": ["학생명", "Name", "이름", "학생"],
-            "Tier2": ["Tier2", "Tier2(CICO)", "대상자", "CICO", "대상"],
-            "목표행동": ["목표행동", "TargetBehavior", "Behavior"],
-            "목표행동 유형": ["목표행동유형", "유형", "Type"],
+            "학생코드": ["학생코드", "Code", "코드", "ID", "StudentCode"],
+            "Tier2": ["Tier2", "Tier2(CICO)", "대상자", "CICO", "대상", "T2"],
+            "Tier3": ["Tier3", "T3", "BIP", "개별화"],
+            "목표행동": ["목표행동", "TargetBehavior", "Behavior", "목표"],
+            "목표행동 유형": ["목표행동유형", "목표행동 유형", "유형", "Type"],
             "척도": ["척도", "Scale", "점수기준"],
-            "입력 기준": ["입력기준", "Criteria"],
-            "목표 달성 기준": ["목표달성기준", "Goal"],
+            "입력 기준": ["입력기준", "입력 기준", "Criteria", "베이스라인", "Baseline"],
+            "목표 달성 기준": ["목표달성기준", "목표 달성 기준", "Goal", "기준", "Criterion"],
             "수행/발생률": ["수행/발생률", "수행률", "발생률", "성취율", "Rate", "Performance"],
-            "목표 달성 여부": ["목표달성여부", "달성여부", "성공여부", "Achieved", "Result"],
+            "목표 달성 여부": ["목표달성여부", "목표 달성 여부", "달성여부", "성공여부", "Achieved", "Result"],
             "교사메모": ["교사메모", "Memo", "비고"],
             "입력자": ["입력자", "Writer", "Author"],
-            "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk"],
-            "차월 대상여부": ["차월대상여부", "차월", "NextMonth"]
-        }
-        
-        # v3 Synonyms and Index mapping
-        synonyms = {
-            "번호": ["번호", "No"],
-            "학급": ["학급", "Class", "Grade"],
-            "학생명": ["학생명", "Name", "Student"],
-            "학생코드": ["학생코드", "Code", "ID"], # Might be merged in Name(Code)
-            "Tier2": ["Tier2", "T2", "CICO"],
-            "Tier3": ["Tier3", "T3", "BIP"],
-            "목표행동": ["목표행동", "Target", "Behavior"],
-            "목표행동 유형": ["목표행동 유형", "유형", "Type"],
-            "척도": ["척도", "Scale"],
-            "입력 기준": ["입력 기준", "베이스라인", "Baseline"],
-            "목표 달성 기준": ["목표 달성 기준", "기준", "Criterion"],
-            "수행/발생률": ["수행/발생률", "수행률", "발생률", "Rate"],
-            "목표 달성 여부": ["목표 달성 여부", "달성여부", "Achieved"],
-            "교사메모": ["교사메모", "Memo", "비고"],
-            "입력자": ["입력자", "Writer", "Author"],
-            "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk"],
-            "차월 대상여부": ["차월대상여부", "차월", "next"],
+            "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk", "협의"],
+            "차월 대상여부": ["차월대상여부", "차월", "NextMonth", "next"]
         }
         
         for key, candidates in synonyms.items():
@@ -1784,9 +1760,9 @@ def get_monthly_cico_data(month: int):
             if len(row) <= max(tier2_idx, tier3_idx, col_map.get("학생명", 2)):
                 continue
             
-            is_tier2 = str(row[tier2_idx]).strip()
-            # We treat CICO students as those with Tier2='O'
-            if is_tier2 != "O":
+            is_tier2 = str(row[tier2_idx]).strip().upper()
+            # We treat CICO students as those with Tier2='O' or anything truthy
+            if is_tier2 not in ["O", "V", "대상", "TRUE", "CHECK", "Y"]:
                 continue
 
             raw_name = str(row[col_map.get("학생명", 2)]).strip()
@@ -1837,11 +1813,19 @@ def get_monthly_cico_data(month: int):
             
             students.append(student)
         
+        # Calculate summary for comprehensive AI analysis
+        summary = {
+            "total_students": len(students),
+            "avg_rate": round(sum(float(s.get("rate_num", 0) or 0) for s in students) / len(students), 1) if students else 0,
+            "achieved_count": sum(1 for s in students if s.get("목표_달성_여부", "") == "O"),
+            "not_achieved_count": sum(1 for s in students if s.get("목표_달성_여부", "") == "X")
+        }
+        
         return {
             "month": month_name,
-            "month": month_name,
-            "day_columns": day_columns, # Return full object {index, label}
+            "day_columns": day_columns,
             "students": students,
+            "summary": summary,
             "col_map": {k: v for k, v in col_map.items()}
         }
     
