@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
+import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -22,7 +23,12 @@ interface Tier3Student {
 
 interface Tier3ReportData {
   students: Tier3Student[];
-  summary: { total_students: number; total_incidents: number; avg_intensity: number; };
+  summary: { 
+    total_students: number; 
+    total_incidents: number; 
+    avg_intensity: number; 
+    weekly_trend?: WeeklyTrend[];
+  };
 }
 
 const DECISION_OPTIONS = [
@@ -145,19 +151,34 @@ export default function Tier3Report() {
 
           {!loading && !error && data && (
             <>
-              {/* Summary Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-                {[
-                  { label: "Tier3 대상 학생", value: data.summary.total_students, unit: "명", icon: "👥", color: "#ef4444" },
-                  { label: "총 위기행동 보고", value: data.summary.total_incidents, unit: "건", icon: "📋", color: "#f59e0b" },
-                  { label: "평균 행동 강도", value: data.summary.avg_intensity, unit: "/5", icon: "⚡", color: getIntensityColor(data.summary.avg_intensity) },
-                ].map((card, i) => (
-                  <div key={i} style={{ background: "#fff", border: `1px solid ${card.color}20`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)", borderRadius: "14px", padding: "20px", textAlign: "center" }}>
-                    <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{card.icon}</div>
-                    <div style={{ color: card.color, fontSize: "1.8rem", fontWeight: 700 }}>{card.value}<span style={{ fontSize: "0.8rem", color: "#64748b" }}>{card.unit}</span></div>
-                    <div style={{ color: "#64748b", fontSize: "0.75rem", marginTop: "4px" }}>{card.label}</div>
+              {/* Summary Cards with Trend Chart */}
+              <div style={{ marginBottom: "24px" }} className="grid-responsive">
+                <WeeklyAnalysisChart 
+                  data={data.summary.weekly_trend || []} 
+                  title="T3 위기행동 주별 트렌드 (통합)" 
+                  color="#ef4444" 
+                  dataKey="count"
+                  yLabel="보고 건수"
+                />
+                
+                <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>Tier3 대상</div>
+                      <div style={{ color: "#ef4444", fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.total_students}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>명</span></div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>총 위기행동</div>
+                      <div style={{ color: "#f59e0b", fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.total_incidents}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>건</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", gridColumn: "span 2", marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>평균 행동 강도</div>
+                      <div style={{ color: getIntensityColor(data.summary.avg_intensity), fontSize: "2rem", fontWeight: 950 }}>
+                        {data.summary.avg_intensity}<span style={{ fontSize: "0.9rem", color: "#64748b" }}>/5</span>
+                      </div>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
 
               {/* ===== Chart 1: Student Comparison Bar ===== */}
@@ -206,7 +227,7 @@ export default function Tier3Report() {
                   Tier3 대상 학생이 없습니다.
                 </div>
               ) : (
-                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <div className="table-responsive-wrapper" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.06)', borderRadius: '24px' }}>
                   <div style={{ overflowX: 'auto', width: '100%' }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
                     <thead>

@@ -13,6 +13,7 @@ import { StudentData, ChartData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { COLORS, TIER_COLORS } from "../../constants";
+import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 
 export default function StudentDetail() {
   const params = useParams();
@@ -132,14 +133,14 @@ export default function StudentDetail() {
 
           <main style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             {/* KPI Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+            <div className="grid-responsive" style={{ marginBottom: '24px' }}>
                {[
                 { label: "총 행동 발생", value: `${profile.total_incidents}건`, icon: "📈", color: "#6366f1" },
                 { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), icon: "⚡", color: profile.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b" },
                 { label: "위험 수준", value: (profile.tier || "").includes("3") ? "높음" : "보통", icon: "🚨", color: (profile.tier || "").includes("3") ? "#ef4444" : "#10b981" }
                ].map((c, i) => (
-                 <div key={i} style={{ background: '#fff', padding: '28px', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '16px' }}>{c.icon}</div>
+                 <div key={i} className="glass-panel" style={{ padding: '28px', borderRadius: '24px' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '12px' }}>{c.icon}</div>
                     <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>{c.label}</div>
                     <div style={{ fontSize: '2.2rem', fontWeight: 950, color: c.color }}>{c.value}</div>
                  </div>
@@ -192,19 +193,25 @@ export default function StudentDetail() {
                 </ChartSection>
             </div>
 
-            {/* Trend Analysis */}
-            <ChartSection title="📉 중재 효과성 및 행동 발생 추이" height={400}>
-               <ResponsiveContainer>
-                  <ComposedChart data={cico_trend}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="count" fill="#e0e7ff" stroke="#6366f1" strokeWidth={3} />
-                    <Bar dataKey="count" fill="#6366f1" barSize={10} radius={[5,5,0,0]} />
-                  </ComposedChart>
-               </ResponsiveContainer>
-            </ChartSection>
+            <div className="grid-responsive">
+              <WeeklyAnalysisChart 
+                data={data.weekly_trend || []} 
+                title={`${profile.name} 학생 주별 행동 발생 추이`} 
+                color="#6366f1" 
+              />
+              <ChartSection title="📉 행동 발생 일별 추이 (전체 기간)" height={400}>
+                 <ResponsiveContainer>
+                    <ComposedChart data={cico_trend}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="count" fill="#6366f110" stroke="#6366f1" strokeWidth={3} />
+                      <Bar dataKey="count" fill="#6366f1" barSize={10} radius={[5,5,0,0]} />
+                    </ComposedChart>
+                 </ResponsiveContainer>
+              </ChartSection>
+            </div>
 
             {/* AI Insights and Logs */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
@@ -238,8 +245,8 @@ export default function StudentDetail() {
 
 function ChartSection({ title, children, height = 340 }: { title: string, children: React.ReactNode, height?: number }) {
   return (
-    <section style={{ background: '#fff', padding: '28px', borderRadius: '28px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)' }}>
-       <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: 800, color: '#475569' }}>{title}</h3>
+    <section className="glass-panel" style={{ padding: '28px', borderRadius: '28px' }}>
+       <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: 900, color: '#475569' }}>{title}</h3>
        <div style={{ height }}>
           {children}
        </div>

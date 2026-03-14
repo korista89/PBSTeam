@@ -11,6 +11,7 @@ import {
 import { DashboardData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
+import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
 
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
@@ -206,6 +207,7 @@ export default function Home() {
   const safetyAlerts = data?.safety_alerts || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const monthlyTrend: any[] = (data as any)?.monthly_trend || [];
+  const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
   const tierTotal = tierDist.reduce((s: number, t: any) => s + t.value, 0);
 
   return (
@@ -288,7 +290,7 @@ export default function Home() {
 
             {/* Section 1 */}
             <div className="section-heading"><span>01</span> 단계별 구조 및 추이</div>
-            <div className="grid-2">
+            <div className="grid-responsive">
               <ChartBox title="🎯 지원 단계별 분포">
                 <PieChart>
                   <Pie data={tierDist} cx="50%" cy="50%" outerRadius={120} innerRadius={80} paddingAngle={4} dataKey="value" stroke="none">
@@ -301,18 +303,12 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <ChartBox title="📈 월별 행동 발생 추이">
-                <BarChart data={monthlyTrend} margin={{ top: 20, right: 20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="count" name="보고 건수" radius={[10, 10, 10, 10]} barSize={24}>
-                    {monthlyTrend.map((_, i) => <Cell key={i} fill="#6366f1" />)}
-                    <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 800, fill: '#6366f1' }} />
-                  </Bar>
-                </BarChart>
-              </ChartBox>
+              <WeeklyAnalysisChart 
+                data={weeklyTrends} 
+                title="주별 행동 발생 추이" 
+                color="#6366f1" 
+                yLabel="건수"
+              />
             </div>
 
             {/* Section 2 */}
@@ -375,7 +371,7 @@ export default function Home() {
 
             {/* Section 4 */}
             <div className="section-heading"><span>04</span> 집중 지원 대상자 명단</div>
-            <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+            <div className="table-responsive-wrapper" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                 <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
                   <tr>

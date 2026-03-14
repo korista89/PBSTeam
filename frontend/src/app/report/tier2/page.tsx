@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
+import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, ComposedChart, Area
@@ -39,6 +40,7 @@ interface CICOReportData {
     avg_rate: number;
     achieved_count: number;
     not_achieved_count: number;
+    weekly_trend?: { week: string; rate: number }[];
   };
 }
 
@@ -262,29 +264,36 @@ export default function CICOReport() {
 
           {!loading && !error && data && (
             <>
-              {/* Summary Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-                {[
-                  { label: "CICO 대상", value: data.summary.total_students, unit: "명", icon: "👥", color: "#3b82f6" },
-                  { label: "평균 수행률", value: `${data.summary.avg_rate}%`, unit: "", icon: "📊", color: getRateColor(data.summary.avg_rate) },
-                  { label: "목표 달성", value: data.summary.achieved_count, unit: "명", icon: "✅", color: "#10b981" },
-                  { label: "목표 미달성", value: data.summary.not_achieved_count, unit: "명", icon: "⚠️", color: "#f59e0b" },
-                ].map((card, i) => (
-                  <div key={i} style={{
-                    background: "#fff",
-                    border: `1px solid ${card.color}20`,
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-                    borderRadius: "12px",
-                    padding: "16px",
-                    textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: "1.5rem", marginBottom: "4px" }}>{card.icon}</div>
-                    <div style={{ color: card.color, fontSize: "1.5rem", fontWeight: 700 }}>
-                      {card.value}<span style={{ fontSize: "0.8rem", color: "#64748b" }}>{card.unit}</span>
+              {/* Summary Cards and Weekly Trend */}
+              <div style={{ marginBottom: "24px" }} className="grid-responsive">
+                <WeeklyAnalysisChart 
+                  data={data.summary.weekly_trend || []} 
+                  title="CICO 월별/주별 수행률 추이 (통합)" 
+                  color="#3b82f6" 
+                  dataKey="rate"
+                  yLabel="수행률 (%)"
+                />
+                
+                <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>CICO 대상</div>
+                      <div style={{ color: "#3b82f6", fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.total_students}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>명</span></div>
                     </div>
-                    <div style={{ color: "#64748b", fontSize: "0.75rem" }}>{card.label}</div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>평균 수행률</div>
+                      <div style={{ color: getRateColor(data.summary.avg_rate), fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.avg_rate}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>%</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>목표 달성</div>
+                      <div style={{ color: "#10b981", fontSize: "1.5rem", fontWeight: 900 }}>{data.summary.achieved_count}<span style={{ fontSize: "0.7rem", color: "#64748b" }}>명</span></div>
+                    </div>
+                    <div style={{ textAlign: "center", marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>목표 미달성</div>
+                      <div style={{ color: "#f59e0b", fontSize: "1.5rem", fontWeight: 900 }}>{data.summary.not_achieved_count}<span style={{ fontSize: "0.7rem", color: "#64748b" }}>명</span></div>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
 
               {/* CICO Data Insights Charts */}
@@ -449,7 +458,8 @@ export default function CICOReport() {
                 }
 
                 return (
-                  <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #e2e8f0", background: "#fff", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
+                  <div className="table-responsive-wrapper" style={{ borderRadius: "24px", overflow: "hidden" }}>
+                    <div style={{ overflowX: "auto", width: "100%" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                       <thead>
                         <tr style={{ background: "#f1f5f9" }}>
@@ -526,7 +536,8 @@ export default function CICOReport() {
                       </tbody>
                     </table>
                   </div>
-                );
+                </div>
+              );
               })()}
 
               {/* Footer info */}

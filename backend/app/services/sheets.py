@@ -1567,14 +1567,6 @@ def _calculate_cico_rate(student: dict) -> dict:
         "input_days": input_days,
         "total_days": total_days
     }
-    
-    return {
-        "rate_str": rate_str,
-        "achieved": achieved,
-        "rate_num": round(rate_num, 1) if rate_num is not None else None,
-        "input_days": input_days,
-        "total_days": total_days
-    }
 
 
 
@@ -1872,12 +1864,45 @@ def get_monthly_cico_data(month: int):
             
             students.append(student)
         
+        # Calculate individual and global weekly trends
+        chunk_size = 5
+        weekly_summary = []
+        
+        # 1. Individual Weekly Trends
+        for s in students:
+            s["weekly_trend"] = []
+            for i in range(0, len(day_columns), chunk_size):
+                chunk_cols = day_columns[i:i + chunk_size]
+                week_label = f"W{i//chunk_size + 1}"
+                # Create subset of days for this week
+                subset_days = {dc["label"]: s["days"].get(dc["label"], "") for dc in chunk_cols}
+                res = _calculate_cico_rate({**s, "days": subset_days})
+                if res["rate_num"] is not None:
+                    s["weekly_trend"].append({"week": week_label, "rate": round(res["rate_num"], 1)})
+
+        # 2. Global Weekly Summary
+        for i in range(0, len(day_columns), chunk_size):
+            chunk_cols = day_columns[i:i + chunk_size]
+            week_label = f"W{i//chunk_size + 1}"
+            
+            all_rates = []
+            for s in students:
+                subset_days = {dc["label"]: s["days"].get(dc["label"], "") for dc in chunk_cols}
+                res = _calculate_cico_rate({**s, "days": subset_days})
+                if res["rate_num"] is not None:
+                    all_rates.append(res["rate_num"])
+            
+            if all_rates:
+                avg_rate = sum(all_rates) / len(all_rates)
+                weekly_summary.append({"week": week_label, "rate": round(avg_rate, 1)})
+
         # Calculate summary for comprehensive AI analysis
         summary = {
             "total_students": len(students),
             "avg_rate": round(sum(float(s.get("rate_num", 0) or 0) for s in students) / len(students), 1) if students else 0,
             "achieved_count": sum(1 for s in students if s.get("목표_달성_여부", "") == "O"),
-            "not_achieved_count": sum(1 for s in students if s.get("목표_달성_여부", "") == "X")
+            "not_achieved_count": sum(1 for s in students if s.get("목표_달성_여부", "") == "X"),
+            "weekly_trend": weekly_summary
         }
         
         return {
@@ -1885,6 +1910,7 @@ def get_monthly_cico_data(month: int):
             "day_columns": day_columns,
             "students": students,
             "summary": summary,
+            "weekly_trend": weekly_summary,
             "col_map": {k: v for k, v in col_map.items()}
         }
     
@@ -2515,6 +2541,33 @@ def get_cico_report_data(month: int):
         
         avg_rate = round(total_rate_sum / total_rate_count, 1) if total_rate_count > 0 else 0
         
+        # Calculate global weekly trend for CICO (Tier 2) report
+        # We can aggregate from the student trends
+        weekly_trend_map = {} # {week: {sum: X, count: Y}}
+        for s in students:
+            for t in s.get("trend", []):
+                # Only include weeks from the current month if possible, but trend usually covers 3 months
+                # For the report page, showing the trend across the 3 months is also valuable.
+                w = t["month"] # In this report, "trend" uses "month" labels like "3월"
+                r_str = t["rate"]
+                try:
+                    r = float(r_str.replace("%", ""))
+                    if r <= 1: r *= 100
+                    if w not in weekly_trend_map:
+                        weekly_trend_map[w] = {"sum": 0, "count": 0}
+                    weekly_trend_map[w]["sum"] += r
+                    weekly_trend_map[w]["count"] += 1
+                except:
+                    pass
+        
+        overall_weekly_trend = []
+        for w in months_list:
+            if w in weekly_trend_map:
+                overall_weekly_trend.append({
+                    "week": w, 
+                    "rate": round(weekly_trend_map[w]["sum"] / weekly_trend_map[w]["count"], 1)
+                })
+
         return {
             "month": month_name,
             "students": students,
@@ -2523,6 +2576,7 @@ def get_cico_report_data(month: int):
                 "avg_rate": avg_rate,
                 "achieved_count": achieved_count,
                 "not_achieved_count": len(students) - achieved_count,
+                "weekly_trend": overall_weekly_trend,
             }
         }
     
@@ -2735,15 +2789,36 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             "decision_color": decision_color,
         })
     
-    # Sort: Tier3+ first, then by incidents desc
-    tier3_students.sort(key=lambda x: (0 if x["tier"] == "Tier3+" else 1, -x["incidents"]))
-    
+    # Calculate overall weekly trend for T3
+    overall_weekly_trend = []
+    if not df.empty and 'date_obj' in df.columns:
+        # Filter df to include only T3 students
+        all_t3_codes = set()
+        for sc in seen_codes:
+            all_t3_codes.update(code_to_all_codes.get(sc, {sc}))
+            # ensure beable codes are also in
+            beable_match = next((s.get("beable_code", "") for s in tier3_students if s["code"] == sc), "")
+            if beable_match:
+                all_t3_codes.add(beable_match)
+        
+        mask_t3 = pd.Series(False, index=df.index)
+        if '학생코드' in df.columns: mask_t3 = mask_t3 | df['학생코드'].isin(all_t3_codes)
+        if '코드번호' in df.columns: mask_t3 = mask_t3 | df['코드번호'].isin(all_t3_codes)
+        
+        t3_df_all = df[mask_t3].copy()
+        if not t3_df_all.empty:
+            t3_df_all['week_key'] = t3_df_all['date_obj'].dt.isocalendar().year.astype(str) + "-W" + t3_df_all['date_obj'].dt.isocalendar().week.astype(str).str.zfill(2)
+            w_counts_overall = t3_df_all.groupby('week_key').size().reset_index(name='count')
+            overall_weekly_trend = [{"week": row['week_key'], "count": int(row['count'])} for _, row in w_counts_overall.iterrows()]
+            overall_weekly_trend.sort(key=lambda x: x["week"])
+
     overall_avg = round(total_intensity_sum_all / total_incidents, 1) if total_incidents > 0 else 0
     
     return {
         "students": tier3_students,
         "summary": {
-            "total_students": len(set(s["code"] for s in tier3_students)),
+            "total_students": len(seen_codes),
+            "weekly_trend": overall_weekly_trend,
             "total_incidents": total_incidents,  # 보고빈도 (row count)
             "avg_intensity": overall_avg,
         },
