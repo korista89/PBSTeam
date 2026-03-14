@@ -196,7 +196,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
                     "student_code": str(student_code),
                     "count": freq_count,
                     "max_intensity": int(max_intensity),
-                    "tier": tier,
+                    "tier": tier_string,
                     "class": tier_status_cache.get(str(student_code), '-')
                 })
     
@@ -474,11 +474,44 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     except Exception:
         pass
     
-    tier = "Tier 1"
-    if total_incidents >= 6 or student_df['강도'].max() >= 5:
-        tier = "Tier 3"
+    # -- Tier Calculation --
+    detected_tiers = []
+    
+    # 1. Behavioral Thresholds (Calculated)
+    if total_incidents >= 6 or (not student_df.empty and student_df['강도'].max() >= 5):
+        detected_tiers.append("Tier 3")
     elif total_incidents >= 3:
-        tier = "Tier 2"
+        detected_tiers.append("Tier 2")
+    else:
+        detected_tiers.append("Tier 1")
+
+    # 2. Manual Sheet settings (from TierStatus)
+    try:
+        tier_status = fetch_student_status()
+        for s in tier_status:
+            if str(s.get('학생코드', '')).strip() == str(resolved_code).strip():
+                if str(s.get('Tier2(CICO)', '')).upper() == 'O':
+                    if "Tier 2" not in detected_tiers: detected_tiers.append("Tier 2(CICO)")
+                if str(s.get('Tier2(SST)', '')).upper() == 'O':
+                    if "Tier 2" not in detected_tiers: detected_tiers.append("Tier 2(SST)")
+                if str(s.get('Tier3', '')).upper() == 'O':
+                    if "Tier 3" not in detected_tiers: detected_tiers.append("Tier 3")
+                if str(s.get('Tier3+', '')).upper() == 'O':
+                    if "Tier 3+" not in detected_tiers: detected_tiers.append("Tier 3+")
+                break
+    except Exception:
+        pass
+    
+    # Unique tiers while maintaining order, but Tier 1 is excluded if Tier 2/3 exists
+    final_tiers = []
+    has_high_tier = any(t for t in detected_tiers if "Tier 2" in t or "Tier 3" in t)
+    for t in detected_tiers:
+        if has_high_tier and t == "Tier 1":
+            continue
+        if t not in final_tiers:
+            final_tiers.append(t)
+            
+    tier_string = ", ".join(final_tiers) if final_tiers else "Tier 1"
 
     # -- ABC Analysis --
     abc_data = []
@@ -594,7 +627,7 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
             "name": resolved_name,
             "student_code": student_code_val,
             "class": student_class,
-            "tier": tier,
+            "tier": tier_string,
             "total_incidents": total_incidents,
             "avg_intensity": avg_intensity
         },

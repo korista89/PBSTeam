@@ -109,7 +109,11 @@ export default function StudentDetail() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 950, color: '#1e293b', letterSpacing: '-0.04em' }}>{profile.name}</h1>
-                <span style={{ padding: '4px 14px', background: TIER_COLORS[profile.tier] || '#64748b', color: '#fff', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 900 }}>{profile.tier}</span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {(profile.tier || "Tier 1").split(", ").map((t, idx) => (
+                    <span key={idx} style={{ padding: '4px 14px', background: TIER_COLORS[t] || TIER_COLORS[t.split('(')[0]] || '#64748b', color: '#fff', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 900 }}>{t}</span>
+                  ))}
+                </div>
               </div>
               <p style={{ margin: '8px 0 0 0', color: '#64748b', fontWeight: 600 }}>{profile.class} | 행동 지원 프로파일</p>
             </div>
@@ -132,7 +136,7 @@ export default function StudentDetail() {
                {[
                 { label: "총 행동 발생", value: `${profile.total_incidents}건`, icon: "📈", color: "#6366f1" },
                 { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), icon: "⚡", color: profile.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b" },
-                { label: "위험 수준", value: profile.tier.includes("3") ? "높음" : "보통", icon: "🚨", color: profile.tier.includes("3") ? "#ef4444" : "#10b981" }
+                { label: "위험 수준", value: (profile.tier || "").includes("3") ? "높음" : "보통", icon: "🚨", color: (profile.tier || "").includes("3") ? "#ef4444" : "#10b981" }
                ].map((c, i) => (
                  <div key={i} style={{ background: '#fff', padding: '28px', borderRadius: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '16px' }}>{c.icon}</div>
