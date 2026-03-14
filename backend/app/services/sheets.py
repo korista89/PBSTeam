@@ -1576,11 +1576,9 @@ def create_monthly_cico_sheet(year: int, month: int):
         month_name = f"{month}월"
         
         # Check if exists
-        try:
-            ws = sheet.worksheet(month_name)
+        ws = get_worksheet_fuzzy(sheet, month_name)
+        if ws:
             return {"message": f"Sheet '{month_name}' already exists.", "exists": True}
-        except gspread.WorksheetNotFound:
-            pass
             
         # 1. Fetch CICO Students (Tier2(CICO) == 'O')
         status_records = fetch_student_status()
@@ -1684,6 +1682,40 @@ def find_col_fuzzy(headers: list, candidates: list) -> int:
     return -1
 
 
+def get_worksheet_fuzzy(sheet, name):
+    """
+    Find a worksheet by name, trying multiple variants.
+    e.g., if name is "3월", tries "3월", "3", "03", "3 Month".
+    """
+    import gspread
+    try:
+        return sheet.worksheet(name)
+    except gspread.WorksheetNotFound:
+        pass
+    
+    # Try variants
+    clean_name = str(name).replace("월", "").strip()
+    try:
+        month_int = int(clean_name)
+        variants = [clean_name, str(month_int), f"{month_int:02d}", f"{month_int}월", f"{month_int} Month"]
+    except ValueError:
+        variants = [clean_name]
+    
+    all_ws = sheet.worksheets()
+    ws_names = {ws.title: ws for ws in all_ws}
+    
+    for v in variants:
+        if v in ws_names:
+            return ws_names[v]
+            
+    # Last resort: partially match
+    for title, ws in ws_names.items():
+        if clean_name in title:
+            return ws
+            
+    return None
+
+
 def get_monthly_cico_data(month: int):
     """
     Get all student data from a monthly sheet for the CICO grid view.
@@ -1698,9 +1730,11 @@ def get_monthly_cico_data(month: int):
         month_name = f"{month}월"
         
         try:
-            ws = sheet.worksheet(month_name)
-        except gspread.WorksheetNotFound:
-            return {"error": f"'{month_name}' 시트가 없습니다."}
+            ws = get_worksheet_fuzzy(sheet, month_name)
+            if not ws:
+                return {"error": f"'{month_name}' 시트가 없습니다."}
+        except Exception:
+            return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         
         all_values = ws.get_all_values()
         if not all_values:
@@ -1849,9 +1883,11 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
         month_name = f"{month}월"
         
         try:
-            ws = sheet.worksheet(month_name)
-        except gspread.WorksheetNotFound:
-            return {"error": f"'{month_name}' 시트가 없습니다."}
+            ws = get_worksheet_fuzzy(sheet, month_name)
+            if not ws:
+                return {"error": f"'{month_name}' 시트가 없습니다."}
+        except Exception:
+            return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         
         headers = ws.row_values(1)
         all_values = ws.get_all_values() 
@@ -2283,9 +2319,11 @@ def get_cico_report_data(month: int):
         
         # Get current month data
         try:
-            ws = sheet.worksheet(month_name)
-        except gspread.WorksheetNotFound:
-            return {"error": f"'{month_name}' 시트가 없습니다."}
+            ws = get_worksheet_fuzzy(sheet, month_name)
+            if not ws:
+                return {"error": f"'{month_name}' 시트가 없습니다."}
+        except Exception:
+            return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         
         all_values = ws.get_all_values()
         if not all_values or len(all_values) < 2:

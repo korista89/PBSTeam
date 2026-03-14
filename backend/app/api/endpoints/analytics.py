@@ -101,9 +101,15 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
     # Sort by count desc
     risk_list.sort(key=lambda x: x["count"], reverse=True)
     
-    # 3. CICO Stats (fetch current month)
+    # 3. CICO Stats (fetch month from end_date)
     import datetime
-    current_month = datetime.datetime.now().month
+    try:
+        # Extract month from end_date (YYYY-MM-DD or YYYY-MM)
+        date_parts = req.end_date.split("-")
+        current_month = int(date_parts[1]) if len(date_parts) > 1 else datetime.datetime.now().month
+    except:
+        current_month = datetime.datetime.now().month
+        
     cico_data = get_monthly_cico_data(current_month)
     if isinstance(cico_data, dict) and "summary" in cico_data:
         cico_stats = cico_data["summary"]
@@ -359,10 +365,13 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     import datetime
     cico_data = []
     try:
+        # Extract month from end_date or start_date
         month = datetime.datetime.now().month
-        if req.start_date:
+        ref_date = req.end_date or req.start_date
+        if ref_date:
             try:
-                month = int(req.start_date.split("-")[1])
+                date_parts = ref_date.split("-")
+                month = int(date_parts[1]) if len(date_parts) > 1 else month
             except:
                 pass
         cico_result = get_monthly_cico_data(month)
@@ -394,9 +403,14 @@ async def ai_comprehensive_analysis(req: ComprehensiveAnalysisRequest):
     # 1. Fetch Dashboard Analytics Data
     analytics_data = get_analytics_data(req.start_date, req.end_date)
     
-    # 2. Fetch CICO Data for current month
+    # 2. Fetch CICO Data for the requested period
     import datetime
-    current_month = datetime.datetime.now().month
+    try:
+        date_parts = req.end_date.split("-")
+        current_month = int(date_parts[1]) if len(date_parts) > 1 else datetime.datetime.now().month
+    except:
+        current_month = datetime.datetime.now().month
+        
     cico_data = get_monthly_cico_data(current_month)
     
     # 3. Fetch Tier 3 Report
