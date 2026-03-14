@@ -1721,6 +1721,7 @@ def get_monthly_cico_data(month: int):
     Get all student data from a monthly sheet for the CICO grid view.
     Returns structured data with headers, students, and day columns.
     """
+    col_map = {}
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
@@ -2910,12 +2911,11 @@ def initialize_monthly_sheets():
         months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
         
         for m_name in months: # Using strings directly
+            ws = get_worksheet_fuzzy(sheet, m_name)
+            if ws:
+                continue
+
             try:
-                ws = sheet.worksheet(m_name)
-                # If exists, skip to avoid overwrite
-                continue 
-            except gspread.WorksheetNotFound:
-                print(f"Creating {m_name}...")
                 ws = sheet.add_worksheet(title=m_name, rows=1000, cols=45)
             
             # Setup Headers
