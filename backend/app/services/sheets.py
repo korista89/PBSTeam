@@ -6,6 +6,59 @@ import json
 import pandas as pd
 import re
 import datetime
+import time
+from typing import Optional, List, Dict, Any, Union
+
+# Simple in-memory cache
+_cache = {
+    "records": {"data": [], "timestamp": 0},
+    "users": {"data": [], "timestamp": 0},
+    "board": {"data": [], "timestamp": 0},
+    "evaluation_sentences": {"data": [], "timestamp": 0},
+    "tierstatus": {"data": [], "timestamp": 0},
+    "daily_cico": {"data": [], "timestamp": 0}
+}
+CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
+
+def safe_get_all_records(ws) -> List[Dict[str, Any]]:
+    """
+    Safely fetch all records from a worksheet.
+    Falls back to get_all_values() if get_all_records() fails (e.g. due to duplicate headers).
+    """
+    try:
+        return ws.get_all_records()
+    except Exception as e:
+        print(f"safe_get_all_records: get_all_records failed, falling back to get_all_values: {e}")
+        all_vals = ws.get_all_values()
+        if len(all_vals) < 2:
+            return []
+        headers = all_vals[0]
+        records = []
+        for row in all_vals[1:]:
+            record = {}
+            for ci, h in enumerate(headers):
+                if ci < len(row) and h:
+                    record[h] = row[ci]
+            records.append(record)
+        return records
+
+def safe_get_all_values(ws) -> List[List[Any]]:
+    """
+    Safely fetch all values from a worksheet.
+    """
+    try:
+        # Retry logic for transient errors
+        retries = 3
+        for i in range(retries):
+            try:
+                return ws.get_all_values()
+            except Exception as e:
+                if i == retries - 1: raise e
+                time.sleep(1)
+        return [] # Fallback
+    except Exception as e:
+        print(f"safe_get_all_values failed: {e}")
+        return []
 
 _sheets_client = None
 
@@ -71,34 +124,21 @@ def fetch_evaluation_sentences():
     """Fetch all records from '평가문장' worksheet with caching."""
     global _cache
     now = time.time()
-    if _cache["evaluation_sentences"]["data"] and (now - _cache["evaluation_sentences"]["timestamp"] < 300):
-        return _cache["evaluation_sentences"]["data"]
-        
+    cached = _cache.get("evaluation_sentences")
+    if cached and cached.get("data") and (now - float(cached.get("timestamp", 0)) < 3600):
+        return cached["data"]
     client = get_sheets_client()
     if not client:
         return []
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        ws = sheet.worksheet("평가문장")
-        records = ws.get_all_records()
-        _cache["evaluation_sentences"] = {"data": records, "timestamp": now}
+        ws = sheet.worksheet(settings.DAILY_LOG_SHEET)
+        records = safe_get_all_records(ws)
+        _cache["evaluation_sentences"] = {"data": records, "timestamp": float(now)}
         return records
     except Exception as e:
         print(f"Error fetching evaluation sentences: {e}")
         return []
-
-import time
-
-# Simple in-memory cache
-_cache = {
-    "records": {"data": [], "timestamp": 0},
-    "users": {"data": [], "timestamp": 0},
-    "board": {"data": [], "timestamp": 0},
-    "evaluation_sentences": {"data": [], "timestamp": 0}
-}
-CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
-
-from typing import Optional, List, Dict, Any, Union
 
 def clear_cache(key: Optional[str] = None):
     if key and key in _cache:
@@ -143,22 +183,7 @@ def fetch_all_records(force_refresh: bool = False):
         return []
     
     try:
-        try:
-            raw_values = worksheet.get_all_records()
-        except Exception as e:
-            print(f"Fallback to get_all_values for BehaviorLogs1 (likely due to size or empty headers): {e}")
-            all_vals = worksheet.get_all_values()
-            if len(all_vals) < 2:
-                raw_values = []
-            else:
-                headers = all_vals[0]
-                raw_values = []
-                for row in all_vals[1:]:
-                    record = {}
-                    for ci, h in enumerate(headers):
-                        if ci < len(row) and h:
-                            record[h] = row[ci]
-                    raw_values.append(record)
+        raw_values = safe_get_all_records(worksheet)
 
         mapped_values = []
         updates_needed = []
@@ -243,7 +268,7 @@ def fetch_student_codes():
         return {}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         # Return dict: {Name: Code} for fast masking
         # Filter out empty names
         code_map = {}
@@ -301,8 +326,6 @@ def get_users_worksheet():
             headers = ws.row_values(1)
             if "Memo" not in headers:
                 ws.update_cell(1, len(headers) + 1, "Memo")
-
-            return ws
         except gspread.WorksheetNotFound:
             print("Creating 'Users' worksheet...")
             ws = sheet.add_worksheet(title="Users", rows=110, cols=10)
@@ -323,16 +346,17 @@ def fetch_all_users():
     now = time.time()
     
     # Check cache
-    if _cache["users"]["data"] and (now - _cache["users"]["timestamp"] < CACHE_TTL):
-        return _cache["users"]["data"]
+    cached_users = _cache.get("users")
+    if cached_users and cached_users.get("data") and (now - float(cached_users.get("timestamp", 0)) < CACHE_TTL):
+        return cached_users["data"]
 
     ws = get_users_worksheet()
     if not ws:
         return []
     
     try:
-        records = ws.get_all_records()
-        _cache["users"] = {"data": records, "timestamp": now}
+        records = safe_get_all_records(ws)
+        _cache["users"] = {"data": records, "timestamp": float(now)}
         return records
     except Exception as e:
         print(f"Error fetching users: {e}")
@@ -344,7 +368,8 @@ def create_user(user_data: dict):
     user_data: {ID, Password, Role, Name, Phone, Email, ClassID, ClassName}
     """
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return {"error": "Sheet not accessible"}
+    if not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
     
     try:
@@ -355,7 +380,7 @@ def create_user(user_data: dict):
             return {"error": "Users sheet not found"}
             
         # Check if user already exists
-        all_records = ws.get_all_records()
+        all_records = safe_get_all_records(ws)
         for r in all_records:
             if str(r.get("ID")) == str(user_data.get("ID")):
                 return {"error": "User ID already exists"}
@@ -379,7 +404,8 @@ def delete_user(user_id: str):
     Delete a user from the 'Users' sheet.
     """
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return {"error": "Sheet not accessible"}
+    if not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
     
     try:
@@ -411,7 +437,7 @@ def update_user_password(user_id: str, new_password: str):
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         for idx, r in enumerate(records):
             if str(r.get('ID')) == str(user_id):
                 # Row index is idx + 2 (1 for header, 1 for 0-index)
@@ -433,7 +459,7 @@ def update_tierstatus_certification(student_code_or_name: str, cert_count: int):
         return {"error": "Sheet not accessible"}
         
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         # 1-indexed column num: 7
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(student_code_or_name) or str(r.get('학생이름')) == str(student_code_or_name):
@@ -451,9 +477,7 @@ def get_all_users():
         return []
     
     try:
-        records = ws.get_all_records()
-        # Don't return passwords
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         # Don't return passwords
         return [{
             "ID": r.get("ID"), 
@@ -594,7 +618,8 @@ def reset_users_sheet():
     Teachers: Korean Style IDs (e.g., 초1-1관리자)
     """
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return {"error": "Cannot access Google Sheets"}
+    if not settings.SHEET_URL:
         return {"error": "Cannot access Google Sheets"}
     
     try:
@@ -662,7 +687,8 @@ def get_student_status_worksheet():
 def reset_tier_status_sheet():
     """Delete and recreate TierStatus sheet with all 210 students (5 tier columns)"""
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return {"error": "Cannot access Google Sheets"}
+    if not settings.SHEET_URL:
         return {"error": "Cannot access Google Sheets"}
     
     try:
@@ -709,21 +735,7 @@ def fetch_student_status():
         return []
     
     try:
-        try:
-            records = ws.get_all_records()
-        except Exception as e:
-            print(f"get_all_records failed for TierStatus, falling back to get_all_values: {e}")
-            all_vals = ws.get_all_values()
-            if len(all_vals) < 2:
-                return []
-            headers = all_vals[0]
-            records = []
-            for row in all_vals[1:]:
-                record = {}
-                for ci, h in enumerate(headers):
-                    if ci < len(row) and h:
-                        record[h] = row[ci]
-                records.append(record)
+        records = safe_get_all_records(ws)
                 
         # Add row_index for updates
         for idx, record in enumerate(records):
@@ -750,7 +762,7 @@ def update_student_tier(code: str, tier_values: dict, memo: str = ""):
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         
@@ -802,7 +814,7 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         
@@ -883,7 +895,7 @@ def update_student_enrollment(code: str, enrolled: str):
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2
@@ -901,7 +913,7 @@ def update_student_beable_code(code: str, beable_code: str):
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2
@@ -1000,22 +1012,7 @@ def fetch_cico_daily(student_code: str = None, start_date: str = None, end_date:
             return []
         
         try:
-            try:
-                records = ws.get_all_records()
-            except Exception as e:
-                print(f"Fallback to get_all_values for CICODaily: {e}")
-                all_vals = ws.get_all_values()
-                if len(all_vals) < 2:
-                    records = []
-                else:
-                    headers = all_vals[0]
-                    records = []
-                    for row in all_vals[1:]:
-                        record = {}
-                        for ci, h in enumerate(headers):
-                            if ci < len(row) and h:
-                                record[h] = row[ci]
-                        records.append(record)
+            records = safe_get_all_records(ws)
             _cache["daily_cico"] = {"data": records, "timestamp": now}
         except Exception as e:
             print(f"Error fetching CICO daily: {e}")
@@ -1113,7 +1110,8 @@ def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, 
 def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str = "", memo: str = ""):
     """Update user role, class, name, and memo in Users sheet"""
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return {"error": "Sheet not available"}
+    if not settings.SHEET_URL:
         return {"error": "Sheet not available"}
         
     try:
@@ -1197,7 +1195,7 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
         return []
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         valid_records = []
         
         # Clean student code for filtering if provided
@@ -1279,7 +1277,7 @@ def update_meeting_note(note_id: str, content: str):
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         row_idx = -1
         
         # Search for note_id in UUID or ID/CreatedAt (legacy)
@@ -1309,7 +1307,7 @@ def delete_meeting_note(note_id: str):
         return {"error": "Sheet not accessible"}
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         row_idx = -1
         
         for i, r in enumerate(records):
@@ -1371,7 +1369,8 @@ def set_default_holidays(ws):
 def get_holidays_from_config():
     """Get holidays list from '날짜 관리' sheet (fallback to '설정(Config)')"""
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return []
+    if not settings.SHEET_URL:
         return []
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
@@ -1584,9 +1583,11 @@ def create_monthly_cico_sheet(year: int, month: int):
     Create a new monthly CICO sheet with dropdowns and student data from TierStatus.
     """
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
+    if not client: return {"error": "Sheet not available"}
+    if not settings.SHEET_URL:
         return {"error": "Sheet not available"}
         
+    if not client: return {"error": "Sheet not available"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
@@ -1676,10 +1677,16 @@ def create_monthly_cico_sheet(year: int, month: int):
         return {"error": str(e)}
 
 
-def find_col_fuzzy(headers: list, candidates: list) -> int:
+def find_col_fuzzy(headers: Union[list, dict], candidates: list) -> int:
     """Find column index (0-based) matching any of the candidates (case-insensitive)"""
+    if isinstance(headers, dict):
+        # Handle dict case if records were fetched as dicts
+        headers_list = list(headers.keys())
+    else:
+        headers_list = headers
+
     # Normalize headers
-    norm_headers = [str(h).strip().lower().replace(" ", "") for h in headers]
+    norm_headers = [str(h).strip().lower().replace(" ", "") for h in headers_list]
     
     for c in candidates:
         norm_c = c.strip().lower().replace(" ", "")
@@ -1742,6 +1749,7 @@ def get_monthly_cico_data(month: int):
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
     
+    if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
@@ -1753,7 +1761,7 @@ def get_monthly_cico_data(month: int):
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         
-        all_values = ws.get_all_values()
+        all_values = safe_get_all_values(ws)
         if not all_values:
             return {"error": "Empty sheet"}
         
@@ -1895,6 +1903,7 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
     
+    if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
@@ -1907,7 +1916,7 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         
         headers = ws.row_values(1)
-        all_values = ws.get_all_values() 
+        all_values = safe_get_all_values(ws) 
         
         # Determine student_code column index for override lookup
         # Check for v3 column "학생명(코드)" or explicit "학생코드"
@@ -2143,6 +2152,7 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
     
+    if not client: return {"error": "Sheet not accessible"}
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
@@ -2152,7 +2162,7 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         except gspread.WorksheetNotFound:
             return {"error": f"'{month_name}' 시트가 없습니다."}
         
-        all_values = ws.get_all_values()
+        all_values = safe_get_all_values(ws)
         headers = all_values[0]
         
         target_row = row_index
@@ -2203,10 +2213,7 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
 
 def toggle_tier2_status(month: int, student_code: str, status: str):
     """Toggle Tier2 status (O/X) for a student in a monthly sheet."""
-    client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
-        return {"error": "Sheet not accessible"}
-    
+    if not client: return {"error": "Sheet not accessible"}
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
@@ -2216,7 +2223,7 @@ def toggle_tier2_status(month: int, student_code: str, status: str):
         except gspread.WorksheetNotFound:
             return {"error": f"'{month_name}' 시트가 없습니다."}
         
-        all_values = ws.get_all_values()
+        all_values = safe_get_all_values(ws)
         headers = all_values[0]
         
         code_idx = headers.index("학생코드") if "학생코드" in headers else 2
@@ -2251,10 +2258,7 @@ def get_student_dashboard_analysis(student_code: str):
     And current status/team talk.
     """
     client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
-        # Fallback for dev - return empty if not connected
-        return {"error": "Sheet not accessible"}
-    
+    if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         # Try to open "Tier2_대시보드"
@@ -2265,7 +2269,11 @@ def get_student_dashboard_analysis(student_code: str):
             
         # Fetch all values
         # Headers are in Row 5, Data starts Row 6
-        rows = ws.get_all_values()
+        all_values = safe_get_all_values(ws)
+        if not all_values:
+            return {"error": "Empty dashboard sheet"}
+        
+        rows = all_values
         
         # Find Student Row
         # Column D (index 3) is Student Code
@@ -2342,7 +2350,7 @@ def get_cico_report_data(month: int):
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         
-        all_values = ws.get_all_values()
+        all_values = safe_get_all_values(ws)
         if not all_values or len(all_values) < 2:
             return {"students": [], "summary": {}}
         
@@ -2390,7 +2398,7 @@ def get_cico_report_data(month: int):
                 m_name = months_list[mi]
                 try:
                     m_ws = sheet.worksheet(m_name)
-                    m_rows = m_ws.get_all_values()
+                    m_rows = safe_get_all_values(m_ws)
                     if len(m_rows) < 2:
                         continue
                     m_headers = m_rows[0]
@@ -2812,7 +2820,7 @@ def refresh_dashboard_data(sheet, dashboard_ws):
     for i, m_name in enumerate(months):
         try:
             m_ws = sheet.worksheet(m_name)
-            m_rows = m_ws.get_all_values()
+            m_rows = safe_get_all_values(m_ws)
             if len(m_rows) < 2: continue
             
             headers = m_rows[0]
@@ -2842,7 +2850,7 @@ def refresh_dashboard_data(sheet, dashboard_ws):
     # 3. Get Current Month Data & Merge
     try:
         t_ws = sheet.worksheet(target_month_str)
-        t_rows = t_ws.get_all_values()
+        t_rows = safe_get_all_values(t_ws)
         
         output_rows = []
         if len(t_rows) > 1:
@@ -2889,15 +2897,14 @@ def initialize_monthly_sheets():
     Creates monthly sheets (3월~12월) and populates them with roster from TierStatus.
     """
     client = get_sheets_client()
-    if not client: return {"error": "Client error"}
-    
+    if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         
         # 1. Get Roster from TierStatus
         try:
             status_ws = sheet.worksheet("TierStatus")
-            status_rows = status_ws.get_all_values()
+            status_rows = safe_get_all_values(status_ws)
         except gspread.WorksheetNotFound:
             return {"error": "TierStatus sheet not found"}
             
@@ -3000,7 +3007,7 @@ def fetch_board_posts():
         return []
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         valid_records = []
         for r in records:
             # Safer getter with defaults
@@ -3129,7 +3136,7 @@ def get_bip(student_code: str):
     if not ws: return None
     
     try:
-        records = ws.get_all_records()
+        records = safe_get_all_records(ws)
         for r in records:
             if str(r.get("StudentCode")) == str(student_code):
                 return r
