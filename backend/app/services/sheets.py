@@ -2915,8 +2915,7 @@ def initialize_monthly_sheets():
             if ws:
                 continue
 
-            try:
-                ws = sheet.add_worksheet(title=m_name, rows=1000, cols=45)
+            ws = sheet.add_worksheet(title=m_name, rows=1000, cols=45)
             
             # Setup Headers
             days = [str(d) for d in range(1, 32)]
