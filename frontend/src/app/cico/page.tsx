@@ -5,11 +5,6 @@ import axios from "axios";
 import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import GlobalNav from "../components/GlobalNav";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line
-} from "recharts";
-// import WeeklyAnalysisChart from "../components/WeeklyAnalysisChart"; // Removed for role separation
 import { useRouter } from "next/navigation";
 
 interface DayValue {
@@ -297,9 +292,11 @@ export default function CICOGridPage() {
                           <th style={{ ...thStyle, minWidth: "80px" }}>학급</th>
                           <th style={thStyle}>코드</th>
                           <th style={{ ...thStyle, minWidth: "100px" }}>학생명</th>
-                          <th style={{ ...thStyle, minWidth: "120px" }}>목표행동</th>
-                          <th style={{ ...thStyle, minWidth: "80px" }}>유형</th>
-                          <th style={{ ...thStyle, minWidth: "70px" }}>척도</th>
+                          <th style={{ ...thStyle, minWidth: "140px" }}>목표행동</th>
+                          <th style={{ ...thStyle, minWidth: "120px" }}>유형</th>
+                          <th style={{ ...thStyle, minWidth: "100px" }}>척도</th>
+                          <th style={{ ...thStyle, minWidth: "80px" }}>입력 기준</th>
+                          <th style={{ ...thStyle, minWidth: "100px" }}>달성 기준</th>
                           {filteredData.day_columns.map(day => (
                             <th key={day.label} style={thStyle}>{day.display || day.label}</th>
                           ))}
@@ -314,17 +311,111 @@ export default function CICOGridPage() {
                             <td style={tdStyle}>{student.학급}</td>
                             <td style={{ ...tdStyle, fontWeight: "bold", color: "#6366f1" }}>{student.학생코드}</td>
                             <td style={{ ...tdStyle, fontWeight: "600" }}>{student.학생명}</td>
-                            <td style={tdStyle}>{student.목표행동}</td>
-                            <td style={tdStyle}>{student["목표행동 유형"]}</td>
-                            <td style={tdStyle}>{student.척도}</td>
+                            <td style={{ ...tdStyle, cursor: "pointer", position: "relative" }} onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}>
+                              {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
+                                <input
+                                  autoFocus
+                                  defaultValue={student.목표행동}
+                                  onBlur={e => handleSettingsChange(student, { "목표행동": e.target.value })}
+                                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                  style={{ width: "100%", padding: "1px 2px", border: "1px solid #6366f1", borderRadius: "2px", fontSize: "0.75rem" }}
+                                />
+                              ) : (
+                                student.목표행동 || <span style={{ color: "#ccc" }}>입력</span>
+                              )}
+                            </td>
+                            <td style={{ ...tdStyle, cursor: "pointer" }}>
+                              <select
+                                value={student["목표행동 유형"]}
+                                onChange={e => handleSettingsChange(student, { "목표행동 유형": e.target.value })}
+                                style={{ border: "none", background: "transparent", fontSize: "0.75rem", cursor: "pointer", width: "100%" }}
+                              >
+                                {TYPE_OPTIONS.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td style={{ ...tdStyle, cursor: "pointer" }}>
+                              <select
+                                value={student.척도}
+                                onChange={e => handleSettingsChange(student, { "척도": e.target.value })}
+                                style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
+                              >
+                                {SCALE_OPTIONS.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td style={{ ...tdStyle, cursor: "pointer" }} onClick={() => setEditingSettings({ row: student.row, field: "입력 기준" })}>
+                              {editingSettings?.row === student.row && editingSettings?.field === "입력 기준" ? (
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  defaultValue={student["입력 기준"]}
+                                  onBlur={e => handleSettingsChange(student, { "입력 기준": e.target.value })}
+                                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                  style={{ width: "100%", textAlign: "center", border: "1px solid #6366f1", borderRadius: "4px", fontSize: "0.75rem" }}
+                                />
+                              ) : (
+                                student["입력 기준"] || "0"
+                              )}
+                            </td>
+                            <td style={{ ...tdStyle, cursor: "pointer" }}>
+                              <select
+                                value={student["목표 달성 기준"]}
+                                onChange={e => handleSettingsChange(student, { "목표 달성 기준": e.target.value })}
+                                style={{ border: "none", background: "transparent", fontSize: "0.7rem", cursor: "pointer", width: "100%" }}
+                              >
+                                {(student["목표행동 유형"] === "감소 목표행동" ? CRITERIA_DECREASE : CRITERIA_INCREASE).map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </td>
                             {filteredData.day_columns.map(day => {
                               const val = student.days[day.label] || "";
                               const isEditing = editingCell?.row === student.row && editingCell?.day === day.label;
                               const options = getInputOptions(student.척도);
                               return (
-                                <td key={day.label} style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"]), cursor: "pointer" }} onClick={() => setEditingCell({ row: student.row, day: day.label })}>
+                                <td 
+                                  key={day.label} 
+                                  style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"]), cursor: "pointer", minWidth: "40px" }} 
+                                  onClick={() => {
+                                    if (options.length > 0 && !isEditing) {
+                                      // Cycle through O/X or 0/1/2 for convenience
+                                      if (options.length <= 3) {
+                                        const currentIdx = options.indexOf(val);
+                                        const nextVal = currentIdx === -1 ? options[0] : (currentIdx === options.length - 1 ? "" : options[currentIdx + 1]);
+                                        handleCellChange(student, day.label, nextVal);
+                                      } else {
+                                        setEditingCell({ row: student.row, day: day.label });
+                                      }
+                                    } else if (options.length === 0) {
+                                      setEditingCell({ row: student.row, day: day.label });
+                                    }
+                                  }}
+                                >
                                   {isEditing ? (
-                                    <input autoFocus defaultValue={val} onBlur={e => handleCellChange(student, day.label, e.target.value)} style={{ width: "30px", textAlign: "center" }} />
+                                    options.length > 0 ? (
+                                      <select
+                                        autoFocus
+                                        value={val}
+                                        onChange={e => handleCellChange(student, day.label, e.target.value)}
+                                        onBlur={() => setEditingCell(null)}
+                                        style={{ width: "100%", fontSize: "0.75rem" }}
+                                      >
+                                        <option value="">-</option>
+                                        {options.map(o => <option key={o} value={o}>{o}</option>)}
+                                      </select>
+                                    ) : (
+                                      <input 
+                                        autoFocus 
+                                        type="number" 
+                                        defaultValue={val} 
+                                        onBlur={e => handleCellChange(student, day.label, e.target.value)} 
+                                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                        style={{ width: "35px", textAlign: "center", fontSize: "0.75rem" }} 
+                                      />
+                                    )
                                   ) : (
                                     <span>{val || "·"}</span>
                                   )}
