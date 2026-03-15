@@ -213,17 +213,35 @@ export default function CICOGridPage() {
     setEditingSettings(null);
   };
 
-  const getCellColor = (value: string, type: string): string => {
-    if (!value) return "transparent";
-    if (type === "증가 목표행동") {
-      if (value === "O" || value === "2") return "#d1fae5";
-      if (value === "X" || value === "0") return "#fee2e2";
-      if (value === "1") return "#fef3c7";
-    } else {
-      if (value === "X" || value === "0") return "#d1fae5";
-      if (value === "O") return "#fee2e2";
-      if (value === "1") return "#fef3c7";
+  const getCellColor = (value: string, type: string, scale: string): string => {
+    if (!value || value === "." || value === "-") return "transparent";
+    
+    const isIncrease = type.includes("증가");
+    const num = parseFloat(value);
+    const hasNum = !isNaN(num);
+
+    // O/X Scale
+    if (scale.includes("O/X")) {
+      if (value === "O") return isIncrease ? "#d1fae5" : "#fee2e2"; // Green for Increase, Red for Decrease
+      if (value === "X") return isIncrease ? "#fee2e2" : "#d1fae5"; // Red for Increase, Green for Decrease
     }
+
+    // 0/1/2 Scale
+    if (scale.includes("0점/1점/2점") || value.includes("점")) {
+        const score = value.replace("점", "");
+        if (score === "2") return isIncrease ? "#d1fae5" : "#fee2e2";
+        if (score === "1") return "#fef3c7"; // Yellow for partial
+        if (score === "0") return isIncrease ? "#fee2e2" : "#d1fae5";
+    }
+
+    // Numeric ranges (0-5, 0-7, etc.)
+    if (hasNum) {
+        // High values are good for increase, bad for decrease
+        if (num >= 4) return isIncrease ? "#d1fae5" : "#fee2e2";
+        if (num >= 2) return "#fef3c7";
+        return isIncrease ? "#fee2e2" : "#d1fae5";
+    }
+
     return "#f3f4f6";
   };
 
@@ -318,9 +336,12 @@ export default function CICOGridPage() {
                             <td style={{ ...tdStyle, fontWeight: "600" }}>{student.학생명}</td>
                             <td style={{ ...tdStyle, cursor: "pointer", position: "relative" }} onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}>
                               {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'absolute', top: 0, left: 0, zIndex: 100, background: 'white', padding: '8px', border: '1px solid #6366f1', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '250px' }}>
+                                <div 
+                                  style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'absolute', top: 0, left: 0, zIndex: 100, background: 'white', padding: '8px', border: '1px solid #6366f1', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '250px' }}
+                                  onMouseDown={(e) => e.stopPropagation()} // Prevent blur when clicking inside the container
+                                >
                                   <select 
-                                    style={{ padding: '4px', borderRadius: '4px', fontSize: '0.8rem' }}
+                                    style={{ padding: '6px', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #e2e8f0' }}
                                     onChange={(e) => {
                                       const preset = BEHAVIOR_PRESETS.find(p => p.label === e.target.value);
                                       if (preset && preset.value !== "manual") {
@@ -338,18 +359,24 @@ export default function CICOGridPage() {
                                       <option key={p.label} value={p.label}>{p.label}</option>
                                     ))}
                                   </select>
-                                  <input
-                                    autoFocus
-                                    placeholder="직접 입력..."
-                                    defaultValue={student.목표행동}
-                                    onBlur={e => handleSettingsChange(student, { "목표행동": e.target.value })}
-                                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                                    style={{ width: "100%", padding: "4px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "0.8rem" }}
-                                  />
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <input
+                                      autoFocus
+                                      placeholder="직접 입력..."
+                                      defaultValue={student.목표행동}
+                                      onBlur={(e) => {
+                                        // Give the select a chance to trigger before closing
+                                        setTimeout(() => setEditingSettings(null), 150);
+                                      }}
+                                      onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                      style={{ flex: 1, padding: "6px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "0.8rem" }}
+                                    />
+                                    <button onClick={() => setEditingSettings(null)} style={{ padding: '4px 8px', background: '#f1f5f9', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>✕</button>
+                                  </div>
                                 </div>
                               ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <span style={{ fontSize: '0.7rem' }}>➕</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                                  <span style={{ fontSize: '0.7rem', color: '#6366f1' }}>➕</span>
                                   {student.목표행동 || <span style={{ color: "#ccc" }}>입력</span>}
                                 </div>
                               )}
@@ -408,7 +435,7 @@ export default function CICOGridPage() {
                               return (
                                 <td 
                                   key={day.label} 
-                                  style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"]), cursor: "pointer", minWidth: "40px" }} 
+                                  style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"], student.척도), cursor: "pointer", minWidth: "40px" }} 
                                   onClick={() => {
                                     if (options.length > 0 && !isEditing) {
                                       // Specific cycling for O/X: O -> X -> empty
