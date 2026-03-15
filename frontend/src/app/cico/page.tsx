@@ -9,7 +9,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line
 } from "recharts";
-import WeeklyAnalysisChart from "../components/WeeklyAnalysisChart";
+// import WeeklyAnalysisChart from "../components/WeeklyAnalysisChart"; // Removed for role separation
+import { useRouter } from "next/navigation";
 
 interface DayValue {
   [day: string]: string;
@@ -77,6 +78,7 @@ export default function CICOGridPage() {
   const [loading, setLoading] = useState(true);
   const [is404, setIs404] = useState(false);
   const [error, setError] = useState("");
+  const router = useRouter();
   const [pendingUpdates, setPendingUpdates] = useState<{ row: number; col: number; value: string }[]>([]);
   const [editingCell, setEditingCell] = useState<{ row: number; day: string } | null>(null);
   const [editingSettings, setEditingSettings] = useState<{ row: number; field: string } | null>(null);
@@ -246,10 +248,24 @@ export default function CICOGridPage() {
         <main className={styles.main} style={{ marginTop: "10px", maxWidth: "100%", padding: "0 10px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>📋 CICO 월별 리포트</h2>
-              <p style={{ color: "#666", margin: "3px 0 0", fontSize: "0.85rem" }}>Tier2 학생 목표행동 일일 기록</p>
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>✍️ CICO 일일 기록 입력</h2>
+              <p style={{ color: "#666", margin: "3px 0 0", fontSize: "0.85rem" }}>Tier2 학생들의 일일 행동 데이터를 기록합니다.</p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <button 
+                onClick={() => router.push('/report/tier2')}
+                style={{ 
+                  padding: "8px 16px", 
+                  borderRadius: "8px", 
+                  border: "1px solid #6366f1", 
+                  backgroundColor: "white", 
+                  color: "#6366f1", 
+                  fontWeight: "bold", 
+                  cursor: "pointer" 
+                }}
+              >
+                📊 CICO 리포트 보기
+              </button>
               <select value={month} onChange={e => setMonth(Number(e.target.value))} style={{ padding: "8px 12px", borderRadius: "8px", border: "2px solid #6366f1", fontWeight: "bold" }}>
                 {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
                   <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
@@ -264,24 +280,13 @@ export default function CICOGridPage() {
 
           {!loading && !error && filteredData && (
             <>
+              {/* Fragment for the data exists condition */}
               {filteredData.students.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "50px", backgroundColor: "white", borderRadius: "12px" }}>해당 학급의 CICO 학생이 없습니다.</div>
               ) : (
                 <>
-                  <div style={{ marginBottom: "24px" }} className="grid-responsive">
-                    <WeeklyAnalysisChart data={filteredData.weekly_trend || []} title={`${month}월 주별 CICO 평균 수행률`} color="#10b981" dataKey="rate" yLabel="수행률 (%)" />
-                    <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 800 }}>평균 수행률</div>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 950, color: '#10b981' }}>{filteredData.summary?.avg_rate}%</div>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 800 }}>목표 달성</div>
-                          <div style={{ fontSize: '1.8rem', fontWeight: 950, color: '#6366f1' }}>{filteredData.summary?.achieved_count}명</div>
-                        </div>
-                      </div>
-                    </div>
+                  <div style={{ marginBottom: "15px", padding: "10px", background: "#f8f9fa", borderRadius: "8px", borderLeft: "4px solid #6366f1", fontSize: "0.85rem" }}>
+                    💡 <strong>데이터 입력 안내:</strong> 셀을 클릭하여 값을 입력하면 즉시 서버에 임시 저장됩니다. (O/X 및 점수 척도 지원)
                   </div>
 
                   <div className="table-responsive-wrapper" style={{ overflowX: "auto", borderRadius: "12px", boxShadow: "0 2px 12px rgba(0,0,0,0.1)", backgroundColor: "white" }}>

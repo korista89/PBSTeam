@@ -200,14 +200,6 @@ export default function TierStatusPage() {
         }
     };
 
-    // Get tier level for filtering
-    const getTierLevel = (s: StudentStatus): string => {
-        if (s['Tier3+'] === "O") return "Tier3+";
-        if (s['Tier3'] === "O") return "Tier3";
-        if (s['Tier2(SST)'] === "O") return "Tier2(SST)";
-        if (s['Tier2(CICO)'] === "O") return "Tier2(CICO)";
-        return "Tier1";
-    };
 
     // Filter students
     const filteredStudents = students.filter(s => {
@@ -219,7 +211,22 @@ export default function TierStatusPage() {
             }
         }
         
-        if (filter !== "all" && getTierLevel(s) !== filter) return false;
+        // Inclusive filtering logic
+        if (filter !== "all") {
+            if (filter === "Tier1") {
+                // Tier 1 is "Pure" Tier 1 (no other tiers)
+                if (!(s['Tier1'] === "O" && s['Tier2(CICO)'] === "X" && s['Tier2(SST)'] === "X" && s['Tier3'] === "X" && s['Tier3+'] === "X")) return false;
+            } else if (filter === "Tier2(CICO)") {
+                if (s['Tier2(CICO)'] !== "O") return false;
+            } else if (filter === "Tier2(SST)") {
+                if (s['Tier2(SST)'] !== "O") return false;
+            } else if (filter === "Tier3") {
+                if (s['Tier3'] !== "O") return false;
+            } else if (filter === "Tier3+") {
+                if (s['Tier3+'] !== "O") return false;
+            }
+        }
+
         if (courseFilter !== "all" && getCourse(s.학생코드) !== courseFilter) return false;
         return true;
     });
@@ -339,11 +346,11 @@ export default function TierStatusPage() {
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>재학</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>BeAble</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>그림말인증</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e8f5e9' }}>T1</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#fff3e0' }}>T2-C</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e3f2fd' }}>T2-S</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>T3</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>T3+</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e8f5e9' }}>Tier1</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px', backgroundColor: '#fff3e0' }}>Tier2(CICO)</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px', backgroundColor: '#e3f2fd' }}>Tier2(SST)</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>Tier3</th>
+                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>Tier3+</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>변경일</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '120px' }}>메모</th>
                                     <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>상세분석</th>
