@@ -51,11 +51,16 @@ const CRITERIA_DECREASE = ["10% 이하", "20% 이하", "30% 이하", "40% 이하
 
 const BEHAVIOR_PRESETS = [
     { label: "직접 입력", value: "manual" },
-    { label: "[공통] 수업 참여율(OX)", behavior: "수업 참여율", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
-    { label: "[공통] 규칙 준수율(012)", behavior: "규칙 준수율", type: "증가 목표행동", scale: "0점/1점/2점", criteria: "80% 이상" },
+    { label: "[공통/증가] 수업 참여율", behavior: "수업 참여율", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
+    { label: "[공통/증가] 규칙 준수율", behavior: "규칙 준수율", type: "증가 목표행동", scale: "0점/1점/2점", criteria: "80% 이상" },
     { label: "[증가] 과제 완수", behavior: "과제 완수", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
+    { label: "[증가] 제자리 앉아있기", behavior: "제자리 앉아있기", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
+    { label: "[증가] 긍정적 상호작용", behavior: "긍정적 상호작용", type: "증가 목표행동", scale: "O/X(발생)", criteria: "80% 이상" },
     { label: "[감소] 위기행동(빈도)", behavior: "위기행동", type: "감소 목표행동", scale: "1~100회", criteria: "20% 이하" },
     { label: "[감소] 수업 이탈(시간)", behavior: "수업 이탈", type: "감소 목표행동", scale: "1~100분", criteria: "20% 이하" },
+    { label: "[감소] 공격행동", behavior: "공격행동", type: "감소 목표행동", scale: "O/X(발생)", criteria: "10% 이하" },
+    { label: "[감소] 부적절한 언어", behavior: "부적절한 언어", type: "감소 목표행동", scale: "O/X(발생)", criteria: "10% 이하" },
+    { label: "[감소] 방해행동", behavior: "방해행동", type: "감소 목표행동", scale: "O/X(발생)", criteria: "10% 이하" },
 ];
 
 function getInputOptions(scale: string): string[] {
@@ -313,15 +318,40 @@ export default function CICOGridPage() {
                             <td style={{ ...tdStyle, fontWeight: "600" }}>{student.학생명}</td>
                             <td style={{ ...tdStyle, cursor: "pointer", position: "relative" }} onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}>
                               {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
-                                <input
-                                  autoFocus
-                                  defaultValue={student.목표행동}
-                                  onBlur={e => handleSettingsChange(student, { "목표행동": e.target.value })}
-                                  onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                                  style={{ width: "100%", padding: "1px 2px", border: "1px solid #6366f1", borderRadius: "2px", fontSize: "0.75rem" }}
-                                />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'absolute', top: 0, left: 0, zIndex: 100, background: 'white', padding: '8px', border: '1px solid #6366f1', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '250px' }}>
+                                  <select 
+                                    style={{ padding: '4px', borderRadius: '4px', fontSize: '0.8rem' }}
+                                    onChange={(e) => {
+                                      const preset = BEHAVIOR_PRESETS.find(p => p.label === e.target.value);
+                                      if (preset && preset.value !== "manual") {
+                                        handleSettingsChange(student, { 
+                                          "목표행동": preset.behavior!, 
+                                          "목표행동 유형": preset.type!, 
+                                          "척도": preset.scale!,
+                                          "목표 달성 기준": preset.criteria!
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <option value="manual">예시 선택 (자동입력)</option>
+                                    {BEHAVIOR_PRESETS.filter(p => p.value !== "manual").map(p => (
+                                      <option key={p.label} value={p.label}>{p.label}</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    autoFocus
+                                    placeholder="직접 입력..."
+                                    defaultValue={student.목표행동}
+                                    onBlur={e => handleSettingsChange(student, { "목표행동": e.target.value })}
+                                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                                    style={{ width: "100%", padding: "4px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "0.8rem" }}
+                                  />
+                                </div>
                               ) : (
-                                student.목표행동 || <span style={{ color: "#ccc" }}>입력</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{ fontSize: '0.7rem' }}>➕</span>
+                                  {student.목표행동 || <span style={{ color: "#ccc" }}>입력</span>}
+                                </div>
                               )}
                             </td>
                             <td style={{ ...tdStyle, cursor: "pointer" }}>
@@ -381,8 +411,12 @@ export default function CICOGridPage() {
                                   style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"]), cursor: "pointer", minWidth: "40px" }} 
                                   onClick={() => {
                                     if (options.length > 0 && !isEditing) {
-                                      // Cycle through O/X or 0/1/2 for convenience
-                                      if (options.length <= 3) {
+                                      // Specific cycling for O/X: O -> X -> empty
+                                      if (student.척도.includes("O/X")) {
+                                        const nextVal = val === "O" ? "X" : (val === "X" ? "" : "O");
+                                        handleCellChange(student, day.label, nextVal);
+                                      } else if (options.length <= 3) {
+                                        // Cycle through 0/1/2 or other small options
                                         const currentIdx = options.indexOf(val);
                                         const nextVal = currentIdx === -1 ? options[0] : (currentIdx === options.length - 1 ? "" : options[currentIdx + 1]);
                                         handleCellChange(student, day.label, nextVal);
