@@ -338,10 +338,11 @@ export default function CICOGridPage() {
                               {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
                                 <div 
                                   style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'absolute', top: 0, left: 0, zIndex: 100, background: 'white', padding: '8px', border: '1px solid #6366f1', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '250px' }}
-                                  onMouseDown={(e) => e.stopPropagation()} // Prevent blur when clicking inside the container
+                                  onMouseDown={(e) => e.stopPropagation()} 
                                 >
+                                  <div style={{ fontSize: '0.7rem', color: '#666', marginBottom: '2px' }}>행동 예시 선택:</div>
                                   <select 
-                                    style={{ padding: '6px', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #e2e8f0' }}
+                                    style={{ padding: '6px', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #e2e8f0', marginBottom: '4px' }}
                                     onChange={(e) => {
                                       const preset = BEHAVIOR_PRESETS.find(p => p.label === e.target.value);
                                       if (preset && preset.value !== "manual") {
@@ -354,23 +355,34 @@ export default function CICOGridPage() {
                                       }
                                     }}
                                   >
-                                    <option value="manual">예시 선택 (자동입력)</option>
+                                    <option value="manual">-- 예시 목록 --</option>
                                     {BEHAVIOR_PRESETS.filter(p => p.value !== "manual").map(p => (
                                       <option key={p.label} value={p.label}>{p.label}</option>
                                     ))}
                                   </select>
+                                  <div style={{ fontSize: '0.7rem', color: '#666', marginBottom: '2px' }}>직접 수정:</div>
                                   <div style={{ display: 'flex', gap: '4px' }}>
                                     <input
                                       autoFocus
-                                      placeholder="직접 입력..."
+                                      id={`edit-behavior-${student.row}`}
+                                      placeholder="행동명 입력..."
                                       defaultValue={student.목표행동}
-                                      onBlur={(e) => {
-                                        // Give the select a chance to trigger before closing
-                                        setTimeout(() => setEditingSettings(null), 150);
+                                      onKeyDown={e => { 
+                                        if (e.key === "Enter") {
+                                          handleSettingsChange(student, { "목표행동": e.currentTarget.value });
+                                        }
                                       }}
-                                      onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
                                       style={{ flex: 1, padding: "6px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "0.8rem" }}
                                     />
+                                    <button 
+                                      onClick={() => {
+                                        const input = document.getElementById(`edit-behavior-${student.row}`) as HTMLInputElement;
+                                        handleSettingsChange(student, { "목표행동": input.value });
+                                      }} 
+                                      style={{ padding: '4px 10px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                    >
+                                      저장
+                                    </button>
                                     <button onClick={() => setEditingSettings(null)} style={{ padding: '4px 8px', background: '#f1f5f9', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>✕</button>
                                   </div>
                                 </div>
@@ -407,7 +419,7 @@ export default function CICOGridPage() {
                               {editingSettings?.row === student.row && editingSettings?.field === "입력 기준" ? (
                                 <input
                                   autoFocus
-                                  type="number"
+                                  type="text"
                                   defaultValue={student["입력 기준"]}
                                   onBlur={e => handleSettingsChange(student, { "입력 기준": e.target.value })}
                                   onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
