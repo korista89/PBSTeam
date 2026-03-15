@@ -124,7 +124,7 @@ export default function CodeManagementPage() {
       try {
           setSaving(true);
           const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-          
+
           // Convert back to format backend expects [ {Code, Name, Memo} ]
           // API expects List[Dict]
           const payload = codes.filter(c => c.name.trim() !== "").map(c => ({
@@ -133,11 +133,17 @@ export default function CodeManagementPage() {
               Memo: c.memo
           }));
 
-          await axios.post(`${apiUrl}/api/v1/roster/codes`, payload);
-          alert("저장되었습니다! 이제 사이트 내 모든 이름이 코드로 표시됩니다.");
-      } catch (err) {
-          console.error(err);
-          alert("저장 중 오류가 발생했습니다.");
+          const response = await axios.post(`${apiUrl}/api/v1/roster/codes`, payload);
+
+          if (response.data && response.data.message) {
+              alert(`✅ ${response.data.message}\n\n이제 사이트 내 모든 이름이 코드로 표시됩니다.`);
+          } else {
+              alert("✅ 저장되었습니다! 이제 사이트 내 모든 이름이 코드로 표시됩니다.");
+          }
+      } catch (err: any) {
+          console.error("Save error:", err);
+          const errorMessage = err.response?.data?.detail || err.message || "알 수 없는 오류가 발생했습니다.";
+          alert(`❌ 저장 중 오류가 발생했습니다.\n\n${errorMessage}\n\n잠시 후 다시 시도해주세요.`);
       } finally {
           setSaving(false);
       }

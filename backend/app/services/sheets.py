@@ -291,16 +291,17 @@ def update_student_codes(new_codes: list):
     ws = get_student_codes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         # Prepare data for upload
         # Headers
         data = [["Code", "Name", "Memo"]]
         for item in new_codes:
             data.append([item.get('Code'), item.get('Name'), item.get('Memo', '')])
-        
+
         ws.clear()
-        ws.update(data)
+        # Updated for gspread 6.x: specify range explicitly
+        ws.update(range_name='A1', values=data, value_input_option='RAW')
         return {"message": "Codes updated successfully"}
     except Exception as e:
         print(f"Error updating codes: {e}")
