@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../components/AuthProvider";
@@ -11,10 +11,41 @@ export default function LoginPage() {
     const { login } = useAuth();
 
     const [loginType, setLoginType] = useState<"admin" | "teacher">("teacher");
-    const [classId, setClassId] = useState(CLASS_LIST[0]?.code || "");
+    const [teacherList, setTeacherList] = useState<{id: string, name: string}[]>([]);
+    const [selectedUserId, setSelectedUserId] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+                const response = await axios.get(`${apiUrl}/api/v1/auth/users`);
+                const users = response.data;
+                const teachers = users
+                    .filter((u: any) => u.Role !== 'admin' && u.ID)
+                    .map((u: any) => ({
+                        id: u.ID,
+                        name: u.ID // Display Column A (ID)
+                    }));
+                
+                setTeacherList(teachers);
+                if (teachers.length > 0) {
+                    setSelectedUserId(teachers[0].id);
+                }
+            } catch (err) {
+                console.error("Failed to fetch users", err);
+                // Fallback to constants if API fails
+                const fallback = CLASS_LIST.map(c => ({ id: c.id || c.code, name: c.id || c.name }));
+                setTeacherList(fallback);
+                if (fallback.length > 0) {
+                    setSelectedUserId(fallback[0].id);
+                }
+            }
+        };
+        fetchUsers();
+    }, []);
 
     const handleLogin = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -27,15 +58,12 @@ export default function LoginPage() {
             let userId = "";
 
             if (loginType === "teacher") {
-                // Find selected class object
-                const selectedClass = CLASS_LIST.find(c => c.code === classId);
-                if (!selectedClass) {
-                    setError("올바르지 않은 학급 선택입니다.");
+                userId = selectedUserId;
+                if (!userId) {
+                    setError("올바르지 않은 계정 선택입니다.");
                     setLoading(false);
                     return;
                 }
-                // Use the Korean ID (e.g., 초1-1관리자)
-                userId = selectedClass.id || selectedClass.code;
             } else {
                 // Admin: Fixed to "admin" (System Admin)
                 userId = "admin";
@@ -195,19 +223,19 @@ export default function LoginPage() {
                         {loginType === "teacher" ? (
                             <div>
                                 <label style={{ display: 'block', marginBottom: '10px', fontWeight: '700', color: '#334155', fontSize: '0.88rem' }}>
-                                    학급 선택
+                                    계정 선택
                                 </label>
                                 <select
-                                    value={classId}
-                                    onChange={(e) => setClassId(e.target.value)}
+                                    value={selectedUserId}
+                                    onChange={(e) => setSelectedUserId(e.target.value)}
                                     style={{
                                         width: '100%', padding: '14px', border: '1.5px solid #e2e8f0',
                                         borderRadius: '12px', fontSize: '1rem', backgroundColor: '#fff',
                                         outline: 'none', transition: 'border-color 0.2s'
                                     }}
                                 >
-                                    {CLASS_LIST.map(cls => (
-                                        <option key={cls.code} value={cls.code}>{cls.name}</option>
+                                    {teacherList.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
                             </div>
@@ -241,7 +269,7 @@ export default function LoginPage() {
 
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || (loginType === "teacher" && teacherList.length === 0)}
                             style={{
                                 width: '100%', padding: '16px', marginTop: '10px',
                                 backgroundColor: loading ? '#9ca3af' : (loginType === "teacher" ? '#1e3a8a' : '#ef4444'),
