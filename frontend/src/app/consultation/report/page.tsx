@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { AuthCheck } from "../../components/AuthProvider";
 import GlobalNav from "../../components/GlobalNav";
+import { maskName } from "../../utils";
 
 export default function ConsultationReportPage() {
     const [loading, setLoading] = useState(false);
@@ -208,7 +209,7 @@ export default function ConsultationReportPage() {
                     <div className="content-box" style={{ minHeight: '400px' }}>
                         {dashboard.risk_list.filter((s: any) => s.tier.includes('Tier 2')).map((s: any, idx: number) => (
                             <div key={idx} style={{ marginBottom: '15px' }}>
-                                <strong>{idx + 1}. {s.name} ({s.class})</strong>
+                                <strong>{idx + 1}. {maskName(s.name)} ({s.class})</strong>
                                 <div>- 행동 발생: {s.count}건</div>
                                 <div>- 주요 문제행동: (상세 분석 참조)</div>
                                 <div style={{ color: '#666', fontSize: '12px' }}>* CICO 수행률 데이터는 별도 첨부</div>
@@ -244,7 +245,7 @@ export default function ConsultationReportPage() {
                         <tbody>
                             {dashboard.risk_list.filter((s: any) => s.tier.includes('Tier 3')).map((s: any, idx: number) => (
                                 <tr key={idx} style={{ height: '80px' }}>
-                                    <td>{s.name}</td>
+                                    <td>{maskName(s.name)}</td>
                                     <td></td>
                                     <td></td>
                                     <td></td>

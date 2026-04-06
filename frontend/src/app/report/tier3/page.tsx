@@ -9,6 +9,7 @@ import {
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
+import { maskName } from "../../utils";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -187,7 +188,7 @@ export default function Tier3Report() {
                   <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '16px', color: '#0f172a' }}>📊 Tier3 학생별 보고빈도 비교</div>
                   <ResponsiveContainer width="100%" height={Math.max(200, students.length * 42)}>
                     <BarChart data={students.map(s => ({
-                      name: s.name ? `${s.name} (${s.code})` : s.code,
+                      name: s.name ? `${maskName(s.name)} (${s.code})` : s.code,
                       보고건수: s.incidents,
                       class: s.class,
                       tier: s.tier
@@ -244,7 +245,7 @@ export default function Tier3Report() {
                             <td style={{ padding: "10px" }}>
                               <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700, color: s.tier === "Tier3+" ? "#7c3aed" : "#ef4444", background: s.tier === "Tier3+" ? "#7c3aed15" : "#ef444415" }}>{s.tier}</span>
                             </td>
-                            <td style={{ padding: "10px", fontWeight: 700, color: '#0f172a' }}>{s.name || "-"}</td>
+                            <td style={{ padding: "10px", fontWeight: 700, color: '#0f172a' }}>{maskName(s.name) || "-"}</td>
                             <td style={{ padding: "10px", color: '#64748b', fontSize: '0.75rem' }}>{s.code}</td>
                             <td style={{ padding: "10px", color: "#64748b", fontSize: '0.75rem' }}>{s.class}</td>
                             <td style={{ padding: "10px", fontWeight: 700, color: s.incidents >= 6 ? "#ef4444" : "#1e293b" }}>{s.incidents}건</td>

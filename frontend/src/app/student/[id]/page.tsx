@@ -14,6 +14,7 @@ import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { COLORS, TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
+import { maskName } from "../../utils";
 
 export default function StudentDetail() {
   const params = useParams();
@@ -57,7 +58,7 @@ export default function StudentDetail() {
         <GlobalNav currentPage="student" />
         <div style={{ padding: '100px', textAlign: 'center', color: '#64748b' }}>
            <div style={{ fontSize: '3rem', animation: 'spin 2s linear infinite', marginBottom: '20px' }}>💿</div>
-           <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>{studentName} 학생의 데이터를 심층 분석하고 있습니다...</p>
+           <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>{maskName(studentName)} 학생의 데이터를 심층 분석하고 있습니다...</p>
         </div>
       </div>
     </AuthCheck>
@@ -109,7 +110,7 @@ export default function StudentDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 950, color: '#1e293b', letterSpacing: '-0.04em' }}>{profile.name}</h1>
+                <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 950, color: '#1e293b', letterSpacing: '-0.04em' }}>{maskName(profile.name)}</h1>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {(profile.tier || "Tier 1").split(", ").map((t, idx) => (
                     <span key={idx} style={{ padding: '4px 14px', background: TIER_COLORS[t] || TIER_COLORS[t.split('(')[0]] || '#64748b', color: '#fff', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 900 }}>{t}</span>
@@ -196,7 +197,7 @@ export default function StudentDetail() {
             <div className="grid-responsive">
               <WeeklyAnalysisChart 
                 data={data.weekly_trend || []} 
-                title={`${profile.name} 학생 주별 행동 발생 추이`} 
+                title={`${maskName(profile.name)} 학생 주별 행동 발생 추이`} 
                 color="#6366f1" 
               />
               <ChartSection title="📉 행동 발생 일별 추이 (전체 기간)" height={400}>

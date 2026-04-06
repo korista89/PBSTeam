@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import GlobalNav from "../components/GlobalNav";
+import { maskName } from "../utils";
 
 interface StudentStatus {
     번호: number;
@@ -372,7 +373,7 @@ export default function TierStatusPage() {
                                                 {isEditing ? (
                                                     <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="이름" />
                                                 ) : (
-                                                    <span style={{ fontWeight: 'bold', color: '#333' }}>{s.학생이름 || s.학생코드}</span>
+                                                    <span style={{ fontWeight: 'bold', color: '#333' }}>{maskName(s.학생이름) || s.학생코드}</span>
                                                 )}
                                             </td>
                                             <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>

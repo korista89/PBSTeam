@@ -9,6 +9,7 @@ import {
 import { DashboardData, ChartData } from "../types";
 import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../components/GlobalNav";
+import { maskName } from "../utils";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
@@ -186,7 +187,7 @@ export default function MeetingMinutesPage() {
                                 {data.risk_list.slice(0, 5).map((s, i) => (
                                     <tr key={i}>
                                         <td>{s.tier}</td>
-                                        <td>{s.name}</td>
+                                        <td>{maskName(s.name)}</td>
                                         <td>{s.count}</td>
                                         <td>최대강도 {s.max_intensity}</td>
                                         <td></td>

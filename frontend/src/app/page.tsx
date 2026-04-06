@@ -12,6 +12,7 @@ import { DashboardData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
+import { maskName } from "./utils";
 
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
@@ -386,7 +387,7 @@ export default function Home() {
                       <td style={{ padding: '16px 24px' }}>
                         <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, background: s.tier === 'Tier 3' ? '#fee2e2' : '#fff7ed', color: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b' }}>{s.tier}</span>
                       </td>
-                      <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{s.name}</td>
+                      <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{maskName(s.name)}</td>
                       <td style={{ padding: '16px 24px', color: '#64748b', fontWeight: 500 }}>{s.class}</td>
                       <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>회</span></td>
                       <td style={{ padding: '16px 24px' }}>

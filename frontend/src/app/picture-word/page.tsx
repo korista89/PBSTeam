@@ -1,4 +1,5 @@
 "use client";
+import { maskName } from "../utils";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
@@ -493,7 +494,7 @@ export default function PictureWordPage() {
               <option value="" disabled>학생을 선택하세요</option>
               {classStudents.map((s) => (
                 <option key={s.학생이름} value={s.학생이름}>
-                  {s.학생번호}번 {s.학생이름}
+                  {s.학생번호}번 {maskName(s.학생이름)}
                 </option>
               ))}
             </select>
@@ -556,7 +557,7 @@ export default function PictureWordPage() {
                       {selectedStudent.학급명}
                     </div>
                     <div style={{ fontSize: "1.5rem", fontWeight: 700 }}>
-                      {selectedStudent.학생번호}번 {selectedStudent.학생이름}
+                      {selectedStudent.학생번호}번 {maskName(selectedStudent.학생이름)}
                     </div>
                     <div
                       style={{
@@ -935,7 +936,7 @@ export default function PictureWordPage() {
               >
                 <div>
                   <div style={{ fontSize: "0.85rem", opacity: 0.8 }}>
-                    {selectedStudent.학급명} · {selectedStudent.학생이름}
+                    {selectedStudent.학급명} · {maskName(selectedStudent.학생이름)}
                   </div>
                   <div
                     style={{

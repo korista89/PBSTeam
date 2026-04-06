@@ -5,6 +5,7 @@ import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
+import { maskName } from "../../utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, ComposedChart, Area
@@ -316,7 +317,7 @@ export default function CICOReport() {
                     <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>👤 학생별 목표 수행률 (%)</p>
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={data.students.map(s => ({
-                        name: s.name ? `${s.name} (${s.code})` : s.code,
+                        name: s.name ? `${maskName(s.name)} (${s.code})` : s.code,
                         rate: s.rate_num || 0,
                         target: parseInt(s.goal_criteria) || 80
                       }))} layout="vertical" margin={{ left: -10, right: 30 }}>
@@ -484,7 +485,7 @@ export default function CICOReport() {
                             }}
                           >
                             <td style={{ padding: "12px 8px", color: "#0f172a", fontWeight: 600 }}>{s.code}</td>
-                            <td style={{ padding: "12px 8px", color: "#334155", fontWeight: 500 }}>{s.name || "-"}</td>
+                            <td style={{ padding: "12px 8px", color: "#334155", fontWeight: 500 }}>{maskName(s.name) || "-"}</td>
                             <td style={{ padding: "12px 8px", color: "#475569" }}>{s.class}</td>
                             <td style={{ padding: "12px 8px", color: "#1e293b", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {s.target_behavior}
