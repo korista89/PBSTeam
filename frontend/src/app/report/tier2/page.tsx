@@ -317,7 +317,7 @@ export default function CICOReport() {
                     <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>👤 학생별 목표 수행률 (%)</p>
                     <ResponsiveContainer width="100%" height="90%">
                       <BarChart data={data.students.map(s => ({
-                        name: s.name ? `${maskName(s.name)} (${s.code})` : s.code,
+                        name: s.name ? maskName(s.name) : s.code,
                         rate: s.rate_num || 0,
                         target: parseInt(s.goal_criteria) || 80
                       }))} layout="vertical" margin={{ left: -10, right: 30 }}>
