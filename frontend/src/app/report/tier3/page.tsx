@@ -10,6 +10,7 @@ import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import { maskName } from "../../utils";
+import { formatWeek } from "../../utils";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -290,7 +291,7 @@ export default function Tier3Report() {
                                       <ResponsiveContainer width="100%" height={160}>
                                         <LineChart data={s.weekly_trend.slice(-12)}>
                                           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                          <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                                          <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
                                           <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
                                           <Tooltip content={<CustomTooltip />} />
                                           <Line type="monotone" dataKey="count" name="보고건수" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
@@ -306,7 +307,7 @@ export default function Tier3Report() {
                                       <ResponsiveContainer width="100%" height={160}>
                                         <LineChart data={s.weekly_trend_freq.slice(-12)}>
                                           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                          <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                                          <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
                                           <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
                                           <Tooltip content={<CustomTooltip />} />
                                           <Line type="monotone" dataKey="count" name="발생빈도" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />

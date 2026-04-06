@@ -5,6 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend
 } from "recharts";
+import { formatWeek } from "../utils";
 
 interface WeeklyData {
   week: string;
@@ -75,8 +76,9 @@ export default function WeeklyAnalysisChart({
                 dataKey="week" 
                 axisLine={false} 
                 tickLine={false} 
-                tick={{ fill: "#64748b", fontSize: 12 }} 
+                tick={{ fill: "#64748b", fontSize: 11 }} 
                 dy={10}
+                tickFormatter={formatWeek}
               />
               <YAxis 
                 axisLine={false} 
@@ -109,8 +111,9 @@ export default function WeeklyAnalysisChart({
                 dataKey="week" 
                 axisLine={false} 
                 tickLine={false} 
-                tick={{ fill: "#64748b", fontSize: 12 }} 
+                tick={{ fill: "#64748b", fontSize: 11 }} 
                 dy={10}
+                tickFormatter={formatWeek}
               />
               <YAxis 
                 axisLine={false} 
