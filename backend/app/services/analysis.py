@@ -5,6 +5,56 @@ import re
 from typing import List, Dict
 from app.services.ai_insight import generate_ai_insight, generate_meeting_agent_report
 
+# ── 행동 기능 6개 표준 카테고리 정규화 ────────────────────────────────
+_FUNCTION_CATEGORIES = [
+    "불편 해소(자동적 부적강화)",
+    "물건/활동 획득(사회적 정적강화)",
+    "관심 끌기(사회적 정적강화)",
+    "과제 회피(사회적 부적강화)",
+    "감각 추구(자동적 정적강화)",
+    "기타",
+]
+
+# 키워드 → 표준 카테고리 매핑
+_FUNCTION_KEYWORD_MAP = [
+    (["불편", "고통", "자동", "부적강화", "자동적 부적"], "불편 해소(자동적 부적강화)"),
+    (["물건", "활동", "획득", "사물", "음식", "tangible"], "물건/활동 획득(사회적 정적강화)"),
+    (["관심", "주목", "attention", "어텐션"], "관심 끌기(사회적 정적강화)"),
+    (["과제", "회피", "escape", "이스케이프", "사회적 부적"], "과제 회피(사회적 부적강화)"),
+    (["감각", "자극", "sensory", "센서리", "자동적 정적"], "감각 추구(자동적 정적강화)"),
+]
+
+def normalize_function(raw: str) -> str:
+    """원시 기능 값을 6개 표준 카테고리 중 하나로 변환."""
+    if not raw or str(raw).strip() in ("", "nan", "None"):
+        return "기타"
+    val = str(raw).strip()
+    # 이미 표준 카테고리인 경우 그대로 반환
+    if val in _FUNCTION_CATEGORIES:
+        return val
+    # 키워드 매핑
+    val_lower = val.lower()
+    for keywords, category in _FUNCTION_KEYWORD_MAP:
+        if any(kw in val_lower for kw in keywords):
+            return category
+    return "기타"
+
+def aggregate_functions(series) -> list:
+    """pandas Series(기능 컬럼)를 6개 카테고리로 집계, 0인 항목 제외 후 정렬."""
+    counts = {cat: 0 for cat in _FUNCTION_CATEGORIES}
+    for val in series:
+        cat = normalize_function(val)
+        counts[cat] = counts.get(cat, 0) + 1
+    # 0인 카테고리 제외, 정렬(내림차순), '기타'는 마지막
+    result = []
+    for cat in _FUNCTION_CATEGORIES[:-1]:  # 기타 제외
+        if counts[cat] > 0:
+            result.append({"name": cat, "value": counts[cat]})
+    result.sort(key=lambda x: x["value"], reverse=True)
+    if counts["기타"] > 0:
+        result.append({"name": "기타", "value": counts["기타"]})
+    return result
+
 def extract_numeric(val, default=0):
     if pd.isna(val):
         return default
@@ -203,11 +253,10 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # Sort risk list by Tier (desc) then Count (desc)
     at_risk_list.sort(key=lambda x: (x['tier'], x['count']), reverse=True)
 
-    # 7. Function Analysis (Why?) - row count
+    # 7. Function Analysis (Why?) - 6개 표준 카테고리로 정규화
     function_stats = []
     if '기능' in df.columns:
-        f_counts = df.groupby('기능').size().sort_values(ascending=False)
-        function_stats = [{"name": k, "value": int(v)} for k, v in f_counts.items()]
+        function_stats = aggregate_functions(df['기능'])
 
     # 8. Heatmap (Location x Time) - Hotspot Analysis using row count
     heatmap_data = []
@@ -524,11 +573,10 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
                 "function": row.get('기능', 'Unknown')
             })
             
-    # -- Function Stats -- (row count per function)
+    # -- Function Stats -- (6개 표준 카테고리로 정규화)
     function_stats = []
     if '기능' in student_df.columns:
-        f_counts = student_df.groupby('기능').size().sort_values(ascending=False)
-        function_stats = [{"name": k, "value": int(v)} for k, v in f_counts.items()]
+        function_stats = aggregate_functions(student_df['기능'])
 
     # -- Daily CICO Trend --
     cico_trend = []
