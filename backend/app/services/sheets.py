@@ -2465,9 +2465,9 @@ def get_cico_report_data(month: int):
             elif "회차" in h_str:
                 date_cols_cur.append({"index": i, "label": h_str})
 
-        # Load previous month daily data
+        # Load previous month daily data (improved matching)
         prev_month_num = month - 1
-        prev_daily = {}
+        prev_daily = {}  # {code: [daily_entries]}
         if prev_month_num >= 3:
             try:
                 pm_ws = get_worksheet_fuzzy(sheet, f"{prev_month_num}월")
@@ -2485,19 +2485,39 @@ def get_cico_report_data(month: int):
                             elif "회차" in h_str:
                                 pm_date_cols.append({"index": i, "label": h_str})
                         pm_code_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생코드","Code","코드"]), -1)
-                        pm_tier2_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["Tier2","CICO"]), -1)
+                        pm_name_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생명","Name","이름","학생"]), -1)
+                        pm_tier2_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["Tier2","CICO","Tier2(CICO)"]), -1)
                         for pm_row in pm_vals[1:]:
-                            if pm_tier2_idx >= 0 and len(pm_row) > pm_tier2_idx and str(pm_row[pm_tier2_idx]).strip() != "O":
+                            if len(pm_row) == 0:
                                 continue
+                            # Filter: only Tier2=O rows, but if col not found include all
+                            if pm_tier2_idx >= 0 and len(pm_row) > pm_tier2_idx:
+                                if str(pm_row[pm_tier2_idx]).strip() not in ["O", "o", "V"]:
+                                    continue
+                            # Get code (primary) or name (fallback)
+                            pcode = ""
                             if pm_code_idx >= 0 and len(pm_row) > pm_code_idx:
                                 pcode = str(pm_row[pm_code_idx]).strip()
-                                if not pcode:
-                                    continue
-                                prev_daily[pcode] = [
-                                    {"date": dc["label"], "value": str(pm_row[dc["index"]]).strip() if dc["index"] < len(pm_row) else "", "is_prev": True}
-                                    for dc in pm_date_cols
-                                ]
-            except Exception:
+                            if not pcode and pm_name_idx >= 0 and len(pm_row) > pm_name_idx:
+                                pcode = str(pm_row[pm_name_idx]).strip()
+                            if not pcode:
+                                continue
+                            day_entries = [
+                                {"date": dc["label"], "value": str(pm_row[dc["index"]]).strip() if dc["index"] < len(pm_row) else "", "is_prev": True}
+                                for dc in pm_date_cols
+                            ]
+                            # Store under both raw code and name-stripped versions for fuzzy match
+                            prev_daily[pcode] = day_entries
+                            # Also store under code-only if pcode contains parentheses
+                            if "(" in pcode:
+                                inner = pcode[pcode.index("(")+1:pcode.rindex(")")] if ")" in pcode else ""
+                                if inner:
+                                    prev_daily[inner] = day_entries
+                                outer = pcode[:pcode.index("(")].strip()
+                                if outer:
+                                    prev_daily[outer] = day_entries
+            except Exception as e:
+                print(f"prev_daily load error: {e}")
                 pass
 
         # Name fallback mapping
@@ -2540,6 +2560,57 @@ def get_cico_report_data(month: int):
                 except ValueError:
                     pass
 
+            # ── 숫자 척도 rate 재계산 (시트 값이 없거나 0일 때 daily_data로 보완) ──
+            behavior_type_val = row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else ""
+            scale_val = row[col_idx.get("척도", 6)] if col_idx.get("척도", 6) < len(row) else ""
+            if (rate_num is None or rate_num == 0.0) and date_cols_cur:
+                raw_day_vals = [str(row[dc["index"]]).strip() for dc in date_cols_cur if dc["index"] < len(row)]
+                numeric_vals = []
+                ox_vals = []
+                for v in raw_day_vals:
+                    if v in ("", "-", "·", "결석", "결"):
+                        continue
+                    if v.upper() == "O":
+                        ox_vals.append(1)
+                    elif v.upper() == "X":
+                        ox_vals.append(0)
+                    else:
+                        try:
+                            numeric_vals.append(float(v.replace("점","").replace("회","").replace("분","").replace("교시","").strip()))
+                        except ValueError:
+                            pass
+                if numeric_vals:
+                    avg_val = sum(numeric_vals) / len(numeric_vals)
+                    # Determine max scale
+                    max_scale = 1.0
+                    if "7교시" in scale_val or "0~7" in scale_val:
+                        max_scale = 7.0
+                    elif "5교시" in scale_val or "0~5" in scale_val:
+                        max_scale = 5.0
+                    elif "2점" in scale_val or "0점/1점/2점" in scale_val:
+                        max_scale = 2.0
+                    elif "100" in scale_val:
+                        max_scale = 100.0
+                    else:
+                        try:
+                            import re as _re2
+                            m = _re2.search(r"0~(\d+)", scale_val)
+                            if m:
+                                max_scale = float(m.group(1))
+                        except Exception:
+                            pass
+                    if behavior_type_val == "감소 목표행동":
+                        rate_num = (1 - avg_val / max_scale) * 100 if max_scale > 0 else 0
+                    else:
+                        rate_num = (avg_val / max_scale) * 100 if max_scale > 0 else 0
+                    rate_num = round(rate_num, 1)
+                    rate_str = f"{round(rate_num)}%"
+                elif ox_vals and not numeric_vals:
+                    rate_num = round(sum(ox_vals) / len(ox_vals) * 100, 1)
+                    rate_str = f"{round(rate_num)}%"
+            # ── 재계산 goal_str 파싱 ─────────────────────────────────────
+            goal_str_val = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else goal_str
+
             if rate_num is not None:
                 total_rate_sum += rate_num
                 total_rate_count += 1
@@ -2556,8 +2627,17 @@ def get_cico_report_data(month: int):
                 for dc in date_cols_cur
             ]
 
-            # Previous month daily data
+            # Previous month daily data (fuzzy code match)
             prev_daily_data = prev_daily.get(code, [])
+            if not prev_daily_data and name:
+                # Try name-based key
+                prev_daily_data = prev_daily.get(name, [])
+            if not prev_daily_data:
+                # Try partial match: code might be "박다솜(2211)" vs key "2211"
+                for k, v in prev_daily.items():
+                    if code and (code in k or k in code):
+                        prev_daily_data = v
+                        break
 
             # Concurrent tier detection
             ts = tier_status_records.get(code, {})
@@ -2661,11 +2741,20 @@ def get_cico_report_data(month: int):
                     "rate": round(weekly_trend_map[w]["sum"] / weekly_trend_map[w]["count"], 1)
                 })
 
+        # Total roster count for percentage
+        total_roster = 0
+        try:
+            all_status = fetch_student_status() or []
+            total_roster = len([r for r in all_status if str(r.get("학생코드","")).strip()])
+        except Exception:
+            pass
+
         return {
             "month": month_name,
             "students": students,
             "summary": {
-                "total_students": len(set(s["code"] for s in students)), # Count unique students
+                "total_students": len(set(s["code"] for s in students)),
+                "total_roster": total_roster,
                 "avg_rate": avg_rate,
                 "achieved_count": achieved_count,
                 "not_achieved_count": len(students) - achieved_count,

@@ -7,7 +7,7 @@ import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import { maskName } from "../../utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, ComposedChart, Area, Line, LineChart
+  Cell, ComposedChart, Area, Line, PieChart, Pie, Legend
 } from "recharts";
 
 interface TrendItem {
@@ -44,6 +44,7 @@ interface CICOReportData {
   students: CICOStudent[];
   summary: {
     total_students: number;
+    total_roster?: number;
     avg_rate: number;
     achieved_count: number;
     not_achieved_count: number;
@@ -414,6 +415,7 @@ export default function CICOReport() {
 
               {/* AI BCBA Analysis */}
               <CICOAIAnalysis month={month} students={data.students} apiUrl={apiUrl} />
+              <CICOReportGuide />
             </>
           )}
         </main>
@@ -492,20 +494,23 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
 function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: number; getRateColor: (r: number|null)=>string }) {
   const students = data.students;
   const s = data.summary;
-  const tier1Candidates = students.filter((st: any) => st.decision === "Tier1 하향 권장").length;
-  const tier3Risk = students.filter((st: any) => st.decision === "Tier3 상향 검토").length;
-  const modifyNeeded = students.filter((st: any) => st.decision?.includes("수정")).length;
+  const roster = s.total_roster || 0;
+  const pct = roster > 0 ? Math.round(s.total_students / roster * 100) : 0;
+  const tier1C = students.filter((st: any) => st.decision === "Tier1 하향 권장").length;
+  const tier3R = students.filter((st: any) => st.decision === "Tier3 상향 검토").length;
+  const modN = students.filter((st: any) => st.decision?.includes("수정")).length;
   const concurrent = students.filter((st: any) => !st.cico_only).length;
 
-  // 학생별 수행률 바 (수평)
+  // 학생별 수행률+목표 grouped bar
   const barData = students.map((st: any) => ({
-    name: st.name ? (st.name.length === 2 ? st.name[0]+"O" : st.name[0]+"O"+st.name[st.name.length-1]) : st.code,
+    name: st.name ? (st.name.length >= 3 ? st.name[0]+"O"+st.name[st.name.length-1] : st.name[0]+"O") : st.code.slice(0,4),
     rate: st.rate_num || 0,
     goal: st.goal_num || 80,
     color: (st.rate_num||0) >= (st.goal_num||80) ? "#10b981" : (st.rate_num||0) >= 50 ? "#f59e0b" : "#ef4444",
   }));
 
-  // 월별 평균 추이
+  // 월별 평균 추이 (3월부터)
+  const MONTHS = ["3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
   const monthMap: Record<string, number[]> = {};
   students.forEach((st: any) => {
     st.trend?.forEach((t: any) => {
@@ -514,54 +519,84 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
       if (!isNaN(r)) { if (!monthMap[t.month]) monthMap[t.month] = []; monthMap[t.month].push(r); }
     });
   });
-  const trendLine = Object.keys(monthMap).map(m => ({ month: m, avg: Math.round(monthMap[m].reduce((a,b)=>a+b,0)/monthMap[m].length) }));
+  const trendLine = MONTHS.filter(m => monthMap[m]).map(m => ({
+    month: m,
+    avg: Math.round(monthMap[m].reduce((a,b)=>a+b,0)/monthMap[m].length)
+  }));
+
+  // 의사결정 분포 pie
+  const decCounts: Record<string, number> = {};
+  students.forEach((st: any) => { const d = st.decision || "미결정"; decCounts[d] = (decCounts[d]||0)+1; });
+  const decPie = Object.keys(decCounts).map(k => ({ name: k, value: decCounts[k] }));
+  const decColors = ["#10b981","#3b82f6","#f59e0b","#ef4444","#8b5cf6","#06b6d4"];
+
+  // 달성/미달 월별 추이
+  const achMap: Record<string, {ach:number,tot:number}> = {};
+  students.forEach((st: any) => {
+    st.trend?.forEach((t: any) => {
+      if (!achMap[t.month]) achMap[t.month] = {ach:0,tot:0};
+      achMap[t.month].tot++;
+      let r = parseFloat(t.rate?.replace("%","") || "NaN");
+      if (r<=1) r*=100;
+      if (!isNaN(r) && r >= (st.goal_num||80)) achMap[t.month].ach++;
+    });
+  });
+  const achLine = MONTHS.filter(m => achMap[m]).map(m => ({
+    month: m,
+    달성: achMap[m].ach,
+    미달: achMap[m].tot - achMap[m].ach,
+  }));
 
   return (
     <div style={{ marginBottom: 24 }}>
-      {/* KPI 카드 5개 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 16 }}>
+      {/* KPI 카드 */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:12, marginBottom:14 }}>
         {[
-          { label: "CICO 대상", val: s.total_students, unit: "명", color: "#3b82f6" },
-          { label: "평균 수행률", val: s.avg_rate, unit: "%", color: getRateColor(s.avg_rate) },
-          { label: "목표 달성", val: s.achieved_count, unit: "명", color: "#10b981" },
-          { label: "Tier1 하향 후보", val: tier1Candidates, unit: "명", color: "#10b981", sub: "2개월 연속 달성(CICO단독)" },
-          { label: "Tier3 상향 위험", val: tier3Risk, unit: "명", color: "#ef4444", sub: "수행률 50% 미만" },
-        ].map((k, i) => (
-          <div key={i} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-            <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700, marginBottom: 4 }}>{k.label}</div>
-            <div style={{ fontSize: "1.7rem", fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.val}<span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#94a3b8" }}>{k.unit}</span></div>
-            {k.sub && <div style={{ fontSize: "0.62rem", color: "#94a3b8", marginTop: 3 }}>{k.sub}</div>}
+          { label:"CICO 대상", val: s.total_students, unit:"명", sub: roster>0?`전체 ${roster}명 중 ${pct}%`:"", color:"#3b82f6" },
+          { label:"평균 수행률", val: s.avg_rate, unit:"%", color: getRateColor(s.avg_rate) },
+          { label:"목표 달성", val: s.achieved_count, unit:"명", color:"#10b981" },
+          { label:"Tier1 하향 후보", val: tier1C, unit:"명", sub:"2개월 연속 달성(CICO단독)", color:"#10b981" },
+          { label:"Tier3 상향 위험", val: tier3R, unit:"명", sub:"수행률 50% 미만", color:"#ef4444" },
+        ].map((k,i) => (
+          <div key={i} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:"14px 16px" }}>
+            <div style={{ fontSize:"0.7rem", color:"#64748b", fontWeight:700, marginBottom:3 }}>{k.label}</div>
+            <div style={{ fontSize:"1.6rem", fontWeight:900, color:k.color, lineHeight:1 }}>{k.val}<span style={{ fontSize:"0.75rem", color:"#94a3b8" }}>{k.unit}</span></div>
+            {k.sub && <div style={{ fontSize:"0.6rem", color:"#94a3b8", marginTop:2 }}>{k.sub}</div>}
           </div>
         ))}
       </div>
 
       {/* 경보 배너 */}
-      {(tier3Risk > 0 || modifyNeeded > 0 || tier1Candidates > 0) && (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-          {tier1Candidates > 0 && <div style={{ flex: 1, minWidth: 220, padding: "10px 14px", background: "#d1fae5", borderRadius: 10, border: "1px solid #6ee7b7", fontSize: "0.78rem", color: "#065f46", fontWeight: 700 }}>🟢 Tier1 하향 검토 대상 {tier1Candidates}명 — 지원팀 최종 확인 필요</div>}
-          {modifyNeeded > 0 && <div style={{ flex: 1, minWidth: 220, padding: "10px 14px", background: "#fef3c7", borderRadius: 10, border: "1px solid #fbbf24", fontSize: "0.78rem", color: "#92400e", fontWeight: 700 }}>⚠️ CICO 계획 수정 검토 {modifyNeeded}명 — 목표행동·강화물 재검토 권장</div>}
-          {tier3Risk > 0 && <div style={{ flex: 1, minWidth: 220, padding: "10px 14px", background: "#fee2e2", borderRadius: 10, border: "1px solid #fca5a5", fontSize: "0.78rem", color: "#991b1b", fontWeight: 700 }}>🚨 Tier3 상향 위험 {tier3Risk}명 — 즉시 FBA·집중 지원 검토</div>}
+      {(tier3R > 0 || modN > 0 || tier1C > 0) && (
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
+          {tier1C > 0 && <div style={{ flex:1, minWidth:200, padding:"8px 12px", background:"#d1fae5", borderRadius:10, border:"1px solid #6ee7b7", fontSize:"0.75rem", color:"#065f46", fontWeight:700 }}>🟢 Tier1 하향 후보 {tier1C}명 — 지원팀 최종 확인 필요</div>}
+          {modN > 0 && <div style={{ flex:1, minWidth:200, padding:"8px 12px", background:"#fef3c7", borderRadius:10, border:"1px solid #fbbf24", fontSize:"0.75rem", color:"#92400e", fontWeight:700 }}>⚠️ CICO 수정 필요 {modN}명 — 목표행동·강화물 재검토</div>}
+          {tier3R > 0 && <div style={{ flex:1, minWidth:200, padding:"8px 12px", background:"#fee2e2", borderRadius:10, border:"1px solid #fca5a5", fontSize:"0.75rem", color:"#991b1b", fontWeight:700 }}>🚨 Tier3 위험 {tier3R}명 — FBA·집중 지원 즉시 검토</div>}
         </div>
       )}
 
-      {/* 차트 2개: 학생별 수행률 바 + 월별 추이 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", marginBottom: 10 }}>👤 학생별 수행률 vs 목표 ({month}월)</div>
-          <ResponsiveContainer width="100%" height={Math.max(160, barData.length * 28)}>
-            <BarChart data={barData} layout="vertical" margin={{ left: -8, right: 32 }}>
+      {/* 차트 4개 2x2 */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+        {/* 1. 학생별 수행률 vs 목표 (grouped) */}
+        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>👤 학생별 수행률 vs 목표 ({month}월)</div>
+          <ResponsiveContainer width="100%" height={Math.max(160, barData.length*22)}>
+            <BarChart data={barData} layout="vertical" margin={{ left:-8, right:36 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
               <XAxis type="number" domain={[0,100]} fontSize={10} axisLine={false} tickLine={false} />
-              <YAxis dataKey="name" type="category" fontSize={10} width={52} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: any) => [`${v}%`, "수행률"]} />
-              <Bar dataKey="rate" name="수행률" radius={[0,4,4,0]} barSize={16}>
+              <YAxis dataKey="name" type="category" fontSize={9} width={50} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: any, n: string) => [`${v}%`, n==="rate"?"수행률":"목표"]} />
+              <Bar dataKey="goal" name="목표" fill="#e2e8f0" radius={[0,4,4,0]} barSize={10} />
+              <Bar dataKey="rate" name="수행률" radius={[0,4,4,0]} barSize={10}>
                 {barData.map((d: any, i: number) => <Cell key={i} fill={d.color} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", marginBottom: 10 }}>📈 월별 평균 수행률 추이 (전체)</div>
+
+        {/* 2. 월별 평균 수행률 추이 */}
+        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>📈 월별 평균 수행률 추이 (3월~)</div>
           <ResponsiveContainer width="100%" height={180}>
             <ComposedChart data={trendLine}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -569,14 +604,40 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
               <YAxis domain={[0,100]} fontSize={10} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v: any) => [`${v}%`, "평균 수행률"]} />
               <Area type="monotone" dataKey="avg" fill="#6366f110" stroke="none" />
-              <Line type="monotone" dataKey="avg" name="전체 평균" stroke="#6366f1" strokeWidth={3} dot={{ r: 5, fill: "#6366f1" }} />
+              <Line type="monotone" dataKey="avg" name="평균" stroke="#6366f1" strokeWidth={3} dot={{ r:4, fill:"#6366f1" }} />
             </ComposedChart>
           </ResponsiveContainer>
-          {concurrent > 0 && (
-            <div style={{ marginTop: 8, fontSize: "0.7rem", color: "#64748b", padding: "6px 10px", background: "#f8fafc", borderRadius: 8, borderLeft: "3px solid #3b82f6" }}>
-              ℹ️ {concurrent}명은 SST/Tier3 병행 대상 — 목표 달성 시에도 CICO 유지
-            </div>
-          )}
+          {concurrent > 0 && <div style={{ marginTop:6, fontSize:"0.68rem", color:"#64748b", padding:"4px 8px", background:"#f8fafc", borderRadius:6, borderLeft:"3px solid #3b82f6" }}>ℹ️ {concurrent}명 SST/T3 병행 — 목표 달성 시에도 CICO 유지</div>}
+        </div>
+
+        {/* 3. 의사결정 분포 Pie */}
+        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>🗂️ 의사결정 분포 ({month}월)</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={decPie} cx="50%" cy="50%" outerRadius={70} innerRadius={35} paddingAngle={3} dataKey="value" label={({name, percent}: any) => `${(percent*100).toFixed(0)}%`} labelLine={false} style={{ fontSize:"9px" }}>
+                {decPie.map((_: any, i: number) => <Cell key={i} fill={decColors[i%decColors.length]} />)}
+              </Pie>
+              <Tooltip />
+              <Legend iconType="circle" wrapperStyle={{ fontSize:"10px" }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 4. 달성/미달 월별 추이 stacked bar */}
+        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>📊 월별 달성·미달 추이</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={achLine}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="month" fontSize={10} axisLine={false} tickLine={false} />
+              <YAxis fontSize={10} axisLine={false} tickLine={false} />
+              <Tooltip />
+              <Legend iconType="circle" wrapperStyle={{ fontSize:"10px" }} />
+              <Bar dataKey="달성" stackId="a" fill="#10b981" radius={[0,0,0,0]} />
+              <Bar dataKey="미달" stackId="a" fill="#f59e0b" radius={[4,4,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>
@@ -726,6 +787,32 @@ function CICOStudentCharts({ s }: { s: CICOStudent }) {
           )}
         </div>
 
+      </div>
+    </div>
+  );
+}
+
+// ====== CICO 리포트 해석 가이드 ======
+function CICOReportGuide() {
+  return (
+    <div style={{ marginTop:32, padding:"24px 28px", background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)", borderRadius:20, border:"1px solid #bae6fd" }}>
+      <h3 style={{ margin:"0 0 16px 0", fontSize:"1rem", fontWeight:800, color:"#0c4a6e" }}>📖 CICO 리포트 해석 가이드</h3>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, fontSize:"0.78rem", color:"#0f172a", lineHeight:1.7 }}>
+        {[
+          { title:"📊 상단 KPI 카드", body:"CICO 대상 학생 수와 전체 재학생 대비 비율, 이달 평균 수행률, 목표 달성자 수, Tier1 하향 후보와 Tier3 위험군 수를 보여줍니다." },
+          { title:"👤 학생별 수행률 vs 목표", body:"회색 막대가 개인 목표, 색상 막대가 실제 수행률입니다. 초록=목표달성, 노랑=부분달성, 빨강=미달. 두 막대의 차이가 클수록 집중 지원이 필요합니다." },
+          { title:"📈 월별 평균 수행률 추이", body:"3월부터 현재까지 전체 CICO 학생의 월별 평균 수행률 변화입니다. 우상향이면 프로그램 효과가 있는 것, 하락세면 전반적 재검토가 필요합니다." },
+          { title:"🗂️ 의사결정 분포", body:"이달 각 학생의 시스템 의사결정 제안 분포입니다. Tier3 상향·CICO수정이 많을수록 지원팀 논의가 필요합니다." },
+          { title:"📅 전월/이번달 일별 차트", body:"학생 차트 버튼을 누르면 날짜별 실제 입력값이 꺾은선으로 표시됩니다. 변동이 크면 일관성 문제, 하락 추세면 중재 조정이 필요합니다." },
+          { title:"🎯 현재 달성 현황 게이지", body:"원형 게이지가 목표 대비 현재 수행률을 보여줍니다. 초록=달성, 노랑=부분, 빨강=미달. 추세 화살표로 방향을 확인하세요." },
+          { title:"🔔 의사결정 제안 기준", body:"Tier1 하향: CICO단독+2개월 연속 목표달성 / CICO수정: 수행률 50~목표% / Tier3 상향: 수행률 50% 미만 / SST·T3 병행 학생은 달성해도 CICO 유지" },
+          { title:"⚠️ 주의사항", body:"수행률은 시트에 입력된 원자료로 자동 계산됩니다. 결석·미입력일은 제외하고 계산되므로, 출석 일수와 입력 일수를 함께 확인하세요." },
+        ].map((item,i) => (
+          <div key={i} style={{ background:"#fff", borderRadius:12, padding:"12px 14px", border:"1px solid #e0f2fe" }}>
+            <div style={{ fontWeight:800, color:"#0369a1", marginBottom:4 }}>{item.title}</div>
+            <div style={{ color:"#334155" }}>{item.body}</div>
+          </div>
+        ))}
       </div>
     </div>
   );

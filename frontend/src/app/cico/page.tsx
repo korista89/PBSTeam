@@ -506,7 +506,30 @@ export default function CICOGridPage() {
               )}
             </>
           )}
+          {/* CICO 입력 가이드 */}
+          <div style={{ marginTop:36, padding:"22px 26px", background:"linear-gradient(135deg,#f0f9ff,#dbeafe)", borderRadius:20, border:"1px solid #93c5fd" }}>
+            <h3 style={{ margin:"0 0 16px 0", fontSize:"1rem", fontWeight:800, color:"#1e3a8a" }}>📖 CICO 데이터 입력 가이드</h3>
+            <div style={{ marginBottom:16, padding:"12px 16px", background:"#eff6ff", borderRadius:12, border:"1px solid #bfdbfe", fontSize:"0.8rem", color:"#1e40af", lineHeight:1.8 }}>
+              <strong>CICO란?</strong> Check-In / Check-Out의 약자로, Tier2 학생이 매일 담당 교사와 짧게 체크인·체크아웃하면서 목표 행동을 함께 점검하는 중재 프로그램입니다. 매일의 작은 데이터가 쌓여 학생의 변화를 객관적으로 파악하고, 지원 방향을 결정하는 근거가 됩니다.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.8 }}>
+              {[
+                {t:"📌 목표행동 설정 예시", b:"증가 목표행동: '수업 시간 자리 앉아 있기', '친구에게 먼저 인사하기'\n감소 목표행동: '수업 중 자리 이탈', '공격행동(때리기)'\n→ 구체적이고 관찰 가능한 행동으로 설정하세요."},
+                {t:"📏 척도 선택 기준", b:"O/X(발생): 행동이 있었는지 없었는지만 기록 (예: 자해 발생=X, 미발생=O)\n0점/1점/2점: 수행 수준 3단계 (예: 0=전혀, 1=부분, 2=완전)\n0~7교시: 해당 교시 수를 숫자로 기록 (예: 목표행동 발생 교시=5)"},
+                {t:"🎯 달성 기준 예시", b:"증가 목표행동 80% 이상: O/X에서 O가 전체 입력일의 80% 이상\n감소 목표행동 30% 이하: 기준 빈도의 30% 이하로 감소\n→ 학생 수준에 맞게 현실적으로 설정하세요."},
+                {t:"✍️ 데이터 입력 방법", b:"① 날짜 열의 셀을 클릭\n② O/X 척도: 한 번 클릭 시 O→X→공백 순서로 변경\n③ 점수 척도: 클릭 후 드롭다운 선택\n④ 숫자 척도: 클릭 후 숫자 직접 입력 후 Enter\n⑤ 결석 등 미입력일은 빈칸으로 두세요(자동 제외)"},
+                {t:"📊 수행률 계산 방식", b:"O/X: (O 개수 ÷ 입력일 수) × 100%\n점수 척도: (합계 ÷ 최대점수×입력일) × 100%\n0~7교시: (일평균 교시 수 ÷ 7) × 100%\n→ 결석 등 미입력일은 계산에서 자동 제외됩니다."},
+                {t:"⚠️ 주의사항", b:"· 당일 빈칸=미입력(계산 제외) / 결석은 그대로 비워두세요\n· 목표행동·척도·달성기준 변경 시 셀 클릭 후 수정하세요\n· 저장은 자동으로 됩니다(오른쪽 상단 저장 상태 확인)"},
+              ].map((item: {t:string;b:string}, i: number) => (
+                <div key={i} style={{ background:"#fff", borderRadius:10, padding:"12px 14px", border:"1px solid #bfdbfe" }}>
+                  <div style={{ fontWeight:800, color:"#1d4ed8", marginBottom:4 }}>{item.t}</div>
+                  <div style={{ color:"#334155", whiteSpace:"pre-line" }}>{item.b}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </main>
+
       </div>
     </AuthCheck>
   );

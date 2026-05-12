@@ -234,6 +234,25 @@ export default function MeetingMinutesPage() {
                     </section>
                 </div>
             </div>
+        {/* 협의록 작성 가이드 */}
+        <div style={{ marginTop:32, padding:"22px 26px", background:"linear-gradient(135deg,#faf5ff,#ede9fe)", borderRadius:20, border:"1px solid #c4b5fd" }}>
+          <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#4c1d95" }}>📖 학교행동중재지원팀 월별 정기회의 협의록 작성 가이드</h3>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
+            {[
+              {t:"1. 회의 기본정보 입력", b:"일시·장소·참석자를 정확히 기록합니다. 참석자는 이름과 역할(담임, 특수교사, 상담사 등)을 함께 적습니다."},
+              {t:"2. Tier 현황 보고", b:"CICO 리포트·T3 리포트를 참고하여 이달 Tier별 학생 수 변화와 주요 의사결정 제안 내용을 요약 보고합니다."},
+              {t:"3. 개별 학생 검토", b:"Tier1 하향 후보·Tier3 상향 후보·CICO 수정 필요 학생을 순서대로 논의하고, 결정 사항과 담당자를 명시합니다."},
+              {t:"4. 협의 결과 기록", b:"각 학생별로 '현재 상태 → 협의 내용 → 결정 사항 → 다음 검토 일정' 순서로 간결하게 작성합니다."},
+              {t:"5. 차기 회의 준비", b:"다음 달 중점 모니터링 학생, 추가 데이터 수집 계획, 교사 연수 필요 사항 등을 기록합니다."},
+              {t:"6. 보관 및 공유", b:"작성 완료 후 팀원 전체에게 공유하고, 학교 행정 파일에 보관합니다. 학생 정보가 포함되므로 외부 공유 금지."},
+            ].map((item,i) => (
+              <div key={i} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #ddd6fe" }}>
+                <div style={{ fontWeight:800, color:"#6d28d9", marginBottom:3 }}>{item.t}</div>
+                <div style={{ color:"#334155" }}>{item.b}</div>
+              </div>
+            ))}
+          </div>
+        </div>
         </AuthCheck>
     );
 }

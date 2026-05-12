@@ -399,6 +399,25 @@ export default function Tier3Report() {
               <Tier3AIAnalysis apiUrl={apiUrl} startDate={startDate} endDate={endDate} />
             </>
           )}
+        {/* T3 리포트 해석 가이드 */}
+        <div style={{ marginTop:32, padding:"22px 26px", background:"linear-gradient(135deg,#fff1f2,#ffe4e6)", borderRadius:20, border:"1px solid #fecdd3" }}>
+          <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#881337" }}>📖 T3 리포트 해석 가이드</h3>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
+            {[
+              {t:"주간 보고빈도 추이", b:"주마다 행동 보고(사건)가 몇 번 발생했는지 꺾은선으로 표시. 우상향=악화, 우하향=개선. 최근 4주 연속 0이면 Tier2 하향 권장."},
+              {t:"주간 발생빈도 추이", b:"행동 1건 당 발생 횟수(빈도). 보고빈도와 함께 해석하세요. 보고빈도는 낮은데 발생빈도가 높으면 보고 누락 가능성."},
+              {t:"행동 유형 분포", b:"공격성·자해·방해 등 행동 유형별 구성 비율. 가장 많은 유형을 BIP 우선 타겟 행동으로 설정하세요."},
+              {t:"행동 기능 분포", b:"행동의 이유(기능)별 분포. 관심 추구·회피 등. 기능에 맞는 대체행동 지도 전략을 수립하는 데 활용."},
+              {t:"행동 강도 정보", b:"각 강도 수준(1~5)별 발생 빈도. 최고 강도 빈도가 높으면 위기 대응 계획이 필요합니다."},
+              {t:"의사결정 제안", b:"Tier2 하향(4주 연속 0건), Tier3 유지, Tier3+ 전환 필요 등을 자동 제안. 팀 협의 후 최종 결정하세요."},
+            ].map((item,i) => (
+              <div key={i} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #fecdd3" }}>
+                <div style={{ fontWeight:800, color:"#be123c", marginBottom:3 }}>{item.t}</div>
+                <div style={{ color:"#334155" }}>{item.b}</div>
+              </div>
+            ))}
+          </div>
+        </div>
         </main>
       </div>
     </AuthCheck>

@@ -574,6 +574,24 @@ export default function Home() {
                 <MeetingNotesContainer title="전체 교직원 협의록" type="tier1" />
                 <MeetingNotesContainer title="Tier 2/3 운영위원회" type="tier2" />
             </div>
+            <div style={{ marginTop:32, padding:"22px 26px", background:"linear-gradient(135deg,#f0fdf4,#dcfce7)", borderRadius:20, border:"1px solid #86efac" }}>
+              <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#14532d" }}>📖 대시보드 차트 해석 가이드</h3>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
+                {[
+                  {t:"01 Tier 현황",b:"전체 학생을 Tier1·2·3·3+로 구분. 초록=정상, 노랑=집중관찰, 빨강=집중지원. Tier3 비율이 높으면 보편적 지원 점검 필요."},
+                  {t:"02 이번 달 위기 경보",b:"행동 보고 빈도·강도가 급변한 학생을 자동 감지. 즉시 담임·지원팀과 소통하세요."},
+                  {t:"03 T3 상향 검토 대상",b:"현재 Tier2이지만 T3 지원이 필요할 수 있는 학생 목록. 차트 버튼으로 상세 분석 확인."},
+                  {t:"수행률 색상 기준",b:"초록(80%+)=달성, 노랑(50~79%)=부분달성, 빨강(50% 미만)=미달. 모든 차트에 동일 기준 적용."},
+                  {t:"데이터 업데이트",b:"CICO 입력 탭 저장 시 즉시 반영. T3 행동 기록은 T3 리포트 탭 입력 후 반영."},
+                  {t:"주의사항",b:"이 대시보드는 의사결정 지원 도구입니다. 최종 결정은 반드시 지원팀 협의를 통해 하세요."},
+                ].map((item: {t:string;b:string}, i: number) => (
+                  <div key={i} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #bbf7d0" }}>
+                    <div style={{ fontWeight:800, color:"#15803d", marginBottom:3 }}>{item.t}</div>
+                    <div style={{ color:"#334155" }}>{item.b}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
