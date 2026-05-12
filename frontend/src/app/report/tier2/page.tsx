@@ -4,11 +4,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
-import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import { maskName } from "../../utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, ComposedChart, Area
+  Cell, ComposedChart, Area, Line, LineChart
 } from "recharts";
 
 interface TrendItem {
@@ -16,6 +15,7 @@ interface TrendItem {
   rate: string;
 }
 
+interface DailyEntry { date: string; value: string; is_prev: boolean; }
 interface CICOStudent {
   code: string;
   name?: string;
@@ -24,10 +24,16 @@ interface CICOStudent {
   behavior_type: string;
   scale: string;
   goal_criteria: string;
+  goal_num?: number;
   rate: string;
   rate_num: number | null;
   achieved: string;
   trend: TrendItem[];
+  daily_data?: DailyEntry[];
+  prev_daily_data?: DailyEntry[];
+  cico_only?: boolean;
+  has_sst?: boolean;
+  has_t3?: boolean;
   decision: string;
   decision_color: string;
   team_talk: string;
@@ -47,6 +53,8 @@ interface CICOReportData {
 
 const DECISION_OPTIONS = [
   { label: "CICO 유지", color: "#3b82f6" },
+  { label: "CICO 유지 (양호)", color: "#3b82f6" },
+  { label: "CICO 유지 (T3/SST 병행)", color: "#3b82f6" },
   { label: "Tier1 하향 권장", color: "#10b981" },
   { label: "CICO 수정 검토", color: "#f59e0b" },
   { label: "Tier2(SST) 전환", color: "#8b5cf6" },
@@ -58,7 +66,7 @@ const RATE_THRESHOLDS = { high: 80, mid: 50 };
 // CICO 전문가 의사결정 메시지 생성
 function getCICODecisionDetail(s: CICOStudent): { msg: string; color: string; bg: string; icon: string } {
   const rate = s.rate_num ?? 0;
-  const goal = parseInt(s.goal_criteria) || 80;
+  const goal = s.goal_num || parseInt(s.goal_criteria) || 80;
   const trendVals = s.trend.map(t => { let r = parseFloat(t.rate.replace("%","")); return r <= 1 ? r*100 : r; }).filter(r => !isNaN(r));
   const lastTwo = trendVals.slice(-2);
   const isRising = lastTwo.length >= 2 && lastTwo[1] > lastTwo[0];
@@ -293,161 +301,10 @@ export default function CICOReport() {
 
           {!loading && !error && data && (
             <>
-              {/* Summary Cards and Weekly Trend */}
-              <div style={{ marginBottom: "24px" }} className="grid-responsive">
-                <WeeklyAnalysisChart 
-                  data={data.summary.weekly_trend || []} 
-                  title="CICO 월별/주별 수행률 추이 (통합)" 
-                  color="#3b82f6" 
-                  dataKey="rate"
-                  yLabel="수행률 (%)"
-                />
-                
-                <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>CICO 대상</div>
-                      <div style={{ color: "#3b82f6", fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.total_students}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>명</span></div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>평균 수행률</div>
-                      <div style={{ color: getRateColor(data.summary.avg_rate), fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.avg_rate}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>%</span></div>
-                    </div>
-                    <div style={{ textAlign: "center", marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>목표 달성</div>
-                      <div style={{ color: "#10b981", fontSize: "1.5rem", fontWeight: 900 }}>{data.summary.achieved_count}<span style={{ fontSize: "0.7rem", color: "#64748b" }}>명</span></div>
-                    </div>
-                    <div style={{ textAlign: "center", marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>목표 미달성</div>
-                      <div style={{ color: "#f59e0b", fontSize: "1.5rem", fontWeight: 900 }}>{data.summary.not_achieved_count}<span style={{ fontSize: "0.7rem", color: "#64748b" }}>명</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* ── 상단 종합 요약 대시보드 ─────────────────── */}
+              <CICOSummaryPanel data={data} month={month} getRateColor={getRateColor} />
 
-              {/* CICO Data Insights Charts */}
-              <div style={{
-                marginBottom: "24px",
-                padding: "20px",
-                background: "white",
-                borderRadius: "16px",
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
-              }}>
-                <h3 style={{ margin: "0 0 20px 0", fontSize: "1.1rem", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>📈 {month}월 CICO 데이터 인사이트</span>
-                  <span style={{ fontSize: "0.75rem", background: "#f1f5f9", padding: "2px 8px", borderRadius: "12px", color: "#64748b", fontWeight: "normal" }}>BCBA 분석 리포트</span>
-                </h3>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-                  {/* 1. Student Achievement Bar Chart */}
-                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
-                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>👤 학생별 목표 수행률 (%)</p>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={data.students.map(s => ({
-                        name: s.name ? maskName(s.name) : s.code,
-                        rate: s.rate_num || 0,
-                        target: parseInt(s.goal_criteria) || 80
-                      }))} layout="vertical" margin={{ left: -10, right: 30 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                        <XAxis type="number" domain={[0, 100]} fontSize={10} axisLine={false} tickLine={false} />
-                        <YAxis dataKey="name" type="category" fontSize={10} width={60} axisLine={false} tickLine={false} />
-                        <Tooltip cursor={{fill: '#f8fafc'}} />
-                        <Bar dataKey="rate" name="수행률" radius={[0, 4, 4, 0]} barSize={18}>
-                          {data.students.map((s, idx) => {
-                            const rate = s.rate_num || 0;
-                            const target = parseInt(s.goal_criteria) || 80;
-                            return <Cell key={`cell-${idx}`} fill={rate >= target ? "#10b981" : "#f59e0b"} />;
-                          })}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* 2. Achievement Status Pie Chart */}
-                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
-                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>🎯 목표 달성 비율</p>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: '달성', value: data.summary.achieved_count },
-                            { name: '미달', value: data.summary.not_achieved_count }
-                          ]}
-                          cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          <Cell fill="#10b981" />
-                          <Cell fill="#f59e0b" />
-                        </Pie>
-                        <Tooltip />
-                        <Legend iconType="circle" />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* 3. Average Trend Line Chart */}
-                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
-                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>📈 최근 3개월 평균 수행 추이</p>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <ComposedChart data={(() => {
-                        const monthsMap: { [m: string]: number[] } = {};
-                        data.students.forEach(s => {
-                          s.trend.forEach(t => {
-                            if (!monthsMap[t.month]) monthsMap[t.month] = [];
-                            try {
-                              let r = parseFloat(t.rate.replace("%", ""));
-                              if (r <= 1) r *= 100;
-                              if (!isNaN(r)) monthsMap[t.month].push(r);
-                            } catch {}
-                          });
-                        });
-                        const monthsList = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
-                        return Object.keys(monthsMap)
-                          .sort((a, b) => monthsList.indexOf(a) - monthsList.indexOf(b))
-                          .map(m => ({
-                            month: m,
-                            avg: Math.round(monthsMap[m].reduce((a, b) => a + b, 0) / monthsMap[m].length)
-                          }));
-                      })()}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="month" fontSize={10} axisLine={false} tickLine={false} />
-                        <YAxis domain={[0, 100]} fontSize={10} axisLine={false} tickLine={false} />
-                        <Tooltip />
-                        <Area type="monotone" dataKey="avg" fill="#6366f110" stroke="none" />
-                        <Line type="monotone" dataKey="avg" name="전체 평균" stroke="#6366f1" strokeWidth={3} dot={{ r: 5, fill: '#6366f1' }} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* 4. Behavior Type Distribution */}
-                  <div style={{ height: "300px", padding: "12px", border: "1px solid #f1f5f9", borderRadius: "12px" }}>
-                    <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: 700, color: "#475569" }}>🎭 중재 행동 유형 분포</p>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <PieChart>
-                        <Pie
-                          data={(() => {
-                            const counts: { [k: string]: number } = {};
-                            data.students.forEach(s => {
-                              const t = s.behavior_type || "미지정";
-                              counts[t] = (counts[t] || 0) + 1;
-                            });
-                            return Object.keys(counts).map(name => ({ name, value: counts[name] }));
-                          })()}
-                          cx="50%" cy="50%" outerRadius={85} dataKey="value"
-                        >
-                          {['#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6'].map((color, i) => (
-                            <Cell key={`cell-${i}`} fill={color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '11px' }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
+              
               {/* Decision Legend */}
               <div style={{
                 display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "16px",
@@ -631,119 +488,242 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
   );
 }
 
-// ====== CICO 학생별 세부 차트 컴포넌트 ======
+// ====== 상단 종합 요약 패널 ======
+function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: number; getRateColor: (r: number|null)=>string }) {
+  const students = data.students;
+  const s = data.summary;
+  const tier1Candidates = students.filter((st: any) => st.decision === "Tier1 하향 권장").length;
+  const tier3Risk = students.filter((st: any) => st.decision === "Tier3 상향 검토").length;
+  const modifyNeeded = students.filter((st: any) => st.decision?.includes("수정")).length;
+  const concurrent = students.filter((st: any) => !st.cico_only).length;
+
+  // 학생별 수행률 바 (수평)
+  const barData = students.map((st: any) => ({
+    name: st.name ? (st.name.length === 2 ? st.name[0]+"O" : st.name[0]+"O"+st.name[st.name.length-1]) : st.code,
+    rate: st.rate_num || 0,
+    goal: st.goal_num || 80,
+    color: (st.rate_num||0) >= (st.goal_num||80) ? "#10b981" : (st.rate_num||0) >= 50 ? "#f59e0b" : "#ef4444",
+  }));
+
+  // 월별 평균 추이
+  const monthMap: Record<string, number[]> = {};
+  students.forEach((st: any) => {
+    st.trend?.forEach((t: any) => {
+      let r = parseFloat(t.rate?.replace("%","") || "NaN");
+      if (r <= 1) r *= 100;
+      if (!isNaN(r)) { if (!monthMap[t.month]) monthMap[t.month] = []; monthMap[t.month].push(r); }
+    });
+  });
+  const trendLine = Object.keys(monthMap).map(m => ({ month: m, avg: Math.round(monthMap[m].reduce((a,b)=>a+b,0)/monthMap[m].length) }));
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {/* KPI 카드 5개 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 16 }}>
+        {[
+          { label: "CICO 대상", val: s.total_students, unit: "명", color: "#3b82f6" },
+          { label: "평균 수행률", val: s.avg_rate, unit: "%", color: getRateColor(s.avg_rate) },
+          { label: "목표 달성", val: s.achieved_count, unit: "명", color: "#10b981" },
+          { label: "Tier1 하향 후보", val: tier1Candidates, unit: "명", color: "#10b981", sub: "2개월 연속 달성(CICO단독)" },
+          { label: "Tier3 상향 위험", val: tier3Risk, unit: "명", color: "#ef4444", sub: "수행률 50% 미만" },
+        ].map((k, i) => (
+          <div key={i} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700, marginBottom: 4 }}>{k.label}</div>
+            <div style={{ fontSize: "1.7rem", fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.val}<span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#94a3b8" }}>{k.unit}</span></div>
+            {k.sub && <div style={{ fontSize: "0.62rem", color: "#94a3b8", marginTop: 3 }}>{k.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* 경보 배너 */}
+      {(tier3Risk > 0 || modifyNeeded > 0 || tier1Candidates > 0) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          {tier1Candidates > 0 && <div style={{ flex: 1, minWidth: 220, padding: "10px 14px", background: "#d1fae5", borderRadius: 10, border: "1px solid #6ee7b7", fontSize: "0.78rem", color: "#065f46", fontWeight: 700 }}>🟢 Tier1 하향 검토 대상 {tier1Candidates}명 — 지원팀 최종 확인 필요</div>}
+          {modifyNeeded > 0 && <div style={{ flex: 1, minWidth: 220, padding: "10px 14px", background: "#fef3c7", borderRadius: 10, border: "1px solid #fbbf24", fontSize: "0.78rem", color: "#92400e", fontWeight: 700 }}>⚠️ CICO 계획 수정 검토 {modifyNeeded}명 — 목표행동·강화물 재검토 권장</div>}
+          {tier3Risk > 0 && <div style={{ flex: 1, minWidth: 220, padding: "10px 14px", background: "#fee2e2", borderRadius: 10, border: "1px solid #fca5a5", fontSize: "0.78rem", color: "#991b1b", fontWeight: 700 }}>🚨 Tier3 상향 위험 {tier3Risk}명 — 즉시 FBA·집중 지원 검토</div>}
+        </div>
+      )}
+
+      {/* 차트 2개: 학생별 수행률 바 + 월별 추이 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", marginBottom: 10 }}>👤 학생별 수행률 vs 목표 ({month}월)</div>
+          <ResponsiveContainer width="100%" height={Math.max(160, barData.length * 28)}>
+            <BarChart data={barData} layout="vertical" margin={{ left: -8, right: 32 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+              <XAxis type="number" domain={[0,100]} fontSize={10} axisLine={false} tickLine={false} />
+              <YAxis dataKey="name" type="category" fontSize={10} width={52} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: any) => [`${v}%`, "수행률"]} />
+              <Bar dataKey="rate" name="수행률" radius={[0,4,4,0]} barSize={16}>
+                {barData.map((d: any, i: number) => <Cell key={i} fill={d.color} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", marginBottom: 10 }}>📈 월별 평균 수행률 추이 (전체)</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <ComposedChart data={trendLine}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="month" fontSize={10} axisLine={false} tickLine={false} />
+              <YAxis domain={[0,100]} fontSize={10} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: any) => [`${v}%`, "평균 수행률"]} />
+              <Area type="monotone" dataKey="avg" fill="#6366f110" stroke="none" />
+              <Line type="monotone" dataKey="avg" name="전체 평균" stroke="#6366f1" strokeWidth={3} dot={{ r: 5, fill: "#6366f1" }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          {concurrent > 0 && (
+            <div style={{ marginTop: 8, fontSize: "0.7rem", color: "#64748b", padding: "6px 10px", background: "#f8fafc", borderRadius: 8, borderLeft: "3px solid #3b82f6" }}>
+              ℹ️ {concurrent}명은 SST/Tier3 병행 대상 — 목표 달성 시에도 CICO 유지
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ====== CICO 학생별 세부 차트 컴포넌트 (재설계) ======
 function CICOStudentCharts({ s }: { s: CICOStudent }) {
+  const goal = s.goal_num || 80;
+  const rate = s.rate_num ?? 0;
+  const gaugeColor = rate >= goal ? "#10b981" : rate >= 50 ? "#f59e0b" : "#ef4444";
+  const circumference = 2 * Math.PI * 44;
+
+  // 전월 일별 차트 데이터
+  const prevDays: { label: string; value: number | null }[] = (s.prev_daily_data || []).map(d => {
+    const v = d.value;
+    if (v === "" || v === "-") return { label: d.date, value: null };
+    if (v === "O") return { label: d.date, value: 1 };
+    if (v === "X") return { label: d.date, value: 0 };
+    const n = parseFloat(v);
+    return { label: d.date, value: isNaN(n) ? null : n };
+  }).filter(d => d.value !== null);
+
+  // 이번달 일별 차트 데이터
+  const curDays: { label: string; value: number | null }[] = (s.daily_data || []).map(d => {
+    const v = d.value;
+    if (v === "" || v === "-") return { label: d.date, value: null };
+    if (v === "O") return { label: d.date, value: 1 };
+    if (v === "X") return { label: d.date, value: 0 };
+    const n = parseFloat(v);
+    return { label: d.date, value: isNaN(n) ? null : n };
+  }).filter(d => d.value !== null);
+
+  // 월별 추이
   const trendData = s.trend.map(t => {
     let r = parseFloat(t.rate.replace("%", ""));
-    if (r <= 1) r = r * 100;
-    return { month: t.month, rate: isNaN(r) ? 0 : Math.round(r) };
+    if (r <= 1) r *= 100;
+    return { month: t.month, rate: isNaN(r) ? 0 : Math.round(r), goal };
   });
-  const goal = parseInt(s.goal_criteria) || 80;
-  const trendNums = trendData.map(t => t.rate);
-  const lastRate = trendNums[trendNums.length - 1] ?? 0;
-  const prevRate = trendNums.length >= 2 ? trendNums[trendNums.length - 2] : null;
-  const trendDir = prevRate !== null ? (lastRate > prevRate ? "up" : lastRate < prevRate ? "down" : "flat") : "flat";
-  const decision = getCICODecisionDetail(s);
 
-  const weeklyBars = trendData.map(t => ({ label: t.month.replace("월","M"), rate: t.rate, goal }));
-
-  const patternData = [
-    { name: "성공", value: trendNums.filter(r => r >= goal).length },
-    { name: "부분", value: trendNums.filter(r => r >= 50 && r < goal).length },
-    { name: "미달", value: trendNums.filter(r => r < 50).length },
-  ].filter(d => d.value > 0);
-  const patternColors = ["#10b981","#f59e0b","#ef4444"];
-
-  const gaugeColor = lastRate >= goal ? "#10b981" : lastRate >= 50 ? "#f59e0b" : "#ef4444";
-  const circumference = 2 * Math.PI * 44;
+  // 의사결정 배너
+  const dec = getCICODecisionDetail(s);
 
   return (
     <div>
-      <div style={{ marginBottom: 16, padding: "12px 16px", background: decision.bg, borderRadius: 12, border: `1.5px solid ${decision.color}40`, display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: "1.3rem" }}>{decision.icon}</span>
+      {/* 의사결정 배너 */}
+      <div style={{ marginBottom: 14, padding: "11px 16px", background: dec.bg, borderRadius: 12, border: `1.5px solid ${dec.color}40`, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: "1.3rem" }}>{dec.icon}</span>
         <div>
-          <div style={{ fontWeight: 800, fontSize: "0.85rem", color: decision.color }}>CICO 의사결정 제안</div>
-          <div style={{ fontSize: "0.78rem", color: decision.color, marginTop: 2 }}>{decision.msg}</div>
+          <div style={{ fontWeight: 800, fontSize: "0.84rem", color: dec.color }}>
+            CICO 의사결정 제안
+            {!s.cico_only && <span style={{ marginLeft: 8, fontSize: "0.7rem", background: "#e0f2fe", color: "#0369a1", padding: "2px 7px", borderRadius: 6, fontWeight: 700 }}>SST/T3 병행 — 하향 보류</span>}
+          </div>
+          <div style={{ fontSize: "0.77rem", color: dec.color, marginTop: 2 }}>{dec.msg}</div>
         </div>
+      </div>
+
+      {/* 목표·척도 정보 칩 */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {[
+          { label: "목표행동", val: s.target_behavior },
+          { label: "척도", val: s.scale },
+          { label: "달성기준", val: s.goal_criteria },
+          { label: "유형", val: s.behavior_type },
+        ].map(item => (
+          <div key={item.label} style={{ padding: "4px 10px", background: "#f1f5f9", borderRadius: 20, fontSize: "0.72rem", color: "#334155" }}>
+            <span style={{ color: "#94a3b8", fontWeight: 700 }}>{item.label}: </span>{item.val || "-"}
+          </div>
+        ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
 
+        {/* 1. 전월 일별 데이터 차트 */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
-          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 10, color: "#0f172a" }}>📈 월별 수행률 추이</div>
+          <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>📅 전월 일별 데이터</div>
+          {prevDays.length > 0 ? (
+            <ResponsiveContainer width="100%" height={140}>
+              <ComposedChart data={prevDays}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
+                <XAxis dataKey="label" style={{ fontSize: "8px" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Area type="monotone" dataKey="value" fill="#6366f110" stroke="none" />
+                <Line type="monotone" dataKey="value" name="측정값" stroke="#6366f1" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : <p style={{ color: "#94a3b8", fontSize: "0.75rem", textAlign: "center", paddingTop: 30 }}>전월 데이터 없음</p>}
+        </div>
+
+        {/* 2. 이번달 일별 데이터 차트 */}
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>📅 이번달 일별 데이터</div>
+          {curDays.length > 0 ? (
+            <ResponsiveContainer width="100%" height={140}>
+              <ComposedChart data={curDays}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
+                <XAxis dataKey="label" style={{ fontSize: "8px" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Area type="monotone" dataKey="value" fill="#3b82f610" stroke="none" />
+                <Line type="monotone" dataKey="value" name="측정값" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : <p style={{ color: "#94a3b8", fontSize: "0.75rem", textAlign: "center", paddingTop: 30 }}>데이터 입력 없음</p>}
+        </div>
+
+        {/* 3. 월별 수행률 추이 + 목표선 */}
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>📈 월별 수행률 추이</div>
           {trendData.length > 0 ? (
             <ResponsiveContainer width="100%" height={140}>
-              <ComposedChart data={weeklyBars}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" style={{ fontSize: "9px" }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0,100]} style={{ fontSize: "9px" }} axisLine={false} tickLine={false} />
+              <ComposedChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
+                <XAxis dataKey="month" style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0,100]} style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v: any) => [`${v}%`, ""]} />
-                <Area type="monotone" dataKey="rate" fill="#3b82f610" stroke="none" />
-                <Line type="monotone" dataKey="rate" name="수행률" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="rate" fill="#f59e0b10" stroke="none" />
+                <Line type="monotone" dataKey="rate" name="수행률" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
                 <Line type="monotone" dataKey="goal" name="목표" stroke="#ef4444" strokeWidth={1} strokeDasharray="4 2" dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <p style={{ color:"#94a3b8", fontSize:"0.78rem", textAlign:"center", padding:"20px 0" }}>데이터 없음</p>}
+          ) : <p style={{ color: "#94a3b8", fontSize: "0.75rem", textAlign: "center", paddingTop: 30 }}>데이터 없음</p>}
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 12, color: "#0f172a", alignSelf: "flex-start" }}>🎯 현재 달성 현황</div>
-          <div style={{ position: "relative", width: 110, height: 110 }}>
+        {/* 4. 현재 달성 게이지 + 팀협의 */}
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a", alignSelf: "flex-start" }}>🎯 현재 달성 현황</div>
+          <div style={{ position: "relative", width: 100, height: 100 }}>
             <svg viewBox="0 0 110 110" style={{ transform: "rotate(-90deg)" }}>
               <circle cx={55} cy={55} r={44} fill="none" stroke="#f1f5f9" strokeWidth={12} />
               <circle cx={55} cy={55} r={44} fill="none" stroke={gaugeColor} strokeWidth={12}
-                strokeDasharray={`${circumference * Math.min(lastRate,100) / 100} ${circumference}`} strokeLinecap="round" />
+                strokeDasharray={`${circumference * Math.min(rate,100) / 100} ${circumference}`} strokeLinecap="round" />
             </svg>
             <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ fontSize: "1.3rem", fontWeight: 900, color: gaugeColor }}>{lastRate}%</div>
+              <div style={{ fontSize: "1.2rem", fontWeight: 900, color: gaugeColor }}>{rate}%</div>
               <div style={{ fontSize: "0.6rem", color: "#94a3b8" }}>목표 {goal}%</div>
             </div>
           </div>
-          <div style={{ marginTop: 8, fontSize: "0.75rem", fontWeight: 700, color: "#475569" }}>
-            {trendDir === "up" ? "📈 상승 추세" : trendDir === "down" ? "📉 하락 추세" : "➡️ 보합 유지"}
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#475569", marginTop: 6 }}>
+            {s.achieved === "O" ? "✅ 달성" : "❌ 미달"}
           </div>
-        </div>
-
-        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
-          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 8, color: "#0f172a" }}>🔄 기간 내 수행 패턴</div>
-          {patternData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={130}>
-              <PieChart>
-                <Pie data={patternData} cx="50%" cy="50%" outerRadius={48} innerRadius={24} paddingAngle={3} dataKey="value">
-                  {patternData.map((_, i) => <Cell key={i} fill={patternColors[i % patternColors.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v: any) => [`${v}개월`, ""]} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : <p style={{ color:"#94a3b8", fontSize:"0.78rem", textAlign:"center", padding:"20px 0" }}>데이터 없음</p>}
-          <div style={{ display:"flex", justifyContent:"center", gap:8, flexWrap:"wrap", marginTop:4 }}>
-            {patternData.map((d, i) => (
-              <span key={i} style={{ fontSize:"0.65rem", color: patternColors[i], fontWeight:700 }}>● {d.name} {d.value}개월</span>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
-          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 10, color: "#0f172a" }}>📌 CICO 설정 정보</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {[
-              { label: "목표행동", val: s.target_behavior },
-              { label: "행동유형", val: s.behavior_type },
-              { label: "측정척도", val: s.scale },
-              { label: "달성기준", val: s.goal_criteria },
-              { label: "현재판정", val: s.achieved === "O" ? "✅ 달성" : s.achieved === "X" ? "❌ 미달" : "-" },
-            ].map(item => (
-              <div key={item.label} style={{ display:"flex", gap:6, alignItems:"flex-start" }}>
-                <span style={{ fontSize:"0.65rem", color:"#94a3b8", fontWeight:700, minWidth:52, paddingTop:1 }}>{item.label}</span>
-                <span style={{ fontSize:"0.72rem", color:"#334155", fontWeight:500, lineHeight:"1.3" }}>{item.val || "-"}</span>
-              </div>
-            ))}
-            {s.team_talk && (
-              <div style={{ marginTop:4, padding:"6px 8px", background:"#f8fafc", borderRadius:6, fontSize:"0.68rem", color:"#475569", borderLeft:"3px solid #3b82f6" }}>
-                💬 {s.team_talk}
-              </div>
-            )}
-          </div>
+          {s.team_talk && (
+            <div style={{ marginTop: 8, padding: "5px 8px", background: "#f8fafc", borderRadius: 7, fontSize: "0.68rem", color: "#475569", borderLeft: "3px solid #3b82f6", alignSelf: "stretch" }}>
+              💬 {s.team_talk}
+            </div>
+          )}
         </div>
 
       </div>

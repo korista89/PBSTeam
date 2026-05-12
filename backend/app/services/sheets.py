@@ -2451,78 +2451,158 @@ def get_cico_report_data(month: int):
         total_rate_sum = 0
         total_rate_count = 0
         achieved_count = 0
-        
-        # Mapping for name fallback
+
+        import re as _re
+
+        # Detect date columns in current sheet
+        date_cols_cur = []
+        for i, h in enumerate(headers):
+            h_str = str(h).strip()
+            if _re.match(r"^\d{2}-\d{2}$", h_str):
+                date_cols_cur.append({"index": i, "label": h_str})
+            elif h_str.isdigit() and 1 <= int(h_str) <= 31:
+                date_cols_cur.append({"index": i, "label": h_str})
+            elif "회차" in h_str:
+                date_cols_cur.append({"index": i, "label": h_str})
+
+        # Load previous month daily data
+        prev_month_num = month - 1
+        prev_daily = {}
+        if prev_month_num >= 3:
+            try:
+                pm_ws = get_worksheet_fuzzy(sheet, f"{prev_month_num}월")
+                if pm_ws:
+                    pm_vals = safe_get_all_values(pm_ws)
+                    if pm_vals and len(pm_vals) >= 2:
+                        pm_hdrs = pm_vals[0]
+                        pm_date_cols = []
+                        for i, h in enumerate(pm_hdrs):
+                            h_str = str(h).strip()
+                            if _re.match(r"^\d{2}-\d{2}$", h_str):
+                                pm_date_cols.append({"index": i, "label": h_str})
+                            elif h_str.isdigit() and 1 <= int(h_str) <= 31:
+                                pm_date_cols.append({"index": i, "label": h_str})
+                            elif "회차" in h_str:
+                                pm_date_cols.append({"index": i, "label": h_str})
+                        pm_code_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생코드","Code","코드"]), -1)
+                        pm_tier2_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["Tier2","CICO"]), -1)
+                        for pm_row in pm_vals[1:]:
+                            if pm_tier2_idx >= 0 and len(pm_row) > pm_tier2_idx and str(pm_row[pm_tier2_idx]).strip() != "O":
+                                continue
+                            if pm_code_idx >= 0 and len(pm_row) > pm_code_idx:
+                                pcode = str(pm_row[pm_code_idx]).strip()
+                                if not pcode:
+                                    continue
+                                prev_daily[pcode] = [
+                                    {"date": dc["label"], "value": str(pm_row[dc["index"]]).strip() if dc["index"] < len(pm_row) else "", "is_prev": True}
+                                    for dc in pm_date_cols
+                                ]
+            except Exception:
+                pass
+
+        # Name fallback mapping
         beable_mapping = get_beable_code_mapping()
         code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
-        
+
+        # TierStatus for concurrent tier detection
+        tier_status_records = {}
+        try:
+            for sr in fetch_student_status():
+                sc = str(sr.get("학생코드", "")).strip()
+                if sc:
+                    tier_status_records[sc] = sr
+        except Exception:
+            pass
+
         for row in all_values[1:]:
             if tier2_idx < 0 or len(row) <= tier2_idx:
                 continue
             if str(row[tier2_idx]).strip() != "O":
                 continue
-            
+
             code = str(row[col_idx.get("학생코드", 2)]).strip() if col_idx.get("학생코드", 2) < len(row) else ""
             name = row[col_idx.get("학생명", 3)] if col_idx.get("학생명", 3) < len(row) and row[col_idx.get("학생명", 3)] not in ["O", "X", ""] else code_to_name.get(code, "")
             rate_str = row[col_idx["수행/발생률"]] if "수행/발생률" in col_idx and col_idx["수행/발생률"] < len(row) else ""
             achieved = row[col_idx["목표 달성 여부"]] if "목표 달성 여부" in col_idx and col_idx["목표 달성 여부"] < len(row) else ""
             goal_str = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else ""
             team_talk = row[col_idx["팀 협의 내용"]] if "팀 협의 내용" in col_idx and col_idx["팀 협의 내용"] < len(row) else ""
-            
-            # Parse rate
+
             rate_num = None
             if rate_str and rate_str != "-":
                 try:
                     r = float(rate_str.replace("%", ""))
-                    if r <= 1:
-                        rate_num = r * 100
-                    else:
-                        rate_num = r
+                    rate_num = r * 100 if r <= 1 else r
                 except ValueError:
                     pass
-            
+
             if rate_num is not None:
                 total_rate_sum += rate_num
                 total_rate_count += 1
-            
+
             if achieved == "O":
                 achieved_count += 1
-            
-            # Monthly trend (prev months + current)
+
             trend = list(prev_rates.get(code, []))
             trend.append({"month": month_name, "rate": rate_str})
-            
-            # Decision recommendation
+
+            # Daily data (current month)
+            daily_data = [
+                {"date": dc["label"], "value": str(row[dc["index"]]).strip() if dc["index"] < len(row) else "", "is_prev": False}
+                for dc in date_cols_cur
+            ]
+
+            # Previous month daily data
+            prev_daily_data = prev_daily.get(code, [])
+
+            # Concurrent tier detection
+            ts = tier_status_records.get(code, {})
+            has_sst = str(ts.get("Tier2(SST)", "")).strip() == "O"
+            has_t3  = str(ts.get("Tier3", "")).strip() == "O" or str(ts.get("Tier3+", "")).strip() == "O"
+            cico_only = not (has_sst or has_t3)
+
+            # Goal number parsing
+            goal_num = 80.0
+            try:
+                gm = _re.search(r"(\d+(?:\.\d+)?)", goal_str)
+                if gm:
+                    goal_num = float(gm.group(1))
+            except Exception:
+                pass
+
+            # Decision logic
             decision = "CICO 유지"
             decision_color = "#3b82f6"
-            
+
             if rate_num is not None:
-                # Check consecutive months of high performance
-                all_rates = []
+                all_rates_parsed = []
                 for t in trend:
                     try:
                         r = float(t["rate"].replace("%", ""))
-                        if r <= 1:
-                            r = r * 100
-                        all_rates.append(r)
+                        all_rates_parsed.append(r * 100 if r <= 1 else r)
                     except (ValueError, AttributeError):
-                        all_rates.append(None)
-                
-                recent_high = all(r is not None and r >= 80 for r in all_rates[-2:]) if len(all_rates) >= 2 else False
-                
-                if recent_high:
+                        all_rates_parsed.append(None)
+
+                last2_high = (
+                    len(all_rates_parsed) >= 2 and
+                    all(r is not None and r >= goal_num for r in all_rates_parsed[-2:])
+                )
+
+                if last2_high and cico_only:
                     decision = "Tier1 하향 권장"
                     decision_color = "#10b981"
-                elif rate_num >= 80:
+                elif last2_high and not cico_only:
+                    decision = "CICO 유지 (T3/SST 병행)"
+                    decision_color = "#3b82f6"
+                elif rate_num >= goal_num:
                     decision = "CICO 유지 (양호)"
                     decision_color = "#3b82f6"
                 elif rate_num >= 50:
                     decision = "CICO 수정 검토"
                     decision_color = "#f59e0b"
-                elif rate_num < 50:
+                else:
                     decision = "Tier3 상향 검토"
                     decision_color = "#ef4444"
-            
+
             students.append({
                 "code": code,
                 "name": name,
@@ -2531,14 +2611,21 @@ def get_cico_report_data(month: int):
                 "behavior_type": row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else "",
                 "scale": row[col_idx.get("척도", 6)] if col_idx.get("척도", 6) < len(row) else "",
                 "goal_criteria": goal_str,
+                "goal_num": goal_num,
                 "rate": rate_str,
                 "rate_num": rate_num,
                 "achieved": achieved,
                 "trend": trend,
+                "daily_data": daily_data,
+                "prev_daily_data": prev_daily_data,
+                "cico_only": cico_only,
+                "has_sst": has_sst,
+                "has_t3": has_t3,
                 "decision": decision,
                 "decision_color": decision_color,
                 "team_talk": team_talk,
             })
+
         
         avg_rate = round(total_rate_sum / total_rate_count, 1) if total_rate_count > 0 else 0
         
