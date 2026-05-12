@@ -2770,39 +2770,32 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                     f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
                     f_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['freq']) for _, r in f_counts.iterrows()}
 
-                if all_weeks_in_range:
-                    # 기간 내 모든 주차 채우기 (없으면 0)
-                    for wk in all_weeks_in_range:
+                if all_weeks_in_range and w_counts_dict:
+                    # X축 시작: 기간 내 해당 학생의 최초 행동 발생 주차
+                    first_data_week = min(w_counts_dict.keys())
+                    # 최초 발생 주차부터 end_date까지 모든 주차 포함 (데이터 없는 주차는 0)
+                    student_weeks = [wk for wk in all_weeks_in_range if wk >= first_data_week]
+                    for wk in student_weeks:
                         weekly_trend.append({"week": wk, "count": w_counts_dict.get(wk, 0)})
                         weekly_trend_freq.append({"week": wk, "count": f_counts_dict.get(wk, 0)})
                 else:
-                    # start/end 없으면 데이터 있는 주차만
+                    # start/end 없거나 데이터 없으면 데이터 있는 주차만
                     for wk_key, cnt in sorted(w_counts_dict.items()):
                         weekly_trend.append({"week": wk_key, "count": cnt})
                     for wk_key, cnt in sorted(f_counts_dict.items()):
                         weekly_trend_freq.append({"week": wk_key, "count": cnt})
-        elif all_weeks_in_range:
-            # 행동 데이터 없지만 기간이 있으면 0으로 채운 주차 목록 생성
-            for wk in all_weeks_in_range:
-                weekly_trend.append({"week": wk, "count": 0})
-                weekly_trend_freq.append({"week": wk, "count": 0})
+        # 행동 데이터 없는 경우 → 빈 목록 유지 (최초 발생 주차 기준 불가, 차트에 "데이터 없음" 표시)
 
-        # --- 6주 이상 연속 0 여부 판단 (보고빈도 AND 발생빈도 모두 0인 주차 기준) ---
+        # --- 최근 4주가 모두 0인지 판단 (보고빈도 AND 발생빈도 모두 0) ---
         zero_week_alert = False
         zero_weeks_count = 0
-        if weekly_trend and weekly_trend_freq:
+        if len(weekly_trend) >= 4:
             freq_map = {item['week']: item['count'] for item in weekly_trend_freq}
-            consecutive = 0
-            for item in weekly_trend:
-                report_zero = item['count'] == 0
-                occur_zero = freq_map.get(item['week'], 0) == 0
-                if report_zero and occur_zero:
-                    consecutive += 1
-                else:
-                    consecutive = 0
-                if consecutive >= 6:
-                    zero_week_alert = True
-                    zero_weeks_count = consecutive
+            last4_report = [item['count'] for item in weekly_trend[-4:]]
+            last4_occur = [freq_map.get(item['week'], 0) for item in weekly_trend[-4:]]
+            if all(c == 0 for c in last4_report) and all(c == 0 for c in last4_occur):
+                zero_week_alert = True
+                zero_weeks_count = 4
         
         total_incidents += incidents  # sum of row counts across Tier3 students
         if not s_df.empty and '강도' in s_df.columns:

@@ -302,8 +302,8 @@ export default function Tier3Report() {
                                         Tier2 하향 검토 권장
                                       </div>
                                       <div style={{ fontSize: '0.78rem', color: '#047857', marginTop: '2px' }}>
-                                        주간 보고빈도 및 발생빈도가 <strong>{s.zero_weeks_count}주 연속 0</strong>으로 기록되었습니다.
-                                        Tier3 지원이 더 이상 필요하지 않을 수 있으며, Tier2(CICO) 하향 또는 종결을 검토하세요.
+                                        최근 <strong>4주간</strong> 주간 보고빈도 및 발생빈도가 모두 <strong>0</strong>으로 기록되었습니다.
+                                        Tier3 집중지원이 더 이상 필요하지 않을 수 있으며, Tier2(CICO) 하향 또는 종결을 검토하세요.
                                       </div>
                                     </div>
                                   </div>
