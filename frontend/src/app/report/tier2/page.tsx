@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
@@ -53,12 +53,40 @@ const DECISION_OPTIONS = [
   { label: "Tier3 상향 검토", color: "#ef4444" },
 ];
 
+const RATE_THRESHOLDS = { high: 80, mid: 50 };
+
+// CICO 전문가 의사결정 메시지 생성
+function getCICODecisionDetail(s: CICOStudent): { msg: string; color: string; bg: string; icon: string } {
+  const rate = s.rate_num ?? 0;
+  const goal = parseInt(s.goal_criteria) || 80;
+  const trendVals = s.trend.map(t => { let r = parseFloat(t.rate.replace("%","")); return r <= 1 ? r*100 : r; }).filter(r => !isNaN(r));
+  const lastTwo = trendVals.slice(-2);
+  const isRising = lastTwo.length >= 2 && lastTwo[1] > lastTwo[0];
+  const isFalling = lastTwo.length >= 2 && lastTwo[1] < lastTwo[0];
+  const allHighLast2 = lastTwo.every(r => r >= goal);
+
+  if (rate >= goal && allHighLast2)
+    return { msg: `수행률 ${rate}% — 목표 달성 2개월 연속. Tier1 하향을 적극 검토하세요.`, color: "#065f46", bg: "#d1fae5", icon: "🟢" };
+  if (rate >= goal)
+    return { msg: `수행률 ${rate}% — 목표 달성. 1개월 더 유지되면 Tier1 하향 권장.`, color: "#047857", bg: "#ecfdf5", icon: "✅" };
+  if (rate >= RATE_THRESHOLDS.mid && isRising)
+    return { msg: `수행률 ${rate}% — 상승 추세. CICO 유지하며 목표 행동 강화 계속.`, color: "#1d4ed8", bg: "#dbeafe", icon: "📈" };
+  if (rate >= RATE_THRESHOLDS.mid && isFalling)
+    return { msg: `수행률 ${rate}% — 하락 추세. CICO 계획 수정 및 강화물 재검토 필요.`, color: "#92400e", bg: "#fef3c7", icon: "⚠️" };
+  if (rate >= RATE_THRESHOLDS.mid)
+    return { msg: `수행률 ${rate}% — 부분 달성. 목표행동 기준 또는 강화 일정 수정 검토.`, color: "#b45309", bg: "#fef3c7", icon: "🔄" };
+  if (rate < RATE_THRESHOLDS.mid && isFalling)
+    return { msg: `수행률 ${rate}% — 지속 하락. Tier3 상향 또는 FBA 실시를 긴급 검토하세요.`, color: "#991b1b", bg: "#fee2e2", icon: "🚨" };
+  return { msg: `수행률 ${rate}% — 목표 미달. 중재 전략 전면 재검토가 필요합니다.`, color: "#b91c1c", bg: "#fee2e2", icon: "❌" };
+}
+
 export default function CICOReport() {
   const [month, setMonth] = useState(3);
   const [data, setData] = useState<CICOReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [is404, setIs404] = useState(false);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const { user, isAdmin } = useAuth();
 
   const apiUrl =
@@ -464,7 +492,7 @@ export default function CICOReport() {
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                       <thead>
                         <tr style={{ background: "#f1f5f9" }}>
-                          {["학생명", "학급", "목표행동", "유형", "척도", "달성기준", "수행률", "달성", "추이", "시스템 의사결정 제안", "팀 협의"].map(h => (
+                          {["학생명", "학급", "목표행동", "유형", "척도", "달성기준", "수행률", "달성", "추이", "시스템 의사결정 제안", "팀 협의", "차트"].map(h => (
                             <th key={h} style={{
                               padding: "12px 8px", color: "#475569", fontWeight: 600,
                               borderBottom: "1px solid #e2e8f0", textAlign: "left",
@@ -477,61 +505,39 @@ export default function CICOReport() {
                       </thead>
                       <tbody>
                         {students.map((s, i) => (
-                          <tr
-                            key={i}
-                            style={{
-                              background: i % 2 === 0 ? "#fff" : "#f8fafc",
-                              borderBottom: "1px solid #f1f5f9",
-                            }}
-                          >
-                            <td style={{ padding: "12px 8px", color: "#334155", fontWeight: 500 }}>{maskName(s.name) || "-"}</td>
-                            <td style={{ padding: "12px 8px", color: "#475569" }}>{s.class}</td>
-                            <td style={{ padding: "12px 8px", color: "#1e293b", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {s.target_behavior}
-                            </td>
-                            <td style={{ padding: "12px 8px", color: "#64748b" }}>{s.behavior_type}</td>
-                            <td style={{ padding: "12px 8px", color: "#64748b" }}>{s.scale}</td>
-                            <td style={{ padding: "12px 8px", color: "#64748b" }}>{s.goal_criteria}</td>
-                            <td style={{
-                              padding: "12px 8px", fontWeight: 700,
-                              color: getRateColor(s.rate_num),
-                            }}>
-                              {s.rate || "-"}
-                            </td>
-                            <td style={{
-                              padding: "12px 8px", textAlign: "center",
-                              color: s.achieved === "O" ? "#10b981" : "#ef4444",
-                              fontWeight: 700,
-                            }}>
-                              {s.achieved === "O" ? "✅" : s.achieved === "X" ? "❌" : "-"}
-                            </td>
-                            <td style={{ padding: "8px" }}>
-                              {miniTrendBar(s.trend)}
-                            </td>
-                            <td style={{
-                              padding: "12px 8px",
-                            }}>
-                              <span style={{
-                                display: "inline-block",
-                                padding: "4px 10px",
-                                borderRadius: "6px",
-                                fontSize: "0.75rem",
-                                fontWeight: 600,
-                                color: s.decision_color,
-                                background: getDecisionBg(s.decision),
-                                border: `1px solid ${s.decision_color}40`,
-                                whiteSpace: "nowrap",
-                              }}>
-                                {s.decision}
-                              </span>
-                            </td>
-                            <td style={{
-                              padding: "12px 8px", color: "#64748b",
-                              maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-                            }}>
-                              {s.team_talk || "-"}
-                            </td>
-                          </tr>
+                          <React.Fragment key={i}>
+                            <tr style={{ background: i % 2 === 0 ? "#fff" : "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "12px 8px", color: "#334155", fontWeight: 500 }}>{maskName(s.name) || "-"}</td>
+                              <td style={{ padding: "12px 8px", color: "#475569" }}>{s.class}</td>
+                              <td style={{ padding: "12px 8px", color: "#1e293b", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.target_behavior}</td>
+                              <td style={{ padding: "12px 8px", color: "#64748b" }}>{s.behavior_type}</td>
+                              <td style={{ padding: "12px 8px", color: "#64748b" }}>{s.scale}</td>
+                              <td style={{ padding: "12px 8px", color: "#64748b" }}>{s.goal_criteria}</td>
+                              <td style={{ padding: "12px 8px", fontWeight: 700, color: getRateColor(s.rate_num) }}>{s.rate || "-"}</td>
+                              <td style={{ padding: "12px 8px", textAlign: "center", color: s.achieved === "O" ? "#10b981" : "#ef4444", fontWeight: 700 }}>
+                                {s.achieved === "O" ? "✅" : s.achieved === "X" ? "❌" : "-"}
+                              </td>
+                              <td style={{ padding: "8px" }}>{miniTrendBar(s.trend)}</td>
+                              <td style={{ padding: "12px 8px" }}>
+                                <span style={{ display: "inline-block", padding: "4px 10px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600, color: s.decision_color, background: getDecisionBg(s.decision), border: `1px solid ${s.decision_color}40`, whiteSpace: "nowrap" }}>
+                                  {s.decision}
+                                </span>
+                              </td>
+                              <td style={{ padding: "12px 8px", color: "#64748b", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.team_talk || "-"}</td>
+                              <td style={{ padding: "8px" }}>
+                                <button onClick={() => setExpandedCode(expandedCode === s.code ? null : s.code)} style={{ padding: "5px 12px", borderRadius: "8px", background: expandedCode === s.code ? "#3b82f6" : "#f1f5f9", color: expandedCode === s.code ? "#fff" : "#475569", border: "1px solid #e2e8f0", cursor: "pointer", fontWeight: 700, fontSize: "0.72rem", whiteSpace: "nowrap", transition: "all 0.2s" }}>
+                                  {expandedCode === s.code ? "▲ 접기" : "📊 차트"}
+                                </button>
+                              </td>
+                            </tr>
+                            {expandedCode === s.code && (
+                              <tr style={{ background: "#f0f9ff" }}>
+                                <td colSpan={12} style={{ padding: "20px 16px", borderBottom: "2px solid #bfdbfe" }}>
+                                  <CICOStudentCharts s={s} />
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>
@@ -621,6 +627,126 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ====== CICO 학생별 세부 차트 컴포넌트 ======
+function CICOStudentCharts({ s }: { s: CICOStudent }) {
+  const trendData = s.trend.map(t => {
+    let r = parseFloat(t.rate.replace("%", ""));
+    if (r <= 1) r = r * 100;
+    return { month: t.month, rate: isNaN(r) ? 0 : Math.round(r) };
+  });
+  const goal = parseInt(s.goal_criteria) || 80;
+  const trendNums = trendData.map(t => t.rate);
+  const lastRate = trendNums[trendNums.length - 1] ?? 0;
+  const prevRate = trendNums.length >= 2 ? trendNums[trendNums.length - 2] : null;
+  const trendDir = prevRate !== null ? (lastRate > prevRate ? "up" : lastRate < prevRate ? "down" : "flat") : "flat";
+  const decision = getCICODecisionDetail(s);
+
+  const weeklyBars = trendData.map(t => ({ label: t.month.replace("월","M"), rate: t.rate, goal }));
+
+  const patternData = [
+    { name: "성공", value: trendNums.filter(r => r >= goal).length },
+    { name: "부분", value: trendNums.filter(r => r >= 50 && r < goal).length },
+    { name: "미달", value: trendNums.filter(r => r < 50).length },
+  ].filter(d => d.value > 0);
+  const patternColors = ["#10b981","#f59e0b","#ef4444"];
+
+  const gaugeColor = lastRate >= goal ? "#10b981" : lastRate >= 50 ? "#f59e0b" : "#ef4444";
+  const circumference = 2 * Math.PI * 44;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, padding: "12px 16px", background: decision.bg, borderRadius: 12, border: `1.5px solid ${decision.color}40`, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: "1.3rem" }}>{decision.icon}</span>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: "0.85rem", color: decision.color }}>CICO 의사결정 제안</div>
+          <div style={{ fontSize: "0.78rem", color: decision.color, marginTop: 2 }}>{decision.msg}</div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 10, color: "#0f172a" }}>📈 월별 수행률 추이</div>
+          {trendData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={140}>
+              <ComposedChart data={weeklyBars}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" style={{ fontSize: "9px" }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0,100]} style={{ fontSize: "9px" }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v: any) => [`${v}%`, ""]} />
+                <Area type="monotone" dataKey="rate" fill="#3b82f610" stroke="none" />
+                <Line type="monotone" dataKey="rate" name="수행률" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="goal" name="목표" stroke="#ef4444" strokeWidth={1} strokeDasharray="4 2" dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : <p style={{ color:"#94a3b8", fontSize:"0.78rem", textAlign:"center", padding:"20px 0" }}>데이터 없음</p>}
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 12, color: "#0f172a", alignSelf: "flex-start" }}>🎯 현재 달성 현황</div>
+          <div style={{ position: "relative", width: 110, height: 110 }}>
+            <svg viewBox="0 0 110 110" style={{ transform: "rotate(-90deg)" }}>
+              <circle cx={55} cy={55} r={44} fill="none" stroke="#f1f5f9" strokeWidth={12} />
+              <circle cx={55} cy={55} r={44} fill="none" stroke={gaugeColor} strokeWidth={12}
+                strokeDasharray={`${circumference * Math.min(lastRate,100) / 100} ${circumference}`} strokeLinecap="round" />
+            </svg>
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ fontSize: "1.3rem", fontWeight: 900, color: gaugeColor }}>{lastRate}%</div>
+              <div style={{ fontSize: "0.6rem", color: "#94a3b8" }}>목표 {goal}%</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 8, fontSize: "0.75rem", fontWeight: 700, color: "#475569" }}>
+            {trendDir === "up" ? "📈 상승 추세" : trendDir === "down" ? "📉 하락 추세" : "➡️ 보합 유지"}
+          </div>
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 8, color: "#0f172a" }}>🔄 기간 내 수행 패턴</div>
+          {patternData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={130}>
+              <PieChart>
+                <Pie data={patternData} cx="50%" cy="50%" outerRadius={48} innerRadius={24} paddingAngle={3} dataKey="value">
+                  {patternData.map((_, i) => <Cell key={i} fill={patternColors[i % patternColors.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v: any) => [`${v}개월`, ""]} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <p style={{ color:"#94a3b8", fontSize:"0.78rem", textAlign:"center", padding:"20px 0" }}>데이터 없음</p>}
+          <div style={{ display:"flex", justifyContent:"center", gap:8, flexWrap:"wrap", marginTop:4 }}>
+            {patternData.map((d, i) => (
+              <span key={i} style={{ fontSize:"0.65rem", color: patternColors[i], fontWeight:700 }}>● {d.name} {d.value}개월</span>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: 10, color: "#0f172a" }}>📌 CICO 설정 정보</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {[
+              { label: "목표행동", val: s.target_behavior },
+              { label: "행동유형", val: s.behavior_type },
+              { label: "측정척도", val: s.scale },
+              { label: "달성기준", val: s.goal_criteria },
+              { label: "현재판정", val: s.achieved === "O" ? "✅ 달성" : s.achieved === "X" ? "❌ 미달" : "-" },
+            ].map(item => (
+              <div key={item.label} style={{ display:"flex", gap:6, alignItems:"flex-start" }}>
+                <span style={{ fontSize:"0.65rem", color:"#94a3b8", fontWeight:700, minWidth:52, paddingTop:1 }}>{item.label}</span>
+                <span style={{ fontSize:"0.72rem", color:"#334155", fontWeight:500, lineHeight:"1.3" }}>{item.val || "-"}</span>
+              </div>
+            ))}
+            {s.team_talk && (
+              <div style={{ marginTop:4, padding:"6px 8px", background:"#f8fafc", borderRadius:6, fontSize:"0.68rem", color:"#475569", borderLeft:"3px solid #3b82f6" }}>
+                💬 {s.team_talk}
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
