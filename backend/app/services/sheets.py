@@ -2501,13 +2501,18 @@ def get_cico_report_data(month: int):
                 pass
 
         # Name fallback mapping
-        beable_mapping = get_beable_code_mapping()
-        code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
+        code_to_name = {}
+        try:
+            beable_mapping = get_beable_code_mapping() or {}
+            code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
+        except Exception:
+            pass
 
         # TierStatus for concurrent tier detection
         tier_status_records = {}
         try:
-            for sr in fetch_student_status():
+            status_list = fetch_student_status() or []
+            for sr in status_list:
                 sc = str(sr.get("학생코드", "")).strip()
                 if sc:
                     tier_status_records[sc] = sr

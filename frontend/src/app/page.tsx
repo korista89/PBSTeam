@@ -531,7 +531,7 @@ export default function Home() {
               <ChartBox title="❓ 행동의 기능 분석" height={280}>
                 <PieChart>
                   <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={90} innerRadius={60} dataKey="value">
-                      {((data as any).functions || []).map((_, i) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
+                      {((data as any).functions || []).map((_: unknown, i: number) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" />
