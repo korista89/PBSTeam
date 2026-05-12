@@ -2822,6 +2822,11 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             decision = "Tier3 유지 (관찰)"
             decision_color = "#f59e0b"
         
+        # 최근 4주 모두 0이면 → 행동 통계 기반 의사결정을 override하여 Tier2 하향 검토로 통일
+        if zero_week_alert:
+            decision = "Tier2(CICO) 하향 검토"
+            decision_color = "#10b981"
+        
         student.update({
             "incidents": incidents,  # 보고빈도 (row count)
             "max_intensity": max_intensity,
