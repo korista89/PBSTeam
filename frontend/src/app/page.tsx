@@ -12,7 +12,7 @@ import { DashboardData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
-import { maskName } from "./utils";
+import { maskName, formatWeek } from "./utils";
 
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
@@ -152,6 +152,195 @@ function ChartBox({ title, children, height = 340 }: { title: string; children: 
           {children as React.ReactElement}
         </ResponsiveContainer>
       </div>
+    </div>
+  );
+}
+
+// ====== T3 상향 검토 대상자 명단 컴포넌트 ======
+const PIE_COLORS_FUNC = ['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+const PIE_COLORS_TYPE = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316'];
+
+function T3UpgradeList({ riskList, startDate, endDate }: { riskList: any[]; startDate: string; endDate: string }) {
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const [chartData, setChartData] = useState<Record<string, any>>({});
+  const [loadingCode, setLoadingCode] = useState<string | null>(null);
+
+  // T3/T3+ 행동기반 대상 제외 → T2만 표시
+  const t2List = riskList.filter((s: any) => s.tier === 'Tier 2');
+
+  const toggleChart = async (s: any) => {
+    const code = s.student_code || s.name;
+    if (expandedCode === code) { setExpandedCode(null); return; }
+    setExpandedCode(code);
+    if (chartData[code]) return;
+
+    setLoadingCode(code);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      const identifier = s.student_code || s.name;
+      const res = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(identifier)}?${params.toString()}`);
+      setChartData(prev => ({ ...prev, [code]: res.data }));
+    } catch {
+      setChartData(prev => ({ ...prev, [code]: { error: true } }));
+    } finally {
+      setLoadingCode(null);
+    }
+  };
+
+  const getIntensityColor = (v: number) => v >= 5 ? '#ef4444' : v >= 3 ? '#f59e0b' : '#22c55e';
+
+  if (t2List.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', color: '#64748b', border: '1px solid rgba(0,0,0,0.05)' }}>
+        T3 상향 검토 대상자가 없습니다.
+      </div>
+    );
+  }
+
+  const maxCount = Math.max(...t2List.map((s: any) => s.count), 1);
+
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+        <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
+          <tr>
+            {['우선순위', '학생명', '학급', '누적 빈도', '위험도', '차트'].map(h => (
+              <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontWeight: 800, color: '#475569', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {t2List.map((s: any, idx: number) => {
+            const code = s.student_code || s.name;
+            const isExpanded = expandedCode === code;
+            const cd = chartData[code];
+            return (
+              <React.Fragment key={idx}>
+                <tr style={{ borderBottom: isExpanded ? 'none' : '1px solid rgba(0,0,0,0.03)', background: isExpanded ? '#f0f9ff' : idx % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ padding: '16px 24px' }}>
+                    <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, background: '#fff7ed', color: '#f59e0b' }}>Tier 2</span>
+                  </td>
+                  <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{maskName(s.name)}</td>
+                  <td style={{ padding: '16px 24px', color: '#64748b', fontWeight: 500 }}>{s.class}</td>
+                  <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>회</span></td>
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ width: '100px', height: '6px', background: '#e2e8f0', borderRadius: '10px' }}>
+                      <div style={{ width: `${Math.min(100, (s.count / maxCount) * 100)}%`, height: '100%', background: '#f59e0b', borderRadius: '10px' }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: '16px 24px' }}>
+                    <button
+                      onClick={() => toggleChart(s)}
+                      style={{ padding: '6px 14px', borderRadius: '10px', background: isExpanded ? '#f59e0b' : '#f1f5f9', color: isExpanded ? '#fff' : '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', transition: 'all 0.2s' }}
+                    >
+                      {loadingCode === code ? '⏳' : isExpanded ? '▲ 접기' : '📈 차트'}
+                    </button>
+                  </td>
+                </tr>
+                {isExpanded && (
+                  <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                    <td colSpan={6} style={{ padding: '20px 24px', background: '#f8fbff' }}>
+                      {loadingCode === code && <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>⏳ 데이터 로딩 중...</div>}
+                      {cd?.error && <div style={{ textAlign: 'center', padding: '20px', color: '#ef4444' }}>⚠️ 데이터를 불러오지 못했습니다.</div>}
+                      {cd && !cd.error && (
+                        <div>
+                          {/* 1행: 주간 보고빈도 + 주간 발생빈도 */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 보고빈도 추이</div>
+                              {(cd.weekly_trend || []).length > 0 ? (
+                                <ResponsiveContainer width="100%" height={140}>
+                                  <LineChart data={cd.weekly_trend}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
+                                    <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
+                                    <Tooltip />
+                                    <Line type="monotone" dataKey="count" name="보고건수" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '18px 0' }}>데이터 없음</p>}
+                            </div>
+                            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 발생빈도 추이</div>
+                              {(cd.cico_trend || []).length > 0 ? (
+                                <ResponsiveContainer width="100%" height={140}>
+                                  <LineChart data={cd.cico_trend}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                                    <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
+                                    <Tooltip />
+                                    <Line type="monotone" dataKey="count" name="발생빈도" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '18px 0' }}>데이터 없음</p>}
+                            </div>
+                          </div>
+                          {/* 2행: 행동유형 + 행동기능 + 행동강도 (3분할) */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+                            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>🎭 행동 유형 분포</div>
+                              {(cd.behavior_types || []).length > 0 ? (
+                                <ResponsiveContainer width="100%" height={150}>
+                                  <PieChart>
+                                    <Pie data={(cd.behavior_types || []).map((b: any) => ({ ...b, name: b.name.split(':')[0] }))} cx="50%" cy="50%" outerRadius={55} innerRadius={28} paddingAngle={3} dataKey="value">
+                                      {(cd.behavior_types || []).map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS_TYPE[i % PIE_COLORS_TYPE.length]} />)}
+                                    </Pie>
+                                    <Tooltip formatter={(v: any) => [`${v}건`, '']} />
+                                    <Legend wrapperStyle={{ fontSize: '8px' }} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '18px 0' }}>데이터 없음</p>}
+                            </div>
+                            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>❓ 행동 기능 분포</div>
+                              {(cd.functions || []).length > 0 ? (
+                                <ResponsiveContainer width="100%" height={150}>
+                                  <PieChart>
+                                    <Pie data={cd.functions || []} cx="50%" cy="50%" outerRadius={55} innerRadius={28} paddingAngle={3} dataKey="value">
+                                      {(cd.functions || []).map((_: any, i: number) => <Cell key={i} fill={PIE_COLORS_FUNC[i % PIE_COLORS_FUNC.length]} />)}
+                                    </Pie>
+                                    <Tooltip formatter={(v: any) => [`${v}건`, '']} />
+                                    <Legend wrapperStyle={{ fontSize: '8px' }} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '18px 0' }}>데이터 없음</p>}
+                            </div>
+                            <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>⚡ 행동 강도 정보</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '6px' }}>
+                                {[
+                                  { label: '평균 강도', val: cd.profile?.avg_intensity || 0, max: 5, suffix: '/5' },
+                                  { label: '보고 건수', val: cd.profile?.total_incidents || 0, max: maxCount, suffix: '건' },
+                                ].map((item, i) => (
+                                  <div key={i}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '3px' }}>
+                                      <span style={{ color: '#64748b' }}>{item.label}</span>
+                                      <span style={{ fontWeight: 700, color: getIntensityColor(item.val) }}>{item.val}{item.suffix}</span>
+                                    </div>
+                                    <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{ width: `${Math.min(100, (item.val / item.max) * 100)}%`, height: '100%', background: getIntensityColor(item.val), borderRadius: '4px', transition: 'width 0.5s' }} />
+                                    </div>
+                                  </div>
+                                ))}
+                                <div style={{ marginTop: '6px', padding: '8px 10px', background: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                  <span style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 700 }}>⚠️ T3 상향 기준 검토 필요</span>
+                                  <div style={{ fontSize: '0.7rem', color: '#9a3412', marginTop: '2px' }}>누적 빈도 {s.count}회 · 최대 강도 {s.max_intensity || '-'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -371,38 +560,12 @@ export default function Home() {
             </div>
 
             {/* Section 4 */}
-            <div className="section-heading"><span>04</span> 집중 지원 대상자 명단</div>
-            <div className="table-responsive-wrapper" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
-                  <tr>
-                    {['우선순위', '학생명', '학급', '누적 빈도', '위험도', '관리'].map(h => (
-                      <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontWeight: 800, color: '#475569', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {riskList.map((s: any, idx: number) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
-                      <td style={{ padding: '16px 24px' }}>
-                        <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, background: s.tier === 'Tier 3' ? '#fee2e2' : '#fff7ed', color: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b' }}>{s.tier}</span>
-                      </td>
-                      <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{maskName(s.name)}</td>
-                      <td style={{ padding: '16px 24px', color: '#64748b', fontWeight: 500 }}>{s.class}</td>
-                      <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>회</span></td>
-                      <td style={{ padding: '16px 24px' }}>
-                         <div style={{ width: '100px', height: '6px', background: '#e2e8f0', borderRadius: '10px' }}>
-                             <div style={{ width: `${Math.min(100, (s.count / 15) * 100)}%`, height: '100%', background: s.tier === 'Tier 3' ? '#ef4444' : '#f59e0b', borderRadius: '10px' }} />
-                         </div>
-                      </td>
-                      <td style={{ padding: '16px 24px' }}>
-                        <button onClick={()=>window.location.href=`/student/${s.name}`} style={{ padding: '6px 14px', borderRadius: '10px', background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', color: '#475569', transition: 'all 0.2s' }} onMouseOver={e=>{e.currentTarget.style.background='#1e293b'; e.currentTarget.style.color='#fff'}} onMouseOut={e=>{e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.color='#475569'}}>세부 분석</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <div className="section-heading"><span>04</span> T3 상향 검토 대상자 명단 <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#94a3b8', marginLeft: '8px' }}>(현재 T3/T3+ 제외 — 행동빈도 기반 T2 선별)</span></div>
+            <T3UpgradeList
+              riskList={riskList}
+              startDate={startDate}
+              endDate={endDate}
+            />
 
             {/* Section 5 */}
             <div className="section-heading"><span>05</span> 실행 계획 및 운영 협의록</div>
