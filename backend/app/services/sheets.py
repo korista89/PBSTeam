@@ -2729,6 +2729,24 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         weekly_trend_freq = []
         # 보고빈도 weekly (row count per week, for the summary)
         weekly_trend = []
+
+        # --- 날짜 범위 내 모든 주차 생성 (데이터 없는 주차도 0으로 포함) ---
+        import datetime as _dt
+        all_weeks_in_range = []
+        if start_date and end_date:
+            try:
+                sd_obj = pd.to_datetime(start_date).date()
+                ed_obj = pd.to_datetime(end_date).date()
+                # 시작일이 속한 주의 월요일부터 순회
+                cur = sd_obj - _dt.timedelta(days=sd_obj.weekday())
+                while cur <= ed_obj:
+                    iso = cur.isocalendar()
+                    week_key = f"{iso[0]}-W{iso[1]:02d}"
+                    all_weeks_in_range.append(week_key)
+                    cur += _dt.timedelta(weeks=1)
+            except Exception:
+                all_weeks_in_range = []
+
         if not s_df.empty and 'date_obj' in s_df.columns:
             s_copy = s_df.copy().dropna(subset=['date_obj'])
             if not s_copy.empty:
@@ -2736,23 +2754,55 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 s_copy['year'] = s_copy['date_obj'].dt.year
                 # Row count per week (보고빈도)
                 w_counts = s_copy.groupby(['year', 'week']).size().reset_index(name='count')
-                for _, row in w_counts.iterrows():
-                    weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
-                
-                # Sum of 발생빈도 per week (발생빈도 - the one specific chart requested)
+                w_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['count']) for _, r in w_counts.iterrows()}
+
+                # Sum of 발생빈도 per week
+                f_counts_dict = {}
                 if '발생빈도' in s_copy.columns:
                     def _extract_val(v):
-                        if pd.isna(v) or v == '': return 1 # Default to 1 if empty
+                        if pd.isna(v) or v == '': return 1
                         try:
-                            # Extract first digit sequence (e.g., "1회" -> 1)
                             match = re.search(r'(\d+)', str(v))
                             return int(match.group(1)) if match else 1
                         except Exception:
                             return 1
                     s_copy['발생빈도_num'] = s_copy['발생빈도'].apply(_extract_val)
                     f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
-                    for _, row in f_counts.iterrows():
-                        weekly_trend_freq.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['freq'])})
+                    f_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['freq']) for _, r in f_counts.iterrows()}
+
+                if all_weeks_in_range:
+                    # 기간 내 모든 주차 채우기 (없으면 0)
+                    for wk in all_weeks_in_range:
+                        weekly_trend.append({"week": wk, "count": w_counts_dict.get(wk, 0)})
+                        weekly_trend_freq.append({"week": wk, "count": f_counts_dict.get(wk, 0)})
+                else:
+                    # start/end 없으면 데이터 있는 주차만
+                    for wk_key, cnt in sorted(w_counts_dict.items()):
+                        weekly_trend.append({"week": wk_key, "count": cnt})
+                    for wk_key, cnt in sorted(f_counts_dict.items()):
+                        weekly_trend_freq.append({"week": wk_key, "count": cnt})
+        elif all_weeks_in_range:
+            # 행동 데이터 없지만 기간이 있으면 0으로 채운 주차 목록 생성
+            for wk in all_weeks_in_range:
+                weekly_trend.append({"week": wk, "count": 0})
+                weekly_trend_freq.append({"week": wk, "count": 0})
+
+        # --- 6주 이상 연속 0 여부 판단 (보고빈도 AND 발생빈도 모두 0인 주차 기준) ---
+        zero_week_alert = False
+        zero_weeks_count = 0
+        if weekly_trend and weekly_trend_freq:
+            freq_map = {item['week']: item['count'] for item in weekly_trend_freq}
+            consecutive = 0
+            for item in weekly_trend:
+                report_zero = item['count'] == 0
+                occur_zero = freq_map.get(item['week'], 0) == 0
+                if report_zero and occur_zero:
+                    consecutive += 1
+                else:
+                    consecutive = 0
+                if consecutive >= 6:
+                    zero_week_alert = True
+                    zero_weeks_count = consecutive
         
         total_incidents += incidents  # sum of row counts across Tier3 students
         if not s_df.empty and '강도' in s_df.columns:
@@ -2788,6 +2838,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             "weekly_trend_freq": weekly_trend_freq,
             "decision": decision,
             "decision_color": decision_color,
+            "zero_week_alert": zero_week_alert,
+            "zero_weeks_count": zero_weeks_count,
         })
     
     # Calculate overall weekly trend for T3

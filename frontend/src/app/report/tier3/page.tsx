@@ -21,6 +21,7 @@ interface Tier3Student {
   behavior_types: BehaviorType[]; weekly_trend: WeeklyTrend[];
   weekly_trend_freq?: WeeklyTrend[];
   decision: string; decision_color: string;
+  zero_week_alert?: boolean; zero_weeks_count?: number;
 }
 
 interface Tier3ReportData {
@@ -278,18 +279,44 @@ export default function Tier3Report() {
                             </td>
                           </tr>
 
-                          {/* Expandable Charts Row */}
+                                {/* Expandable Charts Row */}
                           {expandedStudent === s.code && (
                             <tr key={`${i}-charts`} style={{ borderBottom: '1px solid #e2e8f0' }}>
                               <td colSpan={10} style={{ padding: '20px', background: '#faf5ff' }}>
+
+                                {/* Tier2 하향 검토 경고 배너 */}
+                                {s.zero_week_alert && (
+                                  <div style={{
+                                    marginBottom: '16px',
+                                    padding: '14px 18px',
+                                    background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
+                                    border: '2px solid #10b981',
+                                    borderRadius: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                  }}>
+                                    <span style={{ fontSize: '1.4rem' }}>🟢</span>
+                                    <div>
+                                      <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#065f46' }}>
+                                        Tier2 하향 검토 권장
+                                      </div>
+                                      <div style={{ fontSize: '0.78rem', color: '#047857', marginTop: '2px' }}>
+                                        주간 보고빈도 및 발생빈도가 <strong>{s.zero_weeks_count}주 연속 0</strong>으로 기록되었습니다.
+                                        Tier3 지원이 더 이상 필요하지 않을 수 있으며, Tier2(CICO) 하향 또는 종결을 검토하세요.
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                                  
+
                                   {/* Weekly Trend (Report Frequency) */}
                                   <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
                                     <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>📈 주간 보고빈도 추이 (행정/관찰 지표)</div>
                                     {s.weekly_trend.length > 0 ? (
                                       <ResponsiveContainer width="100%" height={160}>
-                                        <LineChart data={s.weekly_trend.slice(-12)}>
+                                        <LineChart data={s.weekly_trend}>
                                           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                           <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
                                           <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
@@ -300,12 +327,12 @@ export default function Tier3Report() {
                                     ) : <p style={{ color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
                                   </div>
 
-                                  {/* Weekly Trend (Occurrence Frequency - The ONE specific chart) */}
+                                  {/* Weekly Trend (Occurrence Frequency) */}
                                   <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
                                     <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>📈 주간 발생빈도 추이 (경은PBST 핵심지표)</div>
                                     {s.weekly_trend_freq && s.weekly_trend_freq.length > 0 ? (
                                       <ResponsiveContainer width="100%" height={160}>
-                                        <LineChart data={s.weekly_trend_freq.slice(-12)}>
+                                        <LineChart data={s.weekly_trend_freq}>
                                           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                           <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
                                           <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
