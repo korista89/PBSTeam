@@ -12,7 +12,7 @@ import { DashboardData, RiskStudent, SafetyAlert } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
-import { maskName, formatWeek } from "./utils";
+import { maskName, formatWeek, runGeminiClient } from "./utils";
 
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
@@ -38,7 +38,16 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
         start_date: startDate,
         end_date: endDate
       });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+      let analysisText = res.data.analysis || "분석 결과가 없습니다.";
+      if (analysisText.startsWith('{"client_call":')) {
+        try {
+          const payload = JSON.parse(analysisText);
+          analysisText = await runGeminiClient(payload);
+        } catch (clientErr: any) {
+          analysisText = `⚠️ AI 분석 중 오류가 발생했습니다: ${clientErr.message}`;
+        }
+      }
+      setAnalysis(analysisText);
     } catch (e) {
       setAnalysis("⚠️ 학교 전체 PBS 종합 분석 요청 실패. 잠시 후 다시 시도해주세요.");
     } finally {

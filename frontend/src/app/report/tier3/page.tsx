@@ -9,8 +9,7 @@ import {
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
-import { maskName } from "../../utils";
-import { formatWeek } from "../../utils";
+import { maskName, formatWeek, runGeminiClient } from "../../utils";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -433,7 +432,16 @@ function Tier3AIAnalysis({ apiUrl, startDate, endDate }: { apiUrl: string; start
     setLoading(true); setVisible(true);
     try {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-tier3-analysis`, { start_date: startDate || null, end_date: endDate || null }, { timeout: 60000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+      let analysisText = res.data.analysis || "분석 결과가 없습니다.";
+      if (analysisText.startsWith('{"client_call":')) {
+        try {
+          const payload = JSON.parse(analysisText);
+          analysisText = await runGeminiClient(payload);
+        } catch (clientErr: any) {
+          analysisText = `⚠️ AI 분석 중 오류가 발생했습니다: ${clientErr.message}`;
+        }
+      }
+      setAnalysis(analysisText);
     } catch { setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요."); }
     finally { setLoading(false); }
   };

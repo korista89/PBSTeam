@@ -14,7 +14,7 @@ import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
 import { COLORS, TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
-import { maskName } from "../../utils";
+import { maskName, runGeminiClient } from "../../utils";
 
 export default function StudentDetail() {
   const params = useParams();
@@ -368,7 +368,16 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
     setLoading(true); setVisible(true);
     try {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+      let analysisText = res.data.analysis || "분석 결과가 없습니다.";
+      if (analysisText.startsWith('{"client_call":')) {
+        try {
+          const payload = JSON.parse(analysisText);
+          analysisText = await runGeminiClient(payload);
+        } catch (clientErr: any) {
+          analysisText = `⚠️ AI 분석 중 오류가 발생했습니다: ${clientErr.message}`;
+        }
+      }
+      setAnalysis(analysisText);
     } catch { setAnalysis("⚠️ AI 전문가 분석 요청 실패."); } finally { setLoading(false); }
   };
 

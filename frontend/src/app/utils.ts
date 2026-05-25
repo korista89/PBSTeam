@@ -1,3 +1,5 @@
+import axios from "axios";
+
 /**
  * Masks a student name for privacy:
  * - 3+ characters: replace middle char(s) with 'O' → 김O준
@@ -44,4 +46,71 @@ export function formatWeek(weekStr: string): string {
   const weekOfMonth = Math.ceil((monday.getDate() + firstDow) / 7);
 
   return `${yy}년${m}월${weekOfMonth}주차`;
+}
+
+export interface GeminiPayload {
+  client_call: boolean;
+  system_prompt: string;
+  user_prompt: string;
+  max_tokens: number;
+  api_key: string;
+}
+
+/**
+ * Executes a Gemini content generation call directly from the browser to avoid server IP rate blocks.
+ * Automatically falls back through multiple models (1.5-flash, 2.0-flash, 2.0-flash-lite).
+ */
+export async function runGeminiClient(payload: GeminiPayload): Promise<string> {
+  const models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      console.log(`Running client-side Gemini request with model: ${model}`);
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${payload.api_key}`,
+        {
+          systemInstruction: {
+            parts: [
+              {
+                text: payload.system_prompt
+              }
+            ]
+          },
+          contents: [
+            {
+              parts: [
+                {
+                  text: payload.user_prompt
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            maxOutputTokens: payload.max_tokens,
+            temperature: 0.7
+          }
+        },
+        {
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        return text.trim();
+      }
+      throw new Error("Empty response from Gemini API");
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = err.response?.data?.error?.message || err.message || "";
+      console.error(`Gemini API Error with model ${model}:`, errMsg);
+      continue;
+    }
+  }
+
+  const detailedError = lastError?.response?.data?.error?.message || lastError?.message || "Unknown error";
+  throw new Error(`모든 AI 모델 호출에 실패했습니다. (마지막 오류: ${detailedError})`);
 }

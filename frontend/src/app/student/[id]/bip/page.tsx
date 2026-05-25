@@ -7,6 +7,7 @@ import styles from "../../../page.module.css";
 import { AuthCheck } from "../../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../../components/GlobalNav";
 import * as XLSX from "xlsx";
+import { runGeminiClient } from "../../../utils";
 
 interface BIPData {
     StudentCode: string;
@@ -216,7 +217,16 @@ export default function BIPEditor() {
                 reinforcer_info: bip.ReinforcerInfo,
                 other_considerations: bip.OtherConsiderations,
             });
-            setAiResult(res.data.analysis || "분석 결과가 없습니다.");
+            let analysisText = res.data.analysis || "분석 결과가 없습니다.";
+            if (analysisText.startsWith('{"client_call":')) {
+                try {
+                    const payload = JSON.parse(analysisText);
+                    analysisText = await runGeminiClient(payload);
+                } catch (clientErr: any) {
+                    analysisText = `⚠️ AI 분석 중 오류가 발생했습니다: ${clientErr.message}`;
+                }
+            }
+            setAiResult(analysisText);
         } catch {
             setAiResult("⚠️ AI BIP 제안 요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
         } finally {
