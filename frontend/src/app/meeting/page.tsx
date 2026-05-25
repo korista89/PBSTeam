@@ -5,7 +5,7 @@ import styles from './page.module.css';
 import axios from 'axios';
 import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../components/GlobalNav";
-import { runGeminiClient } from "../utils";
+
 
 export default function MeetingPage() {
     const { startDate, endDate } = useDateRange();
@@ -31,16 +31,7 @@ export default function MeetingPage() {
                 context_start_date: contextStartDate,
                 context_end_date: contextEndDate
             });
-            let analysisText = res.data.analysis || "";
-            if (analysisText.startsWith('{"client_call":')) {
-                try {
-                    const payload = JSON.parse(analysisText);
-                    analysisText = await runGeminiClient(payload);
-                } catch (clientErr: any) {
-                    analysisText = `⚠️ AI 분석 중 오류가 발생했습니다: ${clientErr.message}`;
-                }
-            }
-            setResult(analysisText);
+            setResult(res.data.analysis || "");
         } catch (e: any) {
             console.error(e);
             alert("회의록 생성 실패: " + (e.response?.data?.detail || e.message));

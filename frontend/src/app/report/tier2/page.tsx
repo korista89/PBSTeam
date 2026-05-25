@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import GlobalNav from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
-import { maskName, runGeminiClient } from "../../utils";
+import { maskName } from "../../utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, ComposedChart, Area, Line, PieChart, Pie, Legend
@@ -445,16 +445,7 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
           achieved: s.achieved,
         }))
       });
-      let analysisText = res.data.analysis || "분석 결과가 없습니다.";
-      if (analysisText.startsWith('{"client_call":')) {
-        try {
-          const payload = JSON.parse(analysisText);
-          analysisText = await runGeminiClient(payload);
-        } catch (clientErr: any) {
-          analysisText = `⚠️ AI 분석 중 오류가 발생했습니다: ${clientErr.message}`;
-        }
-      }
-      setAnalysis(analysisText);
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch {
       setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
     } finally {
