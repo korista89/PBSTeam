@@ -107,13 +107,13 @@ def get_main_worksheet():
         
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        # Changed to explicit "BehaviorLogs1" sheet
+        # Changed to explicit "Log_Main" sheet
         try:
-            return sheet.worksheet("BehaviorLogs1")
+            return sheet.worksheet("Log_Main")
         except gspread.WorksheetNotFound:
-            print("Creating 'BehaviorLogs1' worksheet...")
-            headers = ['타임스탬프', '학생명', '입력교사명', '행동발생날짜', '시간대 (복수)', '행동 발생 장소', '(주요)행동유형', '강도(1~5점 척도)', '기능(이번 행동을 통해 파악된 기능)', '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부', '발생횟수', '특기사항(기타)', '코드번호']
-            ws = sheet.add_worksheet(title="BehaviorLogs1", rows=1000, cols=20)
+            print("Creating 'Log_Main' worksheet...")
+            headers = ['타임스탬프', '학생명', '입력교사명', '행동발생날짜', '시간대 (복수)', '행동 발생 장소', '(주요)행동유형', '강도(1~5점 척도)', '기능(이번 행동을 통해 파악된 기능)', '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부', '발생횟수', '특기사항(기타)', '코드번호', 'Log_ID', 'Status', 'Source', 'Approval_Meta']
+            ws = sheet.add_worksheet(title="Log_Main", rows=1000, cols=20)
             ws.append_row(headers)
             return ws
     except Exception as e:
@@ -216,7 +216,6 @@ def fetch_all_records(force_refresh: bool = False):
                 "강도": row.get("강도(1~5점 척도)", ""),
                 "행동유형": row.get("행동유형(핵심행동으로택1)", ""),
                 "기능": row.get("기능(이번 행동을 통해 파악된 기능)", ""),
-                "배경": "",
                 "결과": "",
                 "학생명": name,
                 "학생코드": code,
@@ -225,13 +224,17 @@ def fetch_all_records(force_refresh: bool = False):
                 "입력일": row.get("타임스탬프", ""),
                 "비고": row.get("특기사항(기타)", ""),
                 "분리지도 여부": row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", ""),
-                "발생빈도": row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", 1)
+                "발생빈도": row.get("발생횟수", 1),
+                "Log_ID": row.get("Log_ID", ""),
+                "Status": row.get("Status", "Approved"),
+                "Source": row.get("Source", "Google Forms"),
+                "Approval_Meta": row.get("Approval_Meta", "")
             }
             mapped_values.append(mapped_row)
             
         if updates_needed:
             try:
-                print(f"Auto-syncing {len(updates_needed)} missing student codes to BehaviorLogs1 (Column M)...")
+                print(f"Auto-syncing {len(updates_needed)} missing student codes to Log_Main (Column M)...")
                 worksheet.batch_update(updates_needed)
             except Exception as e:
                 print(f"Failed to auto-sync student codes: {e}")

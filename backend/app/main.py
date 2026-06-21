@@ -42,8 +42,10 @@ app.include_router(board.router, prefix="/api/v1/board", tags=["board"])
 
 from app.api.endpoints import bip
 from app.api.endpoints import picture_words
+from app.api.endpoints import behavior
 app.include_router(bip.router, prefix="/api/v1/bip", tags=["bip"])
 app.include_router(picture_words.router, prefix="/api/v1/picture-words", tags=["picture-words"])
+app.include_router(behavior.router, prefix="/api/v1/behavior-log", tags=["behavior-log"])
 
 @app.get("/")
 async def root():
