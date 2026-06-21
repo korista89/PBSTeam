@@ -230,6 +230,32 @@ def fetch_all_records(force_refresh: bool = False):
                 "Source": row.get("Source", "Google Forms"),
                 "Approval_Meta": row.get("Approval_Meta", "")
             }
+            
+            crisis_headers = [
+                "발생 시 지도교사", 
+                "1차_개별학생교육지원_시간", "1차_개별학생교육지원_장소", "1차_개별학생교육지원_교사",
+                "2차_개별학생교육지원_시간", "2차_개별학생교육지원_장소", "2차_개별학생교육지원_교사",
+                "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
+                "1차_경위", "2차_경위", "1차_관찰기록", "2차_관찰기록",
+                "부상자_치료_시간", "부상자_치료_내용",
+                "관리자_보고_시간", "관리자_보고_내용",
+                "학부모_알림_시간", "학부모_알림_내용",
+                "학생_상담_시간", "학생_상담_내용",
+                "학부모_상담_시간", "학부모_상담_내용",
+                "긴급회의_시간", "긴급회의_내용"
+            ]
+            
+            crisis_details = {}
+            has_crisis = False
+            for ch in crisis_headers:
+                val = str(row.get(ch, "")).strip()
+                crisis_details[ch] = val
+                if val:
+                    has_crisis = True
+                    
+            if has_crisis:
+                mapped_row["crisis_details"] = crisis_details
+                
             mapped_values.append(mapped_row)
             
         if updates_needed:
