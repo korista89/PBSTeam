@@ -155,14 +155,14 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # Ensure numeric columns are actually numeric using regex extraction
     if '강도' in df.columns:
         df['강도'] = df['강도'].apply(lambda x: extract_numeric(x, 0))
-    if '발생빈도' in df.columns:
-        df['발생빈도'] = df['발생빈도'].apply(lambda x: extract_numeric(x, 1))
+    if '발생횟수' in df.columns:
+        df['발생횟수'] = df['발생횟수'].apply(lambda x: extract_numeric(x, 1))
     else:
-        df['발생빈도'] = 1
+        df['발생횟수'] = 1
 
     # --- Date Filtering ---
-    if '행동발생 날짜' in df.columns:
-        df['date_obj'] = robust_parse_dates(df['행동발생 날짜'])
+    if '행동발생날짜' in df.columns:
+        df['date_obj'] = robust_parse_dates(df['행동발생날짜'])
         
         if start_date:
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
@@ -177,7 +177,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # --- Tier 1: Big 5 Analysis ---
     if not df.empty:
         # Daily trend: count form submissions per date (not frequency sum)
-        date_counts = df.groupby('행동발생 날짜').size().sort_index().to_dict()
+        date_counts = df.groupby('행동발생날짜').size().sort_index().to_dict()
         
         # Weekly Trend: count submissions per week
         weekly_counts = {}
@@ -227,7 +227,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         pass
     
     if '학생코드' in df.columns:
-        # Group by Student Code (4-digit), sum 발생빈도 for accurate PBIS incident count
+        # Group by Student Code (4-digit), sum 발생횟수 for accurate PBIS incident count
         student_groups = df.groupby('학생코드')
         for student_code, group in student_groups:
             freq_count = len(group)  # PBIS: number of submissions (report frequency)
@@ -277,13 +277,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     if '강도' in df.columns:
         high_intensity_df = df[df['강도'] >= 5]
         # Sort by date desc
-        if '행동발생 날짜' in high_intensity_df.columns:
-            # high_intensity_df.sort_values(by='행동발생 날짜', ascending=False, inplace=True)
+        if '행동발생날짜' in high_intensity_df.columns:
+            # high_intensity_df.sort_values(by='행동발생날짜', ascending=False, inplace=True)
             pass
         
         for _, row in high_intensity_df.iterrows():
              safety_alerts.append({
-                 "date": row.get('행동발생 날짜', '-'),
+                 "date": row.get('행동발생날짜', '-'),
                  "student": row.get('학생코드', row.get('학생명', '-')),  # Use 4-digit student code
                  "location": row.get('장소', '-'),
                  "type": row.get('행동유형', '-'),
@@ -487,14 +487,14 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     # Numeric conversion
     if '강도' in student_df.columns:
         student_df['강도'] = student_df['강도'].apply(lambda x: extract_numeric(x, 0))
-    if '발생빈도' in student_df.columns:
-        student_df['발생빈도'] = student_df['발생빈도'].apply(lambda x: extract_numeric(x, 1))
+    if '발생횟수' in student_df.columns:
+        student_df['발생횟수'] = student_df['발생횟수'].apply(lambda x: extract_numeric(x, 1))
     else:
-        student_df['발생빈도'] = 1
+        student_df['발생횟수'] = 1
     
     # Date parsing & filtering
-    if '행동발생 날짜' in student_df.columns:
-        student_df['date_obj'] = robust_parse_dates(student_df['행동발생 날짜'])
+    if '행동발생날짜' in student_df.columns:
+        student_df['date_obj'] = robust_parse_dates(student_df['행동발생날짜'])
         if start_date:
             student_df = student_df[student_df['date_obj'] >= pd.to_datetime(start_date)]
         if end_date:
@@ -506,7 +506,7 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
         return empty_result
 
     # -- Profile Info --
-    total_incidents = int(student_df['발생빈도'].sum())
+    total_incidents = int(student_df['발생횟수'].sum())
     
     # Row count = 보고빈도 for student (not frequency-weighted)
     total_incidents = len(student_df)
@@ -580,8 +580,8 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
 
     # -- Daily CICO Trend --
     cico_trend = []
-    if '행동발생 날짜' in student_df.columns:
-        d_counts = student_df.groupby('행동발생 날짜')['발생빈도'].sum().sort_index()
+    if '행동발생날짜' in student_df.columns:
+        d_counts = student_df.groupby('행동발생날짜')['발생횟수'].sum().sort_index()
         cico_trend = [{"date": k, "count": int(v)} for k, v in d_counts.items()]
 
     # -- Weekly Trend --
@@ -590,14 +590,14 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
         student_df['week'] = student_df['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
         student_df['year'] = student_df['date_obj'].dt.year.fillna(-1).astype(int)
         s_valid = student_df[student_df['year'] > 0]
-        w_counts = s_valid.groupby(['year', 'week'])['발생빈도'].sum().reset_index(name='count')
+        w_counts = s_valid.groupby(['year', 'week'])['발생횟수'].sum().reset_index(name='count')
         for _, row in w_counts.iterrows():
             weekly_trend.append({"week": f"{int(row['year'])}-W{int(row['week']):02d}", "count": int(row['count'])})
 
     # -- Behavior Types --
     behavior_types = []
     if '행동유형' in student_df.columns:
-        b_counts = student_df.groupby('행동유형')['발생빈도'].sum()
+        b_counts = student_df.groupby('행동유형')['발생횟수'].sum()
         behavior_types = [{"name": k, "value": int(v)} for k, v in b_counts.items()]
 
     # -- Location & Time Stats --
@@ -622,7 +622,7 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     }
     if 'date_obj' in student_df.columns:
         student_df['weekday'] = student_df['date_obj'].dt.day_name()
-        wd_counts = student_df.groupby('weekday')['발생빈도'].sum()
+        wd_counts = student_df.groupby('weekday')['발생횟수'].sum()
         weekdays_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         for wd in weekdays_order:
             if wd in wd_counts:
@@ -637,15 +637,15 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
 
     # -- Daily Intensity --
     daily_intensity = []
-    if '행동발생 날짜' in student_df.columns and '강도' in student_df.columns:
-        d_intensity = student_df.groupby('행동발생 날짜')['강도'].mean().sort_index()
+    if '행동발생날짜' in student_df.columns and '강도' in student_df.columns:
+        d_intensity = student_df.groupby('행동발생날짜')['강도'].mean().sort_index()
         daily_intensity = [{"date": k, "intensity": round(float(v), 1)} for k, v in d_intensity.items()]
 
     # -- Separation (분리지도) Stats --
     separation_stats = []
-    if '분리지도 여부' in student_df.columns and 'date_obj' in student_df.columns:
+    if '물리적제지여부' in student_df.columns and 'date_obj' in student_df.columns:
         student_df['sep_month'] = student_df['date_obj'].dt.strftime('%Y-%m')
-        sep_df = student_df[student_df['분리지도 여부'] == 'O']
+        sep_df = student_df[student_df['물리적제지여부'].str.startswith('O', na=False)]
         if not sep_df.empty:
             s_counts = sep_df.groupby('sep_month').size().reset_index(name='count')
             separation_stats = [{"month": row['sep_month'], "count": int(row['count'])} for _, row in s_counts.iterrows()]
@@ -716,8 +716,8 @@ def analyze_meeting_data(target_date: str = None):
     df = pd.DataFrame(raw_data)
     
     # Preprocessing
-    if '행동발생 날짜' in df.columns:
-        df['date_obj'] = robust_parse_dates(df['행동발생 날짜'])
+    if '행동발생날짜' in df.columns:
+        df['date_obj'] = robust_parse_dates(df['행동발생날짜'])
         # Filter for last 4 weeks
         df = df[(df['date_obj'] >= start_dt) & (df['date_obj'] <= end_dt)]
     
