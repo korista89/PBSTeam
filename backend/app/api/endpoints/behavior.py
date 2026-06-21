@@ -46,6 +46,14 @@ async def submit_behavior_log(payload: dict = Body(...)):
         hour12 = now.hour % 12 or 12
         payload["타임스탬프"] = f"{now.year}. {now.month}. {now.day} {ampm} {hour12}:{now.minute:02d}:{now.second:02d}"
         
+        # Match existing Google Forms date format: "2026. 6. 19" (from "2026-06-19")
+        try:
+            if "행동발생날짜" in payload and "-" in payload["행동발생날짜"]:
+                dt = datetime.datetime.strptime(payload["행동발생날짜"], "%Y-%m-%d")
+                payload["행동발생날짜"] = f"{dt.year}. {dt.month}. {dt.day}"
+        except Exception:
+            pass
+        
         for h in headers:
             row_data.append(str(payload.get(h, "")))
             
