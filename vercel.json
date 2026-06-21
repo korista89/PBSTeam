@@ -10,11 +10,7 @@
       "use": "@vercel/python"
     }
   ],
-  "functions": {
-    "backend/app/main.py": {
-      "maxDuration": 60
-    }
-  },
+
   "routes": [
     {
       "src": "/api/(.*)",
