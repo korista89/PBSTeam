@@ -18,7 +18,7 @@ export default function AdminApprovalsPage() {
       const res = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/pending`);
       setLogs(res.data.logs || []);
     } catch (err: any) {
-      setError(err.message || 'Error fetching pending logs');
+      setError(err.response?.data?.detail || err.message || 'Error fetching pending logs');
     } finally {
       setLoading(false);
     }
@@ -94,14 +94,14 @@ export default function AdminApprovalsPage() {
                     <p><strong>입력교사:</strong> {log['입력교사명']}</p>
                   </div>
                   <div>
-                    <p><strong>장소:</strong> {log['행동 발생 장소']}</p>
-                    <p><strong>유형:</strong> {log['행동유형(핵심행동으로택1)']}</p>
-                    <p><strong>강도/빈도:</strong> {log['강도(1~5점 척도)']} / {log['발생횟수(한 에피소드 당 1회로 입력 권장)']}</p>
+                    <p><strong>장소:</strong> {log['장소']}</p>
+                    <p><strong>유형:</strong> {log['행동유형']}</p>
+                    <p><strong>강도/빈도:</strong> {log['강도']} / {log['발생횟수']}</p>
                   </div>
                 </div>
 
                 <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #fca5a5', marginBottom: '15px' }}>
-                  <strong>특기사항: </strong> {log['특기사항(기타)']}
+                  <strong>특기사항: </strong> {log['특기사항']}
                 </div>
 
                 {log.crisis_details && (

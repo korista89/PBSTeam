@@ -35,6 +35,93 @@ const FUNCTIONS = [
 ];
 const FREQUENCIES = ["1회", "2회", "3회", "4회", "5회", "6회", "7회", "8회", "9회", "10회"];
 
+// ── 위기행동 보고서 드롭다운 예시 ──
+const EXAMPLE_ANTECEDENTS = [
+  "직접 입력",
+  "수업에 잘 참여하고 있었음",
+  "쉬는 시간에 또래와 놀고 있었음",
+  "교사의 과제 지시가 있었음",
+  "선호하는 활동이 종료됨",
+  "원하는 물건/간식을 얻지 못함",
+  "갑작스러운 일과 변동이 있었음",
+  "감각적 불편(소음, 밀집 등)이 있었음"
+];
+const EXAMPLE_BEHAVIORS = [
+  "직접 입력",
+  "화장실로 이동 후 변기에 앉지 않고 교사에게 공격 행동 보임",
+  "수업 중 갑자기 자리를 이탈하여 교실 밖으로 나감",
+  "물건(의자, 교구 등)을 집어 던짐",
+  "타인(교사/또래)을 밀치거나 때림",
+  "자해 행동(머리 박기, 팔 물기 등) 보임",
+  "큰 소리로 소리 지르며 교실 내 이동",
+  "교사 지시에 불응하며 바닥에 누움"
+];
+const EXAMPLE_CONSEQUENCES = [
+  "직접 입력",
+  "심리안정실 입실 후 점점 안정을 찾아서 교실로 복귀",
+  "특수교육지도사님과 심리안정실로 이동",
+  "교사가 신체적 제지 후 안정실로 이동",
+  "담임교사가 오셔서 교실로 복귀",
+  "보건실에서 응급 처치 후 안정",
+  "학부모에게 연락 후 조기 귀가"
+];
+const EXAMPLE_OBSERVATIONS = [
+  "직접 입력",
+  "울면서 노래 흥얼거림, 자신의 머리를 때리면서 음음",
+  "벽을 보고 서서 교사 지시에 반응 없음",
+  "따라하기(일어서기, 손하트, 약속하기) 활동 참여",
+  "'신발 신고 교실로 갈까?' 질문에 안정실로 들어가서 앉아버림",
+  "간식 제공 후 점차 안정되어 대화 가능해짐",
+  "10분간 자유 활동 후 교실 복귀 의사 표현"
+];
+const EXAMPLE_PROCESS = [
+  "직접 입력",
+  "수업이 끝나기 전 화장실로 이동한 후 변기에 앉지 않은 상태에서 교사에게 공격 행동을 보여 특수교육지도사님과 교사가 화장실로 달려들어 양손을 붙잡고 심리안정실로 이동",
+  "교실에서 갑자기 자리를 이탈하여 복도로 나감. 교사가 뒤따라가 안전하게 심리안정실로 안내",
+  "급식실에서 음식을 거부하며 식판을 던짐. 주변 학생들 대피 후 교사가 1:1 대응",
+  "쉬는 시간에 또래를 밀쳐 넘어뜨림. 담임교사가 즉시 분리하여 상담실로 이동"
+];
+
+function DropdownTextarea({ name, value, onChange, examples, placeholder, required }: {
+  name: string, value: string, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void,
+  examples: string[], placeholder?: string, required?: boolean
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const handleSelect = (example: string) => {
+    if (example === "직접 입력") {
+      onChange({ target: { name, value: '' } } as any);
+    } else {
+      onChange({ target: { name, value: example } } as any);
+    }
+    setShowDropdown(false);
+  };
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
+        <button type="button" onClick={() => setShowDropdown(!showDropdown)}
+          style={{ padding: '4px 10px', fontSize: '0.8rem', border: '1px solid #94a3b8', borderRadius: '4px', backgroundColor: '#f1f5f9', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          📝 예시 선택 ▾
+        </button>
+      </div>
+      {showDropdown && (
+        <div style={{ position: 'absolute', zIndex: 10, backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxHeight: '200px', overflowY: 'auto', width: '100%' }}>
+          {examples.map((ex, i) => (
+            <div key={i} onClick={() => handleSelect(ex)}
+              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '0.85rem', backgroundColor: ex === "직접 입력" ? '#f0f4ff' : 'white' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#e0e7ff')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = ex === "직접 입력" ? '#f0f4ff' : 'white')}>
+              {ex}
+            </div>
+          ))}
+        </div>
+      )}
+      <textarea name={name} value={value} onChange={onChange} required={required}
+        placeholder={placeholder || "예시를 선택하거나 직접 입력하세요"}
+        style={{ width: '100%', minHeight: '60px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem' }} />
+    </div>
+  );
+}
+
 export default function BehaviorForm({ studentId, studentName, onLogSubmitted }: { studentId: string, studentName: string, onLogSubmitted: () => void }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -95,72 +182,81 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
       const 기능값 = formData.기능 === '기타' ? formData.기능기타 : formData.기능;
       const 발생횟수값 = formData.발생횟수 === '기타' ? formData.발생횟수기타 : formData.발생횟수;
 
-      const payload = {
+      const payload: Record<string, string> = {
         학생코드: studentId,
         학생명: studentName,
         입력교사명: user?.name || user?.id || '알수없음',
         행동발생날짜: formData.행동발생날짜,
         시간대: formData.시간대.join(', '),
         '행동 발생 장소': 장소값,
-        '(주요)행동유형': formData.행동유형,
+        '행동유형(핵심행동으로택1)': formData.행동유형,
         '강도(1~5점 척도)': formData.강도,
         '기능(이번 행동을 통해 파악된 기능)': 기능값,
         '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부': formData.물리적제지여부,
         '발생횟수(한 에피소드 당 1회로 입력 권장)': 발생횟수값,
         '특기사항(기타)': formData.특기사항,
-        
-        ...(isCrisis && {
-          '발생 시 지도교사': crisisData.발생시지도교사,
-          '1차_개별학생교육지원_시간': crisisData.지원1차_시간,
-          '1차_개별학생교육지원_장소': crisisData.지원1차_장소,
-          '1차_개별학생교육지원_교사': crisisData.지원1차_교사,
-          '2차_개별학생교육지원_시간': crisisData.지원2차_시간,
-          '2차_개별학생교육지원_장소': crisisData.지원2차_장소,
-          '2차_개별학생교육지원_교사': crisisData.지원2차_교사,
-          'A_배경_선행사건': crisisData.배경_선행사건,
-          'B_나타난_위기행동': crisisData.나타난_위기행동,
-          'C_후속결과': crisisData.후속결과,
-          '1차_경위': crisisData.경위1차,
-          '2차_경위': crisisData.경위2차,
-          '1차_관찰기록': crisisData.관찰기록1차,
-          '2차_관찰기록': crisisData.관찰기록2차,
-          '부상자_치료_시간': crisisData.부상자_치료_시간,
-          '부상자_치료_내용': crisisData.부상자_치료_내용,
-          '관리자_보고_시간': crisisData.관리자_보고_시간,
-          '관리자_보고_내용': crisisData.관리자_보고_내용,
-          '학부모_알림_시간': crisisData.학부모_알림_시간,
-          '학부모_알림_내용': crisisData.학부모_알림_내용,
-          '학생_상담_시간': crisisData.학생_상담_시간,
-          '학생_상담_내용': crisisData.학생_상담_내용,
-          '학부모_상담_시간': crisisData.학부모_상담_시간,
-          '학부모_상담_내용': crisisData.학부모_상담_내용,
-          '긴급회의_시간': crisisData.긴급회의_시간,
-          '긴급회의_내용': crisisData.긴급회의_내용
-        })
       };
+
+      if (isCrisis) {
+        payload['발생 시 지도교사'] = crisisData.발생시지도교사;
+        payload['1차_개별학생교육지원_시간'] = crisisData.지원1차_시간;
+        payload['1차_개별학생교육지원_장소'] = crisisData.지원1차_장소;
+        payload['1차_개별학생교육지원_교사'] = crisisData.지원1차_교사;
+        payload['2차_개별학생교육지원_시간'] = crisisData.지원2차_시간;
+        payload['2차_개별학생교육지원_장소'] = crisisData.지원2차_장소;
+        payload['2차_개별학생교육지원_교사'] = crisisData.지원2차_교사;
+        payload['A_배경_선행사건'] = crisisData.배경_선행사건;
+        payload['B_나타난_위기행동'] = crisisData.나타난_위기행동;
+        payload['C_후속결과'] = crisisData.후속결과;
+        payload['1차_경위'] = crisisData.경위1차;
+        payload['2차_경위'] = crisisData.경위2차;
+        payload['1차_관찰기록'] = crisisData.관찰기록1차;
+        payload['2차_관찰기록'] = crisisData.관찰기록2차;
+        payload['부상자_치료_시간'] = crisisData.부상자_치료_시간;
+        payload['부상자_치료_내용'] = crisisData.부상자_치료_내용;
+        payload['관리자_보고_시간'] = crisisData.관리자_보고_시간;
+        payload['관리자_보고_내용'] = crisisData.관리자_보고_내용;
+        payload['학부모_알림_시간'] = crisisData.학부모_알림_시간;
+        payload['학부모_알림_내용'] = crisisData.학부모_알림_내용;
+        payload['학생_상담_시간'] = crisisData.학생_상담_시간;
+        payload['학생_상담_내용'] = crisisData.학생_상담_내용;
+        payload['학부모_상담_시간'] = crisisData.학부모_상담_시간;
+        payload['학부모_상담_내용'] = crisisData.학부모_상담_내용;
+        payload['긴급회의_시간'] = crisisData.긴급회의_시간;
+        payload['긴급회의_내용'] = crisisData.긴급회의_내용;
+      }
 
       const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log`, payload);
       
       if (res.data.success) {
-        setMessage(res.data.status === 'Pending' ? '행동기록 및 보고서가 제출되었습니다 (승인 대기중).' : '행동이 기록되었습니다.');
+        setMessage(res.data.status === 'Pending' ? '✅ 행동기록 및 보고서가 제출되었습니다 (관리자 승인 대기중).' : '✅ 행동이 기록되었습니다.');
         setFormData({
           행동발생날짜: new Date().toISOString().split('T')[0], 시간대: [], 장소: '', 장소기타: '',
           행동유형: '', 강도: '', 기능: '', 기능기타: '', 물리적제지여부: 'X(보고서 작성 불필요)',
           발생횟수: '', 발생횟수기타: '', 특기사항: ''
         });
+        setCrisisData({
+          발생시지도교사: '', 지원1차_시간: '', 지원1차_장소: '', 지원1차_교사: '',
+          지원2차_시간: '', 지원2차_장소: '', 지원2차_교사: '',
+          배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
+          경위1차: '', 경위2차: '', 관찰기록1차: '', 관찰기록2차: '',
+          부상자_치료_시간: '', 부상자_치료_내용: '', 관리자_보고_시간: '', 관리자_보고_내용: '',
+          학부모_알림_시간: '', 학부모_알림_내용: '', 학생_상담_시간: '', 학생_상담_내용: '',
+          학부모_상담_시간: '', 학부모_상담_내용: '', 긴급회의_시간: '', 긴급회의_내용: ''
+        });
         onLogSubmitted();
       } else {
-        setMessage('오류 발생: ' + res.data.message);
+        setMessage('❌ 오류 발생: ' + res.data.message);
       }
     } catch (err: any) {
-      setMessage('서버 통신 오류: ' + (err.response?.data?.detail || err.message));
+      setMessage('❌ 서버 통신 오류: ' + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
   };
 
-  const radioStyle = { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '0.9rem' };
-  const groupStyle = { padding: '15px', border: '1px solid #eaeaea', borderRadius: '8px', marginBottom: '15px', backgroundColor: '#fff' };
+  const radioStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '0.9rem' };
+  const groupStyle: React.CSSProperties = { padding: '15px', border: '1px solid #eaeaea', borderRadius: '8px', marginBottom: '15px', backgroundColor: '#fff' };
 
   return (
     <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fcfcfc' }}>
@@ -226,7 +322,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
             </label>
           ))}
           <label style={radioStyle}>
-            <input type="radio" name="기능" value="기타" checked={formData.기능 === '기타'} onChange={handleChange} required />
+            <input type="radio" name="기능" value="기타" checked={formData.기능 === '기타'} onChange={handleChange} />
             기타:
             {formData.기능 === '기타' && (
               <input type="text" name="기능기타" value={formData.기능기타} onChange={handleChange} style={{ marginLeft: '10px', padding: '4px', border: '1px solid #ccc', flex: 1 }} required />
@@ -245,7 +341,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
             ))}
           </div>
           <label style={{ ...radioStyle, marginTop: '8px' }}>
-            <input type="radio" name="발생횟수" value="기타" checked={formData.발생횟수 === '기타'} onChange={handleChange} required />
+            <input type="radio" name="발생횟수" value="기타" checked={formData.발생횟수 === '기타'} onChange={handleChange} />
             기타:
             {formData.발생횟수 === '기타' && (
               <input type="text" name="발생횟수기타" value={formData.발생횟수기타} onChange={handleChange} style={{ marginLeft: '10px', padding: '4px', border: '1px solid #ccc' }} required />
@@ -270,64 +366,69 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
           <textarea name="특기사항" value={formData.특기사항} onChange={handleChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }} />
         </div>
 
-        {/* CRISIS REPORT BRANCHING */}
+        {/* ── CRISIS REPORT BRANCHING ── */}
         {isCrisis && (
           <div style={{ marginTop: '20px', padding: '20px', border: '2px solid #b91c1c', borderRadius: '12px', backgroundColor: '#fff' }}>
-            <h3 style={{ color: '#b91c1c', textAlign: 'center', marginBottom: '20px' }}>위기행동 지원 및 개별학생교육지원 보고서</h3>
-            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '20px' }}>* 관리자(부장, 교감, 교장) 승인이 필요한 문서입니다.</p>
+            <h3 style={{ color: '#b91c1c', textAlign: 'center', marginBottom: '5px' }}>🚨 위기행동 지원 및 개별학생교육지원 보고서</h3>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', marginBottom: '20px' }}>
+              💡 각 항목의 <strong>[📝 예시 선택]</strong> 버튼을 눌러 예시 문장을 선택한 후 편집하세요. 작성 부담이 줄어듭니다!
+            </p>
 
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ fontWeight: 'bold' }}>발생 시 지도교사:</label>
-              <input type="text" name="발생시지도교사" value={crisisData.발생시지도교사} onChange={handleCrisisChange} style={{ marginLeft: '10px', padding: '6px', border: '1px solid #ccc' }} required />
+              <label style={{ fontWeight: 'bold' }}>발생 시 지도교사: *</label>
+              <input type="text" name="발생시지도교사" value={crisisData.발생시지도교사} onChange={handleCrisisChange} style={{ marginLeft: '10px', padding: '6px', border: '1px solid #ccc', borderRadius: '4px' }} required />
             </div>
 
+            {/* 1차/2차 개별학생교육지원 */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '0.9rem' }}>
               <tbody>
                 <tr>
-                  <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', width: '15%' }}>1차 개별학생교육지원</td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>시간: <input type="text" name="지원1차_시간" value={crisisData.지원1차_시간} onChange={handleCrisisChange} style={{width:'80%', marginLeft:'5px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>장소: <input type="text" name="지원1차_장소" value={crisisData.지원1차_장소} onChange={handleCrisisChange} style={{width:'80%', marginLeft:'5px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>교사: <input type="text" name="지원1차_교사" value={crisisData.지원1차_교사} onChange={handleCrisisChange} style={{width:'80%', marginLeft:'5px'}} /></td>
+                  <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', width: '15%', verticalAlign: 'top' }}>1차 개별학생<br/>교육지원</td>
+                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>시간: <input type="text" name="지원1차_시간" value={crisisData.지원1차_시간} onChange={handleCrisisChange} placeholder="예: 12:55~13:23" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
+                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>장소: <input type="text" name="지원1차_장소" value={crisisData.지원1차_장소} onChange={handleCrisisChange} placeholder="예: 심리안정실" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
+                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>교사: <input type="text" name="지원1차_교사" value={crisisData.지원1차_교사} onChange={handleCrisisChange} placeholder="교사명" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
                 </tr>
                 <tr>
                   <td colSpan={3} style={{ border: '1px solid #ccc', padding: '8px' }}>
                     <div style={{fontWeight: 'bold', marginBottom: '5px'}}>1차 지원 경위:</div>
-                    <textarea name="경위1차" value={crisisData.경위1차} onChange={handleCrisisChange} style={{width:'100%', minHeight:'50px'}} />
+                    <DropdownTextarea name="경위1차" value={crisisData.경위1차} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
                     <div style={{fontWeight: 'bold', marginTop: '10px', marginBottom: '5px'}}>1차 관찰기록:</div>
-                    <textarea name="관찰기록1차" value={crisisData.관찰기록1차} onChange={handleCrisisChange} style={{width:'100%', minHeight:'50px'}} />
+                    <DropdownTextarea name="관찰기록1차" value={crisisData.관찰기록1차} onChange={handleCrisisChange} examples={EXAMPLE_OBSERVATIONS} />
                   </td>
                 </tr>
                 <tr>
-                  <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold' }}>2차 개별학생교육지원</td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>시간: <input type="text" name="지원2차_시간" value={crisisData.지원2차_시간} onChange={handleCrisisChange} style={{width:'80%', marginLeft:'5px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>장소: <input type="text" name="지원2차_장소" value={crisisData.지원2차_장소} onChange={handleCrisisChange} style={{width:'80%', marginLeft:'5px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>교사: <input type="text" name="지원2차_교사" value={crisisData.지원2차_교사} onChange={handleCrisisChange} style={{width:'80%', marginLeft:'5px'}} /></td>
+                  <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', verticalAlign: 'top' }}>2차 개별학생<br/>교육지원</td>
+                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>시간: <input type="text" name="지원2차_시간" value={crisisData.지원2차_시간} onChange={handleCrisisChange} placeholder="해당시 입력" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
+                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>장소: <input type="text" name="지원2차_장소" value={crisisData.지원2차_장소} onChange={handleCrisisChange} style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
+                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>교사: <input type="text" name="지원2차_교사" value={crisisData.지원2차_교사} onChange={handleCrisisChange} style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
                 </tr>
                 <tr>
                   <td colSpan={3} style={{ border: '1px solid #ccc', padding: '8px' }}>
                     <div style={{fontWeight: 'bold', marginBottom: '5px'}}>2차 지원 경위 (해당시):</div>
-                    <textarea name="경위2차" value={crisisData.경위2차} onChange={handleCrisisChange} style={{width:'100%', minHeight:'50px'}} />
+                    <DropdownTextarea name="경위2차" value={crisisData.경위2차} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
                     <div style={{fontWeight: 'bold', marginTop: '10px', marginBottom: '5px'}}>2차 관찰기록:</div>
-                    <textarea name="관찰기록2차" value={crisisData.관찰기록2차} onChange={handleCrisisChange} style={{width:'100%', minHeight:'50px'}} />
+                    <DropdownTextarea name="관찰기록2차" value={crisisData.관찰기록2차} onChange={handleCrisisChange} examples={EXAMPLE_OBSERVATIONS} />
                   </td>
                 </tr>
               </tbody>
             </table>
 
+            {/* A-B-C 행동 분석 */}
             <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>행동 분석 (A-B-C)</h4>
             <div style={{ marginBottom: '10px' }}>
               <label style={{ fontWeight: 'bold' }}>A. 배경/선행사건 (요약):</label>
-              <textarea name="배경_선행사건" value={crisisData.배경_선행사건} onChange={handleCrisisChange} style={{ width: '100%', minHeight: '50px', marginTop: '5px' }} />
+              <DropdownTextarea name="배경_선행사건" value={crisisData.배경_선행사건} onChange={handleCrisisChange} examples={EXAMPLE_ANTECEDENTS} />
             </div>
             <div style={{ marginBottom: '10px' }}>
               <label style={{ fontWeight: 'bold' }}>B. 나타난 위기행동 (구체적 서술):</label>
-              <textarea name="나타난_위기행동" value={crisisData.나타난_위기행동} onChange={handleCrisisChange} style={{ width: '100%', minHeight: '50px', marginTop: '5px' }} />
+              <DropdownTextarea name="나타난_위기행동" value={crisisData.나타난_위기행동} onChange={handleCrisisChange} examples={EXAMPLE_BEHAVIORS} />
             </div>
             <div style={{ marginBottom: '20px' }}>
               <label style={{ fontWeight: 'bold' }}>C. 후속결과 (요약):</label>
-              <textarea name="후속결과" value={crisisData.후속결과} onChange={handleCrisisChange} style={{ width: '100%', minHeight: '50px', marginTop: '5px' }} />
+              <DropdownTextarea name="후속결과" value={crisisData.후속결과} onChange={handleCrisisChange} examples={EXAMPLE_CONSEQUENCES} />
             </div>
 
+            {/* 발생 이후 조치사항 */}
             <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>발생 이후 조치사항</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
@@ -338,36 +439,26 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center' }}>부상자 치료</td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="부상자_치료_시간" value={crisisData.부상자_치료_시간} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="부상자_치료_내용" value={crisisData.부상자_치료_내용} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                </tr>
-                <tr>
-                  <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center', color: '#b91c1c' }}>*관리자 보고</td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="관리자_보고_시간" value={crisisData.관리자_보고_시간} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="관리자_보고_내용" value={crisisData.관리자_보고_내용} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                </tr>
-                <tr>
-                  <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center', color: '#b91c1c' }}>*학부모 알림</td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="학부모_알림_시간" value={crisisData.학부모_알림_시간} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="학부모_알림_내용" value={crisisData.학부모_알림_내용} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                </tr>
-                <tr>
-                  <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center' }}>학생 상담</td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="학생_상담_시간" value={crisisData.학생_상담_시간} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="학생_상담_내용" value={crisisData.학생_상담_내용} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                </tr>
-                <tr>
-                  <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center' }}>학부모 상담</td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="학부모_상담_시간" value={crisisData.학부모_상담_시간} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="학부모_상담_내용" value={crisisData.학부모_상담_내용} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                </tr>
-                <tr>
-                  <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center' }}>긴급회의</td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="긴급회의_시간" value={crisisData.긴급회의_시간} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '4px' }}><input type="text" name="긴급회의_내용" value={crisisData.긴급회의_내용} onChange={handleCrisisChange} style={{width:'100%', border:'none'}} /></td>
-                </tr>
+                {[
+                  { label: '부상자 치료', timeKey: '부상자_치료_시간', contentKey: '부상자_치료_내용', required: false },
+                  { label: '*관리자 보고', timeKey: '관리자_보고_시간', contentKey: '관리자_보고_내용', required: true, highlight: true },
+                  { label: '*학부모 알림', timeKey: '학부모_알림_시간', contentKey: '학부모_알림_내용', required: true, highlight: true },
+                  { label: '학생 상담', timeKey: '학생_상담_시간', contentKey: '학생_상담_내용', required: false },
+                  { label: '학부모 상담', timeKey: '학부모_상담_시간', contentKey: '학부모_상담_내용', required: false },
+                  { label: '긴급회의', timeKey: '긴급회의_시간', contentKey: '긴급회의_내용', required: false },
+                ].map(item => (
+                  <tr key={item.label}>
+                    <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center', color: item.highlight ? '#b91c1c' : 'inherit' }}>{item.label}</td>
+                    <td style={{ border: '1px solid #ccc', padding: '4px' }}>
+                      <input type="text" name={item.timeKey} value={(crisisData as any)[item.timeKey]} onChange={handleCrisisChange}
+                        placeholder="날짜/시간" style={{width:'100%', border:'none', padding:'6px'}} />
+                    </td>
+                    <td style={{ border: '1px solid #ccc', padding: '4px' }}>
+                      <input type="text" name={item.contentKey} value={(crisisData as any)[item.contentKey]} onChange={handleCrisisChange}
+                        placeholder="내용 입력" style={{width:'100%', border:'none', padding:'6px'}} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -376,7 +467,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
         <button type="submit" disabled={loading} style={{ padding: '15px', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold', marginTop: '20px' }}>
           {loading ? '기록 제출 중...' : '행동 기록 제출'}
         </button>
-        {message && <div style={{ marginTop: '15px', padding: '10px', borderRadius: '8px', backgroundColor: message.includes('오류') ? '#fee2e2' : '#dcfce7', color: message.includes('오류') ? '#991b1b' : '#166534', textAlign: 'center', fontWeight: 'bold' }}>{message}</div>}
+        {message && <div style={{ marginTop: '15px', padding: '12px', borderRadius: '8px', backgroundColor: message.includes('❌') ? '#fee2e2' : '#dcfce7', color: message.includes('❌') ? '#991b1b' : '#166534', textAlign: 'center', fontWeight: 'bold' }}>{message}</div>}
       </form>
     </div>
   );
