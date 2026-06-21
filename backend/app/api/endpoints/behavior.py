@@ -26,7 +26,13 @@ async def submit_behavior_log(payload: dict = Body(...)):
         status = "Pending" if intensity >= 3 else "Approved"
         source = "Vercel"
         
-        headers = log_main_ws.row_values(1)
+        # Hardcode headers to save 1-2 seconds of API fetching time
+        headers = [
+            "타임스탬프", "학생명", "학생코드", "행동 발생 장소", 
+            "(주요)행동유형", "발생횟수", "특기사항(기타)", "강도(1~5점 척도)",
+            "Log_ID", "Status", "Source", "Approval_Meta"
+        ]
+        
         row_data = []
         
         payload["Log_ID"] = log_id
@@ -48,7 +54,8 @@ async def submit_behavior_log(payload: dict = Body(...)):
                 crisis_ws = sheet.add_worksheet(title="Log_Crisis", rows=1000, cols=10)
                 crisis_ws.append_row(["Log_ID", "개입방법", "신체적개입여부", "부상여부"])
                 
-            crisis_headers = crisis_ws.row_values(1)
+            # Hardcode crisis headers to save another 1-2 seconds
+            crisis_headers = ["Log_ID", "개입방법", "신체적개입여부", "부상여부"]
             crisis_row = []
             for ch in crisis_headers:
                 crisis_row.append(str(payload.get(ch, "")))
