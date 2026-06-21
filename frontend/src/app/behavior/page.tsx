@@ -7,24 +7,32 @@ import BehaviorForm from '../components/BehaviorForm';
 import StudentTimeline from '../components/StudentTimeline';
 import GlobalNav from '../components/GlobalNav';
 import UserHeader from '../components/UserHeader';
+import { useAuth } from '../components/AuthProvider';
 
 export default function BehaviorPage() {
+  const { user, isAdmin } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     // Fetch students to populate dropdown
-    axios.get(`${API_BASE_URL}/api/v1/roster/tier-status`)
+    axios.get(`${API_BASE_URL}/api/v1/tier/status`)
       .then(res => {
-        // Assume API returns list of students or { data: [...] }
-        const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
+        let data = res.data.students || res.data || [];
+        if (!Array.isArray(data)) data = [];
+        
+        // Filter by teacher's class_id if not admin
+        if (!isAdmin() && user?.class_id) {
+            data = data.filter((s: any) => String(s.학생코드).startsWith(String(user.class_id)));
+        }
+
         // Just take unique students
-        const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex(t => (t.학생코드 === v.학생코드)) === i);
+        const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => (t.학생코드 === v.학생코드)) === i);
         setStudents(unique);
       })
       .catch(err => console.error("Failed to load students", err));
-  }, []);
+  }, [user, isAdmin]);
 
   const handleStudentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const code = e.target.value;

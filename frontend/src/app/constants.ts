@@ -26,6 +26,8 @@ export function getApiUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL || "";
 }
 
+export const API_BASE_URL = getApiUrl();
+
 export const CLASS_LIST = [
     // 1. 유치원 (10X -> 유X관리자)
     { code: "101", name: "유치원 1반", id: "유1관리자" },
