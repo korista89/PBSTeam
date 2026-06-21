@@ -7,7 +7,7 @@ import datetime
 
 router = APIRouter()
 
-@router.post("/")
+@router.post("")
 async def submit_behavior_log(payload: dict = Body(...)):
     """
     Submit a new behavior log from Vercel Frontend.
@@ -40,7 +40,11 @@ async def submit_behavior_log(payload: dict = Body(...)):
         payload["Log_ID"] = log_id
         payload["Status"] = status
         payload["Source"] = source
-        payload["타임스탬프"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Match existing Google Forms timestamp format: "2026. 6. 19 오후 6:37:33"
+        now = datetime.datetime.now()
+        ampm = "오후" if now.hour >= 12 else "오전"
+        hour12 = now.hour % 12 or 12
+        payload["타임스탬프"] = f"{now.year}. {now.month}. {now.day} {ampm} {hour12}:{now.minute:02d}:{now.second:02d}"
         
         for h in headers:
             row_data.append(str(payload.get(h, "")))
