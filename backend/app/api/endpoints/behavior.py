@@ -22,15 +22,17 @@ async def submit_behavior_log(payload: dict = Body(...)):
         log_main_ws = sheet.worksheet("Log_Main")
         
         log_id = str(uuid.uuid4())
-        intensity = int(payload.get("강도(1~5점 척도)", payload.get("강도", 1)))
-        status = "Pending" if intensity >= 3 else "Approved"
+        is_crisis = str(payload.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", "")).startswith("O")
+        status = "Pending" if is_crisis else "Approved"
         source = "Vercel"
         
-        # Hardcode headers to save 1-2 seconds of API fetching time
+        # Hardcode headers to match exact Google Form fields
         headers = [
-            "타임스탬프", "학생명", "학생코드", "행동 발생 장소", 
-            "(주요)행동유형", "발생횟수", "특기사항(기타)", "강도(1~5점 척도)",
-            "Log_ID", "Status", "Source", "Approval_Meta"
+            "타임스탬프", "학생명", "입력교사명", "행동발생날짜", "시간대", 
+            "행동 발생 장소", "행동유형(핵심행동으로택1)", "강도(1~5점 척도)",
+            "기능(이번 행동을 통해 파악된 기능)", "물리적제지, 3/4호분리지도,본인/타인상해 발생 여부",
+            "발생횟수(한 에피소드 당 1회로 입력 권장)", "특기사항(기타)",
+            "학생코드", "Log_ID", "Status", "Source", "Approval_Meta"
         ]
         
         row_data = []
@@ -45,17 +47,33 @@ async def submit_behavior_log(payload: dict = Body(...)):
             
         log_main_ws.append_row(row_data)
         
-        # If intensity >= 3, write to Log_Crisis
-        if intensity >= 3:
+        # If crisis report is required, write to Log_Crisis
+        if is_crisis:
             try:
                 crisis_ws = sheet.worksheet("Log_Crisis")
             except Exception:
                 # Create if not exists
-                crisis_ws = sheet.add_worksheet(title="Log_Crisis", rows=1000, cols=10)
-                crisis_ws.append_row(["Log_ID", "개입방법", "신체적개입여부", "부상여부"])
+                crisis_ws = sheet.add_worksheet(title="Log_Crisis", rows=1000, cols=30)
                 
-            # Hardcode crisis headers to save another 1-2 seconds
-            crisis_headers = ["Log_ID", "개입방법", "신체적개입여부", "부상여부"]
+            # Hardcode crisis headers matching the complex report
+            crisis_headers = [
+                "Log_ID", "발생 시 지도교사", 
+                "1차_개별학생교육지원_시간", "1차_개별학생교육지원_장소", "1차_개별학생교육지원_교사",
+                "2차_개별학생교육지원_시간", "2차_개별학생교육지원_장소", "2차_개별학생교육지원_교사",
+                "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
+                "1차_경위", "2차_경위", "1차_관찰기록", "2차_관찰기록",
+                "부상자_치료_시간", "부상자_치료_내용",
+                "관리자_보고_시간", "관리자_보고_내용",
+                "학부모_알림_시간", "학부모_알림_내용",
+                "학생_상담_시간", "학생_상담_내용",
+                "학부모_상담_시간", "학부모_상담_내용",
+                "긴급회의_시간", "긴급회의_내용"
+            ]
+            
+            # Write headers row if the worksheet is brand new and empty
+            if len(crisis_ws.row_values(1)) == 0:
+                crisis_ws.append_row(crisis_headers)
+
             crisis_row = []
             for ch in crisis_headers:
                 crisis_row.append(str(payload.get(ch, "")))

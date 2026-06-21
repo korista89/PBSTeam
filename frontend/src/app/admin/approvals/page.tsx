@@ -25,12 +25,11 @@ export default function AdminApprovalsPage() {
   };
 
   useEffect(() => {
-    // Basic mock: in real app, get from Auth context
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
         const u = JSON.parse(storedUser);
-        setAdminId(u.ID || u.name || 'Admin');
+        setAdminId(u.name || u.id || 'Admin');
       } catch (e) {
         setAdminId('Admin');
       }
@@ -42,7 +41,7 @@ export default function AdminApprovalsPage() {
   }, []);
 
   const handleApprove = async (logId: string) => {
-    if (!confirm('해당 기록을 승인하시겠습니까?')) return;
+    if (!confirm('해당 위기행동 기록 및 보고서를 승인하시겠습니까?')) return;
 
     try {
       const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/approve`, {
@@ -77,9 +76,9 @@ export default function AdminApprovalsPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {logs.map(log => (
-              <div key={log.Log_ID} style={{ border: '2px solid #ff9800', borderRadius: '8px', padding: '20px', backgroundColor: '#fff8e1' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ccc', paddingBottom: '10px', marginBottom: '10px' }}>
-                  <h3 style={{ margin: 0 }}>🚨 위기행동 기록 (강도: {log.강도})</h3>
+              <div key={log.Log_ID} style={{ border: '2px solid #b91c1c', borderRadius: '8px', padding: '20px', backgroundColor: '#fef2f2' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #fca5a5', paddingBottom: '10px', marginBottom: '10px' }}>
+                  <h3 style={{ margin: 0, color: '#b91c1c' }}>🚨 위기행동 지원 보고서 결재</h3>
                   <button 
                     onClick={() => handleApprove(log.Log_ID)}
                     style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -88,29 +87,71 @@ export default function AdminApprovalsPage() {
                   </button>
                 </div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                   <div>
                     <p><strong>학생:</strong> {log['학생명']} ({log['학생코드']})</p>
-                    <p><strong>날짜:</strong> {log['행동발생 날짜']} {log['시간대']}</p>
-                    <p><strong>작성자:</strong> {log['입력자']} (출처: {log['Source']})</p>
+                    <p><strong>날짜/시간:</strong> {log['행동발생날짜']} ({log['시간대']})</p>
+                    <p><strong>입력교사:</strong> {log['입력교사명']}</p>
                   </div>
                   <div>
-                    <p><strong>장소:</strong> {log['장소']}</p>
-                    <p><strong>유형:</strong> {log['행동유형']}</p>
-                    <p><strong>빈도:</strong> {log['발생빈도']}</p>
+                    <p><strong>장소:</strong> {log['행동 발생 장소']}</p>
+                    <p><strong>유형:</strong> {log['행동유형(핵심행동으로택1)']}</p>
+                    <p><strong>강도/빈도:</strong> {log['강도(1~5점 척도)']} / {log['발생횟수(한 에피소드 당 1회로 입력 권장)']}</p>
                   </div>
                 </div>
 
-                <div style={{ marginTop: '10px', backgroundColor: 'white', padding: '10px', borderRadius: '4px' }}>
-                  <strong>상세 설명: </strong> {log['비고']}
+                <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #fca5a5', marginBottom: '15px' }}>
+                  <strong>특기사항: </strong> {log['특기사항(기타)']}
                 </div>
 
                 {log.crisis_details && (
-                  <div style={{ marginTop: '10px', padding: '15px', backgroundColor: '#ffebee', borderRadius: '4px' }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: '#c62828' }}>위기행동 개입 상세</h4>
-                    <p><strong>개입 방법:</strong> {log.crisis_details['개입방법']}</p>
-                    <p><strong>신체적 개입 여부:</strong> {log.crisis_details['신체적개입여부']}</p>
-                    <p><strong>부상 여부 (학생/교사):</strong> {log.crisis_details['부상여부']}</p>
+                  <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '4px', border: '1px solid #ccc' }}>
+                    <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #ccc', paddingBottom: '5px' }}>보고서 상세 내용</h4>
+                    
+                    <p><strong>발생 시 지도교사:</strong> {log.crisis_details['발생 시 지도교사']}</p>
+                    
+                    <h5 style={{ margin: '15px 0 5px 0' }}>행동 분석</h5>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      <li><strong>선행사건:</strong> {log.crisis_details['A_배경_선행사건']}</li>
+                      <li><strong>위기행동:</strong> {log.crisis_details['B_나타난_위기행동']}</li>
+                      <li><strong>후속결과:</strong> {log.crisis_details['C_후속결과']}</li>
+                    </ul>
+
+                    <h5 style={{ margin: '15px 0 5px 0' }}>개별학생교육지원 현황</h5>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', marginBottom: '10px' }}>
+                      <tbody>
+                        <tr>
+                          <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>1차</td>
+                          <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {log.crisis_details['1차_개별학생교육지원_시간']} | 장소: {log.crisis_details['1차_개별학생교육지원_장소']} | 교사: {log.crisis_details['1차_개별학생교육지원_교사']}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
+                            <strong>경위:</strong> {log.crisis_details['1차_경위']}<br/>
+                            <strong>관찰:</strong> {log.crisis_details['1차_관찰기록']}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>2차</td>
+                          <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {log.crisis_details['2차_개별학생교육지원_시간']} | 장소: {log.crisis_details['2차_개별학생교육지원_장소']} | 교사: {log.crisis_details['2차_개별학생교육지원_교사']}</td>
+                        </tr>
+                        <tr>
+                          <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
+                            <strong>경위:</strong> {log.crisis_details['2차_경위']}<br/>
+                            <strong>관찰:</strong> {log.crisis_details['2차_관찰기록']}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <h5 style={{ margin: '15px 0 5px 0' }}>발생 이후 조치사항</h5>
+                    <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
+                      <li><strong>부상자 치료:</strong> {log.crisis_details['부상자_치료_시간']} - {log.crisis_details['부상자_치료_내용']}</li>
+                      <li><strong>관리자 보고:</strong> {log.crisis_details['관리자_보고_시간']} - {log.crisis_details['관리자_보고_내용']}</li>
+                      <li><strong>학부모 알림:</strong> {log.crisis_details['학부모_알림_시간']} - {log.crisis_details['학부모_알림_내용']}</li>
+                      <li><strong>학생 상담:</strong> {log.crisis_details['학생_상담_시간']} - {log.crisis_details['학생_상담_내용']}</li>
+                      <li><strong>학부모 상담:</strong> {log.crisis_details['학부모_상담_시간']} - {log.crisis_details['학부모_상담_내용']}</li>
+                      <li><strong>긴급회의:</strong> {log.crisis_details['긴급회의_시간']} - {log.crisis_details['긴급회의_내용']}</li>
+                    </ul>
                   </div>
                 )}
               </div>
