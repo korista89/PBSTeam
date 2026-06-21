@@ -57,7 +57,7 @@ async def submit_behavior_log(payload: dict = Body(...)):
         for h in headers:
             row_data.append(str(payload.get(h, "")))
             
-        log_main_ws.append_row(row_data)
+        log_main_ws.append_row(row_data, table_range='A1')
         
         # If crisis report is required, write to Log_Crisis
         if is_crisis:
@@ -89,7 +89,7 @@ async def submit_behavior_log(payload: dict = Body(...)):
             crisis_row = []
             for ch in crisis_headers:
                 crisis_row.append(str(payload.get(ch, "")))
-            crisis_ws.append_row(crisis_row)
+            crisis_ws.append_row(crisis_row, table_range='A1')
             
         return {"success": True, "message": "Log submitted", "log_id": log_id, "status": status}
     except Exception as e:
