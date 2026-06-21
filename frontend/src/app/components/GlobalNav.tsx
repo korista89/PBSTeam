@@ -51,6 +51,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
 
     const navItems = [
         { href: "/", label: "📊 대시보드", key: "dashboard" },
+        { href: "/behavior", label: "✍️ 행동기록(신규)", key: "behavior" },
         { href: "/tier-status", label: "📋 Tier현황", key: "tier-status" },
         { href: "/cico", label: "📝 CICO입력", key: "cico" },
         { href: "/report/tier2", label: "📈 CICO리포트", key: "report-tier2" },
@@ -61,6 +62,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     ];
 
     if (isAdmin()) {
+        navItems.push({ href: "/admin/approvals", label: "✅ 결재함", key: "approvals" });
         navItems.push({ href: "/admin", label: "⚙️ 관리", key: "admin" });
     }
 
