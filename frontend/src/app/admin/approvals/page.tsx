@@ -59,6 +59,27 @@ export default function AdminApprovalsPage() {
     }
   };
 
+  const handleRevise = async (logId: string) => {
+    const memo = prompt('재작성 요청 사유(메모)를 입력해주세요:');
+    if (memo === null) return; // User cancelled
+
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/revise`, {
+        log_id: logId,
+        admin_id: adminId,
+        memo: memo
+      });
+      if (res.data.success) {
+        alert('재작성 요청이 처리되었습니다.');
+        fetchPendingLogs();
+      } else {
+        alert('요청 실패: ' + res.data.message);
+      }
+    } catch (err: any) {
+      alert('오류 발생: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
   return (
     <div>
       <GlobalNav />
@@ -79,12 +100,20 @@ export default function AdminApprovalsPage() {
               <div key={log.Log_ID} style={{ border: '2px solid #b91c1c', borderRadius: '8px', padding: '20px', backgroundColor: '#fef2f2' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #fca5a5', paddingBottom: '10px', marginBottom: '10px' }}>
                   <h3 style={{ margin: 0, color: '#b91c1c' }}>🚨 위기행동 지원 보고서 결재</h3>
-                  <button 
-                    onClick={() => handleApprove(log.Log_ID)}
-                    style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    승인 (Approve)
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      onClick={() => handleRevise(log.Log_ID)}
+                      style={{ backgroundColor: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                      재작성 요청 (Revise)
+                    </button>
+                    <button 
+                      onClick={() => handleApprove(log.Log_ID)}
+                      style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                      승인 (Approve)
+                    </button>
+                  </div>
                 </div>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>

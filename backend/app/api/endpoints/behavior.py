@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Body
 from typing import Optional, List, Dict, Any
-from app.services.sheets import fetch_all_records, get_sheets_client
+from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records
 from app.core.config import settings
 import uuid
 import datetime
@@ -148,6 +148,58 @@ async def approve_behavior_log(payload: dict = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/revise")
+async def revise_behavior_log(payload: dict = Body(...)):
+    """
+    Request revision for a pending behavior log.
+    Requires Admin ID and an optional memo.
+    """
+    log_id = payload.get("log_id")
+    admin_id = payload.get("admin_id")
+    memo = payload.get("memo", "")
+    
+    if not log_id or not admin_id:
+        raise HTTPException(status_code=400, detail="log_id and admin_id required")
+        
+    client = get_sheets_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
+        
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        log_main_ws = sheet.worksheet("Log_Main")
+        
+        all_vals = log_main_ws.get_all_values()
+        if len(all_vals) < 2:
+            raise HTTPException(status_code=404, detail="No logs found")
+            
+        headers = all_vals[0]
+        try:
+            log_id_idx = headers.index("Log_ID")
+            status_idx = headers.index("Status")
+            approval_idx = headers.index("Approval_Meta")
+        except ValueError:
+            raise HTTPException(status_code=500, detail="Schema error: Missing Log_ID or Status columns")
+            
+        for i, row in enumerate(all_vals[1:]):
+            row_log_id = row[log_id_idx] if log_id_idx < len(row) else ""
+            if row_log_id == log_id:
+                row_status = row[status_idx] if status_idx < len(row) else ""
+                if row_status == "Approved":
+                    return {"success": False, "message": "Already approved"}
+                
+                meta = f"Revision requested by {admin_id} on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Memo: {memo}"
+                
+                log_main_ws.update_cell(i + 2, status_idx + 1, "Revision Requested")
+                log_main_ws.update_cell(i + 2, approval_idx + 1, meta)
+                
+                return {"success": True, "message": "Revision requested"}
+                
+        raise HTTPException(status_code=404, detail="Log ID not found")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/timeline/{student_id}")
 async def get_student_timeline(student_id: str):
     """
@@ -165,7 +217,7 @@ async def get_student_timeline(student_id: str):
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         crisis_ws = sheet.worksheet("Log_Crisis")
-        crisis_vals = crisis_ws.get_all_records()
+        crisis_vals = safe_get_all_records(crisis_ws)
         
         crisis_dict = {str(c.get("Log_ID")): c for c in crisis_vals if c.get("Log_ID")}
         
@@ -191,7 +243,7 @@ async def get_pending_logs():
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         crisis_ws = sheet.worksheet("Log_Crisis")
-        crisis_vals = crisis_ws.get_all_records()
+        crisis_vals = safe_get_all_records(crisis_ws)
         
         crisis_dict = {str(c.get("Log_ID")): c for c in crisis_vals if c.get("Log_ID")}
         
