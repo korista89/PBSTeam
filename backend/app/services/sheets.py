@@ -227,9 +227,9 @@ def fetch_all_records(force_refresh: bool = False):
                 for idx, row in enumerate(ws_records):
                     name = str(row.get("학생명", row.get("이름", row.get("학생", "")))).strip()
                     code = str(row.get("학생코드", row.get("코드번호", row.get("코드", "")))).strip()
-                    date_val = str(row.get("행동발생날짜", row.get("행동발생 날짜", row.get("날짜", "")))).strip()
+                    date_val = str(row.get("발생날짜", row.get("행동발생날짜", row.get("행동발생 날짜", row.get("날짜", ""))))).strip()
                     time_val = str(row.get("시간대", row.get("시간대 (복수)", row.get("시간대(복수)", "")))).strip()
-                    behavior_type = str(row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("행동유형", row.get("주요행동유형", ""))))).strip()
+                    behavior_type = str(row.get("행동유형", row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("주요행동유형", ""))))).strip()
                     ts_val = str(row.get("타임스탬프", row.get("Timestamp", row.get("입력일", "")))).strip()
                     log_id = str(row.get("Log_ID", "")).strip()
 
@@ -259,9 +259,9 @@ def fetch_all_records(force_refresh: bool = False):
                         "행동발생날짜": normalize_date_string(date_val),
                         "시간대": time_val,
                         "장소": str(row.get("행동 발생 장소", row.get("행동발생장소", row.get("장소", "")))).strip(),
-                        "강도": str(row.get("강도(1~5점 척도)", row.get("강도", ""))).strip(),
+                        "강도": str(row.get("강도(1~5)", row.get("강도(1~5점 척도)", row.get("강도", "")))).strip(),
                         "행동유형": behavior_type,
-                        "기능": str(row.get("기능(이번 행동을 통해 파악된 기능)", row.get("추정기능(이번 행동을 통해 파악된 기능)", row.get("기능", row.get("추정기능", ""))))).strip(),
+                        "기능": str(row.get("추정기능(이번 행동을 통해 파악된 기능)", row.get("기능(이번 행동을 통해 파악된 기능)", row.get("기능", row.get("추정기능", ""))))).strip(),
                         "결과": str(row.get("결과", row.get("C_후속결과", ""))).strip(),
                         "학생명": name,
                         "학생코드": code,
