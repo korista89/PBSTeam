@@ -90,6 +90,30 @@ async def ai_meeting_minutes(req: MeetingMinutesRequest):
 async def get_dashboard_summary(start_date: str = None, end_date: str = None, class_id: str = None):
     return get_analytics_data(start_date, end_date, class_id)
 
+@router.get("/debug-sheets")
+async def debug_sheets():
+    from app.services.sheets import get_sheets_client, safe_get_all_records, settings
+    client = get_sheets_client()
+    if not client:
+        return {"error": "No sheets client"}
+    sheet = client.open_by_url(settings.SHEET_URL)
+    worksheets_info = []
+    for ws in sheet.worksheets():
+        try:
+            records = safe_get_all_records(ws)
+            sample_keys = list(records[0].keys()) if records else []
+            worksheets_info.append({
+                "title": ws.title,
+                "row_count": len(records),
+                "columns": sample_keys[:10]
+            })
+        except Exception as e:
+            worksheets_info.append({
+                "title": ws.title,
+                "error": str(e)
+            })
+    return {"sheets": worksheets_info}
+
 @router.get("/meeting")
 async def get_meeting_analysis(target_date: str = None):
     from app.services.analysis import analyze_meeting_data
