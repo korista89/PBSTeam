@@ -90,7 +90,7 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -
             
     return None
 
-def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
+def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Fallback Gemini API call wrapper."""
     if not GEMINI_API_KEY:
         return "⚠️ AI 응답 생성에 실패했습니다. 로컬 AI(Ollama) 실행 상태 또는 GEMINI_API_KEY 설정을 확인해주세요."
@@ -115,7 +115,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) ->
         }
         
         try:
-            response = requests.post("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", headers=headers, json=payload, timeout=30)
+            response = requests.post("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", headers=headers, json=payload, timeout=60)
             response.raise_for_status()
             data = response.json()
             if "choices" in data and len(data["choices"]) > 0:
@@ -130,7 +130,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) ->
             
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
-def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -> str:
+def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Primary LLM dispatcher: tries Local Ollama first, falls back to Gemini API."""
     # 1. Try Local Ollama first (100% Free & Secure)
     ollama_result = _call_ollama(system_prompt, user_prompt, max_tokens)
@@ -161,7 +161,7 @@ BCBA로서 위 데이터를 바탕으로 '학교 행동중재지원팀(SST) 주�
 
 *분량: 400~600자 내외 핵심 요약*"""
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 600)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 def generate_meeting_agent_report(
@@ -353,7 +353,7 @@ BCBA로서 학급 및 학교 전체 보고서의 해당 섹션에 대한 임상�
 
 *정교한 한국어로 400~600자 분량으로 작성하세요.*"""
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 600)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 def generate_bcba_cico_analysis(students_data: list, behavior_logs: list = None, tier_info: list = None) -> str:
@@ -384,7 +384,7 @@ BCBA로서 이번 달 CICO 성과를 분석하고 Tier 조정 및 중재 수정�
    - 3개월 연속 미달성 시: 중재 강화(Intensification) 또는 FBA 실시 후 Tier 3 상향
 4. **결론**: 담당 교사들을 위한 CICO 운영 팁을 간략히 포함하세요."""
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1200)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
 
 
 def generate_bcba_meeting_minutes(
@@ -445,7 +445,7 @@ BCBA이자 학교행동중재지원팀(SST) 전문가로서 학교장 보고용 
 
 *형식: 공문서 스타일로 개조식 구성 (수치를 적극 활용하여 1500자 내외로 상세히 작성)*"""
 
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 6000)
 
 
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
@@ -469,7 +469,7 @@ BCBA로서 이번 달 Tier 3 학생들의 행동 양상을 정밀 분석하고 �
 
 *전문가적인 식견이 담긴 한국어로 상세히 작성하세요(1000자 내외).*"""
 
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1500)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
 
 
 def generate_bcba_student_analysis(
@@ -514,7 +514,7 @@ BCBA 전문가로서 이 학생의 중재 전략 수립을 위한 심층 분석�
 
 *정교한 한국어로 가독성 있게 작성하세요(800~1000자).*"""
 
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1500)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
 
 
 def generate_bip_hypothesis(
@@ -551,7 +551,7 @@ BCBA로서 위 데이터를 종합적으로 분석하여 BIP(행동중재계획)
 예: "주 5회 → 주 2회 이하로 감소" 또는 "착석 시간 3분 → 10분으로 증가"
 """
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 800)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 def generate_bip_strategies(
@@ -596,7 +596,7 @@ BCBA로서 위 표적행동, 가설, 목표에 맞추어 구체적인 중재 전
 
 각 영역당 2~3가지 구체적 전략을 제안하세요. 특수학교 현장에서 실제 적용 가능한 수준으로 작성하세요."""
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1200)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
 
 
 SCHOOL_CRISIS_PROTOCOL = """[학교 차원 위기행동 지원 프로토콜 (기본 베이스)]
@@ -725,7 +725,7 @@ BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 
 
 **[8. 평가 계획(Tier3 졸업 기준 포함)]**"""
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 2500)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 6000)
 
 
 # ============================================================
@@ -890,4 +890,4 @@ def generate_bcba_comprehensive_analysis(
 
 *분량: 1500자 내외로 상세하고 전문적으로 작성*"""
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 6000)
