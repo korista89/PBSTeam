@@ -91,43 +91,96 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -
     return None
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
-    """Fallback Gemini API call wrapper."""
-    if not GEMINI_API_KEY:
+    """Fallback Gemini & Cloud API call wrapper with multiple model fallbacks."""
+    api_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GROQ_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
+    if not api_key:
         return "⚠️ AI 응답 생성에 실패했습니다. 로컬 AI(Ollama) 실행 상태 또는 GEMINI_API_KEY 설정을 확인해주세요."
     
-    headers = {
-        "Authorization": f"Bearer {GEMINI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"]
     last_error = ""
     
-    for model in models:
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "max_tokens": max_tokens,
-            "temperature": 0.7
-        }
-        
-        try:
-            response = requests.post("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", headers=headers, json=payload, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-            if "choices" in data and len(data["choices"]) > 0:
-                return data["choices"][0]["message"]["content"].strip()
-        except Exception as e:
-            err_msg = str(e)
-            if hasattr(e, 'response') and e.response is not None:
-                err_msg = e.response.text
-            last_error = err_msg
-            print(f"Gemini API Error with model {model}: {err_msg}")
-            continue
-            
+    # 1. Try Google Gemini Native API (No truncation, full output tokens)
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    if gemini_key:
+        gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        for g_model in gemini_models:
+            try:
+                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
+                g_payload = {
+                    "contents": [
+                        {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.7,
+                        "maxOutputTokens": max_tokens
+                    }
+                }
+                resp = requests.post(g_url, json=g_payload, timeout=60)
+                if resp.status_code == 200:
+                    g_data = resp.json()
+                    candidates = g_data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        text = "".join([p.get("text", "") for p in parts]).strip()
+                        if text:
+                            return text
+            except Exception as e:
+                last_error = str(e)
+                continue
+                
+    # 2. Try Groq API (Ultra-fast Llama-3.3 70B if GROQ_API_KEY is configured)
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if groq_key:
+        groq_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        for g_model in groq_models:
+            try:
+                resp = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": g_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "max_tokens": max_tokens,
+                        "temperature": 0.7
+                    },
+                    timeout=45
+                )
+                if resp.status_code == 200:
+                    content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                    if content:
+                        return content
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+    # 3. Try Gemini OpenAI-compatible endpoint
+    if gemini_key:
+        for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+            try:
+                resp = requests.post(
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    headers={"Authorization": f"Bearer {gemini_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "max_tokens": max_tokens,
+                        "temperature": 0.7
+                    },
+                    timeout=60
+                )
+                if resp.status_code == 200:
+                    content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                    if content:
+                        return content
+            except Exception as e:
+                last_error = str(e)
+                continue
+                
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
