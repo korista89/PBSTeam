@@ -20,10 +20,80 @@ BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격�
 3. 근거: 반드시 제공된 수치와 데이터를 근거로 분석을 수행합니다.
 4. 구조: 가독성을 위해 Markdown 서식(볼드, 목록, 필요시 테이블)을 적극적으로 활용합니다."""
 
+import re
+
+def _clean_llm_output(text: str) -> str:
+    """Clean LLM output by removing think tags and trimming whitespace."""
+    if not text:
+        return ""
+    # Strip <think>...</think> if present in reasoning models
+    text = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE).strip()
+    return text
+
+def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -> Optional[str]:
+    """Call Local Ollama LLM endpoint (100% Private, Zero API cost)."""
+    base_url = os.getenv("LOCAL_LLM_URL", "http://localhost:11434").rstrip("/")
+    configured_model = os.getenv("LOCAL_LLM_MODEL", "").strip()
+    
+    # Priority list of model names to try on Ollama
+    candidate_models = [
+        configured_model,
+        "qwen3.5-custom:latest",
+        "qwen3.5-custom",
+        "qwen3.5-9b:latest",
+        "parkpro-local-fast:latest",
+        "parkpro-local:latest",
+        "qwen2.5:32b",
+        "gemma4:26b"
+    ]
+    candidate_models = [m for m in candidate_models if m]
+    
+    # First query Ollama for actually installed models
+    try:
+        tags_resp = requests.get(f"{base_url}/api/tags", timeout=3)
+        if tags_resp.status_code == 200:
+            installed = [m.get("name") for m in tags_resp.json().get("models", [])]
+            ordered_models = [m for m in candidate_models if m in installed]
+            for inst in installed:
+                if inst not in ordered_models:
+                    ordered_models.append(inst)
+            candidate_models = ordered_models
+    except Exception:
+        # Local Ollama is unreachable, return None to fallback
+        return None
+        
+    for model in candidate_models:
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,
+                    "num_predict": max_tokens
+                }
+            }
+            resp = requests.post(f"{base_url}/api/chat", json=payload, timeout=120)
+            if resp.status_code == 200:
+                res_data = resp.json()
+                msg = res_data.get("message", {}).get("content", "").strip()
+                cleaned = _clean_llm_output(msg)
+                if cleaned:
+                    print(f"✅ Local AI ({model}) generated response ({len(cleaned)} chars)")
+                    return cleaned
+        except Exception as e:
+            print(f"Local AI call with {model} failed: {e}")
+            continue
+            
+    return None
+
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
-    """Shared Gemini API call wrapper with automatic fallback (kept the name _call_gemini for compatibility)."""
+    """Fallback Gemini API call wrapper."""
     if not GEMINI_API_KEY:
-        return "⚠️ Gemini API Key가 설정되지 않았습니다. Vercel 환경변수에 GEMINI_API_KEY를 추가해주세요."
+        return "⚠️ AI 응답 생성에 실패했습니다. 로컬 AI(Ollama) 실행 상태 또는 GEMINI_API_KEY 설정을 확인해주세요."
     
     headers = {
         "Authorization": f"Bearer {GEMINI_API_KEY}",
@@ -55,10 +125,20 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 800) ->
             if hasattr(e, 'response') and e.response is not None:
                 err_msg = e.response.text
             last_error = err_msg
-            print(f"Groq API Error with model {model}: {err_msg}")
+            print(f"Gemini API Error with model {model}: {err_msg}")
             continue
             
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
+
+def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -> str:
+    """Primary LLM dispatcher: tries Local Ollama first, falls back to Gemini API."""
+    # 1. Try Local Ollama first (100% Free & Secure)
+    ollama_result = _call_ollama(system_prompt, user_prompt, max_tokens)
+    if ollama_result:
+        return ollama_result
+        
+    # 2. Fallback to Gemini if Ollama is unreachable
+    return _call_gemini(system_prompt, user_prompt, max_tokens)
 
 
 def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
@@ -81,7 +161,7 @@ BCBA로서 위 데이터를 바탕으로 '학교 행동중재지원팀(SST) 주�
 
 *분량: 400~600자 내외 핵심 요약*"""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 600)
 
 
 def generate_meeting_agent_report(
@@ -273,7 +353,7 @@ BCBA로서 학급 및 학교 전체 보고서의 해당 섹션에 대한 임상�
 
 *정교한 한국어로 400~600자 분량으로 작성하세요.*"""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 600)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 600)
 
 
 def generate_bcba_cico_analysis(students_data: list, behavior_logs: list = None, tier_info: list = None) -> str:
@@ -304,7 +384,7 @@ BCBA로서 이번 달 CICO 성과를 분석하고 Tier 조정 및 중재 수정�
    - 3개월 연속 미달성 시: 중재 강화(Intensification) 또는 FBA 실시 후 Tier 3 상향
 4. **결론**: 담당 교사들을 위한 CICO 운영 팁을 간략히 포함하세요."""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 def generate_bcba_meeting_minutes(
@@ -365,7 +445,7 @@ BCBA이자 학교행동중재지원팀(SST) 전문가로서 학교장 보고용 
 
 *형식: 공문서 스타일로 개조식 구성 (수치를 적극 활용하여 1500자 내외로 상세히 작성)*"""
 
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 3000)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
@@ -389,7 +469,7 @@ BCBA로서 이번 달 Tier 3 학생들의 행동 양상을 정밀 분석하고 �
 
 *전문가적인 식견이 담긴 한국어로 상세히 작성하세요(1000자 내외).*"""
 
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1500)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1500)
 
 
 def generate_bcba_student_analysis(
@@ -407,7 +487,9 @@ def generate_bcba_student_analysis(
         notes_lines = []
         for n in all_notes[:10]:
             notes_lines.append(f"- [{n.get('date', '')}] {n.get('content', '')[:150]}")
-        notes_text = "\n[교사/상담 기록 서술형 정보]\n" + "\n".join(notes_lines)
+    cico_text = ""
+    if cico_data:
+        cico_text = "[CICO 수행 데이터 (수행률 및 달성여부)]\n" + _format_cico_for_ai(cico_data[:5]) + "\n"
     
     prompt = f"""[학생 정밀 데이터]
 - 학생: {student_info.get('code', '')} (Tier {student_info.get('tier', '')})
@@ -416,7 +498,7 @@ def generate_bcba_student_analysis(
 [행동 데이터 패턴 요약]
 {log_summary}
 
-{f"[CICO 수행 데이터 (수행률 및 달성여부)]\n{_format_cico_for_ai(cico_data[:5])}" if cico_data else ""}
+{cico_text}
 {notes_text}
 
 [지시사항]
@@ -432,7 +514,7 @@ BCBA 전문가로서 이 학생의 중재 전략 수립을 위한 심층 분석�
 
 *정교한 한국어로 가독성 있게 작성하세요(800~1000자).*"""
 
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1500)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1500)
 
 
 def generate_bip_hypothesis(
@@ -469,7 +551,7 @@ BCBA로서 위 데이터를 종합적으로 분석하여 BIP(행동중재계획)
 예: "주 5회 → 주 2회 이하로 감소" 또는 "착석 시간 3분 → 10분으로 증가"
 """
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 800)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 800)
 
 
 def generate_bip_strategies(
@@ -514,7 +596,7 @@ BCBA로서 위 표적행동, 가설, 목표에 맞추어 구체적인 중재 전
 
 각 영역당 2~3가지 구체적 전략을 제안하세요. 특수학교 현장에서 실제 적용 가능한 수준으로 작성하세요."""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 1200)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 SCHOOL_CRISIS_PROTOCOL = """[학교 차원 위기행동 지원 프로토콜 (기본 베이스)]
@@ -643,7 +725,7 @@ BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 
 
 **[8. 평가 계획(Tier3 졸업 기준 포함)]**"""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 2500)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 2500)
 
 
 # ============================================================
@@ -808,4 +890,4 @@ def generate_bcba_comprehensive_analysis(
 
 *분량: 1500자 내외로 상세하고 전문적으로 작성*"""
     
-    return _call_gemini(BCBA_SYSTEM_PROMPT, prompt, 3000)
+    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)

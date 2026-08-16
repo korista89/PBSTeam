@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     DAILY_LOG_SHEET: str = "평가문장"
     GEMINI_API_KEY: str = ""
     GAS_WEB_APP_URL: str = ""
+    LOCAL_LLM_URL: str = "http://localhost:11434"
+    LOCAL_LLM_MODEL: str = "qwen3.5-custom:latest"
     
     class Config:
         env_file = ".env"
