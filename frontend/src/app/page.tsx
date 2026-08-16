@@ -5,10 +5,9 @@ import axios from "axios";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
   PieChart, Pie, Cell, Legend, ResponsiveContainer,
-  LineChart, Line, Tooltip, ScatterChart, Scatter, ZAxis,
-  AreaChart, Area, ComposedChart
+  LineChart, Line, Tooltip
 } from "recharts";
-import { DashboardData, RiskStudent, SafetyAlert } from "./types";
+import { DashboardData } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
 import GlobalNav, { useDateRange } from "./components/GlobalNav";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
@@ -352,7 +351,6 @@ export default function Home() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const { user, isAdmin } = useAuth();
   const { startDate, endDate } = useDateRange();
-  const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
   const lastParamsRef = React.useRef("");
 
   useEffect(() => {
@@ -394,11 +392,8 @@ export default function Home() {
   const summary = data?.summary || { total_incidents: 0, avg_intensity: 0, risk_student_count: 0, enrolled_count: 0 };
   const big5 = data?.big5 || { locations: [], behaviors: [], times: [], weekdays: [] };
   const riskList = data?.risk_list || [];
-  const safetyAlerts = data?.safety_alerts || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
-  const monthlyTrend: any[] = (data as any)?.monthly_trend || [];
   const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
-  const tierTotal = tierDist.reduce((s: number, t: any) => s + t.value, 0);
 
   return (
     <AuthCheck>

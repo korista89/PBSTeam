@@ -98,24 +98,23 @@ def get_sheets_client():
 
 def get_main_worksheet():
     client = get_sheets_client()
-    if not client:
-        return None
-    
-    if not settings.SHEET_URL:
-        # Fallback or error
+    if not client or not settings.SHEET_URL:
         return None
         
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        # Changed to explicit "Log_Main" sheet
-        try:
-            return sheet.worksheet("Log_Main")
-        except gspread.WorksheetNotFound:
-            print("Creating 'Log_Main' worksheet...")
-            headers = ['타임스탬프', '학생명', '입력교사명', '행동발생날짜', '시간대', '행동 발생 장소', '행동유형(핵심행동으로택1)', '강도(1~5점 척도)', '기능(이번 행동을 통해 파악된 기능)', '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부', '발생횟수(한 에피소드 당 1회로 입력 권장)', '특기사항(기타)', '학생코드', 'Log_ID', 'Status', 'Source', 'Approval_Meta']
-            ws = sheet.add_worksheet(title="Log_Main", rows=1000, cols=20)
-            ws.append_row(headers)
-            return ws
+        primary_names = ["Log_Main", "BehaviorLogs1", "BehaviorLogs", "설문지 응답 시트1", "설문지 응답 1", "Form Responses 1", "시트1"]
+        existing_ws = {ws.title: ws for ws in sheet.worksheets()}
+        
+        for name in primary_names:
+            if name in existing_ws:
+                return existing_ws[name]
+                
+        print("Creating 'Log_Main' worksheet...")
+        headers = ['타임스탬프', '학생명', '입력교사명', '행동발생날짜', '시간대', '행동 발생 장소', '행동유형(핵심행동으로택1)', '강도(1~5점 척도)', '기능(이번 행동을 통해 파악된 기능)', '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부', '발생횟수(한 에피소드 당 1회로 입력 권장)', '특기사항(기타)', '학생코드', 'Log_ID', 'Status', 'Source', 'Approval_Meta']
+        ws = sheet.add_worksheet(title="Log_Main", rows=1000, cols=20)
+        ws.append_row(headers)
+        return ws
     except Exception as e:
         print(f"Error connecting to sheet: {e}")
         return None
@@ -147,7 +146,6 @@ def clear_cache(key: Optional[str] = None):
         for k in _cache:
             _cache[k] = {"data": [], "timestamp": 0.0}
             
-    # Also explicitly support 'tierstatus' since it was added later
     if key == "tierstatus" and "tierstatus" not in _cache:
         _cache["tierstatus"] = {"data": [], "timestamp": 0}
         
@@ -178,98 +176,142 @@ def fetch_all_records(force_refresh: bool = False):
     if not force_refresh and _cache["records"]["data"] and isinstance(cached_ts, (int, float)) and (now - cached_ts < CACHE_TTL):
         return _cache["records"]["data"]
 
-    worksheet = get_main_worksheet()
-    if not worksheet:
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
         return []
     
     try:
-        raw_values = safe_get_all_records(worksheet)
+        sheet = client.open_by_url(settings.SHEET_URL)
+        all_worksheets = sheet.worksheets()
+        
+        exclude_titles = {
+            "Users", "TierStatus", "CICODaily", "PW_기록", "PW_수업가이드", "PW_협의록",
+            "StudentCodes", "평가문장", "Board", "MeetingNotes", "대시보드", "Dashboard"
+        }
+        
+        candidate_names = ["Log_Main", "BehaviorLogs1", "BehaviorLogs", "설문지 응답 시트1", "설문지 응답 1", "Form Responses 1", "시트1"]
+        
+        ws_by_title = {ws.title: ws for ws in all_worksheets}
+        target_worksheets = []
+        
+        for name in candidate_names:
+            if name in ws_by_title and ws_by_title[name] not in target_worksheets:
+                target_worksheets.append(ws_by_title[name])
+                
+        if not target_worksheets:
+            for ws in all_worksheets:
+                if ws.title not in exclude_titles:
+                    target_worksheets.append(ws)
 
-        mapped_values = []
-        updates_needed = []
+        seen_keys = set()
         beable_map_cache = None
+        mapped_values = []
 
-        for idx, row in enumerate(raw_values):
-            code = str(row.get("학생코드", "")).strip()
-            name = str(row.get("학생명", "")).strip()
-            
-            # Auto-populate Column M for Google Forms entries
-            if not code and name:
-                if beable_map_cache is None:
-                    beable_map_cache = get_beable_code_mapping()
-                
-                # Try to resolve code from mapping
-                clean_name = name.replace(" ", "")
-                for k, v in (beable_map_cache or {}).items():
-                    if isinstance(v, dict) and str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
-                        code = v.get('student_code', k) # Ensure 4-digit student code from TierStatus
-                        updates_needed.append({
-                            'range': f'M{idx + 2}', # idx 0 is Row 2 in sheets due to header
-                            'values': [[code]]
-                        })
-                        break
-            
-            mapped_row = {
-                "행동발생날짜": normalize_date_string(row.get("행동발생날짜", "")),
-                "시간대": row.get("시간대", row.get("시간대 (복수)", "")),
-                "장소": row.get("행동 발생 장소", ""),
-                "강도": row.get("강도(1~5점 척도)", ""),
-                "행동유형": row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", "")),
-                "기능": row.get("기능(이번 행동을 통해 파악된 기능)", ""),
-                "결과": "",
-                "학생명": name,
-                "학생코드": code,
-                "코드번호": row.get("코드번호", ""),
-                "입력교사명": row.get("입력교사명", ""),
-                "타임스탬프": row.get("타임스탬프", ""),
-                "특기사항": row.get("특기사항(기타)", ""),
-                "물리적제지여부": row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", ""),
-                "발생횟수": row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", row.get("발생횟수", 1)),
-                "Log_ID": row.get("Log_ID", ""),
-                "Status": row.get("Status", "Approved"),
-                "Source": row.get("Source", "Google Forms"),
-                "Approval_Meta": row.get("Approval_Meta", "")
-            }
-            
-            crisis_headers = [
-                "발생 시 지도교사", 
-                "1차_개별학생교육지원_시간", "1차_개별학생교육지원_장소", "1차_개별학생교육지원_교사",
-                "2차_개별학생교육지원_시간", "2차_개별학생교육지원_장소", "2차_개별학생교육지원_교사",
-                "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
-                "1차_경위", "2차_경위", "1차_관찰기록", "2차_관찰기록",
-                "부상자_치료_시간", "부상자_치료_내용",
-                "관리자_보고_시간", "관리자_보고_내용",
-                "학부모_알림_시간", "학부모_알림_내용",
-                "학생_상담_시간", "학생_상담_내용",
-                "학부모_상담_시간", "학부모_상담_내용",
-                "긴급회의_시간", "긴급회의_내용"
-            ]
-            
-            crisis_details = {}
-            has_crisis = False
-            for ch in crisis_headers:
-                val = str(row.get(ch, "")).strip()
-                crisis_details[ch] = val
-                if val:
-                    has_crisis = True
-                    
-            if has_crisis:
-                mapped_row["crisis_details"] = crisis_details
-                
-            mapped_values.append(mapped_row)
-            
-        if updates_needed:
+        for ws in target_worksheets:
             try:
-                print(f"Auto-syncing {len(updates_needed)} missing student codes to Log_Main (Column M)...")
-                worksheet.batch_update(updates_needed)
-            except Exception as e:
-                print(f"Failed to auto-sync student codes: {e}")
+                ws_records = safe_get_all_records(ws)
+                if not ws_records:
+                    continue
                 
+                # Check if worksheet looks like behavior log records
+                sample = ws_records[0] if ws_records else {}
+                has_behavior_columns = any(
+                    k in sample for k in [
+                        "학생명", "행동유형(핵심행동으로택1)", "(주요)행동유형", "행동유형",
+                        "행동발생날짜", "행동발생 날짜", "타임스탬프", "Timestamp", "장소", "행동 발생 장소"
+                    ]
+                )
+                if not has_behavior_columns and len(ws_records) > 0:
+                    continue
+
+                for idx, row in enumerate(ws_records):
+                    name = str(row.get("학생명", row.get("이름", row.get("학생", "")))).strip()
+                    code = str(row.get("학생코드", row.get("코드번호", row.get("코드", "")))).strip()
+                    date_val = str(row.get("행동발생날짜", row.get("행동발생 날짜", row.get("날짜", "")))).strip()
+                    time_val = str(row.get("시간대", row.get("시간대 (복수)", row.get("시간대(복수)", "")))).strip()
+                    behavior_type = str(row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("행동유형", row.get("주요행동유형", ""))))).strip()
+                    ts_val = str(row.get("타임스탬프", row.get("Timestamp", row.get("입력일", "")))).strip()
+                    log_id = str(row.get("Log_ID", "")).strip()
+
+                    # Deduplicate across multiple worksheets
+                    if log_id:
+                        dedup_key = f"log_id:{log_id}"
+                    elif name and (date_val or ts_val):
+                        dedup_key = f"{name}_{date_val}_{time_val}_{behavior_type}_{ts_val}"
+                    else:
+                        dedup_key = f"row_{ws.title}_{idx}"
+                        
+                    if dedup_key in seen_keys:
+                        continue
+                    seen_keys.add(dedup_key)
+
+                    # Auto-populate student code if missing
+                    if not code and name:
+                        if beable_map_cache is None:
+                            beable_map_cache = get_beable_code_mapping()
+                        clean_name = name.replace(" ", "")
+                        for k, v in (beable_map_cache or {}).items():
+                            if isinstance(v, dict) and str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
+                                code = v.get('student_code', k)
+                                break
+
+                    mapped_row = {
+                        "행동발생날짜": normalize_date_string(date_val),
+                        "시간대": time_val,
+                        "장소": str(row.get("행동 발생 장소", row.get("행동발생장소", row.get("장소", "")))).strip(),
+                        "강도": str(row.get("강도(1~5점 척도)", row.get("강도", ""))).strip(),
+                        "행동유형": behavior_type,
+                        "기능": str(row.get("기능(이번 행동을 통해 파악된 기능)", row.get("추정기능(이번 행동을 통해 파악된 기능)", row.get("기능", row.get("추정기능", ""))))).strip(),
+                        "결과": str(row.get("결과", row.get("C_후속결과", ""))).strip(),
+                        "학생명": name,
+                        "학생코드": code,
+                        "코드번호": str(row.get("코드번호", code)).strip(),
+                        "입력교사명": str(row.get("입력교사명", row.get("교사명", row.get("입력자", "")))).strip(),
+                        "타임스탬프": ts_val,
+                        "특기사항": str(row.get("특기사항(기타)", row.get("특기사항", row.get("비고", row.get("기타", ""))))).strip(),
+                        "물리적제지여부": str(row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", row.get("물리적제지여부", row.get("분리지도 여부", row.get("물리적제지", ""))))).strip(),
+                        "발생횟수": row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", row.get("발생횟수", row.get("발생빈도", 1))),
+                        "Log_ID": log_id,
+                        "Status": str(row.get("Status", "Approved")),
+                        "Source": str(row.get("Source", "Google Forms")),
+                        "Approval_Meta": str(row.get("Approval_Meta", ""))
+                    }
+
+                    crisis_headers = [
+                        "발생 시 지도교사", 
+                        "1차_개별학생교육지원_시간", "1차_개별학생교육지원_장소", "1차_개별학생교육지원_교사",
+                        "2차_개별학생교육지원_시간", "2차_개별학생교육지원_장소", "2차_개별학생교육지원_교사",
+                        "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
+                        "1차_경위", "2차_경위", "1차_관찰기록", "2차_관찰기록",
+                        "부상자_치료_시간", "부상자_치료_내용",
+                        "관리자_보고_시간", "관리자_보고_내용",
+                        "학부모_알림_시간", "학부모_알림_내용",
+                        "학생_상담_시간", "학생_상담_내용",
+                        "학부모_상담_시간", "학부모_상담_내용",
+                        "긴급회의_시간", "긴급회의_내용"
+                    ]
+                    
+                    crisis_details = {}
+                    has_crisis = False
+                    for ch in crisis_headers:
+                        val = str(row.get(ch, "")).strip()
+                        crisis_details[ch] = val
+                        if val:
+                            has_crisis = True
+                            
+                    if has_crisis:
+                        mapped_row["crisis_details"] = crisis_details
+
+                    mapped_values.append(mapped_row)
+            except Exception as ws_err:
+                print(f"Error reading records from worksheet '{ws.title}': {ws_err}")
+
         _cache["records"] = {"data": mapped_values, "timestamp": now}
         return mapped_values
     except Exception as e:
         print(f"Error fetching records: {e}")
         return []
+
 
 def get_student_codes_worksheet():
     client = get_sheets_client()

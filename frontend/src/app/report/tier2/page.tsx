@@ -153,21 +153,6 @@ export default function CICOReport() {
     fetchData();
   }, [fetchData]);
 
-  const handleTierChange = async (studentCode: string, newTier: string) => {
-    if (!confirm(`${studentCode} 학생의 Tier를 ${newTier}(으)로 변경하시겠습니까?`)) return;
-    try {
-      await axios.post(`${apiUrl}/api/v1/students/tier-update`, {
-        student_code: studentCode,
-        tier: newTier
-      });
-      alert("변경되었습니다.");
-      fetchData(); // Refresh to reflect changes (student might disappear from list if not T2 anymore)
-    } catch (e) {
-      console.error(e);
-      alert("변경 실패");
-    }
-  };
-
   const getDecisionBg = (decision: string) => {
     const opt = DECISION_OPTIONS.find(o => o.label === decision);
     return opt ? `${opt.color}18` : "transparent";
@@ -615,7 +600,7 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
           <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>🗂️ 의사결정 분포 ({month}월)</div>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
-              <Pie data={decPie} cx="50%" cy="50%" outerRadius={70} innerRadius={35} paddingAngle={3} dataKey="value" label={({name, percent}: any) => `${(percent*100).toFixed(0)}%`} labelLine={false} style={{ fontSize:"9px" }}>
+              <Pie data={decPie} cx="50%" cy="50%" outerRadius={70} innerRadius={35} paddingAngle={3} dataKey="value" label={({percent}: any) => `${(percent*100).toFixed(0)}%`} labelLine={false} style={{ fontSize:"9px" }}>
                 {decPie.map((_: any, i: number) => <Cell key={i} fill={decColors[i%decColors.length]} />)}
               </Pie>
               <Tooltip />

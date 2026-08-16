@@ -13,14 +13,12 @@ async def submit_behavior_log(payload: dict = Body(...)):
     Submit a new behavior log from Vercel Frontend.
     Handles 'Intensity' branching and auto-forwards to Google Sheets.
     """
-    client = get_sheets_client()
-    if not client:
-        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
+    from app.services.sheets import get_main_worksheet, clear_cache
+    log_main_ws = get_main_worksheet()
+    if not log_main_ws:
+        raise HTTPException(status_code=500, detail="Cannot access Google Sheets behavior worksheet")
     
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
-        log_main_ws = sheet.worksheet("Log_Main")
-        
         log_id = str(uuid.uuid4())
         is_crisis = str(payload.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", "")).startswith("O")
         status = "Pending" if is_crisis else "Approved"
@@ -69,6 +67,7 @@ async def submit_behavior_log(payload: dict = Body(...)):
             row_data.append(str(payload.get(h, "")))
             
         log_main_ws.append_row(row_data, table_range='A1')
+        clear_cache("records")
             
         return {"success": True, "message": "Log submitted", "log_id": log_id, "status": status}
     except Exception as e:

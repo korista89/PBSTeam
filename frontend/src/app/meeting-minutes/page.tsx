@@ -4,14 +4,12 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
-    PieChart, Pie, Cell, Legend, ResponsiveContainer
+    PieChart, Pie, Cell, ResponsiveContainer
 } from "recharts";
-import { DashboardData, ChartData } from "../types";
+import { DashboardData } from "../types";
 import { AuthCheck } from "../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../components/GlobalNav";
 import { maskName } from "../utils";
-
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 export default function MeetingMinutesPage() {
     const [data, setData] = useState<DashboardData | null>(null);

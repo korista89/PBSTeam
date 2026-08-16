@@ -4,15 +4,14 @@ import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis, Label,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis,
   BarChart, Bar, LabelList, ComposedChart, Area
 } from "recharts";
-import styles from "../../page.module.css";
-import { StudentData, ChartData } from "../../types";
+import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import GlobalNav, { useDateRange } from "../../components/GlobalNav";
-import { COLORS, TIER_COLORS } from "../../constants";
+import { TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import { maskName } from "../../utils";
 
@@ -216,7 +215,7 @@ export default function StudentDetail() {
 
             {/* AI Insights and Logs */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
-               <ConsultationLog studentCode={profile.student_code} studentName={profile.name} />
+               <ConsultationLog studentCode={profile.student_code} />
                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
                   <ChartSection title="📅 요일별 발생 패턴" height={300}>
@@ -255,7 +254,7 @@ function ChartSection({ title, children, height = 340 }: { title: string, childr
   );
 }
 
-function ConsultationLog({ studentCode, studentName }: { studentCode: string, studentName: string }) {
+function ConsultationLog({ studentCode }: { studentCode: string }) {
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,3 @@
-import axios from "axios";
-
 /**
  * Masks a student name for privacy:
  * - 3+ characters: replace middle char(s) with 'O' → 김O준

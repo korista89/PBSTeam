@@ -93,15 +93,6 @@ export default function Tier3Report() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleTierChange = async (studentCode: string, newTier: string) => {
-    if (!confirm(`${studentCode}님의 Tier를 ${newTier}로 변경하시겠습니까?`)) return;
-    try {
-      await axios.post(`${apiUrl}/api/v1/students/tier-update`, { student_code: studentCode, tier: newTier });
-      alert("변경되었습니다.");
-      fetchData();
-    } catch (e) { alert("변경 실패"); }
-  };
-
   const getIntensityColor = (i: number) => i >= 5 ? "#ef4444" : i >= 3 ? "#f59e0b" : "#22c55e";
   const getIntensityBar = (val: number) => {
     const pct = Math.min(100, (val / 5) * 100);

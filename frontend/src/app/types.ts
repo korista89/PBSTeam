@@ -128,4 +128,6 @@ export interface User {
     Role?: string; // Legacy support
     class_id?: string;
     class_name?: string;
+    name?: string;
 }
+
