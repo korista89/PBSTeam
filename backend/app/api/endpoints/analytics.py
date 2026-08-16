@@ -173,7 +173,8 @@ class Tier3AnalysisRequest(BaseModel):
     end_date: Optional[str] = None
 
 class StudentAnalysisRequest(BaseModel):
-    student_code: str
+    student_code: Optional[str] = None
+    student_name: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
@@ -292,21 +293,35 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     
     # Resolve BeAble code for BehaviorLogs1 matching
     beable_mapping = get_beable_code_mapping()
+    target_code = str(req.student_code or "").strip()
+    
+    if not target_code and req.student_name:
+        for bc, info in beable_mapping.items():
+            if str(info.get('student_name', '')).strip() == str(req.student_name).strip():
+                target_code = str(info.get('student_code', bc)).strip()
+                break
+                
+    if not target_code and req.student_name:
+        target_code = req.student_name
+        
     beable_code = ""
     for bc, info in beable_mapping.items():
-        if str(info.get('student_code', '')).strip() == str(req.student_code).strip():
+        if str(info.get('student_code', '')).strip() == target_code:
             beable_code = bc
             break
     
-    codes_to_match = {str(req.student_code).strip()}
+    codes_to_match = {target_code}
     if beable_code:
         codes_to_match.add(str(beable_code).strip())
+    if req.student_name:
+        codes_to_match.add(str(req.student_name).strip())
     
     records = fetch_all_records()
     student_logs = [
         r for r in records
         if str(r.get("학생코드", "")).strip() in codes_to_match
         or str(r.get("코드번호", "")).strip() in codes_to_match
+        or str(r.get("학생명", "")).strip() in codes_to_match
     ]
     
     # Filter by date if provided
