@@ -23,7 +23,7 @@ const TIER_COLORS: Record<string, string> = {
   "Tier 3+ (위기)": "#8b5cf6",
 };
 
-// ====== AI Comprehensive Analysis Component ======
+// ====== AI Comprehensive Analysis Component (기존 버튼: 파란색 외곽선) ======
 function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; endDate: string }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,40 +51,42 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
         <button onClick={requestAnalysis} style={{
           width: '100%', padding: '24px', 
           background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', 
-          color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer',
+          color: 'white', 
+          border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
+          borderRadius: '20px', cursor: 'pointer',
           fontSize: '1.2rem', fontWeight: '800',
-          boxShadow: '0 10px 25px rgba(99, 102, 241, 0.4)',
+          boxShadow: '0 10px 25px rgba(37, 99, 235, 0.35)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
           transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
           letterSpacing: '-0.02em'
         }}
         onMouseOver={e => {
             e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 15px 35px rgba(99, 102, 241, 0.5)';
+            e.currentTarget.style.boxShadow = '0 15px 35px rgba(37, 99, 235, 0.5)';
         }}
         onMouseOut={e => {
             e.currentTarget.style.transform = 'scale(1) translateY(0)';
-            e.currentTarget.style.boxShadow = '0 10px 25px rgba(99, 102, 241, 0.4)';
+            e.currentTarget.style.boxShadow = '0 10px 25px rgba(37, 99, 235, 0.35)';
         }}>
           <span style={{ fontSize: '1.6rem' }}>🧙‍♂️</span> BCBA AI 학교 전체 PBS 운영 정밀 분석 리포트 생성
         </button>
       ) : (
         <div style={{ 
-            background: 'rgba(255, 255, 255, 0.9)', 
+            background: 'rgba(255, 255, 255, 0.95)', 
             backdropFilter: 'blur(10px)',
             padding: '32px', borderRadius: '24px', 
-            border: '1px solid rgba(99, 102, 241, 0.2)', 
+            border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼 모달) */
             boxShadow: '0 20px 50px rgba(0,0,0,0.1)' 
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '1.3rem', fontWeight: 900 }}>🤖 AI Specialist Analysis</h3>
+            <h3 style={{ margin: 0, background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '1.3rem', fontWeight: 900 }}>🤖 AI Specialist Analysis</h3>
             <div style={{ display: 'flex', gap: '12px' }}>
-               <button onClick={requestAnalysis} style={{ padding: '6px 14px', borderRadius: '10px', background: '#f5f3ff', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: '#6366f1', fontWeight: 700, transition: 'background 0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#ede9fe'} onMouseOut={e=>e.currentTarget.style.background='#f5f3ff'}>🔄 Refresh</button>
+               <button onClick={requestAnalysis} style={{ padding: '6px 14px', borderRadius: '10px', background: '#eff6ff', border: '1.5px solid #3b82f6', cursor: 'pointer', fontSize: '0.85rem', color: '#1d4ed8', fontWeight: 700, transition: 'background 0.2s' }}>🔄 Refresh</button>
                <button onClick={() => setVisible(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#94a3b8' }}>✕</button>
             </div>
           </div>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '60px', color: '#6366f1' }}>
+            <div style={{ textAlign: 'center', padding: '60px', color: '#2563eb' }}>
               <div style={{ fontSize: '3rem', marginBottom: '20px', animation: 'pulse 2s infinite' }}>🧠</div>
               <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Expert is synthesizing all school-wide data...</p>
               <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '8px' }}>Tier 1-3, CICO, Behavior Logs, Meeting Notes integrated.</p>
@@ -109,27 +111,236 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
   );
 }
 
-// Custom tooltip for charts
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(4px)', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px rgba(0,0,0,0.05)' }}>
-        <p style={{ margin: '0 0 8px 0', fontWeight: 800, color: '#1e293b', fontSize: '0.9rem' }}>{label}</p>
-        {payload.map((p: any, i: number) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: p.color || '#3b82f6' }} />
-            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{p.name}:</span>
-            <span style={{ color: '#1e293b', fontWeight: 800, fontSize: '0.85rem' }}>{p.value}</span>
+// ====== 5대 영역별 AI 정밀 분석 버튼 컴포넌트 (신규 추가: 빨간색 외곽선) ======
+function SectionAIButton({
+  sectionName,
+  title,
+  dataContext,
+  startDate,
+  endDate
+}: {
+  sectionName: string;
+  title: string;
+  dataContext: any;
+  startDate: string;
+  endDate: string;
+}) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const handleRequest = async () => {
+    setLoading(true);
+    setOpen(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
+        section_name: sectionName,
+        data_context: dataContext || {},
+        start_date: startDate || null,
+        end_date: endDate || null
+      });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch {
+      setAnalysis("⚠️ AI 영역별 정밀 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleRequest}
+        style={{
+          padding: '6px 12px',
+          background: '#fff',
+          color: '#dc2626',
+          border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
+          borderRadius: '10px',
+          fontSize: '0.78rem',
+          fontWeight: 800,
+          cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          transition: 'all 0.2s'
+        }}
+        onMouseOver={e => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.background = '#fef2f2';
+        }}
+        onMouseOut={e => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.background = '#fff';
+        }}
+      >
+        <span>🤖</span> {title} AI 정밀 분석
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '20px'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '24px',
+            maxWidth: '850px', width: '100%', maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 모달) */
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '20px 28px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'linear-gradient(135deg, #fff5f5, #ffffff)'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🤖 BCBA AI {title} 정밀 분석
+              </h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={handleRequest} style={{ padding: '6px 14px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>🔄 새로고침</button>
+                <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+              </div>
+            </div>
+            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.95rem', color: '#334155' }}>
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', color: '#ef4444' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>🧠</div>
+                  <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>{title} 데이터를 바탕으로 BCBA 정밀 분석 중입니다...</p>
+                </div>
+              ) : (
+                analysis
+              )}
+            </div>
           </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+        </div>
+      )}
+    </>
+  );
+}
+
+// ====== 학급 또래 행동 전염 분석 버튼 컴포넌트 (신규 추가: 빨간색 외곽선) ======
+function PeerContagionAIButton({
+  riskList,
+  startDate,
+  endDate
+}: {
+  riskList: any[];
+  startDate: string;
+  endDate: string;
+}) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const handleRequest = async () => {
+    setLoading(true);
+    setOpen(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
+        section_name: "function",
+        data_context: {
+          analysis_type: "peer_contagion",
+          risk_students: (riskList || []).slice(0, 5),
+          notes: "학급 내 청각 자극 매개 및 또래 행동 상호작용 분석"
+        },
+        start_date: startDate || null,
+        end_date: endDate || null
+      });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch {
+      setAnalysis("⚠️ 학급 또래 행동 전염 AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleRequest}
+        style={{
+          padding: '8px 16px',
+          background: '#fff',
+          color: '#dc2626',
+          border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
+          borderRadius: '12px',
+          fontSize: '0.82rem',
+          fontWeight: 800,
+          cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          transition: 'all 0.2s'
+        }}
+        onMouseOver={e => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.background = '#fef2f2';
+        }}
+        onMouseOut={e => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.background = '#fff';
+        }}
+      >
+        <span>👥</span> 🤖 학급 또래 행동 전염 AI 심층 분석
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '20px'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '24px',
+            maxWidth: '850px', width: '100%', maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '2.5px solid #ef4444', /* 빨간색 외곽선 */
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '20px 28px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'linear-gradient(135deg, #fff5f5, #ffffff)'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                👥 🤖 BCBA AI 학급 또래 행동 전염 및 환경 중재 분석
+              </h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={handleRequest} style={{ padding: '6px 14px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>🔄 새로고침</button>
+                <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+              </div>
+            </div>
+            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.95rem', color: '#334155' }}>
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', color: '#ef4444' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>🧠</div>
+                  <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>학급 내 촉발원-반응자 상호작용 및 청각 자극 매개 패턴을 분석 중입니다...</p>
+                </div>
+              ) : (
+                analysis
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 // Chart wrapper
-function ChartBox({ title, children, height = 340 }: { title: string; children: React.ReactNode; height?: number }) {
+function ChartBox({ title, children, height = 340, action }: { title: string; children: React.ReactNode; height?: number; action?: React.ReactNode }) {
   return (
     <div style={{ 
         background: 'rgba(255, 255, 255, 0.8)', 
@@ -142,9 +353,12 @@ function ChartBox({ title, children, height = 340 }: { title: string; children: 
     }}
     onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
     onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '4px', height: '18px', background: '#6366f1', borderRadius: '2px' }} />
-          {title}
+      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '4px', height: '18px', background: '#6366f1', borderRadius: '2px' }} />
+            {title}
+          </div>
+          {action && <div>{action}</div>}
       </div>
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -498,24 +712,45 @@ export default function Home() {
 
             {/* Section 2 */}
             <div className="section-heading"><span>02</span> Big 5 패턴 분석</div>
-            <div className="grid-2">
-              <ChartBox title="📍 장소별 분석">
-                <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 60 }}>
+            <div className="grid-3">
+              <ChartBox 
+                title="⏰ 시간대별 분석" 
+                action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} />}
+              >
+                <BarChart data={[...(big5.times || [])].slice(0, 8)} layout="vertical" margin={{ right: 40 }}>
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
+                  <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" radius={[0, 10, 10, 0]} fill="#6366f1" barSize={18}>
-                      <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 800, fill: '#6366f1' }} formatter={(v:any)=>`${v}건`} />
+                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#8b5cf6" barSize={16}>
+                      <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#8b5cf6' }} formatter={(v:any)=>`${v}건`} />
                   </Bar>
                 </BarChart>
               </ChartBox>
-              <ChartBox title="🎭 행동 유형별 프로필">
+
+              <ChartBox 
+                title="📍 장소별 분석" 
+                action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} />}
+              >
+                <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 40 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#6366f1" barSize={16}>
+                      <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#6366f1' }} formatter={(v:any)=>`${v}건`} />
+                  </Bar>
+                </BarChart>
+              </ChartBox>
+
+              <ChartBox 
+                title="🎭 행동 유형별 프로필" 
+                action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} />}
+              >
                 <PieChart>
-                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={110} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={4}>
+                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={85} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
                     {(big5.behaviors || []).map((_, i) => <Cell key={i} fill={['#6366f1','#8b5cf6','#d946ef','#f43f5e','#f97316','#f59e0b'][i%6]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend iconType="circle" />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
                 </PieChart>
               </ChartBox>
             </div>
@@ -523,16 +758,25 @@ export default function Home() {
             {/* Section 3 */}
             <div className="section-heading"><span>03</span> ABC 기능 평가</div>
             <div className="grid-3">
-              <ChartBox title="❓ 행동의 기능 분석" height={280}>
+              <ChartBox 
+                title="❓ 행동의 기능 분석" 
+                height={280}
+                action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} />}
+              >
                 <PieChart>
-                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={90} innerRadius={60} dataKey="value">
+                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={80} innerRadius={50} dataKey="value">
                       {((data as any).functions || []).map((_: unknown, i: number) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend iconType="circle" />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
                 </PieChart>
               </ChartBox>
-              <ChartBox title="⚡ 행동 강도 분포" height={280}>
+
+              <ChartBox 
+                title="⚡ 행동 강도 분포" 
+                height={280}
+                action={<SectionAIButton sectionName="intensity" title="강도/위기" dataContext={(data as any).intensity_distribution || []} startDate={startDate} endDate={endDate} />}
+              >
                 <BarChart data={(data as any).intensity_distribution || []}>
                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                    <Bar dataKey="value" radius={[8,8,8,8]}>
@@ -543,6 +787,7 @@ export default function Home() {
                    </Bar>
                 </BarChart>
               </ChartBox>
+
               <ChartBox title="⏰ 심각도 시계열 분석" height={280}>
                 <LineChart data={(data as any).intensity_trend || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -555,7 +800,12 @@ export default function Home() {
             </div>
 
             {/* Section 4 */}
-            <div className="section-heading"><span>04</span> T3 상향 검토 대상자 명단 <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#94a3b8', marginLeft: '8px' }}>(현재 T3/T3+ 제외 — 행동빈도 기반 T2 선별)</span></div>
+            <div className="section-heading" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div>
+                <span>04</span> T3 상향 검토 대상자 명단 <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#94a3b8', marginLeft: '8px' }}>(현재 T3/T3+ 제외 — 행동빈도 기반 T2 선별)</span>
+              </div>
+              <PeerContagionAIButton riskList={riskList} startDate={startDate} endDate={endDate} />
+            </div>
             <T3UpgradeList
               riskList={riskList}
               startDate={startDate}

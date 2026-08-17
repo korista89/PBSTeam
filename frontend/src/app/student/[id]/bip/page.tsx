@@ -204,7 +204,48 @@ export default function BIPEditor() {
         }
     };
 
-    // AI BIP Full — comprehensive analysis
+    const [hypLoading, setHypLoading] = useState(false);
+    const [stratLoading, setStratLoading] = useState(false);
+
+    // AI Functional Hypothesis (BIP Step 4 - 신규 추가)
+    const handleAIHypothesis = async () => {
+        if (!studentCode) return;
+        setHypLoading(true);
+        try {
+            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-hypothesis`);
+            if (res.data.hypothesis) {
+                handleChange("Hypothesis", res.data.hypothesis);
+                alert("기능적 가설이 2번 [가설(기능)] 필드에 자동으로 생성되었습니다.");
+            }
+        } catch {
+            alert("AI 가설 생성에 실패했습니다.");
+        } finally {
+            setHypLoading(false);
+        }
+    };
+
+    // AI 3-Stage Intervention Strategies (BIP Step 6 - 신규 추가)
+    const handleAIStrategies = async () => {
+        if (!studentCode) return;
+        setStratLoading(true);
+        try {
+            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-strategies`, {
+                target_behavior: bip.TargetBehavior,
+                hypothesis: bip.Hypothesis,
+                goals: bip.Goals
+            });
+            if (res.data.strategies) {
+                handleChange("PreventionStrategies", res.data.strategies);
+                alert("AI 3단계 중재 전략이 제안되었습니다. (4번 예방/교수/강화 필드에 입력됨)");
+            }
+        } catch {
+            alert("AI 중재 전략 생성에 실패했습니다.");
+        } finally {
+            setStratLoading(false);
+        }
+    };
+
+    // AI BIP Full — comprehensive analysis (기존 버튼)
     const handleAIBIPFull = async () => {
         if (!studentCode) return;
         setAiLoading(true);
@@ -364,7 +405,7 @@ export default function BIPEditor() {
                             <div style={{
                                 padding: '10px 16px', backgroundColor: field.color + '10',
                                 borderBottom: `2px solid ${field.color}`,
-                                display: 'flex', alignItems: 'center', gap: '8px'
+                                display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
                             }}>
                                 <span style={{
                                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -376,6 +417,54 @@ export default function BIPEditor() {
                                 <h3 style={{ margin: 0, color: field.color, fontSize: '1rem', fontWeight: '600' }}>
                                     {field.title}
                                 </h3>
+
+                                {field.key === "Hypothesis" && (
+                                    <button
+                                        onClick={handleAIHypothesis}
+                                        disabled={hypLoading}
+                                        style={{
+                                            marginLeft: 'auto',
+                                            padding: '4px 12px',
+                                            backgroundColor: '#fff',
+                                            color: '#dc2626',
+                                            border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
+                                            borderRadius: '6px',
+                                            fontSize: '0.78rem',
+                                            fontWeight: 700,
+                                            cursor: hypLoading ? 'wait' : 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.2)'
+                                        }}
+                                    >
+                                        {hypLoading ? "⏳ 가설 분석 중..." : "🤖 AI 기능 가설 생성"}
+                                    </button>
+                                )}
+
+                                {field.key === "PreventionStrategies" && (
+                                    <button
+                                        onClick={handleAIStrategies}
+                                        disabled={stratLoading}
+                                        style={{
+                                            marginLeft: 'auto',
+                                            padding: '4px 12px',
+                                            backgroundColor: '#fff',
+                                            color: '#dc2626',
+                                            border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
+                                            borderRadius: '6px',
+                                            fontSize: '0.78rem',
+                                            fontWeight: 700,
+                                            cursor: stratLoading ? 'wait' : 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.2)'
+                                        }}
+                                    >
+                                        {stratLoading ? "⏳ 전략 도출 중..." : "🤖 AI 3단계 중재 전략 제안"}
+                                    </button>
+                                )}
                             </div>
                             <div style={{ padding: '12px 16px' }}>
                                 <AutoTextarea
@@ -420,10 +509,12 @@ export default function BIPEditor() {
                                     style={{
                                         padding: '8px 20px',
                                         background: aiLoading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                                        color: 'white', border: 'none', borderRadius: '8px',
+                                        color: 'white', 
+                                        border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
+                                        borderRadius: '8px',
                                         cursor: aiLoading ? 'wait' : 'pointer',
-                                        fontSize: '0.85rem', fontWeight: 600,
-                                        boxShadow: '0 2px 8px rgba(124,58,237,0.3)',
+                                        fontSize: '0.85rem', fontWeight: 700,
+                                        boxShadow: '0 2px 8px rgba(37,99,235,0.35)',
                                         transition: 'all 0.2s'
                                     }}
                                 >

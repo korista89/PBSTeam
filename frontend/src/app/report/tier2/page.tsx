@@ -442,16 +442,24 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
     <div style={{ marginTop: "20px" }}>
       {!visible ? (
         <button onClick={requestAnalysis} style={{
-          padding: "10px 20px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-          color: "white", border: "none", borderRadius: "10px", cursor: "pointer",
-          fontSize: "0.9rem", fontWeight: 600, boxShadow: "0 4px 12px rgba(124,58,237,0.3)"
-        }}>
-          🤖 BCBA AI 종합 분석
+          padding: "10px 22px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+          color: "white", 
+          border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼) */
+          borderRadius: "10px", cursor: "pointer",
+          fontSize: "0.9rem", fontWeight: 700, boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
+          display: "inline-flex", alignItems: "center", gap: "8px",
+          transition: "transform 0.2s"
+        }}
+        onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+        onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+          <span>🤖</span> BCBA AI 종합 분석
         </button>
       ) : (
         <div style={{
-          background: "rgba(124,58,237,0.05)", border: "1px solid rgba(124,58,237,0.2)",
-          borderRadius: "12px", padding: "20px", marginTop: "12px"
+          background: "#fff", 
+          border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼 모달) */
+          borderRadius: "14px", padding: "24px", marginTop: "12px",
+          boxShadow: "0 10px 30px rgba(37,99,235,0.15)"
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 style={{ margin: 0, color: "#6d28d9", fontSize: "1rem" }}>🤖 BCBA AI 분석 — {month}월 CICO</h3>

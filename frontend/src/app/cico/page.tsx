@@ -269,7 +269,8 @@ export default function CICOGridPage() {
               <h2 style={{ margin: 0, fontSize: "1.3rem" }}>✍️ CICO 일일 기록 입력</h2>
               <p style={{ color: "#666", margin: "3px 0 0", fontSize: "0.85rem" }}>Tier2 학생들의 일일 행동 데이터를 기록합니다.</p>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <CICOAIModal month={month} students={filteredData?.students || []} apiUrl={apiUrl} />
               <button 
                 onClick={() => router.push('/report/tier2')}
                 style={{ 
@@ -557,3 +558,111 @@ const tdStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
   fontSize: "0.75rem",
 };
+
+// ====== CICO AI 성과 분석 및 Tier 조정 모달 (신규 추가: 빨간색 외곽선) ======
+function CICOAIModal({ month, students, apiUrl }: { month: number; students: CICOStudent[]; apiUrl: string }) {
+  const [analysis, setAnalysis] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  const requestAnalysis = async () => {
+    setLoading(true);
+    setVisible(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-cico-analysis`, {
+        month,
+        students_data: students.map(s => ({
+          code: s.학생코드,
+          target_behavior: s.목표행동,
+          behavior_type: s["목표행동 유형"],
+          scale: s.척도,
+          goal_criteria: s["목표 달성 기준"],
+          rate: s.수행_발생률,
+          achieved: s.목표_달성_여부,
+        }))
+      });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch {
+      setAnalysis("⚠️ CICO AI 분석 요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={requestAnalysis}
+        style={{
+          padding: "8px 16px",
+          background: "#fff",
+          color: "#dc2626",
+          border: "2.5px solid #ef4444", /* 빨간색 외곽선 (신규 추가 버튼) */
+          borderRadius: "8px",
+          cursor: "pointer",
+          fontSize: "0.85rem",
+          fontWeight: "bold",
+          boxShadow: "0 2px 8px rgba(239, 68, 68, 0.2)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px",
+          transition: "all 0.2s"
+        }}
+        onMouseOver={e => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.background = '#fef2f2';
+        }}
+        onMouseOut={e => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.background = '#fff';
+        }}
+      >
+        <span>🤖</span> CICO AI 분석 & Tier 조정
+      </button>
+
+      {visible && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '20px'
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '24px',
+            maxWidth: '850px', width: '100%', maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '2.5px solid #ef4444', /* 빨간색 외곽선 */
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              padding: '20px 28px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'linear-gradient(135deg, #fff5f5, #ffffff)'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                🤖 BCBA AI 분석 — {month}월 CICO 성과 & Tier 조정
+              </h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={requestAnalysis} style={{ padding: '6px 14px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>🔄 새로고침</button>
+                <button onClick={() => setVisible(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+              </div>
+            </div>
+            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.95rem', color: '#334155' }}>
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', color: '#ef4444' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>🧠</div>
+                  <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>{month}월 CICO 일일행동카드 및 달성률 데이터를 바탕으로 BCBA 분석 중입니다...</p>
+                </div>
+              ) : (
+                analysis
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

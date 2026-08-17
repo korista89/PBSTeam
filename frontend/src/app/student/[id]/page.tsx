@@ -372,19 +372,21 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   };
 
   return (
-    <div style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', padding: '28px', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+    <div style={{ background: '#fff', padding: '28px', borderRadius: '24px', border: '2.5px solid #2563eb', boxShadow: '0 10px 30px rgba(37, 99, 235, 0.15)' }}>
        {!visible ? (
-         <button onClick={requestAnalysis} style={{ width: '100%', padding: '16px', background: '#6366f1', color: '#fff', borderRadius: '14px', border: 'none', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>🤖 AI 종합 분석 리포트 생성</button>
+         <button onClick={requestAnalysis} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff', borderRadius: '14px', border: '2.5px solid #2563eb', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)', transition: 'transform 0.2s' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
+           🤖 AI 종합 분석 리포트 생성
+         </button>
        ) : (
          <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h4 style={{ margin: 0, color: '#4338ca', fontWeight: 900 }}>🤖 AI 전문가 정밀 분석</h4>
-                <button onClick={()=>setVisible(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+                <h4 style={{ margin: 0, color: '#1d4ed8', fontWeight: 900, fontSize: '1.05rem' }}>🤖 AI 전문가 정밀 분석</h4>
+                <button onClick={()=>setVisible(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
             </div>
             {loading ? (
-                <div style={{ color: '#6366f1', fontWeight: 700, textAlign: 'center', padding: '20px' }}>패턴 분석 및 데이터 요약 중... 🧠</div>
+                <div style={{ color: '#2563eb', fontWeight: 700, textAlign: 'center', padding: '20px' }}>패턴 분석 및 데이터 요약 중... 🧠</div>
             ) : (
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.8', color: '#312e81', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">{analysis}</div>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.8', color: '#1e293b', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">{analysis}</div>
             )}
          </div>
        )}

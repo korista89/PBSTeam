@@ -103,14 +103,20 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
             payload = {
                 "model": model_to_use,
                 "messages": [
-                    {"role": "system", "content": system_prompt + "\n\n[중요] 영어 생각(Thinking/Reasoning) 과정을 출력하지 말고, 즉시 한국어 최종 보고서 본문만을 작성하라."},
+                    {
+                        "role": "system", 
+                        "content": "/no_think\n" + system_prompt + "\n\n[최우선 지침: 생각/추론 과정(Thinking/Reasoning)을 일체 출력하지 말고, 즉시 <1. 핵심 요약>부터 시작하는 한국어 최종 보고서 본문만을 출력하라.]"
+                    },
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": 0.5,
-                "max_tokens": min(max_tokens, 4096)
+                "temperature": 0.4,
+                "max_tokens": min(max_tokens, 4096),
+                "reasoning_effort": "none",
+                "chat_template_kwargs": {"enable_thinking": False},
+                "extra_body": {"thinking": False}
             }
-            # Vercel Serverless Function 제한(60s) 고려 50초 타임아웃
-            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=50)
+            # Vercel Serverless Function 제한(60s) 내에 빠른 폴백을 보장하기 위해 25초 타임아웃 설정
+            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=25)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])

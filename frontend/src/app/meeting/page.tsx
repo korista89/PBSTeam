@@ -115,12 +115,12 @@ export default function MeetingPage() {
                                             padding: '12px 30px',
                                             backgroundColor: loading ? '#9ca3af' : '#8b5cf6',
                                             color: 'white',
-                                            border: 'none',
-                                            borderRadius: '6px',
+                                            border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
+                                            borderRadius: '8px',
                                             fontSize: '1rem',
                                             fontWeight: 'bold',
                                             cursor: loading ? 'not-allowed' : 'pointer',
-                                            boxShadow: '0 4px 6px rgba(139, 92, 246, 0.25)',
+                                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
                                             transition: 'all 0.2s',
                                             display: 'inline-flex', alignItems: 'center', gap: '8px'
                                         }}
