@@ -87,9 +87,11 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 choices = data.get("choices", [])
                 if choices:
                     content = choices[0].get("message", {}).get("content", "").strip()
+                    # 실제 응답에서 모델명 추출 (LM Studio가 실제 모델명 반환)
+                    actual_model = data.get("model", configured_model or "Gemma 4 E4B")
                     cleaned = _clean_llm_output(content)
                     if cleaned:
-                        return cleaned
+                        return cleaned + f"\n\n---\n> 🖥️ **로컬 모델**: {actual_model} (LM Studio)"
         except Exception:
             pass
             
@@ -131,7 +133,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 msg = res_data.get("message", {}).get("content", "").strip()
                 cleaned = _clean_llm_output(msg)
                 if cleaned:
-                    return cleaned
+                    return cleaned + f"\n\n---\n> 🖥️ **로컬 모델**: {model} (Ollama)"
         except Exception:
             continue
             
@@ -180,7 +182,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     if candidates:
                         text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])).strip()
                         if text:
-                            return _clean_llm_output(text)
+                            return _clean_llm_output(text) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini)"
 
                 # Attempt B: 단일 content 방식 (일부 버전 호환)
                 resp2 = requests.post(g_url, json={
@@ -193,7 +195,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     if candidates2:
                         text2 = "".join(p.get("text", "") for p in candidates2[0].get("content", {}).get("parts", [])).strip()
                         if text2:
-                            return _clean_llm_output(text2)
+                            return _clean_llm_output(text2) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini)"
 
                 last_error = f"{g_model} HTTP {resp.status_code}"
             except Exception as e:
@@ -228,7 +230,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                 if resp.status_code == 200:
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
-                        return _clean_llm_output(content)
+                        return _clean_llm_output(content) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Groq)"
                 elif resp.status_code == 429:
                     # Rate limit - 더 이상 다른 모델 시도해도 429 연속됨, 바로 종료
                     return "⏳ AI 분석 요청이 너무 많아 잠시 대기 중입니다. 1분 후 다시 [Refresh]를 눌러주세요. (Groq 무료 한도 초과)"
@@ -303,7 +305,7 @@ def generate_bcba_comprehensive_analysis(
 4. **학급 단위 밀집 및 환경 분석**: 특정 학급 편중 시 (a) 실제 행동 밀집 (b) 교사 기록 성실도 양측 가능성 명시.
 5. **이번 주 학교 차원 3대 실행 우선순위**: 정확히 3가지를 도출하고 각각 `[담당 주체]`(담임/PBS담당/관리자/외부전문가), `[실행 기간]`, `[성공 기준]`을 명시."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
@@ -486,7 +488,7 @@ def generate_bcba_meeting_minutes(
 5. **보호자 협력 사항 분리**: 학교가 제공할 지원과 가정에 요청할 지원을 명확히 구분.
 6. **금지**: 논의되지 않은 내용을 데이터만 보고 지어내지 말고, 제안 사항은 `[AI 제안 — 협의 필요]` 태그를 붙여라."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
@@ -521,7 +523,7 @@ def generate_bcba_tier3_analysis(
 4. **위기 발생 후 24시간 내 처리 체크리스트**: 보고서 작성, 보호자 소통, 학생 회복, 교직원 디브리핑.
 5. **예방 실패 신호 경고**: 반복적 위기는 선행사건 예방 실패의 신호이므로 BIP 예방 전략 재검토 항목을 제시하라."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
@@ -542,21 +544,42 @@ def generate_bcba_student_analysis(
     prompt = f"""[학생 기본 정보]
 {s_info}
 
-[학생의 행동 발생 이력 및 관찰 기록]
+[학생의 행동 발생 이력 및 관찰 기록 (최근 30건)]
 {logs_str}
 
 [지시사항]
-담임선생님이 내일 교실에서 바로 적용할 수 있는 수준의 개별 A-B-C 임상 분석 리포트를 작성하라.
-1. **A-B-C 프로파일**:
-   - A(선행사건): 가장 위험한 시간대·장소·활동 조합 Top 3 및 촉발 요인.
-   - B(표적행동): 조작적 정의 기반 유형·강도·빈도 분포.
-   - C(후속결과): 의도치 않게 행동을 유지/강화시킨 대응 점검.
-2. **배경사건(Setting Event) 분석**: 수면, 투약("약을 안먹음"), 배고픔, 날씨, 가정사 언급을 추출하여 대조.
-3. **또래 영향 점검**: 특기사항에 동급생 이름이 언급된 경우 학급 청각 환경 및 자리 배치 조정을 명시.
-4. **담임교사용 즉시 실행 팁 5개**: 준비물 없이 내일 바로 실천 가능한 구체적 행동 지침.
-5. **데이터 신뢰도 경고**: 기록 지연(entry lag)이 큰 경우 시계열 해석 주의점 명시."""
+특수교사·담임교사·IEP팀이 내일 교실에서 바로 적용할 수 있는 수준의 개별 A-B-C 임상 분석 리포트를 작성하라.
+반드시 제공된 실제 로그 데이터의 수치(건수, 날짜, 시간대, 장소, 유형)를 인용하라. 데이터에 없는 내용은 지어내지 마라.
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+1. **A-B-C 프로파일 (데이터 기반)**:
+   - A(선행사건): 가장 위험한 시간대·장소·활동 조합 Top 3 (실제 건수/비율 명시).
+   - B(표적행동): 유형별 건수 분포, 평균 강도(실제 수치), 물리적 제지 발생 여부.
+   - C(후속결과): 관찰 기록에서 추론 가능한 유지 강화 패턴 (없으면 "기록 없음"으로 명시).
+
+2. **배경사건(Setting Event) 분석**:
+   - 특기사항 텍스트에서 수면 부족, 투약 누락("약을 안먹음"), 배고픔, 가정사 언급 건수를 추출하여 열거.
+   - 배경사건 기록이 있는 날과 없는 날의 행동 발생 빈도를 비교하라 (데이터가 부족하면 "배경사건 기록 부재로 분석 불가"로 명시).
+
+3. **또래 영향 점검**:
+   - 특기사항에 타 학생 이름이 언급된 경우 → 학급 청각 환경 자극원으로 파악 → 좌석 배치 및 분리 타이밍 제안.
+   - 언급이 없으면 "또래 관련 기록 없음"으로 명시.
+
+4. **담임교사용 즉시 실행 팁 5개** (준비물·예산 없이 내일 아침부터 가능한 것):
+   - 각 팁에 [적용 상황], [구체적 행동 지침], [기대 효과] 3줄 이내로 작성.
+   - 경은학교 자원(경은그림말 AAC, 시각적 일과표, 심리안정실) 중 활용 가능한 것을 명시.
+
+5. **IEP·개별화교육지원팀을 위한 행동 목표 초안**:
+   - 현재 데이터를 기준선으로 하여 4주/12주 SMART 목표를 각 1개씩 제시.
+   - 기준선 수치가 없으면 "직접 관찰 1주 후 확정" 조건을 명시.
+
+6. **학부모 가정 협력 요청 사항** (전문용어 없이 일상어로):
+   - 학교가 실행할 것과 가정에서 협력 요청할 것을 구분하여 각 3항목 이내로 정리.
+
+7. **데이터 한계 및 추가 수집 권고**:
+   - 기록 지연일, 강도 기록 누락, 기능 기록 누락 여부를 수치로 명시.
+   - 다음 단계로 필요한 데이터(ABC 직접관찰, 기능평가(FBA) 등)를 우선순위별로 제시."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
@@ -663,7 +686,7 @@ def generate_full_bip(
 [문서 말미 필수 첨부 2: 보호자 설명용 요약서 (1페이지 분량)]
 전문용어를 쉬운 일상어로 풀어쓰고 학교와 가정의 협력 방안을 정리하라."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
