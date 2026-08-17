@@ -142,90 +142,59 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     return _call_local_llm(system_prompt, user_prompt, max_tokens)
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
-    """Fallback Gemini & Cloud API call wrapper with multiple model fallbacks."""
+    """Fallback Gemini & Cloud API call wrapper - only v1beta, valid model names only."""
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    
-    if not (gemini_key or groq_key or openai_key):
-        return "⚠️ AI 응답 생성에 실패했습니다. 로컬 LM Studio(1234 포트) 실행 상태 또는 Vercel 환경변수(GEMINI_API_KEY)를 확인해주세요."
-    
+
+    if not (gemini_key or groq_key):
+        return "⚠️ AI 응답 생성에 실패했습니다. Vercel 환경변수 GEMINI_API_KEY 또는 GROQ_API_KEY를 설정해주세요."
+
     last_error = ""
-    
-    # 1. Native Gemini v1beta / v1 API with header authentication
+    combined_prompt = f"{system_prompt}\n\n[데이터 및 분석 요청]\n{user_prompt}"
+
+    # 1. Gemini API - v1beta ONLY (v1 경로는 대부분 404)
     if gemini_key:
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": gemini_key
-        }
-        
-        models_and_versions = [
-            ("v1beta", "gemini-2.0-flash"),
-            ("v1beta", "gemini-1.5-flash"),
-            ("v1", "gemini-1.5-flash"),
-            ("v1beta", "gemini-1.5-pro"),
-            ("v1", "gemini-1.5-pro")
+        gemini_models = [
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
         ]
-        
-        for api_ver, g_model in models_and_versions:
+        for g_model in gemini_models:
+            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
             try:
-                g_url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{g_model}:generateContent"
-                
-                # Payload with systemInstruction
-                g_payload = {
-                    "systemInstruction": {
-                        "parts": [{"text": system_prompt}]
-                    },
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [{"text": user_prompt}]
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.6,
-                        "maxOutputTokens": min(max_tokens, 8192)
-                    }
-                }
-                resp = requests.post(g_url, headers=headers, json=g_payload, timeout=60)
+                # Attempt A: systemInstruction 분리 방식
+                resp = requests.post(g_url, json={
+                    "systemInstruction": {"parts": [{"text": system_prompt}]},
+                    "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": min(max_tokens, 8192)}
+                }, timeout=60)
+
                 if resp.status_code == 200:
-                    g_data = resp.json()
-                    candidates = g_data.get("candidates", [])
+                    candidates = resp.json().get("candidates", [])
                     if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        text = "".join([p.get("text", "") for p in parts]).strip()
+                        text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])).strip()
                         if text:
                             return _clean_llm_output(text)
-                
-                # Alternate single content payload
-                alt_payload = {
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [{"text": f"{system_prompt}\n\n[데이터 및 요청]\n{user_prompt}"}]
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.6,
-                        "maxOutputTokens": min(max_tokens, 8192)
-                    }
-                }
-                resp2 = requests.post(g_url, headers=headers, json=alt_payload, timeout=60)
+
+                # Attempt B: 단일 content 방식 (일부 버전 호환)
+                resp2 = requests.post(g_url, json={
+                    "contents": [{"role": "user", "parts": [{"text": combined_prompt}]}],
+                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": min(max_tokens, 8192)}
+                }, timeout=60)
+
                 if resp2.status_code == 200:
-                    g_data2 = resp2.json()
-                    candidates2 = g_data2.get("candidates", [])
+                    candidates2 = resp2.json().get("candidates", [])
                     if candidates2:
-                        parts2 = candidates2[0].get("content", {}).get("parts", [])
-                        text2 = "".join([p.get("text", "") for p in parts2]).strip()
+                        text2 = "".join(p.get("text", "") for p in candidates2[0].get("content", {}).get("parts", [])).strip()
                         if text2:
                             return _clean_llm_output(text2)
-                            
-                last_error = f"{g_model} ({api_ver}) HTTP {resp.status_code}: {resp.text[:150]}"
+
+                last_error = f"{g_model} HTTP {resp.status_code}"
             except Exception as e:
                 last_error = f"{g_model} 예외: {str(e)}"
                 continue
-                
-    # 2. Groq Fallback
+
+    # 2. Groq Fallback (Gemini 실패 시)
     if groq_key:
         for g_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
             try:
@@ -247,6 +216,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
                         return _clean_llm_output(content)
+                last_error = f"Groq {g_model} HTTP {resp.status_code}"
             except Exception as e:
                 last_error = f"Groq {g_model}: {str(e)}"
                 continue
