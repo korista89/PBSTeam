@@ -158,24 +158,36 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     """Fallback Gemini & Cloud API call wrapper with multiple model fallbacks."""
     api_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GROQ_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
     if not api_key:
-        return "⚠️ AI 응답 생성에 실패했습니다. 로컬 AI(Ollama) 실행 상태 또는 GEMINI_API_KEY 설정을 확인해주세요."
+        return "⚠️ AI 응답 생성에 실패했습니다. 로컬 AI(LM Studio/Ollama) 실행 상태 또는 Vercel 환경변수(GEMINI_API_KEY)를 확인해주세요."
     
     last_error = ""
     
-    # 1. Native Gemini API
+    # 1. Native Gemini v1beta REST API
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     if gemini_key:
-        gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        gemini_models = [
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro",
+            "gemini-pro"
+        ]
         for g_model in gemini_models:
             try:
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
                 g_payload = {
+                    "systemInstruction": {
+                        "parts": [{"text": system_prompt}]
+                    },
                     "contents": [
-                        {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}
+                        {
+                            "role": "user",
+                            "parts": [{"text": user_prompt}]
+                        }
                     ],
                     "generationConfig": {
-                        "temperature": 0.7,
-                        "maxOutputTokens": max_tokens
+                        "temperature": 0.6,
+                        "maxOutputTokens": min(max_tokens, 8192)
                     }
                 }
                 resp = requests.post(g_url, json=g_payload, timeout=60)
@@ -186,12 +198,36 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                         parts = candidates[0].get("content", {}).get("parts", [])
                         text = "".join([p.get("text", "") for p in parts]).strip()
                         if text:
-                            return text
+                            return _clean_llm_output(text)
+                else:
+                    # Fallback to combined content format if systemInstruction unsupported
+                    alt_payload = {
+                        "contents": [
+                            {
+                                "role": "user",
+                                "parts": [{"text": f"{system_prompt}\n\n[사용자 요청 및 데이터]\n{user_prompt}"}]
+                            }
+                        ],
+                        "generationConfig": {
+                            "temperature": 0.6,
+                            "maxOutputTokens": min(max_tokens, 8192)
+                        }
+                    }
+                    resp2 = requests.post(g_url, json=alt_payload, timeout=60)
+                    if resp2.status_code == 200:
+                        g_data2 = resp2.json()
+                        candidates2 = g_data2.get("candidates", [])
+                        if candidates2:
+                            parts2 = candidates2[0].get("content", {}).get("parts", [])
+                            text2 = "".join([p.get("text", "") for p in parts2]).strip()
+                            if text2:
+                                return _clean_llm_output(text2)
+                    last_error = f"{g_model} HTTP {resp.status_code}: {resp.text[:200]}"
             except Exception as e:
-                last_error = str(e)
+                last_error = f"{g_model} 예외: {str(e)}"
                 continue
                 
-    # 2. Groq API
+    # 2. Groq API Fallback
     groq_key = os.getenv("GROQ_API_KEY", "")
     if groq_key:
         groq_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
@@ -207,19 +243,21 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                             {"role": "user", "content": user_prompt}
                         ],
                         "max_tokens": max_tokens,
-                        "temperature": 0.7
+                        "temperature": 0.6
                     },
                     timeout=45
                 )
                 if resp.status_code == 200:
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
-                        return content
+                        return _clean_llm_output(content)
+                else:
+                    last_error = f"Groq {g_model} HTTP {resp.status_code}: {resp.text[:200]}"
             except Exception as e:
-                last_error = str(e)
+                last_error = f"Groq 예외: {str(e)}"
                 continue
 
-    # 3. Gemini OpenAI endpoint
+    # 3. Gemini OpenAI Compatible Endpoint
     if gemini_key:
         for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
             try:
@@ -233,16 +271,18 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                             {"role": "user", "content": user_prompt}
                         ],
                         "max_tokens": max_tokens,
-                        "temperature": 0.7
+                        "temperature": 0.6
                     },
                     timeout=60
                 )
                 if resp.status_code == 200:
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
-                        return content
+                        return _clean_llm_output(content)
+                else:
+                    last_error = f"Gemini-OpenAI HTTP {resp.status_code}: {resp.text[:200]}"
             except Exception as e:
-                last_error = str(e)
+                last_error = f"Gemini-OpenAI 예외: {str(e)}"
                 continue
                 
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
