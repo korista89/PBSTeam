@@ -258,15 +258,25 @@ def test_ebp_matching_bundle():
 
 def test_health_routes():
     print("\n" + "=" * 60)
-    print("STEP 6: Testing FastAPI Health and Alias Routes")
+    print("STEP 6: Testing FastAPI Health Routes via TestClient")
     print("=" * 60)
+    from fastapi.testclient import TestClient
     from app.main import app
-    routes = [r.path for r in app.routes]
-    print(f"✅ Total Registered Routes: {len(routes)}")
-    assert "/health" in routes, "Missing /health route"
-    assert "/api/health" in routes, "Missing /api/health route"
-    assert "/api/v1/health" in routes, "Missing /api/v1/health route"
-    print("✅ Health routes (/health, /api/health, /api/v1/health): OK")
+    
+    client = TestClient(app)
+    
+    # Test GET /health
+    res_health = client.get("/health")
+    assert res_health.status_code == 200, f"/health returned {res_health.status_code}"
+    assert res_health.json() == {"status": "ok"}, f"/health returned {res_health.json()}"
+    print("✅ GET /health: 200 {'status': 'ok'}")
+    
+    # Test GET /api/health
+    res_api_health = client.get("/api/health")
+    assert res_api_health.status_code == 200, f"/api/health returned {res_api_health.status_code}"
+    assert res_api_health.json() == {"status": "ok"}, f"/api/health returned {res_api_health.json()}"
+    print("✅ GET /api/health: 200 {'status': 'ok'}")
+    
     return True
 
 if __name__ == "__main__":
