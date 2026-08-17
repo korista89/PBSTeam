@@ -210,6 +210,16 @@ class DataSufficiency(StrictModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class DataQualityCheck(StrictModel):
+    event_count: int = 0
+    date_span_days: int = 0
+    complete_abc_count: int = 0
+    has_location_data: bool = False
+    has_intensity_data: bool = False
+    is_sufficient_for_fba: bool = False
+    reasons: list[str] = Field(default_factory=list)
+
+
 class FunctionHypothesis(StrictModel):
     hypothesis_id: str
     student_code: str

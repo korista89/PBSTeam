@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
-from app.domain.models import EBPStrategy, EBPCategory, FunctionCode, FunctionHypothesis
+from app.domain.models import EBPStrategy, EBPCategory, FunctionCode, FunctionHypothesis, DataSufficiency, HypothesisStatus
 from app.services.ebp.catalog import load_ebp_catalog, get_ebp_by_code, search_ebp_catalog
 from app.services.ebp.matching import generate_ebp_recommendation_bundle
 
@@ -57,8 +57,22 @@ async def recommend_ebp_bundle(req: EBPRecommendationRequest):
         hypothesis_id="TEMP_HYP",
         student_code="TEMP",
         target_behavior="표적행동",
+        antecedent_condition=req.antecedent_patterns[0] if req.antecedent_patterns else "일반 일과/과제 상황",
+        consequence_pattern="교사 반응 또는 활동 회피",
         function_code=fn_enum,
-        confidence_level="MEDIUM" if fn_enum != FunctionCode.UNKNOWN else "LOW"
+        hypothesis_statement=f"표적행동은 {fn_enum.value} 기능을 위해 나타나는 것으로 추정됨.",
+        evidence_for=[],
+        evidence_against=[],
+        data_sufficiency=DataSufficiency(
+            direct_observation_n=1,
+            unique_days_n=1,
+            unique_contexts_n=1,
+            abc_complete_n=1,
+            contradictory_evidence_n=0,
+            status="MEDIUM" if fn_enum != FunctionCode.UNKNOWN else "LOW",
+            reasons=[] if fn_enum != FunctionCode.UNKNOWN else ["기능 코드 미지정"]
+        ),
+        status=HypothesisStatus.PROPOSED
     )
 
     bundle = generate_ebp_recommendation_bundle(

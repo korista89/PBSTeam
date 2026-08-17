@@ -5,7 +5,8 @@ from typing import Optional, List, Dict, Any
 from datetime import date, timedelta
 from app.domain.models import (
     StudentWorkspace, StudentProfile, BehaviorEvent, CicoObservation,
-    DecisionSignal, DataQualityCheck, FunctionHypothesis, FunctionCode, DataSufficiency
+    DecisionSignal, DataQualityCheck, FunctionHypothesis, FunctionCode,
+    DataSufficiency, SignalSeverity, HypothesisStatus
 )
 from app.adapters.sheets.tier_status import TierStatusAdapter
 from app.adapters.sheets.log_main import LogMainAdapter
@@ -43,8 +44,8 @@ async def get_today_decision_center():
             sigs = evaluate_decision_signals(s.student_code, s_events)
             all_signals.extend(sigs)
 
-    urgent_signals = [s for s in all_signals if s.severity.value in ["CRITICAL", "URGENT"]]
-    review_signals = [s for s in all_signals if s.severity.value in ["HIGH", "REVIEW"]]
+    urgent_signals = [s for s in all_signals if s.severity in [SignalSeverity.URGENT, SignalSeverity.PRIORITY]]
+    review_signals = [s for s in all_signals if s.severity in [SignalSeverity.REVIEW, SignalSeverity.INFO]]
 
     # Tier counts
     tier_counts = {"Tier 1": 0, "Tier 2": 0, "Tier 3": 0, "Tier 3+": 0}
@@ -85,12 +86,7 @@ async def get_student_workspace(student_code: str):
     students = TierStatusAdapter.fetch_students()
     profile = next((s for s in students if s.student_code == student_code), None)
     if not profile:
-        # Fallback profile if not in roster
-        profile = StudentProfile(
-            student_code=student_code,
-            display_name=student_code,
-            class_name="학급 미지정"
-        )
+        raise HTTPException(status_code=404, detail=f"Student '{student_code}' not found in TierStatus roster.")
 
     all_events = LogMainAdapter.fetch_events()
     s_events = [e for e in all_events if e.student_code == student_code]
@@ -114,8 +110,8 @@ async def get_student_workspace(student_code: str):
         event_count=len(s_events),
         date_span_days=unique_dates,
         complete_abc_count=complete_abc,
-        has_location_data=sum(1 for e in s_events if e.primary_location != "기타/미상"),
-        has_intensity_data=sum(1 for e in s_events if e.intensity > 0),
+        has_location_data=any(e.primary_location and e.primary_location != "기타/미상" for e in s_events),
+        has_intensity_data=any(e.intensity is not None and e.intensity > 0 for e in s_events),
         is_sufficient_for_fba=is_sufficient,
         reasons=[] if is_sufficient else ["ABC 직접 관찰 기록(선행-행동-후속) 5건 이상 수집 권장"]
     )
@@ -132,22 +128,38 @@ async def get_student_workspace(student_code: str):
         if top_fn_str in FunctionCode.__members__:
             top_fn_code = FunctionCode(top_fn_str)
 
+    target_beh = s_events[0].behavior_code if s_events else "표적행동"
+    antecedent = s_events[0].antecedent if (s_events and s_events[0].antecedent) else "과제 전환 또는 지시 상황"
+    consequence = s_events[0].consequence if (s_events and s_events[0].consequence) else "과제 회피 또는 교사 관심 획득"
+    setting_ev = s_events[0].setting_events[0] if (s_events and s_events[0].setting_events) else None
+
     hyp = FunctionHypothesis(
         hypothesis_id=f"HYP_{student_code}",
         student_code=student_code,
-        target_behavior=s_events[0].behavior_code if s_events else "표적행동",
+        target_behavior=target_beh,
+        setting_event=setting_ev,
+        antecedent_condition=antecedent,
+        consequence_pattern=consequence,
         function_code=top_fn_code,
-        confidence_level="MEDIUM" if len(s_events) >= 5 else "LOW",
+        hypothesis_statement=f"{student_code} 학생은 {antecedent} 상황에서 {top_fn_code.value} 기능을 위해 {target_beh} 행동을 나타내는 것으로 추정됨.",
+        evidence_for=[],
+        evidence_against=[],
         data_sufficiency=DataSufficiency(
+            direct_observation_n=len(s_events),
+            unique_days_n=unique_dates,
+            unique_contexts_n=len(set(e.primary_location for e in s_events if e.primary_location)),
+            abc_complete_n=complete_abc,
+            contradictory_evidence_n=0,
             status="MEDIUM" if is_sufficient else "LOW",
             reasons=dq.reasons
-        )
+        ),
+        status=HypothesisStatus.PROPOSED
     )
 
     # EBP Recommendation Bundle
     ebp_bundle = generate_ebp_recommendation_bundle(
         hypothesis=hyp,
-        antecedent_patterns=[e.primary_location for e in s_events[:5]],
+        antecedent_patterns=[e.primary_location for e in s_events[:5] if e.primary_location],
         setting_events=[s for e in s_events for s in e.setting_events],
         current_tier=profile.tier.active_tiers[0].value if profile.tier.active_tiers else "TIER_1"
     )

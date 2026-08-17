@@ -184,6 +184,16 @@ export interface DataSufficiency {
   reasons: string[];
 }
 
+export interface DataQualityCheck {
+  event_count: number;
+  date_span_days: number;
+  complete_abc_count: number;
+  has_location_data: boolean;
+  has_intensity_data: boolean;
+  is_sufficient_for_fba: boolean;
+  reasons: string[];
+}
+
 export interface FunctionHypothesis {
   hypothesis_id: string;
   student_code: string;
