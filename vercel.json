@@ -9,15 +9,11 @@
       "src": "backend/app/main.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "15mb"
+        "maxLambdaSize": "15mb",
+        "maxDuration": 60
       }
     }
   ],
-  "functions": {
-    "backend/app/main.py": {
-      "maxDuration": 60
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
