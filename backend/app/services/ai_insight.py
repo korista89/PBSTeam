@@ -160,9 +160,10 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     # 1. Gemini API - v1beta ONLY (v1 경로는 대부분 404)
     if gemini_key:
         gemini_models = [
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
+            "gemini-2.5-flash",          # 현재 최신 (2026)
+            "gemini-2.5-flash-lite",     # 경량 최신
+            "gemini-1.5-flash",          # 안정 버전
+            "gemini-1.5-pro",            # 고품질 안정 버전
         ]
         for g_model in gemini_models:
             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
