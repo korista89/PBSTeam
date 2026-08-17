@@ -318,6 +318,12 @@ def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
     """하위 호환용 래퍼"""
     return generate_bcba_comprehensive_analysis(summary, trends, risk_list)
 
+def generate_meeting_agent_report(section_type: str, context_data: dict) -> str:
+    """하위 호환용 래퍼: 회의용 섹션 리포트"""
+    chart_data = context_data.get("chart_data", context_data) if isinstance(context_data, dict) else []
+    top_items = context_data.get("top_items", []) if isinstance(context_data, dict) else []
+    return generate_bcba_section_analysis(section_type, chart_data=chart_data, top_items=top_items, raw_summary=context_data)
+
 
 # ------------------------------------------------------------------------------
 # ② 5대 심층 영역별(시간/장소/유형/강도/기능) AI 분석
