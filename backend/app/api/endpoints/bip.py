@@ -1,62 +1,62 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from app.services.normalize import normalize_behavior_log
+from app.services.ai_insight import (
+    generate_bip_hypothesis,
+    generate_bip_strategies,
+    generate_full_bip
+)
 
 router = APIRouter()
 
 class BIPData(BaseModel):
     StudentCode: str
-    TargetBehavior: str = ""
-    Hypothesis: str = ""
-    Goals: str = ""
-    PreventionStrategies: str = ""
-    TeachingStrategies: str = ""
-    ReinforcementStrategies: str = ""
-    CrisisPlan: str = ""
-    EvaluationPlan: str = ""
-    MedicationStatus: str = ""
-    ReinforcerInfo: str = ""
-    OtherConsiderations: str = ""
-    UpdatedAt: str = ""
-    Author: str = ""
-
+    TargetBehavior: Optional[str] = ""
+    AntecedentTriggers: Optional[str] = ""
+    SettingEvents: Optional[str] = ""
+    EstimatedFunction: Optional[str] = ""
+    FunctionalHypothesis: Optional[str] = ""
+    BehaviorGoal: Optional[str] = ""
+    AntecedentInterventions: Optional[str] = ""
+    TeachingInterventions: Optional[str] = ""
+    ConsequenceInterventions: Optional[str] = ""
+    CrisisManagementPlan: Optional[str] = ""
+    EvaluationPlan: Optional[str] = ""
+    MedicationStatus: Optional[str] = ""
+    ReinforcerInfo: Optional[str] = ""
+    OtherConsiderations: Optional[str] = ""
 
 def _resolve_beable_code(student_code: str) -> str:
-    """Convert student_code (e.g. '2611') to BeAble code (e.g. 'STU000012').
-    BehaviorLogs1 use '코드번호' (BeAble code), not '학생코드'.
-    Returns the BeAble code, or empty string if not found."""
     from app.services.sheets import get_beable_code_mapping
     mapping = get_beable_code_mapping()
-    # mapping: { beable_code: { student_code: '2611', ... } }
-    for beable_code, info in mapping.items():
-        if str(info.get('student_code', '')).strip() == str(student_code).strip():
-            return beable_code
-    return ""
-
+    for bc, info in mapping.items():
+        if str(info.get('student_code', '')).strip() == student_code.strip():
+            return bc
+    return student_code
 
 def _filter_student_logs(records: list, student_code: str, beable_code: str = "") -> list:
-    """Filter BehaviorLogs1 for a student by student_code OR BeAble code (코드번호)."""
-    codes_to_match = {str(student_code).strip()}
+    codes = {student_code.strip()}
     if beable_code:
-        codes_to_match.add(str(beable_code).strip())
+        codes.add(beable_code.strip())
     
-    return [
-        r for r in records
-        if str(r.get("학생코드", "")).strip() in codes_to_match
-        or str(r.get("코드번호", "")).strip() in codes_to_match
-    ]
+    filtered = []
+    for r in records:
+        sc = str(r.get("student_code", r.get("학생코드", r.get("코드번호", "")))).strip()
+        name = str(r.get("student_name", r.get("학생명", ""))).strip()
+        if sc in codes or name in codes:
+            filtered.append(r)
+    return filtered
 
 
 @router.get("/students/{student_code}/bip")
 async def get_student_bip(student_code: str):
-    from app.services.sheets import get_bip
-    bip = get_bip(student_code)
-    if not bip:
-        return {}
-    # Migration: rename old field if present
-    if "ConsequenceStrategies" in bip and "ReinforcementStrategies" not in bip:
-        bip["ReinforcementStrategies"] = bip.pop("ConsequenceStrategies")
-    return bip
+    from app.services.sheets import fetch_bip_by_code
+    result = fetch_bip_by_code(student_code)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
 
 @router.post("/students/{student_code}/bip")
 async def save_student_bip(student_code: str, data: BIPData):
@@ -76,27 +76,48 @@ async def save_student_bip(student_code: str, data: BIPData):
 
 @router.post("/students/{student_code}/ai-hypothesis")
 async def ai_bip_hypothesis(student_code: str):
-    """Generate BIP hypothesis using BCBA AI analysis."""
-    from app.services.ai_insight import generate_bip_hypothesis
+    """⑦ 🤖 AI 기능적 가설 생성 (BIP Step 4)"""
     from app.services.sheets import fetch_all_records, fetch_student_status
     
     beable_code = _resolve_beable_code(student_code)
-    
     records = fetch_all_records()
-    student_logs = _filter_student_logs(records, student_code, beable_code)
+    raw_logs = _filter_student_logs(records, student_code, beable_code)
     
     status_records = fetch_student_status()
-    tier_data = None
+    student_info = {"code": student_code, "class": "", "tier": 1}
     for s in status_records:
         if str(s.get("학생코드", "")).strip() == student_code:
-            tier_data = {
-                "학급": s.get("학급", ""),
-                "지원단계": s.get("Tier", s.get("지원단계", "")),
-                "Tier2(CICO)": s.get("Tier2(CICO)", ""),
+            student_info = {
+                "code": student_code,
+                "name": s.get("학생명", student_code),
+                "class": s.get("학급", ""),
+                "tier": s.get("Tier", s.get("지원단계", 1)),
             }
             break
+            
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
     
-    result = generate_bip_hypothesis(student_code, student_logs, tier_data)
+    # 텍스트 및 데이터 종합
+    target_behaviors = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
+    tb_str = ", ".join(target_behaviors) if target_behaviors else "수업 방해 및 과제 불응"
+    
+    antecedents = list(dict.fromkeys([f"{l['location']} ({','.join(l['time_slot_labels'])})" for l in norm_logs[:5]]))
+    ant_str = "; ".join(antecedents) if antecedents else "과제 제시 및 교실 일과 상황"
+    
+    functions = list(dict.fromkeys([','.join(l['function_labels']) for l in norm_logs if l['function_labels']]))
+    func_str = ", ".join(functions) if functions else "불편해소 또는 과제회피"
+    
+    notes_list = [l["notes"] for l in norm_logs if l.get("notes")]
+    notes_summary = " / ".join(notes_list[:5])
+    
+    result = generate_bip_hypothesis(
+        student_info=student_info,
+        target_behavior=tb_str,
+        antecedent_data=ant_str,
+        function_data=func_str,
+        notes_summary=notes_summary,
+        sample_size=len(norm_logs)
+    )
     return {"hypothesis": result}
 
 
@@ -107,21 +128,26 @@ class AIStrategiesRequest(BaseModel):
 
 @router.post("/students/{student_code}/ai-strategies")
 async def ai_bip_strategies(student_code: str, req: AIStrategiesRequest):
-    """Generate BIP intervention strategies using BCBA AI analysis."""
-    from app.services.ai_insight import generate_bip_strategies
-    from app.services.sheets import fetch_all_records
+    """⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)"""
+    from app.services.sheets import fetch_student_status
     
-    beable_code = _resolve_beable_code(student_code)
-    
-    records = fetch_all_records()
-    student_logs = _filter_student_logs(records, student_code, beable_code)
-    
+    status_records = fetch_student_status()
+    student_info = {"code": student_code}
+    for s in status_records:
+        if str(s.get("학생코드", "")).strip() == student_code:
+            student_info = {
+                "code": student_code,
+                "name": s.get("학생명", student_code),
+                "class": s.get("학급", ""),
+                "tier": s.get("Tier", 1)
+            }
+            break
+            
     result = generate_bip_strategies(
-        student_code, 
-        req.target_behavior, 
-        req.hypothesis, 
-        req.goals, 
-        student_logs
+        student_info=student_info,
+        target_behavior=req.target_behavior or "표적행동",
+        hypothesis_data=req.hypothesis or "가설 데이터",
+        function_data=req.goals or "추정 기능"
     )
     return {"strategies": result}
 
@@ -135,94 +161,43 @@ class AIBIPFullRequest(BaseModel):
 
 @router.post("/students/{student_code}/ai-bip-full")
 async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
-    """Generate comprehensive AI BIP using ALL data sources."""
-    from app.services.ai_insight import generate_full_bip
-    from app.services.sheets import (
-        fetch_all_records, fetch_student_status,
-        fetch_meeting_notes, get_monthly_cico_data,
-        normalize_date_string
-    )
-    import datetime
+    """⑨ 🤖 AI BIP 전체 계획서 제안 (BIP Step 12)"""
+    from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
     
-    # Resolve BeAble code for BehaviorLogs1 matching
     beable_code = _resolve_beable_code(student_code)
-    
-    # 1) BehaviorLogs1 for the period
     records = fetch_all_records()
-    student_logs = _filter_student_logs(records, student_code, beable_code)
+    raw_logs = _filter_student_logs(records, student_code, beable_code)
     
-    # Filter by date if provided
     if req.start_date and req.end_date:
         sd = normalize_date_string(req.start_date)
         ed = normalize_date_string(req.end_date)
-        student_logs = [
-            r for r in student_logs
-            if sd <= normalize_date_string(r.get("행동발생 날짜", "")) <= ed
-        ]
-    
-    # 2) TierStatus
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("발생날짜", r.get("date", ""))) <= ed]
+        
     status_records = fetch_student_status()
-    tier_data = {}
+    student_info = {"code": student_code}
     for s in status_records:
         if str(s.get("학생코드", "")).strip() == student_code:
-            tier_data = s
+            student_info = {
+                "code": student_code,
+                "name": s.get("학생명", student_code),
+                "class": s.get("학급", ""),
+                "tier": s.get("Tier", 1)
+            }
             break
+            
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
     
-    # 3) MeetingNotes — try both student_code and beable_code
-    meeting_notes = []
-    try:
-        notes_result = fetch_meeting_notes(student_code=student_code)
-        meeting_notes = notes_result if isinstance(notes_result, list) else []
-        # Also try with beable_code if different
-        if beable_code and beable_code != student_code:
-            notes_beable = fetch_meeting_notes(student_code=beable_code)
-            if isinstance(notes_beable, list):
-                meeting_notes.extend(notes_beable)
-    except Exception as e:
-        print(f"MeetingNotes fetch error: {e}")
-    
-    # 4) CICO monthly data — match by student_code (학생코드 in CICO sheet)
-    cico_data = []
-    try:
-        now = datetime.datetime.now()
-        month = now.month
-        if req.start_date:
-            try:
-                month = int(req.start_date.split("-")[1])
-            except:
-                pass
-        cico_result = get_monthly_cico_data(month)
-        codes_to_match = {student_code}
-        if beable_code:
-            codes_to_match.add(beable_code)
+    target_behavior = "신체적 공격 및 과제 거부/이탈"
+    if norm_logs:
+        target_behavior = f"{norm_logs[0]['behavior_type']} (평균 강도 {round(sum(l['intensity'] for l in norm_logs)/len(norm_logs),1)}/5, 누적 {len(norm_logs)}건)"
         
-        if isinstance(cico_result, dict) and "students" in cico_result:
-            for cs in cico_result["students"]:
-                cs_code = str(cs.get("code", cs.get("student_code", cs.get("학생코드", "")))).strip()
-                if cs_code in codes_to_match:
-                    cico_data.append(cs)
-        elif isinstance(cico_result, list):
-            for cs in cico_result:
-                cs_code = str(cs.get("code", cs.get("student_code", cs.get("학생코드", "")))).strip()
-                if cs_code in codes_to_match:
-                    cico_data.append(cs)
-    except Exception as e:
-        print(f"CICO data fetch error: {e}")
-    
-    # 5) User-provided fields 9-11
-    user_context = {
-        "medication_status": req.medication_status,
-        "reinforcer_info": req.reinforcer_info,
-        "other_considerations": req.other_considerations,
-    }
-    
     result = generate_full_bip(
-        student_code=student_code,
-        behavior_logs=student_logs,
-        tier_data=tier_data,
-        meeting_notes=meeting_notes,
-        cico_data=cico_data,
-        user_context=user_context
+        student_info=student_info,
+        target_behavior=target_behavior,
+        hypothesis_data="과제 제시 및 급식/전이 상황에서의 불편해소 및 회피",
+        strategies_data=f"투약: {req.medication_status}, 선호강화제: {req.reinforcer_info}, 기타: {req.other_considerations}",
+        school_crisis_protocol="경은학교 위기관리 4단계 프로토콜 (전조-고조-위기-회복 및 최소제한원칙 준수)",
+        behavior_logs=norm_logs
     )
     
     return {"analysis": result}

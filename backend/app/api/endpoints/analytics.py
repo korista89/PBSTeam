@@ -1,12 +1,25 @@
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from app.services.analysis import get_analytics_data
 from app.services.sheets import (
     fetch_all_records, get_beable_code_mapping, get_tier3_report_data,
     fetch_student_status, fetch_meeting_notes, get_monthly_cico_data,
     normalize_date_string
+)
+from app.services.normalize import (
+    normalize_behavior_log, calculate_data_quality_report
+)
+from app.services.contagion import analyze_peer_contagion
+from app.services.ai_insight import (
+    generate_bcba_comprehensive_analysis,
+    generate_bcba_section_analysis,
+    generate_bcba_cico_analysis,
+    generate_bcba_meeting_minutes,
+    generate_bcba_tier3_analysis,
+    generate_bcba_student_analysis,
+    generate_peer_contagion_analysis
 )
 
 router = APIRouter()
@@ -15,148 +28,84 @@ router = APIRouter()
 # Date filtering helper
 # ============================================================
 def _filter_by_date(records: list, start_date: str = None, end_date: str = None) -> list:
-    """Filter BehaviorLogs1 by date range. Returns all records if no dates provided."""
+    """Filter records by date range. Returns all records if no dates provided."""
     if not start_date or not end_date:
         return records
     
-    # Normalize inputs to YYYY-MM-DD
     sd = normalize_date_string(start_date)
     ed = normalize_date_string(end_date)
     
     filtered = []
     for r in records:
-        # Normalize record date for comparison
-        rd = normalize_date_string(r.get("행동발생 날짜", ""))
+        rd = normalize_date_string(r.get("date", r.get("행동발생날짜", r.get("발생날짜", r.get("행동발생 날짜", "")))))
         if rd and sd <= rd <= ed:
             filtered.append(r)
     return filtered
 
 
-class MeetingMinutesRequest(BaseModel):
-    start_date: str
-    end_date: str
-    context_start_date: Optional[str] = None
-    context_end_date: Optional[str] = None
+def _get_normalized_records(start_date: str = None, end_date: str = None) -> List[dict]:
+    """Fetch raw records from Google Sheets and pass through §2 Normalization Layer."""
+    raw_records = fetch_all_records()
+    raw_filtered = _filter_by_date(raw_records, start_date, end_date)
+    
+    status_records = fetch_student_status()
+    tier_info_map = {}
+    for s in status_records:
+        code = str(s.get("학생코드", s.get("code", ""))).strip()
+        name = str(s.get("학생명", s.get("name", ""))).strip()
+        meta = {
+            "class": s.get("학급", ""),
+            "tier": s.get("Tier", s.get("지원단계", 1))
+        }
+        if code:
+            tier_info_map[code] = meta
+        if name:
+            tier_info_map[name] = meta
+            
+    return [normalize_behavior_log(r, tier_info_map) for r in raw_filtered]
 
-@router.post("/ai-meeting-minutes")
-async def ai_meeting_minutes(req: MeetingMinutesRequest):
-    """Generate comprehensive AI meeting minutes using ALL school data."""
-    from app.services.ai_insight import generate_bcba_meeting_minutes
+
+# ============================================================
+# §2 Data Quality Endpoint
+# ============================================================
+@router.get("/data-quality")
+async def get_data_quality(start_date: str = None, end_date: str = None):
+    """
+    §2 데이터 정규화 레이어 품질 진단:
+    정규화 실패 건수, 필드별 오염률, 평균 기록 지연일 JSON 반환
+    """
+    normalized_logs = _get_normalized_records(start_date, end_date)
+    report = calculate_data_quality_report(normalized_logs)
+    return report
+
+
+# ============================================================
+# §4 Peer Contagion Endpoint
+# ============================================================
+@router.get("/peer-contagion")
+async def get_peer_contagion(start_date: str = None, end_date: str = None, with_ai: bool = False):
+    """
+    §4 학급 또래 행동 전염 분석:
+    특기사항 텍스트 기반 상호작용 네트워크 및 AI 임상 분석 보고서 반환
+    """
+    normalized_logs = _get_normalized_records(start_date, end_date)
+    status_records = fetch_student_status()
     
-    # 1. Fetch current and context analytics using centralized service
-    analytics = get_analytics_data(req.start_date, req.end_date)
-    summary = analytics["summary"]
-    risk_list = analytics["risk_list"]
+    contagion_data = analyze_peer_contagion(normalized_logs, status_records)
     
-    context_summary = None
-    if req.context_start_date and req.context_end_date:
-        context_analytics = get_analytics_data(req.context_start_date, req.context_end_date)
-        context_summary = context_analytics["summary"]
-    
-    # Sort by count desc
-    risk_list.sort(key=lambda x: x.get("count", 0), reverse=True)
-    
-    # 3. CICO Stats (fetch month from end_date)
-    import datetime
-    try:
-        # Extract month from end_date (YYYY-MM-DD or YYYY-MM)
-        date_parts = req.end_date.split("-")
-        current_month = int(date_parts[1]) if len(date_parts) > 1 else datetime.datetime.now().month
-    except:
-        current_month = datetime.datetime.now().month
+    ai_analysis = ""
+    if with_ai and contagion_data["edges"]:
+        ai_analysis = generate_peer_contagion_analysis(contagion_data)
         
-    cico_data = get_monthly_cico_data(current_month)
-    if isinstance(cico_data, dict) and "summary" in cico_data:
-        cico_stats = cico_data["summary"]
-        
-    # 4. Tier 3 Data
-    t3_data = get_tier3_report_data(req.start_date, req.end_date)
-    tier3_stats = []
-    if isinstance(t3_data, dict) and "students" in t3_data:
-        tier3_stats = t3_data["students"]
-        
-    result = generate_bcba_meeting_minutes(
-        req.start_date, req.end_date,
-        summary, risk_list, cico_stats, tier3_stats,
-        context_start=req.context_start_date,
-        context_end=req.context_end_date,
-        context_summary=context_summary
-    )
-    
-    return {"analysis": result}
-
-
-@router.get("/dashboard")
-async def get_dashboard_summary(start_date: str = None, end_date: str = None, class_id: str = None):
-    return get_analytics_data(start_date, end_date, class_id)
-
-@router.get("/debug-sheets")
-async def debug_sheets():
-    from app.services.sheets import get_sheets_client, safe_get_all_records, settings
-    client = get_sheets_client()
-    if not client:
-        return {"error": "No sheets client"}
-    sheet = client.open_by_url(settings.SHEET_URL)
-    worksheets_info = []
-    for ws in sheet.worksheets():
-        try:
-            records = safe_get_all_records(ws)
-            sample_keys = list(records[0].keys()) if records else []
-            worksheets_info.append({
-                "title": ws.title,
-                "row_count": len(records),
-                "columns": sample_keys[:10]
-            })
-        except Exception as e:
-            worksheets_info.append({
-                "title": ws.title,
-                "error": str(e)
-            })
-    return {"sheets": worksheets_info}
-
-@router.get("/meeting")
-async def get_meeting_analysis(target_date: str = None):
-    from app.services.analysis import analyze_meeting_data
-    return analyze_meeting_data(target_date)
-
-@router.get("/tier3-report")
-async def get_tier3_report(start_date: str = None, end_date: str = None, class_id: str = None):
-    """Get Tier3 report data for decision making. Supports class_id filter for class managers."""
-    import traceback
-    try:
-        data = get_tier3_report_data(start_date, end_date, class_id)
-        if isinstance(data, dict) and "error" in data:
-            print(f"[T3-REPORT] Error from get_tier3_report_data: {data['error']}")
-            from fastapi import HTTPException
-            raise HTTPException(status_code=500, detail=data["error"])
-        return data
-    except Exception as e:
-        from fastapi import HTTPException
-        if isinstance(e, HTTPException):
-            raise
-        err_msg = str(e)[:300] if str(e) else "T3 데이터 처리 중 오류 발생"
-        print(f"[T3-REPORT] Unhandled exception: {err_msg}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=err_msg)
-
-
-@router.post("/dashboard/refresh")
-async def refresh_dashboard():
-    """Trigger a refresh of monthly sheets and dashboard data."""
-    from app.services.sheets import initialize_monthly_sheets
-    result = initialize_monthly_sheets()
-    if "error" in result:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
+    return {
+        "network": contagion_data,
+        "ai_analysis": ai_analysis
+    }
 
 
 # ============================================================
 # AI BCBA Analysis Endpoints
 # ============================================================
-
-from pydantic import BaseModel
-from typing import Optional, List
 
 class SectionAnalysisRequest(BaseModel):
     section_name: str
@@ -178,30 +127,56 @@ class StudentAnalysisRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
+class ComprehensiveAnalysisRequest(BaseModel):
+    start_date: str
+    end_date: str
+
+class MeetingMinutesRequest(BaseModel):
+    start_date: str
+    end_date: str
+    context_start_date: Optional[str] = None
+    context_end_date: Optional[str] = None
+
+
+@router.post("/ai-comprehensive-analysis")
+async def ai_comprehensive_analysis(req: ComprehensiveAnalysisRequest):
+    """① 🤖 메인 대시보드 BCBA 종합 분석"""
+    analytics_data = get_analytics_data(req.start_date, req.end_date)
+    summary = analytics_data.get("summary", {})
+    trends = analytics_data.get("trends", [])
+    risk_list = analytics_data.get("risk_list", [])
+    
+    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
+    quality_report = calculate_data_quality_report(normalized_logs)
+    
+    result = generate_bcba_comprehensive_analysis(
+        summary, trends, risk_list, quality_report=quality_report
+    )
+    return {"analysis": result}
+
+
 @router.post("/ai-section-analysis")
 async def ai_section_analysis(req: SectionAnalysisRequest):
-    """Generate BCBA AI analysis for a T1 report section using school-wide data."""
-    from app.services.ai_insight import generate_bcba_section_analysis
+    """② 🤖 5대 심층 영역별(시간/장소/유형/강도/기능) AI 분석"""
+    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
+    quality_report = calculate_data_quality_report(normalized_logs)
     
-    # Enrich with actual school-wide data if not provided
-    enriched_context = dict(req.data_context)
-    if not enriched_context.get("behavior_summary"):
-        records = fetch_all_records()
-        # Apply date range filter
-        records = _filter_by_date(records, req.start_date, req.end_date)
-        if records:
-            enriched_context["total_records"] = len(records)
-            enriched_context["record_sample"] = str(records[:3])[:500]
-            if req.start_date and req.end_date:
-                enriched_context["analysis_period"] = f"{req.start_date} ~ {req.end_date}"
+    chart_data = req.data_context.get("chart_data", req.data_context)
+    top_items = req.data_context.get("top_items", [])
     
-    result = generate_bcba_section_analysis(req.section_name, enriched_context)
+    result = generate_bcba_section_analysis(
+        req.section_name,
+        chart_data=chart_data,
+        top_items=top_items,
+        raw_summary=req.data_context,
+        quality_report=quality_report
+    )
     return {"analysis": result}
+
 
 @router.post("/ai-cico-analysis")
 async def ai_cico_analysis(req: CICOAnalysisRequest):
-    """Generate BCBA AI analysis for CICO report using comprehensive data."""
-    from app.services.ai_insight import generate_bcba_cico_analysis
+    """③ 🤖 CICO AI 성과 분석 및 Tier 조정 의사결정"""
     from app.services.sheets import get_cico_report_data
     
     if req.students_data:
@@ -211,87 +186,67 @@ async def ai_cico_analysis(req: CICOAnalysisRequest):
         if "error" in data:
             return {"analysis": f"데이터 로드 실패: {data['error']}"}
         students = data.get("students", [])
-    
-    # Resolve student codes to BeAble codes for BehaviorLogs1 matching
-    beable_mapping = get_beable_code_mapping()
-    reverse_map = {str(v['student_code']).strip(): k for k, v in beable_mapping.items()}
-    
-    cico_student_codes = [str(s.get("code", s.get("student_code", ""))).strip() for s in students]
-    cico_all_codes = set(cico_student_codes)
-    for sc in cico_student_codes:
-        bc = reverse_map.get(sc, "")
-        if bc:
-            cico_all_codes.add(bc)
-    
-    records = fetch_all_records()
-    # Filter by the CICO month's date range
-    import datetime
-    year = datetime.datetime.now().year
-    month_start = f"{year}-{req.month:02d}-01"
-    month_end = f"{year}-{req.month:02d}-31"
-    records = _filter_by_date(records, month_start, month_end)
-    
-    cico_behavior_logs = [
-        r for r in records
-        if str(r.get("학생코드", "")).strip() in cico_all_codes
-        or str(r.get("코드번호", "")).strip() in cico_all_codes
-    ]
-    
+        
+    normalized_logs = _get_normalized_records()
     status_records = fetch_student_status()
-    cico_tier_info = [
-        s for s in status_records
-        if str(s.get("학생코드", "")).strip() in cico_all_codes
-    ]
     
     result = generate_bcba_cico_analysis(
-        students,
-        behavior_logs=cico_behavior_logs[:50],
-        tier_info=cico_tier_info
+        students_data=students,
+        behavior_logs=normalized_logs[:100],
+        tier_info=status_records,
+        selected_month=req.month
     )
     return {"analysis": result}
+
+
+@router.post("/ai-meeting-minutes")
+async def ai_meeting_minutes(req: MeetingMinutesRequest):
+    """④ 🤖 SST 행동중재협의회 공문서 규격 AI 회의록 자동 생성"""
+    analytics = get_analytics_data(req.start_date, req.end_date)
+    risk_list = analytics.get("risk_list", [])
+    risk_list.sort(key=lambda x: x.get("count", 0), reverse=True)
+    
+    meeting_data = {
+        "start_date": req.start_date,
+        "end_date": req.end_date,
+        "summary": analytics.get("summary", {}),
+        "total_incidents": analytics.get("summary", {}).get("total_incidents", 0)
+    }
+    
+    result = generate_bcba_meeting_minutes(
+        meeting_data=meeting_data,
+        risk_students=risk_list[:5],
+        recent_trends=analytics.get("trends", [])
+    )
+    return {"analysis": result}
+
 
 @router.post("/ai-tier3-analysis")
 async def ai_tier3_analysis(req: Tier3AnalysisRequest):
-    """Generate BCBA AI analysis for Tier 3 report."""
-    from app.services.ai_insight import generate_bcba_tier3_analysis
-    
+    """⑤ 🤖 Tier 3 심층 위기관리 AI 컨설팅"""
     t3_data = get_tier3_report_data(req.start_date, req.end_date)
     if "error" in t3_data:
         return {"analysis": f"데이터 로드 실패: {t3_data['error']}"}
-    
-    # Resolve student codes to BeAble codes for BehaviorLogs1
-    beable_mapping = get_beable_code_mapping()
-    reverse_map = {str(v['student_code']).strip(): k for k, v in beable_mapping.items()}
-    
-    t3_student_codes = [s.get("code", "") for s in t3_data.get("students", [])]
-    t3_all_codes = set(t3_student_codes)
-    for sc in t3_student_codes:
-        bc = reverse_map.get(str(sc).strip(), "")
-        if bc:
-            t3_all_codes.add(bc)
-    
-    records = fetch_all_records()
-    # Apply date range filter
-    records = _filter_by_date(records, req.start_date, req.end_date)
+        
+    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
+    t3_students = t3_data.get("students", [])
+    t3_codes = {str(s.get("code", "")).strip() for s in t3_students}
     
     t3_logs = [
-        r for r in records
-        if str(r.get("학생코드", "")).strip() in t3_all_codes
-        or str(r.get("코드번호", "")).strip() in t3_all_codes
+        l for l in normalized_logs
+        if l.get("student_code") in t3_codes or l.get("student_name") in t3_codes
     ]
     
     result = generate_bcba_tier3_analysis(
-        t3_data.get("students", []), 
-        t3_logs
+        tier3_students=t3_students,
+        behavior_logs=t3_logs
     )
     return {"analysis": result}
 
+
 @router.post("/ai-student-analysis")
 async def ai_student_analysis(req: StudentAnalysisRequest):
-    """Generate BCBA AI analysis for individual student using ALL data sources."""
-    from app.services.ai_insight import generate_bcba_student_analysis
-    
-    # Resolve BeAble code for BehaviorLogs1 matching
+    """⑥ 🤖 개별 학생 A-B-C 기능평가 기반 AI 종합 진단"""
     beable_mapping = get_beable_code_mapping()
     target_code = str(req.student_code or "").strip()
     
@@ -300,121 +255,82 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
             if str(info.get('student_name', '')).strip() == str(req.student_name).strip():
                 target_code = str(info.get('student_code', bc)).strip()
                 break
-                
     if not target_code and req.student_name:
         target_code = req.student_name
-        
+
     beable_code = ""
     for bc, info in beable_mapping.items():
         if str(info.get('student_code', '')).strip() == target_code:
             beable_code = bc
             break
-    
+            
     codes_to_match = {target_code}
     if beable_code:
         codes_to_match.add(str(beable_code).strip())
     if req.student_name:
         codes_to_match.add(str(req.student_name).strip())
-    
-    records = fetch_all_records()
+
+    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
     student_logs = [
-        r for r in records
-        if str(r.get("학생코드", "")).strip() in codes_to_match
-        or str(r.get("코드번호", "")).strip() in codes_to_match
-        or str(r.get("학생명", "")).strip() in codes_to_match
+        l for l in normalized_logs
+        if l.get("student_code") in codes_to_match or l.get("student_name") in codes_to_match
     ]
     
-    # Filter by date if provided
-    student_logs = _filter_by_date(student_logs, req.start_date, req.end_date)
-    
-    # Get student info from TierStatus
     status_records = fetch_student_status()
     student_info = {}
     for s in status_records:
-        if str(s.get("학생코드", "")).strip() == str(req.student_code).strip():
+        if str(s.get("학생코드", "")).strip() == target_code or str(s.get("학생명", "")).strip() == target_code:
             student_info = {
-                "code": req.student_code,
+                "code": target_code,
+                "name": s.get("학생명", req.student_name or target_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", s.get("지원단계", "")),
+                "tier": s.get("Tier", s.get("지원단계", 1)),
             }
             break
-    
     if not student_info:
-        student_info = {"code": req.student_code, "class": "", "tier": ""}
-    
-    # Gather MeetingNotes for this student
-    meeting_notes = []
-    try:
-        notes_result = fetch_meeting_notes(student_code=req.student_code)
-        meeting_notes = notes_result if isinstance(notes_result, list) else []
-        # Also try with beable_code
-        if beable_code and beable_code != req.student_code:
-            notes_beable = fetch_meeting_notes(student_code=beable_code)
-            if isinstance(notes_beable, list):
-                meeting_notes.extend(notes_beable)
-    except Exception as e:
-        print(f"MeetingNotes fetch error for student analysis: {e}")
-    
-    # Gather CICO data for this student
-    import datetime
-    cico_data = []
-    try:
-        # Extract month from end_date or start_date
-        month = datetime.datetime.now().month
-        ref_date = req.end_date or req.start_date
-        if ref_date:
-            try:
-                date_parts = ref_date.split("-")
-                month = int(date_parts[1]) if len(date_parts) > 1 else month
-            except:
-                pass
-        cico_result = get_monthly_cico_data(month)
-        if isinstance(cico_result, dict) and "students" in cico_result:
-            for cs in cico_result["students"]:
-                cs_code = str(cs.get("학생코드", cs.get("code", cs.get("student_code", "")))).strip()
-                if cs_code in codes_to_match or any(c in cs_code for c in codes_to_match):
-                    cico_data.append(cs)
-    except Exception as e:
-        print(f"CICO fetch error for student analysis: {e}")
+        student_info = {"code": target_code, "name": req.student_name or target_code, "class": "", "tier": 1}
+        
+    all_notes = [{"date": l.get("date"), "content": l.get("notes")} for l in student_logs if l.get("notes")]
     
     result = generate_bcba_student_analysis(
-        student_info, student_logs,
-        meeting_notes=meeting_notes,
-        cico_data=cico_data
+        student_info=student_info,
+        student_logs=student_logs,
+        all_notes=all_notes
     )
     return {"analysis": result}
 
-class ComprehensiveAnalysisRequest(BaseModel):
-    start_date: str
-    end_date: str
 
-@router.post("/ai-comprehensive-analysis")
-async def ai_comprehensive_analysis(req: ComprehensiveAnalysisRequest):
-    """Generate holistic BCBA AI analysis for the entire school's PBS operation."""
-    from app.services.ai_insight import generate_bcba_comprehensive_analysis
-    from app.services.analysis import get_analytics_data
-    
-    # 1. Fetch Dashboard Analytics Data
-    analytics_data = get_analytics_data(req.start_date, req.end_date)
-    
-    # 2. Fetch CICO Data for the requested period
-    import datetime
+# ============================================================
+# Basic Analytics Endpoints
+# ============================================================
+@router.get("/dashboard")
+async def get_dashboard_summary(start_date: str = None, end_date: str = None, class_id: str = None):
+    return get_analytics_data(start_date, end_date, class_id)
+
+@router.get("/meeting")
+async def get_meeting_analysis(target_date: str = None):
+    from app.services.analysis import analyze_meeting_data
+    return analyze_meeting_data(target_date)
+
+@router.get("/tier3-report")
+async def get_tier3_report(start_date: str = None, end_date: str = None, class_id: str = None):
+    import traceback
     try:
-        date_parts = req.end_date.split("-")
-        current_month = int(date_parts[1]) if len(date_parts) > 1 else datetime.datetime.now().month
-    except:
-        current_month = datetime.datetime.now().month
-        
-    cico_data = get_monthly_cico_data(current_month)
-    
-    # 3. Fetch Tier 3 Report
-    t3_data = get_tier3_report_data(req.start_date, req.end_date)
-    
-    result = generate_bcba_comprehensive_analysis(
-        req.start_date, 
-        req.end_date,
-        analytics_data,
-        cico_data,
-        t3_data
-    )
-    return {"analysis": result}
+        data = get_tier3_report_data(start_date, end_date, class_id)
+        if isinstance(data, dict) and "error" in data:
+            raise HTTPException(status_code=500, detail=data["error"])
+        return data
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
+        err_msg = str(e)[:300] if str(e) else "T3 데이터 처리 중 오류 발생"
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=err_msg)
+
+@router.post("/dashboard/refresh")
+async def refresh_dashboard():
+    from app.services.sheets import initialize_monthly_sheets
+    result = initialize_monthly_sheets()
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result

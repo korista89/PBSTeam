@@ -1,56 +1,115 @@
 import os
 import json
+import re
+import requests
 from dotenv import load_dotenv
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 load_dotenv()
 
-import requests
-
-# Gemini API setup
+# Gemini & Cloud API setup
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-BCBA_SYSTEM_PROMPT = """당신은 BCBA(Board Certified Behavior Analyst) 자격을 가진 특수교육 및 행동 분석 전문가입니다.
-학교차원 긍정적 행동지원(SW-PBIS) 프레임워크와 ABA(응용행동분석) 원리에 기반하여 정밀하게 데이터를 분석합니다. 
-학교 행동중재지원팀(SST)의 의사결정을 돕기 위해 데이터 기반의 실제적이고 전문적인 분석 결과를 제공하는 것이 목표입니다.
+# ==============================================================================
+# §1. 모든 AI 버튼 공통 BCBA 임상 시스템 프롬프트 (Common System Prompt)
+# ==============================================================================
 
-[작성 가이드라인]
-1. 어조: 전문적이고 객관적이되, 현장 교사들이 이해하기 쉬운 한국어(정중한 '해요체')로 작성합니다.
-2. 핵심: 현상 나열보다는 '왜(기능)' 그런 일이 일어나는지, 어떤 '증거기반실제(EBP)'를 적용해야 하는지에 집중합니다.
-3. 근거: 반드시 제공된 수치와 데이터를 근거로 분석을 수행합니다.
-4. 구조: 가독성을 위해 Markdown 서식(볼드, 목록, 필요시 테이블)을 적극적으로 활용합니다."""
+COMMON_BCBA_SYSTEM_PROMPT = """너는 한국 특수학교의 학교차원 긍정적 행동지원(SW-PBIS)을 자문하는 BCBA 수준 행동분석 전문가이자 '경은학교 AI 학교행동중재전문교사'다.
+사용자는 특수교사·행동중재 담당자이며, 산출물은 학교장 보고와 학부모 협의에 쓰일 수 있다.
 
-import re
+[해석 원칙]
+1. '추정기능' 필드는 교사의 간접 추정이며 기능분석(FA)이나 정식 FBA 결과가 아니다.
+   "이 학생의 기능은 회피다"라고 단정하지 마라. 반드시 이렇게 쓴다:
+   "교사 추정 기준 회피가 N건(전체 M건 중 X%)으로 가장 많다. 확정하려면 ABC 직접관찰이 필요하다."
+2. 모든 수치에 분모와 표본수를 함께 쓴다. (예: "교실 75%(n=42/56)")
+3. 기간 비교 시 반드시 경고한다: 이 데이터에는 관찰 시간·기회 수가 없어 비율(rate) 산출이 불가능하다.
+   건수 증가가 실제 행동 증가인지 교사 기록 충실도 증가인지 구분할 수 없다.
+4. '건수'(에피소드 행 수)와 '발생횟수 합계'를 절대 섞지 마라. 항상 어느 쪽인지 명시한다.
+5. 표본이 5건 미만이면 해석하지 말고 "표본 부족(n<5)으로 해석 보류"라고 쓴다.
+
+[작성 원칙]
+6. 모든 행동은 관찰 가능하고 측정 가능한 조작적 정의로 기술한다.
+   "산만하다", "공격적인 아이" 같은 특성 귀인·낙인 표현을 금지한다. 행동은 사람이 아니라 상황의 함수다.
+7. 중재 제안은 반드시 3단계 구조를 갖춘다.
+   ① 선행사건·배경사건 조절(예방) ② 대체행동 교수(FCT/BST 등) ③ 강화 기반 후속결과(DRA/토큰)
+   벌 중심, 소거 단독, 감각 차단 위주의 제안을 하지 마라.
+8. 대체행동은 표적행동과 기능적으로 동등해야 하며, 학생이 더 적은 노력으로 더 빨리 같은 결과를 얻을 수 있어야 한다. 그 근거를 한 줄로 밝혀라.
+9. 모든 제안 끝에 [검증 방법]을 붙인다. 어떤 데이터를 몇 주간 어떤 기준으로 보면 효과가 있다고 판단할지 구체적으로 쓴다.
+
+[금지]
+10. 의학적 진단명 추정, 약물 조정 제안, 가정환경에 대한 단정적 원인 귀인 금지.
+11. 데이터에 없는 내용을 지어내지 마라. 근거가 없으면 "해당 데이터 없음"이라고 쓴다.
+12. 학생 실명은 산출물 성격에 맞게 다룬다. 학교장·외부 보고용에는 학생코드를 우선 사용한다.
+
+[출력 형식]
+- 한국어. 개조식. 소제목 사용. 이모지 남용 금지.
+- 순서: 핵심 요약(3줄) → 데이터 근거 → 해석 → 실행 제안(우선순위 표시) → 검증 방법 → 데이터 한계
+- 마지막에 반드시 [데이터 한계] 섹션을 넣어 이번 분석에서 신뢰할 수 없는 부분을 명시한다."""
+
+
+# ==============================================================================
+# LLM 호출 파이프라인 (Local Ollama 1순위 + Native Gemini & Cloud Fallback)
+# ==============================================================================
 
 def _clean_llm_output(text: str) -> str:
     """Clean LLM output by removing think tags and trimming whitespace."""
     if not text:
         return ""
-    # Strip <think>...</think> if present in reasoning models
     text = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE).strip()
     return text
 
-def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -> Optional[str]:
-    """Call Local Ollama LLM endpoint (100% Private, Zero API cost)."""
-    base_url = os.getenv("LOCAL_LLM_URL", "http://localhost:11434").rstrip("/")
-    configured_model = os.getenv("LOCAL_LLM_MODEL", "").strip()
+def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+    """Call Local LLM endpoint (LM Studio on :1234 or Ollama on :11434) with Gemma 4 E4B optimizations."""
+    configured_url = os.getenv("LOCAL_LLM_URL", "http://localhost:1234/v1").rstrip("/")
+    configured_model = os.getenv("LOCAL_LLM_MODEL", "gemma-4-E4B-it-GGUF").strip()
     
-    # Priority list of model names to try on Ollama
+    # 1. Try LM Studio OpenAI-compatible endpoint (:1234/v1)
+    lmstudio_urls = [
+        configured_url if ":1234" in configured_url else "http://localhost:1234/v1",
+        "http://127.0.0.1:1234/v1"
+    ]
+    for lm_url in lmstudio_urls:
+        try:
+            payload = {
+                "model": configured_model or "gemma-4-E4B-it-GGUF",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.6,
+                "max_tokens": max_tokens,
+                "frequency_penalty": 0.05,
+                "presence_penalty": 0.0
+            }
+            resp = requests.post(f"{lm_url}/chat/completions", json=payload, timeout=120)
+            if resp.status_code == 200:
+                data = resp.json()
+                choices = data.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "").strip()
+                    cleaned = _clean_llm_output(content)
+                    if cleaned:
+                        return cleaned
+        except Exception:
+            pass
+            
+    # 2. Try Ollama endpoint (:11434)
+    ollama_url = "http://localhost:11434" if ":11434" not in configured_url else configured_url
     candidate_models = [
         configured_model,
-        "qwen3.5-custom:latest",
-        "qwen3.5-custom",
-        "qwen3.5-9b:latest",
-        "parkpro-local-fast:latest",
-        "parkpro-local:latest",
-        "qwen2.5:32b",
-        "gemma4:26b"
+        "gemma-4-E4B-it-GGUF:latest",
+        "gemma-4-E4B-it-GGUF",
+        "gemma-4-e4b-it",
+        "gemma-4-e4b-it:latest",
+        "lmstudio-community/gemma-4-E4B-it-GGUF",
+        "gemma4:26b",
+        "hf.co/michaelw9999/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF:latest",
+        "qwen3.5-custom:latest"
     ]
     candidate_models = [m for m in candidate_models if m]
     
-    # First query Ollama for actually installed models
     try:
-        tags_resp = requests.get(f"{base_url}/api/tags", timeout=3)
+        tags_resp = requests.get(f"{ollama_url}/api/tags", timeout=2)
         if tags_resp.status_code == 200:
             installed = [m.get("name") for m in tags_resp.json().get("models", [])]
             ordered_models = [m for m in candidate_models if m in installed]
@@ -59,8 +118,7 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -
                     ordered_models.append(inst)
             candidate_models = ordered_models
     except Exception:
-        # Local Ollama is unreachable, return None to fallback
-        return None
+        pass
         
     for model in candidate_models:
         try:
@@ -72,23 +130,29 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 1200) -
                 ],
                 "stream": False,
                 "options": {
-                    "temperature": 0.7,
+                    "temperature": 0.6,
+                    "repeat_penalty": 1.05,
+                    "top_p": 0.95,
+                    "top_k": 40,
+                    "num_ctx": 16384,
                     "num_predict": max_tokens
                 }
             }
-            resp = requests.post(f"{base_url}/api/chat", json=payload, timeout=120)
+            resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=120)
             if resp.status_code == 200:
                 res_data = resp.json()
                 msg = res_data.get("message", {}).get("content", "").strip()
                 cleaned = _clean_llm_output(msg)
                 if cleaned:
-                    print(f"✅ Local AI ({model}) generated response ({len(cleaned)} chars)")
                     return cleaned
-        except Exception as e:
-            print(f"Local AI call with {model} failed: {e}")
+        except Exception:
             continue
             
     return None
+
+def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Optional[str]:
+    """Alias for _call_local_llm for backward compatibility."""
+    return _call_local_llm(system_prompt, user_prompt, max_tokens)
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Fallback Gemini & Cloud API call wrapper with multiple model fallbacks."""
@@ -98,7 +162,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     
     last_error = ""
     
-    # 1. Try Google Gemini Native API (No truncation, full output tokens)
+    # 1. Native Gemini API
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     if gemini_key:
         gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
@@ -127,7 +191,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                 last_error = str(e)
                 continue
                 
-    # 2. Try Groq API (Ultra-fast Llama-3.3 70B if GROQ_API_KEY is configured)
+    # 2. Groq API
     groq_key = os.getenv("GROQ_API_KEY", "")
     if groq_key:
         groq_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
@@ -155,7 +219,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                 last_error = str(e)
                 continue
 
-    # 3. Try Gemini OpenAI-compatible endpoint
+    # 3. Gemini OpenAI endpoint
     if gemini_key:
         for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
             try:
@@ -185,762 +249,428 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Primary LLM dispatcher: tries Local Ollama first, falls back to Gemini API."""
-    # 1. Try Local Ollama first (100% Free & Secure)
     ollama_result = _call_ollama(system_prompt, user_prompt, max_tokens)
     if ollama_result:
         return ollama_result
-        
-    # 2. Fallback to Gemini if Ollama is unreachable
     return _call_gemini(system_prompt, user_prompt, max_tokens)
 
 
-def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
-    """Generate professional BCBA insight for school-wide dashboard."""
-    risk_text = ", ".join([f"{r.get('name', r.get('학생명', 'N/A'))} ({r.get('count', 0)}건)" for r in risk_list[:3]]) if risk_list else "없음"
-    
-    prompt = f"""[학교 전체 데이터 요약]
-- 분석 기간 총 행동 발생: {summary.get('total_incidents', 0)}건
-- 일평균 발생율: {summary.get('daily_avg', '데이터 없음')}
-- 고위험(Risk) 학생군: {summary.get('risk_student_count', 0)}명
-- 집중 관리 대상자: {risk_text}
+# ==============================================================================
+# §3. 9대 고도화 AI 분석 버튼별 구현 함수
+# ==============================================================================
 
-[지시사항]
-BCBA로서 위 데이터를 바탕으로 '학교 행동중재지원팀(SST) 주간 브리핑'을 작성하세요.
-
-1. **상태 진단**: 전체적인 행동 발생 현황이 안정적인지, 아니면 특정 요인(날짜, 이벤트 등)으로 인해 악화 중인지 진단하세요.
-2. **패턴 분석**: 고위험 학생들의 발생 빈도와 심각도를 고려할 때, 학급 차원의 환경 수정이 필요한지 아니면 개별화된 FBA(기능평가)가 우선인지 제안하세요.
-3. **EBP 제안**: 교직원이 즉시 실천할 수 있는 보편적 지원(Tier 1) 전략(예: 칭찬 강화 비율 확대, 시각적 일과표 정비 등)을 전문 용어와 함께 제시하세요.
-4. **결론**: 이번 주 가장 시급하게 추진해야 할 행동 지원 액션 플랜을 1가지만 명확히 짚어주세요.
-
-*분량: 400~600자 내외 핵심 요약*"""
-    
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
-
-
-def generate_meeting_agent_report(
+# ------------------------------------------------------------------------------
+# ① 🤖 메인 대시보드 BCBA 종합 분석
+# ------------------------------------------------------------------------------
+def generate_bcba_comprehensive_analysis(
     summary: dict,
     trends: list,
     risk_list: list,
-    tier_stats: Optional[dict] = None,
-    cico_summary: Optional[dict] = None,
-    tier3_students: Optional[list] = None
-) -> dict:
-    """Generate a comprehensive meeting agent report for the School Behavior Intervention Team."""
-    total_incidents = summary.get("total_incidents", 0)
-    risk_count = len(risk_list) if risk_list else 0
-    
-    if not tier_stats:
-        tier_stats = {
-            "enrolled": 210,
-            "tier1": {"count": 200, "pct": 95.2},
-            "tier2_cico": {"count": 5, "pct": 2.4, "pure": 3},
-            "tier2_sst": {"count": 2, "pct": 1.0},
-            "tier3": {"count": 2, "pct": 1.0},
-            "tier3_plus": {"count": 1, "pct": 0.5},
-        }
-    
-    enrolled = tier_stats.get("enrolled", 210)
-    t1 = tier_stats.get("tier1", {})
-    t2c = tier_stats.get("tier2_cico", {})
-    t2s = tier_stats.get("tier2_sst", {})
-    t3 = tier_stats.get("tier3", {})
-    t3p = tier_stats.get("tier3_plus", {})
-    
-    briefing_lines = []
-    briefing_lines.append("## 📋 주요 현황 브리핑")
-    briefing_lines.append("")
-    briefing_lines.append(f"### 전교생 현황 (재학생 {enrolled}명 기준)")
-    briefing_lines.append("")
-    briefing_lines.append("| Tier | 인원 | 비율 | 비고 |")
-    briefing_lines.append("|------|------|------|------|")
-    briefing_lines.append(f"| Tier 1 (보편적 지원) | {t1.get('count', 0)}명 | {t1.get('pct', 0)}% | 일반 학생 |")
-    briefing_lines.append(f"| Tier 2 CICO | {t2c.get('count', 0)}명 | {t2c.get('pct', 0)}% | 순수 {t2c.get('pure', t2c.get('count', 0))}명 |")
-    briefing_lines.append(f"| Tier 2 SST | {t2s.get('count', 0)}명 | {t2s.get('pct', 0)}% | 사회기술훈련 |")
-    briefing_lines.append(f"| Tier 3 (집중지원) | {t3.get('count', 0)}명 | {t3.get('pct', 0)}% | FBA/BIP 대상 |")
-    briefing_lines.append(f"| Tier 3+ (외부연계) | {t3p.get('count', 0)}명 | {t3p.get('pct', 0)}% | 위기 지원 |")
-    briefing_lines.append("")
-    
-    briefing_lines.append(f"### 행동 발생 현황")
-    briefing_lines.append(f"- 분석 기간 내 총 행동 발생 건수: **{total_incidents}건**")
-    if risk_count > 0:
-        briefing_lines.append(f"- 주의 요망 학생: **{risk_count}명**")
-        for r in risk_list[:3]:
-            name = r.get("name", r.get("학생명", ""))
-            count = r.get("count", r.get("건수", 0))
-            briefing_lines.append(f"  - {name}: {count}건")
-    briefing_lines.append("")
-    
-    if cico_summary:
-        briefing_lines.append("### CICO 수행 현황")
-        briefing_lines.append(f"- CICO 대상 학생: {cico_summary.get('total_students', 0)}명")
-        briefing_lines.append(f"- 평균 수행률: {cico_summary.get('avg_rate', 0)}%")
-        briefing_lines.append(f"- 목표 달성: {cico_summary.get('achieved_count', 0)}명 / 미달성: {cico_summary.get('not_achieved_count', 0)}명")
-        briefing_lines.append("")
-    
-    agenda_lines = []
-    agenda_lines.append("## 📌 회의 안건")
-    agenda_lines.append("")
-    agenda_lines.append("### 안건 1: Tier 1 보편적 지원 현황 보고")
-    agenda_lines.append(f"- 전체 행동 발생 추이 및 Big 5 분석 결과 공유")
-    agenda_lines.append(f"- 학교 차원 행동 지원 전략 평가")
-    agenda_lines.append("")
-    agenda_lines.append("### 안건 2: Tier 2 (CICO) 학생별 수행 점검")
-    if cico_summary:
-        achieved = cico_summary.get("achieved_count", 0)
-        not_achieved = cico_summary.get("not_achieved_count", 0)
-        agenda_lines.append(f"- 목표 달성 학생 ({achieved}명): Tier 1 하향 여부 논의")
-        agenda_lines.append(f"- 미달성 학생 ({not_achieved}명): CICO 수정 또는 Tier 3 상향 검토")
-    else:
-        agenda_lines.append("- 학생별 수행률 및 달성 여부 점검")
-        agenda_lines.append("- Tier 조정 필요 학생 논의")
-    agenda_lines.append("")
-    agenda_lines.append("### 안건 3: Tier 3 집중지원 학생 점검")
-    if tier3_students:
-        for s in tier3_students[:5]:
-            code = s.get("code", "")
-            incidents = s.get("incidents", 0)
-            agenda_lines.append(f"- 학생 {code}: {incidents}건 발생, FBA/BIP 적절성 검토")
-    else:
-        agenda_lines.append("- Tier 3 학생 행동 추이 및 BIP 적절성 검토")
-        agenda_lines.append("- 외부 연계(Tier 3+) 필요 여부 논의")
-    agenda_lines.append("")
-    
-    if risk_count > 0:
-        agenda_lines.append("### ⚠️ 긴급 안건")
-        for r in risk_list[:3]:
-            name = r.get("name", r.get("학생명", ""))
-            count = r.get("count", r.get("건수", 0))
-            agenda_lines.append(f"- **{name}** ({count}건): 즉각적 개입 방안 논의 필요")
-        agenda_lines.append("")
-    
-    order_lines = []
-    order_lines.append("## 🔄 안건 진행 순서")
-    order_lines.append("")
-    order_lines.append("```")
-    order_lines.append("1️⃣ Tier 1 보편적 지원 보고 (10분)")
-    order_lines.append("   → 전체 데이터 리뷰 → 학교 차원 개선 사항 논의")
-    order_lines.append("")
-    order_lines.append("2️⃣ Tier 2 (CICO) 학생별 점검 (15분)")
-    order_lines.append("   → 수행률 리뷰 → 담임 의견 → Tier 조정 결정")
-    order_lines.append("")
-    order_lines.append("3️⃣ Tier 3 집중지원 점검 (15분)")
-    order_lines.append("   → 행동 추이 리뷰 → BIP 적절성 → 외부연계 필요성")
-    order_lines.append("")
-    order_lines.append("4️⃣ 긴급 안건 (필요 시)")
-    order_lines.append("   → 위기 학생 → 즉각 개입 방안 → 담당자 배정")
-    order_lines.append("")
-    order_lines.append("5️⃣ 종합 결정 및 차기 계획 (5분)")
-    order_lines.append("```")
-    order_lines.append("")
-    
-    decision_lines = []
-    decision_lines.append("## 🗳️ 의사결정 방법")
-    decision_lines.append("")
-    decision_lines.append("| Tier 전환 | 기준 | 결정 방법 |")
-    decision_lines.append("|----------|------|----------|")
-    decision_lines.append("| Tier1 → Tier2(CICO) | 주 2회 이상 2주 연속 | 담임 + 팀 합의 |")
-    decision_lines.append("| Tier2 → Tier1 (하향) | 목표 달성 기준 2개월 연속 충족 | 데이터 기반 자동 권고 |")
-    decision_lines.append("| Tier2 → Tier3 (상향) | 3개월 미달성 또는 위기 행동 | 팀 전원 합의 |")
-    decision_lines.append("| Tier3 → Tier3+ | 자·타해 위험 또는 FBA/BIP 효과 없음 | 학교장 승인 필요 |")
-    decision_lines.append("")
-    
-    checklist_lines = []
-    checklist_lines.append("## ☑️ 회의 체크리스트")
-    checklist_lines.append("")
-    checklist_lines.append("- [ ] Tier 1: 이번 달 전체 행동 발생 추이 검토 완료")
-    checklist_lines.append("- [ ] Tier 1: 학교 차원 보편적 지원 전략 점검")
-    
-    if t2c.get("count", 0) > 0:
-        checklist_lines.append(f"- [ ] Tier 2 CICO: {t2c.get('count', 0)}명 학생별 수행률 점검 완료")
-        checklist_lines.append("- [ ] Tier 2 CICO: Tier 조정 대상 학생 결정")
-    
-    if t3.get("count", 0) > 0:
-        checklist_lines.append(f"- [ ] Tier 3: {t3.get('count', 0)}명 학생 BIP 적절성 검토")
-        checklist_lines.append("- [ ] Tier 3: 외부 연계 필요 학생 파악")
-    
-    if t3p.get("count", 0) > 0:
-        checklist_lines.append(f"- [ ] Tier 3+: {t3p.get('count', 0)}명 학생 위기 지원 계획 수립")
-    
-    checklist_lines.append("- [ ] 담임교사/담당자 의견 기록 완료")
-    checklist_lines.append("- [ ] 차기 회의 일정 및 과제 확정")
-    checklist_lines.append("")
-    
-    full_text = "\n".join(
-        briefing_lines + agenda_lines + order_lines + decision_lines + checklist_lines
-    )
-    
-    return {
-        "briefing_text": full_text,
-        "sections": {
-            "briefing": "\n".join(briefing_lines),
-            "agenda": "\n".join(agenda_lines),
-            "order": "\n".join(order_lines),
-            "decision": "\n".join(decision_lines),
-            "checklist": "\n".join(checklist_lines),
-        },
-        "tier_stats": tier_stats,
-        "summary": {
-            "total_incidents": total_incidents,
-            "risk_count": risk_count,
-            "cico_students": cico_summary.get("total_students", 0) if cico_summary else 0,
-        }
-    }
-
-
-# ============================================================
-# BCBA Analysis Functions (Google Gemini)
-# ============================================================
-
-def generate_bcba_section_analysis(section_name: str, data_context: dict) -> str:
-    """Generate professional BCBA analysis for school-wide report sections."""
-    prompt = f"""[분석 대상 섹션]: {section_name}
-[관련 데이터]:
-{_format_dict(data_context)}
-
-[지시사항]
-BCBA로서 학급 및 학교 전체 보고서의 해당 섹션에 대한 임상적 분석을 수행하세요.
-
-1. **데이터 인사이트**: 단순히 수치를 나열하지 말고, 해당 데이터가 학교 차원의 PBIS 운영에 주는 의미를 찾으세요. (예: 특정 시간대 집중 발생 시 인력 배치 이슈 제안)
-2. **EBP 연계**: 분석 결과를 바탕으로 T1(보편), T2(선별) 단계에서 적용할 수 있는 증거기반실제(EBP) 전략을 권고하세요.
-3. **의사결정 가이드**: 관리자와 교사들이 어떤 방향으로 중재 계획을 수정해야 할지 2~3가지 핵심 포인트로 정리하세요.
-
-*정교한 한국어로 400~600자 분량으로 작성하세요.*"""
-    
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
-
-
-def generate_bcba_cico_analysis(students_data: list, behavior_logs: list = None, tier_info: list = None) -> str:
-    """Generate clinical BCBA analysis for CICO (Tier 2) reports."""
-    student_summaries = []
-    for s in students_data[:15]:
-        student_summaries.append(
-            f"- {s.get('code','?')}: 목표={s.get('target_behavior','')}, 수행률={s.get('rate','')}, 달성={s.get('achieved','')}"
-        )
-    
-    behavior_context = ""
-    if behavior_logs:
-        from collections import Counter
-        types = Counter(str(r.get("행동유형", r.get("type", ""))) for r in behavior_logs)
-        behavior_context = f"\n[CICO 학생들의 병행 행동 기록]\n- 빈발 유형: {dict(types.most_common(5))}\n"
-    
-    prompt = f"""[이번 달 CICO 대상자 데이터]
-{chr(10).join(student_summaries)}
-{behavior_context}
-
-[지시사항]
-BCBA로서 이번 달 CICO 성과를 분석하고 Tier 조정 및 중재 수정을 제안하세요.
-
-1. **성과 평가**: 목표 달성률과 실제 행동 발생 기록 간의 상관관계를 분석하세요. (CICO 만족도는 높은데 행동 발생이 여전하다면 중재 수정 필요)
-2. **트렌드 분류**: 학생들을 '자력 회복(Tier 1 복귀 가능)', '유지/정체', '심화(Tier 3 검토)' 그룹으로 분류하고 근거를 제시하세요.
-3. **Tier 조정 권고**: 
-   - 2개월 연속 목표 80% 이상 달성 시: Tier 1 하향 및 사후 관리 전환
-   - 3개월 연속 미달성 시: 중재 강화(Intensification) 또는 FBA 실시 후 Tier 3 상향
-4. **결론**: 담당 교사들을 위한 CICO 운영 팁을 간략히 포함하세요."""
-    
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
-
-
-def generate_bcba_meeting_minutes(
-    start_date: str,
-    end_date: str,
-    summary: dict,
-    risk_list: list,
-    cico_stats: dict = None,
-    tier3_stats: list = None,
-    context_start: str = None,
-    context_end: str = None,
-    context_summary: dict = None,
-    context_risk_list: list = None
+    quality_report: dict = None,
+    class_stats: dict = None
 ) -> str:
-    """Generate professional comparative meeting minutes for the principal and behavior team."""
-    focus_risk_text = "\n".join([f"- {r.get('name', '')}: {r.get('count', 0)}건 (Tier {r.get('tier', '?')})" for r in risk_list[:5]]) if risk_list else "없음"
+    """
+    메인 대시보드 BCBA 종합 분석: 3층 구조 + 위험군 근거 + 학급 밀집도 + 3대 주간 액션 플랜
+    """
+    quality_report = quality_report or {}
+    class_stats = class_stats or {}
     
-    cico_total = cico_stats.get('total_students', 0) if cico_stats else 0
-    cico_avg = cico_stats.get('avg_rate', 0) if cico_stats else 0
-    cico_text = f"- CICO 대상: {cico_total}명, 달성률 {cico_avg}%" if cico_stats else "데이터 없음"
+    total_incidents = summary.get('total_incidents', 0)
+    unique_students = summary.get('risk_students_count', len(risk_list))
+    total_school_students = summary.get('total_school_students', 190)
     
-    t3_text = "\n".join([f"- {s.get('code', '')}: {s.get('incidents', 0)}건, 기능={s.get('top_function', '')}" for s in tier3_stats[:5]]) if tier3_stats else "데이터 없음"
-
-    context_text = ""
-    if context_summary and context_summary.get('total_incidents', 0) > 0:
-        f_avg = summary.get('daily_avg', 0)
-        c_avg = context_summary.get('daily_avg', 0)
-        trend = "안정"
-        try:
-            f_avg_val = float(f_avg)
-            c_avg_val = float(c_avg)
-            if c_avg_val > 0:
-                if f_avg_val > c_avg_val * 1.1: trend = "상승(우려)"
-                elif f_avg_val < c_avg_val * 0.9: trend = "하락(개선)"
-            else:
-                trend = "신규 데이터"
-        except:
-            pass
-        context_text = f"\n[비교 데이터 ({context_start} ~ {context_end})]\n- 일평균 발생 비교: {c_avg} -> {f_avg} ({trend})\n"
-    elif context_summary:
-        context_text = f"\n[비교 데이터 ({context_start} ~ {context_end})]\n- 해당 기간에 기록된 행동 발생 내역이 없습니다.\n"
-
-    prompt = f"""[분석 대상 기간]: {start_date} ~ {end_date}
-{context_text}
-[주요 데이터 현황]
-- 총 행동 발생: {summary.get('total_incidents', 0)}건
-- 고위험군: {focus_risk_text}
-- CICO(Tier 2): {cico_text}
-- 집중지원(Tier 3): {t3_text}
-
-[지시사항]
-BCBA이자 학교행동중재지원팀(SST) 전문가로서 학교장 보고용 '정기 행동중재 협의록'을 작성하세요.
-
-1. **종합 총평**: 비교 기간 대비 행동 발생 추이의 변화를 데이터 기반으로 분석하고, 전반적인 PBIS 운영 상태를 평가하세요.
-2. **Tier별 성과**: 보편적 지원(T1)의 효과성과 소집단/개별 중재(T2/T3)의 성과를 구분하여 기술하세요.
-3. **핵심 안건**: 고위험 학생들에 대한 개별 중재 현황과 향후 추진 계획을 명시하세요.
-4. **종합 추천**: 학교 환경 수정이나 인력 배치 등 행정적 지원이 필요한 포인트가 있다면 제안하세요.
-
-*형식: 공문서 스타일로 개조식 구성 (수치를 적극 활용하여 1500자 내외로 상세히 작성)*"""
-
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 6000)
-
-
-def generate_bcba_tier3_analysis(tier3_students: list, behavior_logs: list, cico_data: list = None) -> str:
-    """Generate professional BCBA analysis for individual intensive (Tier 3) reports."""
-    student_info = "\n".join([f"- {s.get('code','')}: 빈도 {s.get('incidents',0)}건, 강도 {s.get('max_intensity','')}, 기능 {s.get('top_function','')}" for s in tier3_students[:10]])
-    log_summary = _summarize_behavior_logs(behavior_logs)
+    avg_lag = quality_report.get('entry_timeliness', {}).get('avg_lag_days', 0.0)
     
-    prompt = f"""[Tier 3 관리 대상자 현황]
-{student_info}
-
-[행동 패턴 요약]
-{log_summary}
-
-[지시사항]
-BCBA로서 이번 달 Tier 3 학생들의 행동 양상을 정밀 분석하고 임상적 의견을 제시하세요.
-
-1. **개별 맞춤 분석**: 각 학생의 행동 형태와 기능, 발생 패턴(Context)을 교차 분석하여 BIP의 유효성을 평가하세요.
-2. **중재 정교화**: 데이터상 BIP가 효과적이지 않은 학생(빈도/강도 유지 또는 상승)을 식별하고, 특정 EBP(예: 기능적 의사소통 훈련, 환경의 정비 등) 보완을 권고하세요.
-3. **위기 관리**: 자·타해 등 위험도가 높은 학생의 고수위 행동에 대한 위기관리 계획(Crisis Plan)의 적절성을 검토하세요.
-4. **졸업 및 전환**: 중재 효과가 뚜렷하여 Tier 2로 하향 조정이 가능하거나, 반대로 외부 연계(Tier 3+)가 필요한 학생을 선별하세요.
-
-*전문가적인 식견이 담긴 한국어로 상세히 작성하세요(1000자 내외).*"""
-
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
-
-
-def generate_bcba_student_analysis(
-    student_info: dict, 
-    behavior_logs: list, 
-    cico_data: list = None,
-    teacher_notes: list = None,
-    meeting_notes: list = None
-) -> str:
-    """Generate a deep BCBA clinical analysis for an individual student."""
-    log_summary = _summarize_behavior_logs(behavior_logs)
-    all_notes = (teacher_notes or []) + (meeting_notes or [])
-    notes_text = ""
-    if all_notes:
-        notes_lines = []
-        for n in all_notes[:10]:
-            notes_lines.append(f"- [{n.get('date', '')}] {n.get('content', '')[:150]}")
-    cico_text = ""
-    if cico_data:
-        cico_text = "[CICO 수행 데이터 (수행률 및 달성여부)]\n" + _format_cico_for_ai(cico_data[:5]) + "\n"
-    
-    prompt = f"""[학생 정밀 데이터]
-- 학생: {student_info.get('code', '')} (Tier {student_info.get('tier', '')})
-- 학급: {student_info.get('class', '')}
-
-[행동 데이터 패턴 요약]
-{log_summary}
-
-{cico_text}
-{notes_text}
-
-[지시사항]
-BCBA 전문가로서 이 학생의 중재 전략 수립을 위한 심층 분석을 수행하세요.
-
-1. **기능적 가설(Functional Hypothesis)**: 행동의 형태(Topography)가 아닌 기능(Function: 정적/부적 강화)에 집중하여 가설을 도출하세요. 상담 기록에 나타난 전조(Antecedent)와 결과를 데이터와 연결하세요.
-2. **트렌드 및 상관분석**: 시간대별, 요일별 발생 패턴과 CICO 수행률 및 교사 기록 사이의 상관관계가 있는지 분석하세요.
-3. **증거기반실제(EBP) 추천**: 
-   - 예방: 선행사건 수정(NCR, 환경 재구조화 등)
-   - 기술: 대체행동 교수(BST, 사회적 상황 이야기 등)
-   - 결과: 차별강화(DRA, DRO 등)
-4. **Tier 조정 제안**: 현재의 지원 단계(Tier)가 적절한지, 아니면 위기 대응(Tier 3+)이나 단계적 하향이 필요한지 근거와 함께 제시하세요.
-
-*정교한 한국어로 가독성 있게 작성하세요(800~1000자).*"""
-
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
-
-
-def generate_bip_hypothesis(
-    student_code: str,
-    behavior_logs: list,
-    tier_data: dict = None,
-    cico_data: list = None
-) -> str:
-    """Generate BIP hypothesis based on comprehensive data analysis."""
-    log_summary = _summarize_behavior_logs(behavior_logs)
-    
-    prompt = f"""[학생 코드]: {student_code}
-{f"[Tier 정보]: {tier_data}" if tier_data else ""}
-
-[행동 기록 분석]
-{log_summary}
-
-{f"[CICO 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
-
-[지시사항]
-BCBA로서 위 데이터를 종합적으로 분석하여 BIP(행동중재계획)의 가설을 수립하세요.
-
-다음 형식으로 작성해주세요:
-
-**[표적행동]**
-(현재 나타나는 행동을 구체적이고 관찰 가능한 용어로 정의)
-
-**[가설]**
-(배경사건-선행사건-행동-후속결과 패턴을 기반으로, 행동의 기능을 파악한 가설)
-형식: "(배경)일 때, (선행사건)이 발생하면, (학생이름)은/는 (행동)을 하고, 그 결과 (기능/강화)를 얻는다."
-
-**[목표 (수치화)]**
-(구체적이고 측정 가능한 목표를 작성)
-예: "주 5회 → 주 2회 이하로 감소" 또는 "착석 시간 3분 → 10분으로 증가"
-"""
-    
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 3000)
-
-
-def generate_bip_strategies(
-    student_code: str,
-    target_behavior: str,
-    hypothesis: str,
-    goals: str,
-    behavior_logs: list,
-    cico_data: list = None
-) -> str:
-    """Generate BIP intervention strategies based on current BIP fields."""
-    log_summary = _summarize_behavior_logs(behavior_logs)
-    
-    prompt = f"""[학생 코드]: {student_code}
-
-[현재 BIP 내용]
-- 표적행동: {target_behavior}
-- 가설: {hypothesis}
-- 목표 (수치화): {goals}
-
-[행동 기록 분석]
-{log_summary}
-
-{f"[CICO 데이터]{chr(10)}{_format_list(cico_data[:5])}" if cico_data else ""}
-
-[지시사항]
-BCBA로서 위 표적행동, 가설, 목표에 맞추어 구체적인 중재 전략을 제안하세요.
-
-다음 4가지 영역별로 작성해주세요:
-
-**[예방 전략 (Prevention)]**
-- 배경사건/선행사건 수정을 통해 문제행동 발생을 사전에 예방하는 전략
-
-**[교수 전략 (Teaching)]**  
-- 대체행동/바람직한 행동을 체계적으로 가르치는 전략
-
-**[강화 전략 (Reinforcement)]**
-- 바람직한 행동을 강화하고 문제행동의 강화를 차단하는 전략
-
-**[위기관리 계획 (Crisis Plan)]**
-- 위기 상황(자·타해, 도주 등) 발생 시 대응 절차
-
-각 영역당 2~3가지 구체적 전략을 제안하세요. 특수학교 현장에서 실제 적용 가능한 수준으로 작성하세요."""
-    
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 4096)
-
-
-SCHOOL_CRISIS_PROTOCOL = """[학교 차원 위기행동 지원 프로토콜 (기본 베이스)]
-1) 전조: 불안한 눈빛이나 짧은 호흡 등 전조 징후가 관찰될 경우, 감정카드 등 시각 도구로 자기조절을 유도하며, 진정 시 교육활동으로 복귀시키고 고조 시 다음 단계로 이행한다.
-2) 고조: 얼굴 붉힘, 목소리 고조 등 정서가 급격히 거칠어지는 학급 차원의 문제행동이 발생할 경우, 언어 자극을 최소화하고 시각자료를 활용해 자극 요소를 차단하며, 진정 시 복귀시키되 위기행동으로 악화될 경우 위기 발생 상황 알림 단계로 넘어간다.
-3) 대응 및 알림: 의자를 집어던지거나 자해적 행동 등 학교 차원 관리 위기행동이 발생할 경우, 비상벨이나 무전기로 즉시 위기대응팀을 호출하여 현장 대응 및 제한적 물리적 제지를 실행하며, 진정되면 교육활동으로 복귀시키고 지속되면 분리 장소와 분리지도 교원을 확정한다.
-4) 분리지도 및 회복: 교직원 2인 이상이 동행하여 학생을 안전하게 분리 장소로 이동시킨 경우, 진정 활동지 등을 제공하고 10분 간격으로 호흡 안정 및 지시 수용 상태를 관찰하며, 복귀 가능 기준 충족 시 학급으로 복귀시키고 미회복 시 2차 분리를 진행한다.
-5) 가정학습 조치 및 보고: 하루 2회 이상 분리 후에도 복귀를 거부하거나 반복적 위기행동으로 회복이 불가능한 경우, 관리자 보고 및 학부모 연락을 통해 가정학습 전환과 학생 인계를 실행하며, 발생 상황을 행동데이터시스템에 입력하고 분리지도 보고서를 제출하여 추후 지원 여부를 확정한다."""
-
-
-def generate_full_bip(
-    student_code: str,
-    behavior_logs: list,
-    tier_data: dict = None,
-    meeting_notes: list = None,
-    cico_data: list = None,
-    user_context: dict = None
-) -> str:
-    """Generate comprehensive BIP using ALL available data sources."""
-    log_summary = _summarize_behavior_logs(behavior_logs)
-    
-    # Format meeting notes
-    notes_text = "(상담/관찰 기록 없음)"
-    if meeting_notes:
-        notes_lines = []
-        for n in meeting_notes[:10]:
-            date = n.get("date", n.get("날짜", ""))
-            content = n.get("content", n.get("내용", ""))
-            if content:
-                notes_lines.append(f"- [{date}] {content[:150]}")
-        if notes_lines:
-            notes_text = "\n".join(notes_lines)
-    
-    # Format CICO data
-    cico_text = "(CICO 데이터 없음)"
-    if cico_data:
-        cico_lines = []
-        for c in cico_data[:5]:
-            cico_lines.append(str(c)[:200])
-        if cico_lines:
-            cico_text = "\n".join(cico_lines)
-    
-    # Format tier info
-    tier_text = "(Tier 정보 없음)"
-    if tier_data:
-        tier_text = str(tier_data)[:300]
-    
-    # User context (fields 9-11)
-    user_text = ""
-    if user_context:
-        med = user_context.get("medication_status", "")
-        reinf = user_context.get("reinforcer_info", "")
-        other = user_context.get("other_considerations", "")
-        if med: user_text += f"\n[약물 복용 현황]: {med}"
-        if reinf: user_text += f"\n[강화제 정보]: {reinf}"
-        if other: user_text += f"\n[기타 고려사항]: {other}"
-    if not user_text:
-        user_text = "(사용자 추가 입력 없음)"
-    
-    prompt = f"""[학생 코드]: {student_code}
-
-[Tier 현황]
-{tier_text}
-
-[행동 기록 분석 (BehaviorLogs1)]
-{log_summary}
-
-[상담일지/관찰기록 (MeetingNotes)]
-{notes_text}
-
-[CICO 데이터]
-{cico_text}
-
-[사용자 입력 정보 (약물/강화제/기타)]
-{user_text}
-
-{SCHOOL_CRISIS_PROTOCOL}
-
-[지시사항]
-BCBA로서 위의 모든 데이터를 종합적으로 분석하여, 아래 8개 영역의 BIP(행동중재계획) 내용을 작성하세요.
-
-**반드시 지켜야 할 규칙:**
-1. 각 영역의 내용은 서로 **절대 중복되지 않도록** 합니다. 8개가 합쳐져서 하나의 완성된 BIP가 됩니다.
-2. 각 영역당 **최대 10줄 이내**로 작성합니다.
-3. 그대로 복사하여 붙여넣기하면 BIP가 완성되도록 **실용적이고 구체적으로** 작성합니다.
-4. 7번 위기행동지원전략은 위 학교 차원 프로토콜을 기본으로 하되, 데이터에서 식별된 이 학생의 특성에 맞게 개별맞춤형으로 제시합니다.
-5. **4, 5, 6번(전략 영역)에서는 반드시 NCEAP의 EBP Report(2020) 또는 Cooper의 응용행동분석(ABA) 3판에서 명시된 증거기반실제(EBP) 절차 이름을 각 전략의 제목으로 사용합니다.**
-
-**EBP 용어 사용 규칙 (4, 5, 6번에 적용):**
-각 전략은 아래 형식으로 제시합니다:
-• **[EBP 절차명(영문 약어)]** — 구체적 적용 방법  
-예시:
-- **[NCR(비수반강화, Noncontingent Reinforcement)]** — 10분 간격 고정시간 스케줄(FT)로 선호자극 제공
-- **[고확률지시순서(High-Probability Instructional Sequence)]** — 쉬운 지시 3회 연속 후 목표 지시 제시
-- **[BST(행동기술훈련, Behavioral Skills Training)]** — 지시→모델링→리허설→피드백 4단계로 교수
-- **[DRA(대체행동 차별강화)]** — 도움 요청 시 즉시 강화, 자리이탈 시 강화 차단
-- **[토큰경제(Token Economy)]** — 토큰 5개 누적 시 선호활동 교환
-- **[자기관리(Self-Management)]** — 자기기록+자기평가+자기강화 3단계
-
-4번 예방 전략에 사용 가능한 EBP: NCR(비수반강화), 고확률지시순서(HPC), 선행사건 조절(Antecedent Modification), 환경재배치(Environmental Rearrangement), 시각적 지원(Visual Support), 선택제공(Choice Making), 구조화된 일과(Structured Schedule)
-5번 교수 전략에 사용 가능한 EBP: BST(행동기술훈련), 촉구(Prompting)/용암(Fading), 과제분석(Task Analysis), 사회기술훈련(Social Skills Training), 자기관리(Self-Management), 또래중재(Peer-Mediated Instruction), 비디오 모델링(Video Modeling), 사회 내러티브(Social Narratives)
-6번 강화 전략에 사용 가능한 EBP: DRA(대체행동 차별강화), DRI(비양립행동 차별강화), DRO(타행동 차별강화), 토큰경제(Token Economy), 행동계약(Behavioral Contracting), 집단강화(Group-Oriented Contingency), 소거(Extinction), 반응대가(Response Cost)
-
-다음 형식으로 정확히 작성하세요:
-
-**[1. 표적행동]**
-(내용)
-
-**[2. 가설(기능)]**
-(내용)
-
-**[3. 목표]**
-(내용)
-
-**[4. 예방 전략]**
-(EBP 절차명을 제목으로 하여 각 전략 제시)
-
-**[5. 교수 전략]**
-(EBP 절차명을 제목으로 하여 각 전략 제시)
-
-**[6. 강화 전략]**
-(EBP 절차명을 제목으로 하여 각 전략 제시)
-
-**[7. 위기행동지원 전략]**
-(내용)
-
-**[8. 평가 계획(Tier3 졸업 기준 포함)]**"""
-    
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 6000)
-
-
-# ============================================================
-# Utility Functions
-# ============================================================
-
-def _format_cico_for_ai(cico_list: list) -> str:
-    """Format CICO student data for better AI readability."""
-    if not cico_list:
-        return "(데이터 없음)"
-    lines = []
-    for c in cico_list:
-        rate = c.get("수행_발생률", c.get("rate", "?"))
-        achieved = c.get("목표_달성_여부", c.get("achieved", "?"))
-        target = c.get("목표행동", c.get("target_behavior", "?"))
-        lines.append(f"- 행동: {target} / 수행률: {rate} / 달성: {achieved}")
-    return "\n".join(lines)
-
-
-def _format_dict(d: dict) -> str:
-    """Format a dict for prompt inclusion."""
-    lines = []
-    for k, v in d.items():
-        if isinstance(v, list):
-            lines.append(f"- {k}: {len(v)}개 항목")
-            for item in v[:5]:
-                lines.append(f"  - {item}")
-        elif isinstance(v, dict):
-            lines.append(f"- {k}: {v}")
-        else:
-            lines.append(f"- {k}: {v}")
-    return "\n".join(lines)
-
-
-def _format_list(lst: list) -> str:
-    """Format a list for prompt inclusion."""
-    if not lst:
-        return "(데이터 없음)"
-    return "\n".join([f"- {item}" for item in lst[:10]])
-
-
-def _summarize_behavior_logs(logs: list) -> str:
-    """Summarize behavior logs for AI prompt."""
-    if not logs:
-        return "(행동 기록 없음)"
-    
-    total = len(logs)
-    
-    type_counts = {}
-    function_counts = {}
-    time_counts = {}
-    day_counts = {}
-    intensity_sum = 0
-    intensity_count = 0
-    
-    for log in logs:
-        btype = log.get("행동유형", log.get("type", ""))
-        func = log.get("기능", log.get("function", ""))
-        time_slot = log.get("시간대", log.get("time", ""))
-        date_str = log.get("행동발생 날짜", log.get("date", ""))
-        intensity = log.get("강도", log.get("intensity", 0))
-        
-        if btype:
-            type_counts[btype] = type_counts.get(btype, 0) + 1
-        if func:
-            function_counts[func] = function_counts.get(func, 0) + 1
-        if time_slot:
-            time_counts[time_slot] = time_counts.get(time_slot, 0) + 1
-        if date_str:
-            try:
-                from datetime import datetime
-                dt = datetime.strptime(str(date_str), "%Y-%m-%d")
-                days = ["월", "화", "수", "목", "금", "토", "일"]
-                day_name = days[dt.weekday()]
-                day_counts[day_name] = day_counts.get(day_name, 0) + 1
-            except:
-                pass
-        try:
-            ival = float(intensity)
-            intensity_sum += ival
-            intensity_count += 1
-        except:
-            pass
-    
-    avg_intensity = round(intensity_sum / intensity_count, 2) if intensity_count > 0 else 0
-    
-    lines = [
-        f"- 총 행동 발생: {total}건",
-        f"- 평균 강도: {avg_intensity}",
-        f"- 행동유형별: {_top_items(type_counts, 5)}",
-        f"- 기능별: {_top_items(function_counts, 5)}",
-        f"- 시간대별: {_top_items(time_counts, 5)}",
-        f"- 요일별: {_top_items(day_counts, 5)}",
-    ]
-    
-    return "\n".join(lines)
-
-
-def _top_items(counts: dict, n: int = 5) -> str:
-    """Get top N items from a count dict as a formatted string."""
-    if not counts:
-        return "(없음)"
-    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:n]
-    return ", ".join([f"{k}({v}건)" for k, v in sorted_items])
-
-def generate_bcba_comprehensive_analysis(
-    start_date: str,
-    end_date: str,
-    analytics_data: dict,
-    cico_data: dict,
-    tier3_data: dict
-) -> str:
-    """Generate a holistic BCBA report for the entire school based on dashboard data."""
-    
-    # Format analytics context
-    summary = analytics_data.get("summary", {})
-    big5 = analytics_data.get("big5", {})
-    
-    behavior_types = ", ".join([f"{item['name']}({item['value']})" for item in big5.get("behaviors", [])[:5]])
-    time_slots = ", ".join([f"{item['name']}({item['value']})" for item in big5.get("times", [])[:5]])
-    locations = ", ".join([f"{item['name']}({item['value']})" for item in big5.get("locations", [])[:5]])
-    
-    risk_list = analytics_data.get("risk_list", [])
-    risk_text = "\n".join([f"- {r['name']}: {r['count']}건" for r in risk_list[:5]]) if risk_list else "없음"
-    
-    # Format CICO context
-    cico_summary = cico_data.get("summary", {})
-    cico_text = f"- 대상 학생: {cico_summary.get('total_students', 0)}명\n" \
-                f"- 평균 수행률: {cico_summary.get('avg_rate', 0)}%\n" \
-                f"- 목표 달성: {cico_summary.get('achieved_count', 0)}명 / 미달성: {cico_summary.get('not_achieved_count', 0)}명"
-    
-    # Format Tier 3 context
-    t3_students = tier3_data.get("students", [])
-    t3_text = "\n".join([f"- {s['code']}({s['name']}): {s.get('incidents', 0)}건 발생" for s in t3_students[:5]]) if t3_students else "없음"
-    
-    prompt = f"""[분석 기간]: {start_date} ~ {end_date}
-
-[1. 전체 행동 발생 통계]
-- 총 발생 건수: {summary.get('total_incidents', 0)}건
-- 일평균 발생: {summary.get('daily_avg', 0)}건
-- 주요 행동 유형: {behavior_types}
-- 주요 발생 시간대: {time_slots}
-- 주요 발생 장소: {locations}
-
-[2. 집중 지원 대상 학생 (High Risk)]
+    risk_lines = []
+    for r in risk_list[:5]:
+        name = r.get('name', r.get('학생명', 'N/A'))
+        code = r.get('code', r.get('학생코드', 'N/A'))
+        cnt = r.get('count', 0)
+        avg_int = r.get('avg_intensity', 0.0)
+        restr_cnt = r.get('restraint_count', 0)
+        risk_lines.append(f"- 학생 {code}({name}): 총 {cnt}건(전체 {total_incidents}건 중 {round(cnt/total_incidents*100,1) if total_incidents else 0}%), 평균강도 {avg_int}/5, 물리적제지(O) {restr_cnt}회")
+    risk_text = "\n".join(risk_lines) if risk_lines else "고위험군 학생 없음"
+
+    prompt = f"""[분석 대상 데이터: 경은학교 SW-PBIS 전교 현황]
+- 총 행동 발생 건수: {total_incidents}건 (에피소드 행 기준)
+- 행동 기록이 발생한 학생 수: {unique_students}명 (전교생 {total_school_students}명 중 {round(unique_students/total_school_students*100, 1) if total_school_students else 0}%)
+- 무발생 학생 비율: {round((total_school_students - unique_students)/total_school_students*100, 1) if total_school_students else 0}% (Tier 1 보편적 지원 효과 지표)
+- 데이터 품질 및 입력 지연: 평균 기록 지연일 {avg_lag}일
+
+[상위 고위험군 학생 상세 근거]
 {risk_text}
 
-[3. Tier 2 (CICO) 운영 현황]
-{cico_text}
+[지시사항]
+공통 시스템 프롬프트 원칙을 엄격히 준수하여 다음 5개 영역으로 분석 리포트를 작성하라.
+1. **데이터 신뢰도 및 해석 경고**: 평균 기록 지연일({avg_lag}일)을 바탕으로 선행사건 기억 왜곡 가능성 및 관찰시간 미통제에 따른 전월 대비 단순 증감 해석 주의점 명시.
+2. **학교 전체 SW-PBIS 3층(Tier 1/2/3) 현황 요약**:
+   - Tier 1(보편): 무발생 학생 비율 및 전교 긍정적 환경 조성 평가.
+   - Tier 2(표적): 3건 이상 반복 학생군과 CICO 지원 연계 상태.
+   - Tier 3(집중): 강도 4~5 및 물리적 제지(O) 발생 학생 집중도.
+3. **고위험군 학생 임상적 위험 근거**: 빈도·강도·제지 여부를 조합하여 왜 위험한지 기술.
+4. **학급 단위 밀집 및 환경 분석**: 특정 학급 편중 시 (a) 실제 행동 밀집 (b) 교사 기록 성실도 양측 가능성 명시.
+5. **이번 주 학교 차원 3대 실행 우선순위**: 정확히 3가지를 도출하고 각각 `[담당 주체]`(담임/PBS담당/관리자/외부전문가), `[실행 기간]`, `[성공 기준]`을 명시."""
 
-[4. Tier 3 (집중지원/위기관리) 학생 현황]
-{t3_text}
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+
+
+def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
+    """하위 호환용 래퍼"""
+    return generate_bcba_comprehensive_analysis(summary, trends, risk_list)
+
+
+# ------------------------------------------------------------------------------
+# ② 5대 심층 영역별(시간/장소/유형/강도/기능) AI 분석
+# ------------------------------------------------------------------------------
+def generate_bcba_section_analysis(
+    section_type: str,
+    chart_data: list,
+    top_items: list,
+    raw_summary: dict = None,
+    quality_report: dict = None
+) -> str:
+    """
+    5대 심층 영역별 특화 분석:
+    - time: 과정별 5/6구간 역전, 등하교 전이구간, 점심 전후 가설 검증
+    - location: 노출 시간 대비 위험도, 핫스팟 환경 수정, 심리안정실 복귀 분석
+    - type: 6종 전체 처리, 유형x기능 교차, 교직원 상해 집계, 경은그림말 AAC
+    - intensity: 강도 4~5 전조, O/X 교차분석, 안전 3대 지표, 최소제한원칙
+    - function: 데이터 품질 선행 출력, GO_HOME 태그, 기능적 등가 대체행동
+    """
+    raw_summary = raw_summary or {}
+    quality_report = quality_report or {}
+    data_str = json.dumps(chart_data, ensure_ascii=False, indent=2)
+
+    if section_type == "time":
+        prompt = f"""[분석 영역: 시간대별(Time Slot) 정밀 분석]
+[차트 데이터]
+{data_str}
+
+[필수 반영 지침]
+1. 시간대 필드는 다중값이므로 '총 에피소드 건수'와 '구간-건 교차수'를 명시하고 합계 초과 사유를 각주로 설명하라.
+2. 초등과 중등의 5구간(초등 점심 / 중등 4교시), 6구간(초등 4교시 / 중등 점심) 역전 현상을 반영하여 과정별 차이를 해석하라.
+3. 등교(1구간)와 하교(10구간)를 전이(Transition) 구간으로 묶어 가정-학교 전이 실패 및 배경사건(수면/투약) 가능성을 분석하라.
+4. 점심 전후 집중 발생 시 배고픔, 감각과부하, 비구조화 시간 가설을 검토하라.
+5. 말미에 '일과 재구조화 제안' 3개 이하(구간, 변경방안, 검증지표)를 제시하라."""
+
+    elif section_type == "location":
+        prompt = f"""[분석 영역: 장소별(Location) 핫스팟 분석]
+[차트 데이터]
+{data_str}
+
+[필수 반영 지침]
+1. 교실은 학생 체류 시간이 가장 길어 건수가 높은 것은 자연스럽다. 단순 비율이 아닌 '노출 시간 대비 위험도' 관점에서 체류 시간이 짧은데 발생이 잦은 급식실·복도·강당을 진정한 핫스팟으로 분석하라 (노출시간 미측정에 따른 추정임을 명시).
+2. 장소별 강도 분포 및 물리적 제지(O) 비율을 교차 분석하여 실제 안전 위험 지점을 도출하라.
+3. 물리적 환경 재구조화(동선, 대기줄, 소음, 조도, 밀집도, 진정공간 거리, 인력배치)를 제안하라.
+4. 심리안정실 사용 기록과 사용 후 교실 복귀 성공 사례를 요약하라."""
+
+    elif section_type == "type":
+        prompt = f"""[분석 영역: 행동유형별(Behavior Type) 분석]
+[차트 데이터 (6종 정규 유형: 신체적공격/자해/물건파괴/방해/비협조적/반복적)]
+{data_str}
+
+[필수 반영 지침]
+1. 유형별 비율과 함께 행동유형 × 추정기능 교차 관점을 제시하라 (예: 회피성 공격행동 vs 획득성 공격행동의 중재 차이).
+2. 자해행동의 경우 빈도 계수 외에 비율 및 지속시간(duration) 측정 방식 도입을 권고하라.
+3. 교직원 상해(깨물음, 발로 참, 밀침, 할큄 등) 기록 여부를 추출하여 교권보호 및 산업안전 지표로 다루어라.
+4. 유형별 기능적 대체행동을 경은학교의 '경은그림말 AAC' 및 의사소통 판과 연결하여 제시하라."""
+
+    elif section_type == "intensity":
+        prompt = f"""[분석 영역: 강도 및 위기관리(Intensity/Crisis) 분석]
+[차트 데이터]
+{data_str}
+
+[필수 반영 지침]
+1. 강도 4~5 발생의 선행 조건 및 텍스트에 기록된 전조 신호를 목록화하라.
+2. 물리적 제지/분리지도(O/X) 편중 시 (a) 학생 특성 (b) 대응 역량 (c) 기록 기준 차이의 3가지 가능성을 객관적으로 제시하고 교사 개인을 평가하지 마라.
+3. 반복적 물리적 제지 발생 학생에 대한 BIP 위기관리계획 재검토를 권고하라.
+4. 안전 3대 지표(교직원 상해, 학생 자상, 분리지도 후 복귀율)와 최소제한원칙(Least Restrictive) 준수 여부를 점검하라."""
+
+    elif section_type == "function":
+        q_func = quality_report.get('function_quality', {})
+        prompt = f"""[분석 영역: 추정기능별(Function) 정밀 분석]
+[데이터 품질 상태: 서술형 오염률 {q_func.get('unknown_rate', 0)}%, 귀가요구 태그 {q_func.get('go_home_count', 0)}건]
+[차트 데이터]
+{data_str}
+
+[필수 선행 출력]
+- 정규 5종 매핑 건수, 오염/불명 건수를 먼저 표기하고 오염률에 따른 신뢰도 경고를 상단에 배치하라.
+
+[필수 반영 지침]
+1. '귀가 요구'(집에 가고 싶어함, 엄마 차, 신발 신을까) 계열의 단일 패턴을 별도로 분석하고 FBA 우선 대상을 지목하라.
+2. 기능별(회피, 획득, 관심, 감각) 선제적 대체행동을 기능적 등가성 원칙과 함께 제시하라.
+3. unknown 비율이 높은 학생에 대한 ABC 직접관찰 계획을 수립하라.
+4. 향후 구글 설문지 폼 개선안(라디오버튼 강제, 귀가요구 선택지 추가 등)을 제안하라."""
+
+    else:
+        prompt = f"[분석 데이터]\n{data_str}\n\n공통 시스템 프롬프트에 따라 BCBA 분석을 작성하라."
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+
+
+# ------------------------------------------------------------------------------
+# ③ 🤖 CICO AI 분석 (/cico)
+# ------------------------------------------------------------------------------
+def generate_bcba_cico_analysis(
+    students_data: list,
+    behavior_logs: list = None,
+    tier_info: list = None,
+    selected_month: int = None
+) -> str:
+    """
+    CICO 분석: 주 단위 DPR 추세 + 중재 충실도 우선 점검 + 80%/70% 단계 이동 룰 + 강화제 포화 점검
+    """
+    cico_str = json.dumps(students_data, ensure_ascii=False, indent=2)
+    month_text = f"{selected_month}월 " if selected_month else ""
+    
+    prompt = f"""[분석 대상 데이터: {month_text}CICO 일일행동카드(DPR) 및 대상자 성과]
+{cico_str}
 
 [지시사항]
-당신은 특수학교 PBS 전문가(BCBA)입니다. 위 데이터를 바탕으로 학교 전체의 PBS 운영 현황을 진단하고 개선 방향을 제시하는 '학교 PBS 운영 종합 분석 보고서'를 작성하세요.
+공통 시스템 프롬프트를 준수하여 CICO 성과 분석 및 Tier 조정 의사결정 보고서를 작성하라.
+1. **중재 충실도(Fidelity) 우선 점검**: 달성률 저하 시 체크인/체크아웃 매일 실시 여부, 즉각적 피드백 제공 여부를 먼저 확인하도록 권고하라.
+2. **학생별 DPR 달성률 추세 판정**: 단순 평균이 아닌 주 단위 추세(상승/유지/하락)를 판정하라.
+3. **객관적 Tier 이동 의사결정 매트릭스**:
+   - 4주 연속 80% 이상 달성: Tier 1 복귀(졸업) 검토 (단, 졸업 후 4주 모니터링 조건 명시).
+   - 70~80% 유지: 현행 CICO 유지 및 강화제 선호도 재평가.
+   - 70% 미만 2주 연속: 중재 충실도 점검 및 피드백 주기 단축.
+   - 70% 미만 4주 연속 또는 강도 4~5 발생: Tier 3 상향 및 정식 FBA/BIP 의뢰 권고.
+4. **Log_Main 실제 행동 발생과의 교차 검증**: DPR 점수는 높은데 실제 문제행동 로그가 많은 경우 목표행동 설정의 정합성 문제를 지적하라.
+5. **강화제 포화(Satiation) 점검**: 초기 고득점 후 3~4주 차에 하락하는 학생에 대한 강화제 교체 팁 제공."""
 
-보고서 구성:
-1. **행동 현황 총평**: 기간 내 행동 발생 추이와 전반적인 학교 분위기 분석
-2. **Tier별 운영 효과성**: 보편적 지원(T1)이 잘 작동하고 있는지, 2/3단계 지원이 필요한 학생들에게 적절히 제공되고 있는지 평가
-3. **핵심 위기 요인**: 고위험 학생군과 빈발 장소/시간대를 연계한 환경적 위험 요소 분석
-4. **전문적 제언**: 차기 운영 기간 동안 강화해야 할 PBIS 전략 및 행정적 지원 요청 사항
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
 
-*분량: 1500자 내외로 상세하고 전문적으로 작성*"""
+
+# ------------------------------------------------------------------------------
+# ④ 🤖 SST 행동중재협의회 AI 회의록 자동 생성 (/meetings)
+# ------------------------------------------------------------------------------
+def generate_bcba_meeting_minutes(
+    meeting_data: dict,
+    risk_students: list,
+    recent_trends: list = None
+) -> str:
+    """
+    SST 회의록: 공문서 규격 개조식 + 4단 안건 구조 + 다학제 역할 분담 + 보호자 지원 분리
+    """
+    m_info = json.dumps(meeting_data, ensure_ascii=False, indent=2)
+    r_info = json.dumps(risk_students, ensure_ascii=False, indent=2)
     
-    return _call_llm(BCBA_SYSTEM_PROMPT, prompt, 6000)
+    prompt = f"""[회의 기본 정보]
+{m_info}
+
+[심의 대상 위기군 학생 데이터]
+{r_info}
+
+[지시사항]
+학교장 결재 및 특수교육지원센터 제출이 가능한 고품격 공문서 규격 회의록을 작성하라.
+1. **문서 형식**: 
+   - 제목 / 일시 / 장소 / 참석자(직위 포함) / 안건 / 협의 내용 / 결정 사항 / 향후 일정 순서의 개조식 종결체.
+   - 학생은 실명 대신 '학생코드'를 우선 사용하라.
+2. **안건별 4단 구조 필수 준수**:
+   - `[현황 데이터]` ➔ `[협의 내용]` ➔ `[결정사항]` ➔ `[담당자/기한]`
+3. **실행 가능한 결정사항 기술**: "지속 관찰" 같은 모호한 문구를 금지하고 구체적인 실행 행동을 기술하라.
+4. **다학제 역할 분담 명시**: 담임교사 / 특수교육지도사 / 전문상담사 / 치료사 / 보호자 / 관리자 역할 구분.
+5. **보호자 협력 사항 분리**: 학교가 제공할 지원과 가정에 요청할 지원을 명확히 구분.
+6. **금지**: 논의되지 않은 내용을 데이터만 보고 지어내지 말고, 제안 사항은 `[AI 제안 — 협의 필요]` 태그를 붙여라."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+
+
+# ------------------------------------------------------------------------------
+# ⑤ 🤖 Tier 3 심층 위기지원 컨설팅 (/tier3)
+# ------------------------------------------------------------------------------
+def generate_bcba_tier3_analysis(
+    tier3_students: list,
+    behavior_logs: list,
+    cico_data: list = None
+) -> str:
+    """
+    Tier 3 위기 컨설팅: 개별화된 4단계 위기 프로토콜 + 하지 말아야 할 것 + 효과적 대응 추출 + 교직원 안전
+    """
+    t3_str = json.dumps(tier3_students, ensure_ascii=False, indent=2)
+    sample_logs = json.dumps(behavior_logs[:30], ensure_ascii=False, indent=2) if behavior_logs else "[]"
+    
+    prompt = f"""[Tier 3 위기관리 대상 학생 목록]
+{t3_str}
+
+[해당 학생들의 최근 행동 및 위기 개입 로그]
+{sample_logs}
+
+[지시사항]
+특수학교 현장에서 교직원과 학생 모두의 안전을 확보할 수 있는 즉시 실행 위기관리 프로토콜을 작성하라.
+1. **위기 4단계 개별화 프로토콜 (각 단계별 '하지 말아야 할 것' 필수 명시)**:
+   - ① 전조(Trigger 직후): 텍스트에서 관찰된 실제 전조 신호 및 자극 제거.
+   - ② 고조(Escalation): 언어 자극 축소, 요구 철회 시점, 공간 확보. (훈계/설득 금지)
+   - ③ 위기(Peak): 안전 확보 최우선, 2인 1조 최소 신체 개입 원칙.
+   - ④ 회복(Recovery): 복귀 기준, 진정 시간 확보 및 사후 디브리핑.
+2. **실제 효과가 있었던 대응 vs 실패한 대응 추출**: 로그 텍스트에서 성공/실패 사례를 요약하라.
+3. **교직원 안전 및 신체 방어 가이드**: 깨물기, 할퀴기, 발차기 형태별 방어 자세 및 3/4호 분리지도 법적 보고 요건 명시.
+4. **위기 발생 후 24시간 내 처리 체크리스트**: 보고서 작성, 보호자 소통, 학생 회복, 교직원 디브리핑.
+5. **예방 실패 신호 경고**: 반복적 위기는 선행사건 예방 실패의 신호이므로 BIP 예방 전략 재검토 항목을 제시하라."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+
+
+# ------------------------------------------------------------------------------
+# ⑥ 🤖 개별 학생 AI 종합 분석 (학생 프로필)
+# ------------------------------------------------------------------------------
+def generate_bcba_student_analysis(
+    student_info: dict,
+    student_logs: list,
+    cico_data: list = None,
+    all_notes: list = None
+) -> str:
+    """
+    개별 학생 종합 분석: A-B-C 프로파일 + 배경사건(투약/수면) + 또래 영향 + 담임교사 즉시 실행 팁 5개
+    """
+    s_info = json.dumps(student_info, ensure_ascii=False)
+    logs_str = json.dumps(student_logs[:30], ensure_ascii=False, indent=2) if student_logs else "[]"
+    
+    prompt = f"""[학생 기본 정보]
+{s_info}
+
+[학생의 행동 발생 이력 및 관찰 기록]
+{logs_str}
+
+[지시사항]
+담임선생님이 내일 교실에서 바로 적용할 수 있는 수준의 개별 A-B-C 임상 분석 리포트를 작성하라.
+1. **A-B-C 프로파일**:
+   - A(선행사건): 가장 위험한 시간대·장소·활동 조합 Top 3 및 촉발 요인.
+   - B(표적행동): 조작적 정의 기반 유형·강도·빈도 분포.
+   - C(후속결과): 의도치 않게 행동을 유지/강화시킨 대응 점검.
+2. **배경사건(Setting Event) 분석**: 수면, 투약("약을 안먹음"), 배고픔, 날씨, 가정사 언급을 추출하여 대조.
+3. **또래 영향 점검**: 특기사항에 동급생 이름이 언급된 경우 학급 청각 환경 및 자리 배치 조정을 명시.
+4. **담임교사용 즉시 실행 팁 5개**: 준비물 없이 내일 바로 실천 가능한 구체적 행동 지침.
+5. **데이터 신뢰도 경고**: 기록 지연(entry lag)이 큰 경우 시계열 해석 주의점 명시."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+
+
+# ------------------------------------------------------------------------------
+# ⑦ 🤖 AI 기능적 가설 생성 (BIP Step 4)
+# ------------------------------------------------------------------------------
+def generate_bip_hypothesis(
+    student_info: dict,
+    target_behavior: str,
+    antecedent_data: str,
+    function_data: str,
+    notes_summary: str = "",
+    sample_size: int = 5
+) -> str:
+    """
+    BIP Step 4 가설 생성: 표준 공식 + 조작적 정의 + 배경 vs 선행 분리 + 복수 가설 + 반증 예측 + n<5 가드
+    """
+    if sample_size < 5:
+        return "⚠️ 직접관찰 데이터 부족(표본 n<5). 신뢰할 수 있는 기능적 가설 수립을 위해 최소 2주간의 ABC 직접관찰 기록이 선행되어야 합니다."
+
+    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+[표적행동] {target_behavior}
+[선행사건 및 배경사건 데이터] {antecedent_data}
+[추정기능 및 관찰 텍스트] {function_data} / {notes_summary}
+
+[지시사항]
+아래 표준 공식에 맞추어 기능적 가설을 작성하라.
+공식: "[배경사건]이 있는 상황에서 [선행사건]이 제시되면, [학생]은 [조작적으로 정의된 표적행동]을 보이며, 그 결과 [후속결과]를 얻는다. 따라서 이 행동의 기능은 [기능]으로 추정된다."
+
+[작성 규칙]
+1. 표적행동은 관찰·측정 가능하게 기술하라.
+2. 배경사건(원거리 조건)과 선행사건(직전 자극)을 명확히 구분하라.
+3. 기능이 복수이면 가설 1, 가설 2로 분리하라.
+4. 각 가설마다 데이터 근거와 "이 가설이 맞다면 [조건]에서 행동이 감소할 것"이라는 반증 가능한 예측을 제시하라."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 3000)
+
+
+# ------------------------------------------------------------------------------
+# ⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)
+# ------------------------------------------------------------------------------
+def generate_bip_strategies(
+    student_info: dict,
+    target_behavior: str,
+    hypothesis_data: str,
+    function_data: str
+) -> str:
+    """
+    BIP Step 6 전략 제안: 3단계 구조 + 기능 1:1 매칭 + 대체행동 3요건 표 + 교내 자원(AAC/마트/안정실) 연계
+    """
+    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+[표적행동 및 가설] {target_behavior} / {hypothesis_data}
+[추정 기능] {function_data}
+
+[지시사항]
+1단계 예방(선행사건/배경사건 조절), 2단계 교수(대체행동 훈련), 3단계 강화(차별강화)의 3단계 중재 전략을 제안하라.
+1. **기능 1:1 매칭 검증**: 각 전략이 가설의 기능에 정확히 부합하는지 확인하라.
+2. **대체행동 기능적 등가성 3요건 확인 표**:
+   - 동일 기능 수행 여부 / 표적행동 대비 적은 노력 / 더 빠르고 확실한 강화 여부를 표로 점검.
+3. **경은학교 기존 자원 연계**: 경은그림말 AAC, 경은마트 토큰경제, 심리안정실, 시각적 일과표 적극 활용.
+4. **소거 폭발(Extinction Burst) 주의**: 자해/공격행동에 대한 단독 소거 금지 및 안전 조건 명시.
+5. **우선순위 부여**: 전략별 [실행 난이도: 상/중/하] 및 [효과 발현 예상 시점] 표기."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+
+
+# ------------------------------------------------------------------------------
+# ⑨ 🤖 AI BIP 전체 계획서 제안 (BIP Step 12)
+# ------------------------------------------------------------------------------
+def generate_full_bip(
+    student_info: dict,
+    target_behavior: str,
+    hypothesis_data: str,
+    strategies_data: str,
+    school_crisis_protocol: str = "",
+    behavior_logs: list = None
+) -> str:
+    """
+    BIP Step 12 전문: 8대 핵심 요소 + 8항목 내부 정합성 자체 검증표 + 실제 기준선(Baseline) + 학부모 1페이지 요약
+    """
+    logs_summary = f"누적 행동 로그 {len(behavior_logs)}건 분석 완료" if behavior_logs else "기본 로그 연동"
+    
+    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+[표적행동] {target_behavior}
+[기능 가설] {hypothesis_data}
+[3단계 중재 전략] {strategies_data}
+[학교 위기 프로토콜 및 데이터] {school_crisis_protocol} / {logs_summary}
+
+[지시사항]
+미국 PBIS 표준 8대 핵심 요소를 충족하는 공식 행동중재계획서(BIP) 전문을 작성하라.
+[8대 필수 요소]
+1. 표적행동의 조작적 정의 (실제 데이터 기준선 수치 포함)
+2. A-B-C 기능적 가설
+3. SMART 단기(4주)/장기(12주) 행동 목표
+4. 선행사건 및 배경사건 예방 전략
+5. 기능적 대체행동 교수 계획 (FCT/경은그림말 AAC)
+6. 강화 전략 (DRA/토큰)
+7. 위기관리계획 (전조-고조-위기-회복 및 3/4호 분리지도 법적 보고)
+8. 평가 및 재검토 계획 (Tier 하향 졸업 기준)
+
+[문서 말미 필수 첨부 1: BIP 내부 정합성 자체 검증표]
+아래 8개 항목에 대해 충족/미충족/보완점을 판정한 검증표를 첨부하라:
+1) 조작적 정의 측정가능성 2) 가설과 대체행동 기능 일치 3) 대체행동 효율성 4) 예방전략의 선행사건 대응성 5) 강화전략의 기능 일치 6) 위기계획의 최고강도 감당성 7) 평가방식 적합성 8) SMART 목표 기준선 근거
+
+[문서 말미 필수 첨부 2: 보호자 설명용 요약서 (1페이지 분량)]
+전문용어를 쉬운 일상어로 풀어쓰고 학교와 가정의 협력 방안을 정리하라."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000)
+
+
+# ------------------------------------------------------------------------------
+# ⑩ 🤖 신규: 학급 또래 행동 전염 AI 심층 분석
+# ------------------------------------------------------------------------------
+def generate_peer_contagion_analysis(contagion_data: dict) -> str:
+    """
+    학급 또래 행동 전염 분석: 촉발원-반응자 관계, 청각 자극 매개, 학급 환경 중재안
+    """
+    c_str = json.dumps(contagion_data, ensure_ascii=False, indent=2)
+    
+    prompt = f"""[학급 또래 행동 전염 및 상호작용 데이터]
+{c_str}
+
+[지시사항]
+공통 시스템 프롬프트에 기반하여 학급 단위 행동 전염 임상 분석 및 환경 중재 보고서를 작성하라.
+1. **촉발원(Source)과 반응자(Reactor) 관계 분석**: 상황적 촉발 관계임을 명시하고 낙인 표현을 절대 쓰지 마라.
+2. **매개 청각 자극(울음, 소리지름, 박수, 괴성)의 역할 규명**.
+3. **개별 학생이 아닌 학급 전체 환경 중재 솔루션 제시**:
+   - 소음 차단 헤드셋, 좌석 배치 재조정, 진정 공간 동선 확보, 1차 촉발 학생 조기 분리 타이밍, 반응자 대처 기술(FCT).
+4. **데이터 한계 명시**: 교사 서술에 기록된 건에 한정된 분석임을 명시."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)

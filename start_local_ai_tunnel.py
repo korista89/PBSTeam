@@ -35,7 +35,7 @@ try:
         print(f"✅ Ollama 로컬 서버 정상 작동 중! ({OLLAMA_URL})")
         print("📦 설치된 AI 모델 목록:")
         for m in models:
-            is_custom = "⭐ (기본 사용)" if "qwen3.5-custom" in m else ""
+            is_custom = "⭐ (기본 사용)" if "michaelw9999" in m or "Qwen3.6" in m else ""
             print(f"   - {m} {is_custom}")
             
 except urllib.error.URLError as e:

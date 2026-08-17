@@ -1,0 +1,11 @@
+FROM "C:/Users/koris/.lmstudio/models/lmstudio-community/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf"
+
+PARAMETER num_ctx 16384
+PARAMETER num_gpu 42
+PARAMETER num_batch 1024
+PARAMETER num_thread 6
+PARAMETER temperature 0.6
+PARAMETER top_k 40
+PARAMETER top_p 0.95
+PARAMETER repeat_penalty 1.05
+PARAMETER presence_penalty 0.0
