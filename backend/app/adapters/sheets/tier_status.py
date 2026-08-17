@@ -16,7 +16,7 @@ class TierStatusAdapter:
             return None
         try:
             sheet = client.open_by_url(settings.SHEET_URL)
-            return sheet.worksheet(settings.STUDENT_STATUS_SHEET)
+            return sheet.worksheet("TierStatus")
         except Exception as e:
             print(f"Error opening TierStatus worksheet: {e}")
             return None
