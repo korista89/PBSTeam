@@ -212,7 +212,7 @@ export default function BIPEditor() {
         if (!studentCode) return;
         setHypLoading(true);
         try {
-            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-hypothesis`);
+            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-hypothesis`, {}, { timeout: 180000 });
             if (res.data.hypothesis) {
                 handleChange("Hypothesis", res.data.hypothesis);
                 alert("기능적 가설이 2번 [가설(기능)] 필드에 자동으로 생성되었습니다.");
@@ -233,7 +233,7 @@ export default function BIPEditor() {
                 target_behavior: bip.TargetBehavior,
                 hypothesis: bip.Hypothesis,
                 goals: bip.Goals
-            });
+            }, { timeout: 180000 });
             if (res.data.strategies) {
                 handleChange("PreventionStrategies", res.data.strategies);
                 alert("AI 3단계 중재 전략이 제안되었습니다. (4번 예방/교수/강화 필드에 입력됨)");
@@ -257,10 +257,10 @@ export default function BIPEditor() {
                 medication_status: bip.MedicationStatus,
                 reinforcer_info: bip.ReinforcerInfo,
                 other_considerations: bip.OtherConsiderations,
-            });
+            }, { timeout: 180000 });
             setAiResult(res.data.analysis || "분석 결과가 없습니다.");
-        } catch {
-            setAiResult("⚠️ AI BIP 제안 요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        } catch (e: any) {
+            setAiResult("⚠️ AI BIP 제안 요청에 실패했습니다. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
         } finally {
             setAiLoading(false);
         }

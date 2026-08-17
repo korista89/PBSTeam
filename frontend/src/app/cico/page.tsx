@@ -580,10 +580,10 @@ function CICOAIModal({ month, students, apiUrl }: { month: number; students: CIC
           rate: s.수행_발생률,
           achieved: s.목표_달성_여부,
         }))
-      });
+      }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch {
-      setAnalysis("⚠️ CICO AI 분석 요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } catch (e: any) {
+      setAnalysis("⚠️ CICO AI 분석 요청에 실패했습니다. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
     } finally {
       setLoading(false);
     }

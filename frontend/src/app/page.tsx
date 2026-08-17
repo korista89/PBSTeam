@@ -36,10 +36,10 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-comprehensive-analysis`, {
         start_date: startDate,
         end_date: endDate
-      });
+      }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch (e) {
-      setAnalysis("⚠️ 학교 전체 PBS 종합 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } catch (e: any) {
+      setAnalysis("⚠️ 학교 전체 PBS 종합 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
     } finally {
       setLoading(false);
     }
@@ -111,6 +111,25 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
   );
 }
 
+// Custom tooltip for charts
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(4px)', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px rgba(0,0,0,0.05)', zIndex: 100 }}>
+        <p style={{ margin: '0 0 8px 0', fontWeight: 800, color: '#1e293b', fontSize: '0.9rem' }}>{label}</p>
+        {payload.map((p: any, i: number) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: p.color || '#3b82f6' }} />
+            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{p.name}:</span>
+            <span style={{ color: '#1e293b', fontWeight: 800, fontSize: '0.85rem' }}>{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
 // ====== 5대 영역별 AI 정밀 분석 버튼 컴포넌트 (신규 추가: 빨간색 외곽선) ======
 function SectionAIButton({
   sectionName,
@@ -138,10 +157,10 @@ function SectionAIButton({
         data_context: dataContext || {},
         start_date: startDate || null,
         end_date: endDate || null
-      });
+      }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch {
-      setAnalysis("⚠️ AI 영역별 정밀 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } catch (e: any) {
+      setAnalysis("⚠️ AI 영역별 정밀 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
     } finally {
       setLoading(false);
     }
@@ -252,10 +271,10 @@ function PeerContagionAIButton({
         },
         start_date: startDate || null,
         end_date: endDate || null
-      });
+      }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch {
-      setAnalysis("⚠️ 학급 또래 행동 전염 AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } catch (e: any) {
+      setAnalysis("⚠️ 학급 또래 행동 전염 AI 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
     } finally {
       setLoading(false);
     }

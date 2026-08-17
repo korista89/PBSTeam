@@ -366,9 +366,9 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   const requestAnalysis = async () => {
     setLoading(true); setVisible(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode });
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch { setAnalysis("⚠️ AI 전문가 분석 요청 실패."); } finally { setLoading(false); }
+    } catch (e: any) { setAnalysis("⚠️ AI 전문가 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")"); } finally { setLoading(false); }
   };
 
   return (

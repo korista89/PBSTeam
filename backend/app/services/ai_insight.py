@@ -115,8 +115,8 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 "chat_template_kwargs": {"enable_thinking": False},
                 "extra_body": {"thinking": False}
             }
-            # Vercel Serverless Function 제한(60s) 내에 빠른 폴백을 보장하기 위해 25초 타임아웃 설정
-            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=25)
+            # 로컬 LLM 생성 시간(20 tokens/s 기준)을 고려하여 여유있는 180초 타임아웃 설정
+            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=180)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])
@@ -151,7 +151,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                     "num_predict": max_tokens
                 }
             }
-            resp = requests.post(f"{o_url}/api/chat", json=payload, timeout=45)
+            resp = requests.post(f"{o_url}/api/chat", json=payload, timeout=180)
             if resp.status_code == 200:
                 res_data = resp.json()
                 msg = res_data.get("message", {}).get("content", "").strip()

@@ -429,10 +429,10 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
           rate: s.rate,
           achieved: s.achieved,
         }))
-      });
+      }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch {
-      setAnalysis("⚠️ AI 분석 요청 실패. 잠시 후 다시 시도해주세요.");
+    } catch (e: any) {
+      setAnalysis("⚠️ AI 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
     } finally {
       setLoading(false);
     }
