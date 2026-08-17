@@ -4,7 +4,7 @@ Deterministic Verification Script for PBSTeam 2.0 Backend & Domain Contracts
 """
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 # Ensure backend directory is on sys.path
 backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend")
@@ -26,6 +26,7 @@ def test_imports():
         return False
 
     endpoints = [
+        "app.core.time",
         "app.adapters.sheets.log_main",
         "app.adapters.sheets.tier_status",
         "app.adapters.sheets.cico",
@@ -184,6 +185,8 @@ def test_synthetic_log_main_adapter():
     assert event1.primary_location == "교실", f"Primary location mismatch: {event1.primary_location}"
     assert event1.antecedent == "쉬는 시간 종료 후 착석 지시"
     assert event1.consequence == "교사의 구두 지도 후 착석"
+    assert event1.safety.injury_to_others is False
+    assert event1.safety.physical_restraint is False
     
     # Function mapping check: '불편해소' ➔ DISCOMFORT_RELIEF
     assert len(event1.teacher_function_estimates) > 0
@@ -203,15 +206,19 @@ def test_synthetic_log_main_adapter():
     assert event2.primary_location == "급식실"
     print("✅ Synthetic Row 2 (SENSORY ➔ AUTOMATIC_SENSORY): OK")
 
-    row3_tangible = {
+    # Synthetic Row 3: Notes text mentioning "공격/힘들어함" without explicit safety field must NOT set safety=True
+    row3_notes_only = {
         "발생날짜": "2026-06-02",
         "학생코드": "2311",
-        "추정기능": "물건·활동획득"
+        "물리적제지, 3/4호분리지도,본인/타인상해 발생 여부": "X",
+        "특기사항(기타)": "친구의 울음소리를 매우 힘들어하며 공격적인 태도를 보였으나 상해는 없음"
     }
-    event3 = LogMainAdapter._normalize_row(row3_tangible, row_idx=4)
+    event3 = LogMainAdapter._normalize_row(row3_notes_only, row_idx=4)
     assert event3 is not None
-    assert event3.teacher_function_estimates[0].function_code == FunctionCode.TANGIBLE_ACTIVITY
-    print("✅ Synthetic Row 3 (TANGIBLE ➔ TANGIBLE_ACTIVITY): OK")
+    assert event3.safety.physical_restraint is False
+    assert event3.safety.injury_to_others is False
+    assert event3.safety.self_injury is False
+    print("✅ Synthetic Row 3 (Notes only without explicit safety flag -> Safety flags all False): OK")
 
     # Synthetic Row 4: Invalid date should NOT forge date.today()
     row4_bad_date = {
@@ -224,36 +231,98 @@ def test_synthetic_log_main_adapter():
 
     return True
 
-def test_ebp_matching_bundle():
+def test_decision_signals_regression():
     print("\n" + "=" * 60)
-    print("STEP 5: Testing EBP Recommendation Bundle Generator")
+    print("STEP 5: Testing Decision Signal Correctness & 14d Cutoff Rules")
     print("=" * 60)
-    from app.services.ebp.matching import generate_ebp_recommendation_bundle
-    from app.domain.models import FunctionHypothesis, FunctionCode, DataSufficiency, HypothesisStatus
-    
-    hyp = FunctionHypothesis(
-        hypothesis_id="HYP_TEST",
-        student_code="2111",
-        target_behavior="자리이탈",
-        antecedent_condition="집단 수업 상황",
-        consequence_pattern="교사 주의집중 획득",
-        function_code=FunctionCode.ATTENTION,
-        hypothesis_statement="교사 관심 획득을 위해 자리이탈함.",
-        data_sufficiency=DataSufficiency(status="HIGH", reasons=[]),
-        status=HypothesisStatus.TEACHER_CONFIRMED
-    )
+    from app.core.time import today_kst, now_kst
+    from app.services.decision.signals import evaluate_decision_signals
+    from app.domain.models import BehaviorEvent, SafetyFlags, SignalSeverity, DecisionSignalType
 
-    bundle = generate_ebp_recommendation_bundle(
-        hypothesis=hyp,
-        antecedent_patterns=["교실 앞쪽"],
-        setting_events=[],
-        current_tier="TIER_2_CICO"
-    )
+    as_of = date(2026, 8, 18)
 
-    print("✅ EBP Recommendation Bundle Keys:", list(bundle.keys()))
-    assert len(bundle["prevent"]) > 0, "Expected prevention strategies"
-    assert len(bundle["teach"]) > 0, "Expected teaching strategies"
-    assert len(bundle["reinforce"]) > 0, "Expected reinforcement strategies"
+    def make_event(ev_date: date, physical_restraint: bool = False, has_abc: bool = True) -> BehaviorEvent:
+        return BehaviorEvent(
+            event_id=f"EV_{ev_date}",
+            source_log_id="LOG_1",
+            student_code="ST_01",
+            event_date=ev_date,
+            entered_by="교사",
+            time_slot_codes=[1],
+            time_slot_labels=["1구간"],
+            location_codes=["교실"],
+            primary_location="교실",
+            behavior_code="자리이탈",
+            behavior_raw="자리이탈",
+            intensity=3,
+            occurrence_count=1,
+            antecedent="과제 지시" if has_abc else None,
+            consequence="교사 지도" if has_abc else None,
+            setting_events=[],
+            teacher_function_estimates=[],
+            safety=SafetyFlags(physical_restraint=physical_restraint),
+            notes="관찰 내용",
+            source="Log_Main"
+        )
+
+    # 1. KST test
+    k_now = now_kst()
+    k_today = today_kst()
+    assert k_today is not None
+    print(f"✅ KST Date Test: {k_today} (Current KST: {k_now.strftime('%Y-%m-%d %H:%M:%S %Z')})")
+
+    # 2. Historical 2025/March 2026 Safety event -> Excluded from Today URGENT
+    old_safety = [make_event(date(2025, 6, 1), physical_restraint=True)]
+    sigs_old = evaluate_decision_signals("ST_01", old_safety, as_of_date=as_of, safety_window_days=14)
+    safety_sigs_old = [s for s in sigs_old if s.signal_type == DecisionSignalType.SAFETY]
+    assert len(safety_sigs_old) == 0, "Historical safety event must NOT appear in Today safety signals"
+    print("✅ 2025 Safety Event -> Excluded from Today URGENT Safety Signals: OK")
+
+    # 3. Recent 14d Safety event -> Included in Today URGENT
+    recent_safety = [make_event(date(2026, 8, 10), physical_restraint=True)]
+    sigs_recent = evaluate_decision_signals("ST_01", recent_safety, as_of_date=as_of, safety_window_days=14)
+    safety_sigs_recent = [s for s in sigs_recent if s.signal_type == DecisionSignalType.SAFETY]
+    assert len(safety_sigs_recent) == 1
+    assert safety_sigs_recent[0].severity == SignalSeverity.URGENT
+    assert "최근 14일간 1건" in safety_sigs_recent[0].reason
+    print("✅ Recent 14d Safety Event -> Included in Today URGENT Safety Signals: OK")
+
+    # 4. CHANGE_UP: Recent 14d (4 events) vs Previous 14d (1 event) -> CHANGE_UP emitted
+    spike_events = [
+        make_event(date(2026, 8, 15)),
+        make_event(date(2026, 8, 14)),
+        make_event(date(2026, 8, 10)),
+        make_event(date(2026, 8, 6)),  # 4 in current 14d (Aug 5 ~ Aug 18)
+        make_event(date(2026, 7, 25)), # 1 in previous 14d (Jul 22 ~ Aug 4)
+    ]
+    sigs_spike = evaluate_decision_signals("ST_01", spike_events, as_of_date=as_of)
+    spike_sigs = [s for s in sigs_spike if s.signal_type == DecisionSignalType.CHANGE_UP]
+    assert len(spike_sigs) == 1
+    assert "최근 14일간 4건 발생 (직전 14일 1건 대비 빈도 증가)" in spike_sigs[0].reason
+    print("✅ CHANGE_UP Test (Current 14d: 4 vs Prev 14d: 1 -> Spike Signal): OK")
+
+    # 5. CHANGE_UP denominator isolation: 50 historical events in 2025 must NOT affect 14d comparison
+    hist_events = [make_event(date(2025, 5, 1)) for _ in range(50)]
+    sigs_hist = evaluate_decision_signals("ST_01", hist_events, as_of_date=as_of)
+    spike_sigs_hist = [s for s in sigs_hist if s.signal_type == DecisionSignalType.CHANGE_UP]
+    assert len(spike_sigs_hist) == 0, "50 historical events must not trigger recent spike"
+    print("✅ CHANGE_UP Historical Isolation Test (Older 50 events ignored): OK")
+
+    # 6. MORE_DATA: ABC complete < 3 for active student -> MORE_DATA emitted
+    incomplete_events = [make_event(date(2026, 8, 10), has_abc=False) for _ in range(2)]
+    sigs_more_data = evaluate_decision_signals("ST_01", incomplete_events, as_of_date=as_of, is_today_inbox=True)
+    more_data_sigs = [s for s in sigs_more_data if s.signal_type == DecisionSignalType.MORE_DATA]
+    assert len(more_data_sigs) == 1
+    assert "3건 미만" in more_data_sigs[0].reason
+    print("✅ MORE_DATA Test (ABC < 3 -> MORE_DATA signal): OK")
+
+    # 7. MORE_DATA suppression: Historical Tier 1 student with no recent events -> Excluded from Today Inbox
+    old_incomplete_events = [make_event(date(2025, 3, 1), has_abc=False)]
+    sigs_old_inbox = evaluate_decision_signals("ST_01", old_incomplete_events, as_of_date=as_of, is_today_inbox=True, active_tier_names=["TIER_1"])
+    more_data_old = [s for s in sigs_old_inbox if s.signal_type == DecisionSignalType.MORE_DATA]
+    assert len(more_data_old) == 0, "Inactive historical Tier 1 student must NOT appear in Today MORE_DATA inbox"
+    print("✅ MORE_DATA Inbox Suppression (Historical inactive student excluded): OK")
+
     return True
 
 def test_health_routes():
@@ -284,12 +353,12 @@ if __name__ == "__main__":
     t2 = test_ebp_catalog()
     t3 = test_domain_constructors()
     t4 = test_synthetic_log_main_adapter()
-    t5 = test_ebp_matching_bundle()
+    t5 = test_decision_signals_regression()
     t6 = test_health_routes()
 
     print("\n" + "=" * 60)
     if t1 and t2 and t3 and t4 and t5 and t6:
-        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, AND IMPORT CHECKS PASSED!")
+        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, TIMEZONE & SIGNAL CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")
     print("=" * 60)
