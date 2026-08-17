@@ -59,7 +59,7 @@ def _clean_llm_output(text: str) -> str:
     return text
 
 def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Optional[str]:
-    """Call Local LLM endpoint (LM Studio on :1234 or Ollama on :11434) with Gemma 4 E4B optimizations."""
+    """Call Local LLM endpoint (LM Studio on :1234 or Ollama on :11434) with Gemma 4 E4B."""
     configured_url = os.getenv("LOCAL_LLM_URL", "http://localhost:1234/v1").rstrip("/")
     configured_model = os.getenv("LOCAL_LLM_MODEL", "gemma-4-E4B-it-GGUF").strip()
     
@@ -81,7 +81,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 "frequency_penalty": 0.05,
                 "presence_penalty": 0.0
             }
-            resp = requests.post(f"{lm_url}/chat/completions", json=payload, timeout=120)
+            resp = requests.post(f"{lm_url}/chat/completions", json=payload, timeout=90)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])
@@ -97,29 +97,16 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
     ollama_url = "http://localhost:11434" if ":11434" not in configured_url else configured_url
     candidate_models = [
         configured_model,
-        "gemma-4-E4B-it-GGUF:latest",
         "gemma-4-E4B-it-GGUF",
+        "gemma-4-E4B-it-Q4_K_M.gguf",
         "gemma-4-e4b-it",
-        "gemma-4-e4b-it:latest",
+        "gemma-4-e4b",
         "lmstudio-community/gemma-4-E4B-it-GGUF",
         "gemma4:26b",
-        "hf.co/michaelw9999/Qwen3.6-35B-A3B-NVFP4-MTP-GGUF:latest",
-        "qwen3.5-custom:latest"
+        "gemma:7b"
     ]
     candidate_models = [m for m in candidate_models if m]
     
-    try:
-        tags_resp = requests.get(f"{ollama_url}/api/tags", timeout=2)
-        if tags_resp.status_code == 200:
-            installed = [m.get("name") for m in tags_resp.json().get("models", [])]
-            ordered_models = [m for m in candidate_models if m in installed]
-            for inst in installed:
-                if inst not in ordered_models:
-                    ordered_models.append(inst)
-            candidate_models = ordered_models
-    except Exception:
-        pass
-        
     for model in candidate_models:
         try:
             payload = {
@@ -138,7 +125,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                     "num_predict": max_tokens
                 }
             }
-            resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=120)
+            resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=90)
             if resp.status_code == 200:
                 res_data = resp.json()
                 msg = res_data.get("message", {}).get("content", "").strip()
@@ -156,25 +143,35 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Fallback Gemini & Cloud API call wrapper with multiple model fallbacks."""
-    api_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GROQ_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
-    if not api_key:
-        return "⚠️ AI 응답 생성에 실패했습니다. 로컬 AI(LM Studio/Ollama) 실행 상태 또는 Vercel 환경변수(GEMINI_API_KEY)를 확인해주세요."
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    
+    if not (gemini_key or groq_key or openai_key):
+        return "⚠️ AI 응답 생성에 실패했습니다. 로컬 LM Studio(1234 포트) 실행 상태 또는 Vercel 환경변수(GEMINI_API_KEY)를 확인해주세요."
     
     last_error = ""
     
-    # 1. Native Gemini v1beta REST API
-    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    # 1. Native Gemini v1beta / v1 API with header authentication
     if gemini_key:
-        gemini_models = [
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-pro",
-            "gemini-pro"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": gemini_key
+        }
+        
+        models_and_versions = [
+            ("v1beta", "gemini-2.0-flash"),
+            ("v1beta", "gemini-1.5-flash"),
+            ("v1", "gemini-1.5-flash"),
+            ("v1beta", "gemini-1.5-pro"),
+            ("v1", "gemini-1.5-pro")
         ]
-        for g_model in gemini_models:
+        
+        for api_ver, g_model in models_and_versions:
             try:
-                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
+                g_url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{g_model}:generateContent"
+                
+                # Payload with systemInstruction
                 g_payload = {
                     "systemInstruction": {
                         "parts": [{"text": system_prompt}]
@@ -190,7 +187,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                         "maxOutputTokens": min(max_tokens, 8192)
                     }
                 }
-                resp = requests.post(g_url, json=g_payload, timeout=60)
+                resp = requests.post(g_url, headers=headers, json=g_payload, timeout=60)
                 if resp.status_code == 200:
                     g_data = resp.json()
                     candidates = g_data.get("candidates", [])
@@ -199,39 +196,38 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                         text = "".join([p.get("text", "") for p in parts]).strip()
                         if text:
                             return _clean_llm_output(text)
-                else:
-                    # Fallback to combined content format if systemInstruction unsupported
-                    alt_payload = {
-                        "contents": [
-                            {
-                                "role": "user",
-                                "parts": [{"text": f"{system_prompt}\n\n[사용자 요청 및 데이터]\n{user_prompt}"}]
-                            }
-                        ],
-                        "generationConfig": {
-                            "temperature": 0.6,
-                            "maxOutputTokens": min(max_tokens, 8192)
+                
+                # Alternate single content payload
+                alt_payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": f"{system_prompt}\n\n[데이터 및 요청]\n{user_prompt}"}]
                         }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.6,
+                        "maxOutputTokens": min(max_tokens, 8192)
                     }
-                    resp2 = requests.post(g_url, json=alt_payload, timeout=60)
-                    if resp2.status_code == 200:
-                        g_data2 = resp2.json()
-                        candidates2 = g_data2.get("candidates", [])
-                        if candidates2:
-                            parts2 = candidates2[0].get("content", {}).get("parts", [])
-                            text2 = "".join([p.get("text", "") for p in parts2]).strip()
-                            if text2:
-                                return _clean_llm_output(text2)
-                    last_error = f"{g_model} HTTP {resp.status_code}: {resp.text[:200]}"
+                }
+                resp2 = requests.post(g_url, headers=headers, json=alt_payload, timeout=60)
+                if resp2.status_code == 200:
+                    g_data2 = resp2.json()
+                    candidates2 = g_data2.get("candidates", [])
+                    if candidates2:
+                        parts2 = candidates2[0].get("content", {}).get("parts", [])
+                        text2 = "".join([p.get("text", "") for p in parts2]).strip()
+                        if text2:
+                            return _clean_llm_output(text2)
+                            
+                last_error = f"{g_model} ({api_ver}) HTTP {resp.status_code}: {resp.text[:150]}"
             except Exception as e:
                 last_error = f"{g_model} 예외: {str(e)}"
                 continue
                 
-    # 2. Groq API Fallback
-    groq_key = os.getenv("GROQ_API_KEY", "")
+    # 2. Groq Fallback
     if groq_key:
-        groq_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-        for g_model in groq_models:
+        for g_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
             try:
                 resp = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
@@ -251,40 +247,10 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
                         return _clean_llm_output(content)
-                else:
-                    last_error = f"Groq {g_model} HTTP {resp.status_code}: {resp.text[:200]}"
             except Exception as e:
-                last_error = f"Groq 예외: {str(e)}"
+                last_error = f"Groq {g_model}: {str(e)}"
                 continue
 
-    # 3. Gemini OpenAI Compatible Endpoint
-    if gemini_key:
-        for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
-            try:
-                resp = requests.post(
-                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                    headers={"Authorization": f"Bearer {gemini_key}", "Content-Type": "application/json"},
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        "max_tokens": max_tokens,
-                        "temperature": 0.6
-                    },
-                    timeout=60
-                )
-                if resp.status_code == 200:
-                    content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-                    if content:
-                        return _clean_llm_output(content)
-                else:
-                    last_error = f"Gemini-OpenAI HTTP {resp.status_code}: {resp.text[:200]}"
-            except Exception as e:
-                last_error = f"Gemini-OpenAI 예외: {str(e)}"
-                continue
-                
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
