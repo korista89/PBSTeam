@@ -420,7 +420,7 @@ def generate_bcba_section_analysis(
     else:
         prompt = f"[분석 데이터]\n{data_str}\n\n공통 시스템 프롬프트에 따라 BCBA 분석을 작성하라."
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
@@ -453,7 +453,7 @@ def generate_bcba_cico_analysis(
 4. **Log_Main 실제 행동 발생과의 교차 검증**: DPR 점수는 높은데 실제 문제행동 로그가 많은 경우 목표행동 설정의 정합성 문제를 지적하라.
 5. **강화제 포화(Satiation) 점검**: 초기 고득점 후 3~4주 차에 하락하는 학생에 대한 강화제 교체 팁 제공."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
