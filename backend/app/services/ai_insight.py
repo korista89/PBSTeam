@@ -63,15 +63,13 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
     raw_url = os.getenv("LOCAL_LLM_URL", "").strip()
     configured_model = os.getenv("LOCAL_LLM_MODEL", "").strip()
     
-    # URL 후보 목록 구성 (환경변수 URL 우선)
+    # URL 후보 목록 구성 (반드시 /v1 경로로 정규화)
     v1_urls = []
     if raw_url:
         clean = raw_url.rstrip("/")
-        if clean.endswith("/v1"):
-            v1_urls.append(clean)
-        else:
-            v1_urls.append(f"{clean}/v1")
-            v1_urls.append(clean)
+        if not clean.endswith("/v1"):
+            clean = f"{clean}/v1"
+        v1_urls.append(clean)
             
     # 로컬 기본 URL 추가
     v1_urls.extend([
@@ -92,7 +90,6 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
     # 1. OpenAI-compatible /v1/chat/completions 호출 (LM Studio / Cloudflare Tunnel / Ollama v1)
     for endpoint in unique_urls:
         try:
-            # 먼저 활성화된 모델 확인 시도 (선택적)
             model_to_use = configured_model or "google/gemma-4-e4b"
             try:
                 m_resp = requests.get(f"{endpoint}/models", timeout=3)
@@ -106,19 +103,24 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
             payload = {
                 "model": model_to_use,
                 "messages": [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": system_prompt + "\n\n[중요] 영어 생각(Thinking/Reasoning) 과정을 출력하지 말고, 즉시 한국어 최종 보고서 본문만을 작성하라."},
                     {"role": "user", "content": user_prompt}
                 ],
-                "temperature": 0.6,
-                "max_tokens": max_tokens
+                "temperature": 0.5,
+                "max_tokens": min(max_tokens, 4096)
             }
-            # Vercel 환경 고려 타임아웃 45초
-            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=45)
+            # Vercel Serverless Function 제한(60s) 고려 50초 타임아웃
+            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=50)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])
                 if choices:
-                    content = choices[0].get("message", {}).get("content", "").strip()
+                    msg_obj = choices[0].get("message", {})
+                    content = msg_obj.get("content", "").strip()
+                    # content가 비어있고 reasoning_content에 내용이 있는 경우 대비
+                    if not content and msg_obj.get("reasoning_content"):
+                        content = msg_obj.get("reasoning_content", "").strip()
+                        
                     actual_model = data.get("model", model_to_use)
                     cleaned = _clean_llm_output(content)
                     if cleaned and len(cleaned) > 100:
