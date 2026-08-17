@@ -178,26 +178,19 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                 }, timeout=60)
 
                 if resp.status_code == 200:
-                    candidates = resp.json().get("candidates", [])
+                    resp_json = resp.json()
+                    candidates = resp_json.get("candidates", [])
                     if candidates:
                         text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])).strip()
+                        finish_reason = candidates[0].get("finishReason", "UNKNOWN")
+                        usage = resp_json.get("usageMetadata", {})
+                        out_tokens = usage.get("candidatesTokenCount", "?")
+                        in_tokens = usage.get("promptTokenCount", "?")
                         if text:
-                            return _clean_llm_output(text) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini)"
+                            diag = f"| 종료: {finish_reason} | 입력: {in_tokens}토큰, 출력: {out_tokens}토큰"
+                            return _clean_llm_output(text) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini) {diag}"
 
-                # Attempt B: 단일 content 방식 (일부 버전 호환)
-                resp2 = requests.post(g_url, json={
-                    "contents": [{"role": "user", "parts": [{"text": combined_prompt}]}],
-                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": min(max_tokens, 8192)}
-                }, timeout=60)
-
-                if resp2.status_code == 200:
-                    candidates2 = resp2.json().get("candidates", [])
-                    if candidates2:
-                        text2 = "".join(p.get("text", "") for p in candidates2[0].get("content", {}).get("parts", [])).strip()
-                        if text2:
-                            return _clean_llm_output(text2) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini)"
-
-                last_error = f"{g_model} HTTP {resp.status_code}"
+                last_error = f"{g_model} HTTP {resp.status_code}: {resp.text[:200]}"
             except Exception as e:
                 last_error = f"{g_model} 예외: {str(e)}"
                 continue
