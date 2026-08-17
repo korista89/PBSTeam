@@ -224,7 +224,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             max_intensity = group['강도'].max()
             
             tier = "Tier 1"
-            if freq_count >= 6 or max_intensity >= 5:
+            if freq_count >= 6 or (pd.notna(max_intensity) and max_intensity >= 5):
                 tier = "Tier 3"
             elif freq_count >= 3:
                 tier = "Tier 2"
@@ -235,7 +235,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
                     "name": student_name_label,
                     "student_code": str(student_code),
                     "count": freq_count,
-                    "max_intensity": int(max_intensity),
+                    "max_intensity": int(max_intensity) if pd.notna(max_intensity) else 0,
                     "tier": tier,
                     "class": tier_status_cache.get(str(student_code), '-')
                 })
@@ -272,13 +272,18 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             pass
         
         for _, row in high_intensity_df.iterrows():
-             safety_alerts.append({
-                 "date": row.get('행동발생날짜', '-'),
-                 "student": row.get('학생코드', row.get('학생명', '-')),  # Use 4-digit student code
-                 "location": row.get('장소', '-'),
-                 "type": row.get('행동유형', '-'),
-                 "intensity": int(row.get('강도', 5))
-             })
+            raw_int_val = row.get('강도', 5)
+            try:
+                alert_int = int(raw_int_val) if pd.notna(raw_int_val) else 5
+            except Exception:
+                alert_int = 5
+            safety_alerts.append({
+                "date": row.get('행동발생날짜', '-'),
+                "student": row.get('학생코드', row.get('학생명', '-')),  # Use 4-digit student code
+                "location": row.get('장소', '-'),
+                "type": row.get('행동유형', '-'),
+                "intensity": alert_int
+            })
 
 
 

@@ -256,15 +256,29 @@ def test_ebp_matching_bundle():
     assert len(bundle["reinforce"]) > 0, "Expected reinforcement strategies"
     return True
 
+def test_health_routes():
+    print("\n" + "=" * 60)
+    print("STEP 6: Testing FastAPI Health and Alias Routes")
+    print("=" * 60)
+    from app.main import app
+    routes = [r.path for r in app.routes]
+    print(f"✅ Total Registered Routes: {len(routes)}")
+    assert "/health" in routes, "Missing /health route"
+    assert "/api/health" in routes, "Missing /api/health route"
+    assert "/api/v1/health" in routes, "Missing /api/v1/health route"
+    print("✅ Health routes (/health, /api/health, /api/v1/health): OK")
+    return True
+
 if __name__ == "__main__":
     t1 = test_imports()
     t2 = test_ebp_catalog()
     t3 = test_domain_constructors()
     t4 = test_synthetic_log_main_adapter()
     t5 = test_ebp_matching_bundle()
+    t6 = test_health_routes()
 
     print("\n" + "=" * 60)
-    if t1 and t2 and t3 and t4 and t5:
+    if t1 and t2 and t3 and t4 and t5 and t6:
         print("🎉 ALL DOMAIN CONTRACT, ADAPTER, AND IMPORT CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")

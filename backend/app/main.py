@@ -63,10 +63,15 @@ app.include_router(ebp.router, prefix="/api/v1/ebp", tags=["ebp"])
 app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspace"])
 
 @app.get("/")
+@app.get("/api")
+@app.get("/api/")
 async def root():
     return {"message": "IBSD Backend API Operational"}
 
 
 @app.get("/health")
+@app.get("/api/health")
+@app.get("/api/v1/health")
 async def health_check():
     return {"status": "ok"}
+
