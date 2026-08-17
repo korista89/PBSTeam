@@ -143,7 +143,12 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Fallback Gemini & Cloud API call wrapper - only v1beta, valid model names only."""
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    # 여러 이름으로 저장된 Gemini 키를 순서대로 시도
+    gemini_key = (
+        os.getenv("GEMINI_API_KEY", "").strip()
+        or os.getenv("GEMINI_API_KEY_0817", "").strip()
+        or os.getenv("GOOGLE_AI_API_KEY", "").strip()
+    )
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
 
     if not (gemini_key or groq_key):
@@ -196,6 +201,13 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
     # 2. Groq Fallback (Gemini 실패 시)
     if groq_key:
+        # Groq 무료 티어 제한: 요청 본문 약 6000 토큰 → 문자 기준 약 20000자로 자름
+        GROQ_MAX_CHARS = 18000
+        groq_system = system_prompt[:3000] if len(system_prompt) > 3000 else system_prompt
+        groq_user = user_prompt[:GROQ_MAX_CHARS] if len(user_prompt) > GROQ_MAX_CHARS else user_prompt
+        if len(user_prompt) > GROQ_MAX_CHARS:
+            groq_user += "\n\n[참고: 데이터가 길어 앞부분만 분석합니다. 전체 분석은 Gemini API 설정 후 가능합니다.]"
+
         for g_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
             try:
                 resp = requests.post(
@@ -204,10 +216,10 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     json={
                         "model": g_model,
                         "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
+                            {"role": "system", "content": groq_system},
+                            {"role": "user", "content": groq_user}
                         ],
-                        "max_tokens": max_tokens,
+                        "max_tokens": min(max_tokens, 2048),
                         "temperature": 0.6
                     },
                     timeout=45
