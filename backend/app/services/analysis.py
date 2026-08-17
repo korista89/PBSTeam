@@ -370,13 +370,17 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     except Exception:
         tier_stats = None
 
-    ai_report = generate_meeting_agent_report(
-        summary={"total_incidents": total_incidents, "risk_student_count": len(at_risk_list)},
-        trends=[],
-        risk_list=at_risk_list,
-        tier_stats=tier_stats
-    )
-    ai_comment = ai_report.get("briefing_text", "")
+    try:
+        ai_report = generate_meeting_agent_report(
+            summary={"total_incidents": total_incidents, "risk_student_count": len(at_risk_list)},
+            trends=[],
+            risk_list=at_risk_list,
+            tier_stats=tier_stats
+        )
+        ai_comment = ai_report.get("briefing_text", "") if isinstance(ai_report, dict) else str(ai_report)
+    except Exception as e:
+        ai_report = {"briefing_text": "대시보드 분석 요약", "error": str(e)}
+        ai_comment = "대시보드 분석 요약"
 
     # Monthly trend — row count per month (for monthly bar chart)
     monthly_trend = []

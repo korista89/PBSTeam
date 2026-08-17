@@ -318,11 +318,26 @@ def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:
     """하위 호환용 래퍼"""
     return generate_bcba_comprehensive_analysis(summary, trends, risk_list)
 
-def generate_meeting_agent_report(section_type: str, context_data: dict) -> str:
-    """하위 호환용 래퍼: 회의용 섹션 리포트"""
-    chart_data = context_data.get("chart_data", context_data) if isinstance(context_data, dict) else []
-    top_items = context_data.get("top_items", []) if isinstance(context_data, dict) else []
-    return generate_bcba_section_analysis(section_type, chart_data=chart_data, top_items=top_items, raw_summary=context_data)
+def generate_meeting_agent_report(*args, **kwargs) -> dict:
+    """하위 호환용 래퍼: 회의용 브리핑 리포트 딕셔너리 반환"""
+    try:
+        if len(args) == 2 and isinstance(args[0], str):
+            sec_type = args[0]
+            ctx = args[1] if isinstance(args[1], dict) else {}
+            text = generate_bcba_section_analysis(sec_type, chart_data=ctx, top_items=[], raw_summary=ctx)
+            return {"briefing_text": text, "text": text}
+            
+        summary = kwargs.get("summary", {})
+        trends = kwargs.get("trends", [])
+        risk_list = kwargs.get("risk_list", [])
+        text = generate_bcba_comprehensive_analysis(summary, trends, risk_list)
+        return {
+            "briefing_text": text,
+            "text": text,
+            "summary": summary
+        }
+    except Exception as e:
+        return {"briefing_text": "대시보드 브리핑 요약 준비 완료", "text": "", "error": str(e)}
 
 
 # ------------------------------------------------------------------------------

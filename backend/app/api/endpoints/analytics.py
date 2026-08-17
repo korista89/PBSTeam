@@ -300,9 +300,30 @@ async def ai_student_analysis(req: StudentAnalysisRequest):
     return {"analysis": result}
 
 
-# ============================================================
-# Basic Analytics Endpoints
-# ============================================================
+@router.get("/debug-sheets")
+async def debug_sheets():
+    """Debug endpoint to inspect sheets connectivity."""
+    from app.services.sheets import get_sheets_client, safe_get_all_records
+    sheet = get_sheets_client()
+    if not sheet:
+        return {"error": "Failed to connect to Google Spreadsheet"}
+    worksheets_info = []
+    for ws in sheet.worksheets():
+        try:
+            records = safe_get_all_records(ws)
+            sample_keys = list(records[0].keys()) if records else []
+            worksheets_info.append({
+                "title": ws.title,
+                "row_count": len(records),
+                "columns": sample_keys[:10]
+            })
+        except Exception as e:
+            worksheets_info.append({
+                "title": ws.title,
+                "error": str(e)
+            })
+    return {"sheets": worksheets_info}
+
 @router.get("/dashboard")
 async def get_dashboard_summary(start_date: str = None, end_date: str = None, class_id: str = None):
     return get_analytics_data(start_date, end_date, class_id)
