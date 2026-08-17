@@ -228,6 +228,9 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
                         return _clean_llm_output(content)
+                elif resp.status_code == 429:
+                    # Rate limit - 더 이상 다른 모델 시도해도 429 연속됨, 바로 종료
+                    return "⏳ AI 분석 요청이 너무 많아 잠시 대기 중입니다. 1분 후 다시 [Refresh]를 눌러주세요. (Groq 무료 한도 초과)"
                 last_error = f"Groq {g_model} HTTP {resp.status_code}"
             except Exception as e:
                 last_error = f"Groq {g_model}: {str(e)}"
