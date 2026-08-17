@@ -359,58 +359,75 @@ async def refresh_dashboard():
 
 @router.get("/debug-ai")
 async def debug_ai_keys():
-    """AI API 키 상태 실시간 진단 - Gemini/Groq 각각 테스트 호출"""
+    """AI API 키 및 로컬 LLM 터널 상태 실시간 진단"""
     import os, requests as req
     results = {}
 
-    # 1. 환경변수 감지 (값 일부만 노출)
+    # 1. 환경변수 감지 (보안 마스킹)
     gemini_key = (
         os.getenv("GEMINI_API_KEY", "").strip()
         or os.getenv("GEMINI_API_KEY_0817", "").strip()
         or os.getenv("GOOGLE_AI_API_KEY", "").strip()
     )
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    local_url = os.getenv("LOCAL_LLM_URL", "").strip()
 
     results["env"] = {
+        "LOCAL_LLM_URL": local_url if local_url else "(설정 안 됨)",
         "GEMINI_API_KEY": f"{gemini_key[:8]}...{gemini_key[-4:]}" if len(gemini_key) > 12 else ("(없음)" if not gemini_key else "(너무 짧음)"),
         "GROQ_API_KEY": f"{groq_key[:8]}...{groq_key[-4:]}" if len(groq_key) > 12 else ("(없음)" if not groq_key else "(너무 짧음)"),
     }
 
-    # 2. Gemini 실제 호출 테스트
+    # 2. 로컬 LLM (터널) 테스트
+    if local_url:
+        target_v1 = local_url.rstrip("/") if local_url.rstrip("/").endswith("/v1") else f"{local_url.rstrip('/')}/v1"
+        try:
+            r0 = req.get(f"{target_v1}/models", timeout=5)
+            if r0.status_code == 200:
+                models = [m.get("id") for m in r0.json().get("data", [])]
+                results["local_llm"] = {"status": "✅ 정상 연결", "models": models[:3]}
+            else:
+                results["local_llm"] = {"status": f"⚠️ HTTP {r0.status_code}", "body": r0.text[:100]}
+        except Exception as e:
+            results["local_llm"] = {"status": "❌ 연결 실패", "error": str(e)[:150]}
+    else:
+        results["local_llm"] = {"status": "ℹ️ LOCAL_LLM_URL 미설정 (클라우드 모드)"}
+
+    # 3. Gemini 2.5 Flash 실제 호출 테스트
     if gemini_key:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
             r = req.post(url, json={
-                "contents": [{"role": "user", "parts": [{"text": "안녕? 한 단어로만 답해줘."}]}],
-                "generationConfig": {"maxOutputTokens": 20}
+                "contents": [{"role": "user", "parts": [{"text": "안녕? '정상'이라고 두 글자로만 답해줘."}]}],
+                "generationConfig": {"maxOutputTokens": 20, "thinkingConfig": {"thinkingBudget": 0}}
             }, timeout=20)
             if r.status_code == 200:
                 txt = r.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                results["gemini"] = {"status": "✅ 정상", "http": 200, "response": txt[:50]}
+                results["gemini_2.5_flash"] = {"status": "✅ 정상", "http": 200, "response": txt.strip()[:50]}
             else:
-                results["gemini"] = {"status": f"❌ 실패", "http": r.status_code, "body": r.text[:300]}
+                results["gemini_2.5_flash"] = {"status": "❌ 실패", "http": r.status_code, "body": r.text[:200]}
         except Exception as e:
-            results["gemini"] = {"status": "❌ 예외 발생", "error": str(e)[:200]}
+            results["gemini_2.5_flash"] = {"status": "❌ 예외 발생", "error": str(e)[:150]}
     else:
-        results["gemini"] = {"status": "⚠️ 키 없음"}
+        results["gemini_2.5_flash"] = {"status": "⚠️ 키 없음"}
 
-    # 3. Groq 실제 호출 테스트
+    # 4. Groq 실제 호출 테스트
     if groq_key:
         try:
             r2 = req.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": "안녕?"}], "max_tokens": 10},
+                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": "안녕?"}], "max_tokens": 10},
                 timeout=15
             )
             if r2.status_code == 200:
                 txt2 = r2.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                results["groq"] = {"status": "✅ 정상", "http": 200, "response": txt2[:50]}
+                results["groq_70b"] = {"status": "✅ 정상", "http": 200, "response": txt2.strip()[:50]}
             else:
-                results["groq"] = {"status": f"❌ 실패", "http": r2.status_code, "body": r2.text[:300]}
+                results["groq_70b"] = {"status": "❌ 실패", "http": r2.status_code, "body": r2.text[:200]}
         except Exception as e:
-            results["groq"] = {"status": "❌ 예외 발생", "error": str(e)[:200]}
+            results["groq_70b"] = {"status": "❌ 예외 발생", "error": str(e)[:150]}
     else:
-        results["groq"] = {"status": "⚠️ 키 없음"}
+        results["groq_70b"] = {"status": "⚠️ 키 없음"}
 
     return results

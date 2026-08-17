@@ -59,60 +59,80 @@ def _clean_llm_output(text: str) -> str:
     return text
 
 def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Optional[str]:
-    """Call Local LLM endpoint (LM Studio on :1234 or Ollama on :11434) with Gemma 4 E4B."""
-    configured_url = os.getenv("LOCAL_LLM_URL", "http://localhost:1234/v1").rstrip("/")
-    configured_model = os.getenv("LOCAL_LLM_MODEL", "gemma-4-E4B-it-GGUF").strip()
+    """Call Local LLM endpoint (LM Studio on :1234 or Cloudflare Tunnel or Ollama) with Gemma 4 E4B."""
+    raw_url = os.getenv("LOCAL_LLM_URL", "").strip()
+    configured_model = os.getenv("LOCAL_LLM_MODEL", "").strip()
     
-    # 1. Try LM Studio OpenAI-compatible endpoint (:1234/v1)
-    lmstudio_urls = [
-        configured_url if ":1234" in configured_url else "http://localhost:1234/v1",
-        "http://127.0.0.1:1234/v1"
-    ]
-    for lm_url in lmstudio_urls:
+    # URL 후보 목록 구성 (환경변수 URL 우선)
+    v1_urls = []
+    if raw_url:
+        clean = raw_url.rstrip("/")
+        if clean.endswith("/v1"):
+            v1_urls.append(clean)
+        else:
+            v1_urls.append(f"{clean}/v1")
+            v1_urls.append(clean)
+            
+    # 로컬 기본 URL 추가
+    v1_urls.extend([
+        "http://localhost:1234/v1",
+        "http://127.0.0.1:1234/v1",
+        "http://localhost:11434/v1",
+        "http://127.0.0.1:11434/v1"
+    ])
+    
+    # 중복 제거
+    seen = set()
+    unique_urls = []
+    for u in v1_urls:
+        if u not in seen:
+            seen.add(u)
+            unique_urls.append(u)
+            
+    # 1. OpenAI-compatible /v1/chat/completions 호출 (LM Studio / Cloudflare Tunnel / Ollama v1)
+    for endpoint in unique_urls:
         try:
+            # 먼저 활성화된 모델 확인 시도 (선택적)
+            model_to_use = configured_model or "google/gemma-4-e4b"
+            try:
+                m_resp = requests.get(f"{endpoint}/models", timeout=3)
+                if m_resp.status_code == 200:
+                    m_data = m_resp.json().get("data", [])
+                    if m_data and isinstance(m_data, list):
+                        model_to_use = m_data[0].get("id", model_to_use)
+            except Exception:
+                pass
+
             payload = {
-                "model": configured_model or "gemma-4-E4B-it-GGUF",
+                "model": model_to_use,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 "temperature": 0.6,
-                "max_tokens": max_tokens,
-                "frequency_penalty": 0.05,
-                "presence_penalty": 0.0
+                "max_tokens": max_tokens
             }
-            resp = requests.post(f"{lm_url}/chat/completions", json=payload, timeout=90)
+            # Vercel 환경 고려 타임아웃 45초
+            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=45)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])
                 if choices:
                     content = choices[0].get("message", {}).get("content", "").strip()
-                    # 실제 응답에서 모델명 추출 (LM Studio가 실제 모델명 반환)
-                    actual_model = data.get("model", configured_model or "Gemma 4 E4B")
+                    actual_model = data.get("model", model_to_use)
                     cleaned = _clean_llm_output(content)
-                    if cleaned:
-                        return cleaned + f"\n\n---\n> 🖥️ **로컬 모델**: {actual_model} (LM Studio)"
+                    if cleaned and len(cleaned) > 100:
+                        location_tag = "Cloudflare Tunnel" if "trycloudflare" in endpoint else "Local"
+                        return cleaned + f"\n\n---\n> 🖥️ **로컬 AI 모델**: {actual_model} ({location_tag})"
         except Exception:
-            pass
+            continue
             
-    # 2. Try Ollama endpoint (:11434)
-    ollama_url = "http://localhost:11434" if ":11434" not in configured_url else configured_url
-    candidate_models = [
-        configured_model,
-        "gemma-4-E4B-it-GGUF",
-        "gemma-4-E4B-it-Q4_K_M.gguf",
-        "gemma-4-e4b-it",
-        "gemma-4-e4b",
-        "lmstudio-community/gemma-4-E4B-it-GGUF",
-        "gemma4:26b",
-        "gemma:7b"
-    ]
-    candidate_models = [m for m in candidate_models if m]
-    
-    for model in candidate_models:
+    # 2. Ollama 네이티브 API (:11434/api/chat)
+    ollama_candidates = ["http://localhost:11434", "http://127.0.0.1:11434"]
+    for o_url in ollama_candidates:
         try:
             payload = {
-                "model": model,
+                "model": configured_model or "gemma-4-e4b",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -120,20 +140,16 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 "stream": False,
                 "options": {
                     "temperature": 0.6,
-                    "repeat_penalty": 1.05,
-                    "top_p": 0.95,
-                    "top_k": 40,
-                    "num_ctx": 16384,
                     "num_predict": max_tokens
                 }
             }
-            resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=90)
+            resp = requests.post(f"{o_url}/api/chat", json=payload, timeout=45)
             if resp.status_code == 200:
                 res_data = resp.json()
                 msg = res_data.get("message", {}).get("content", "").strip()
                 cleaned = _clean_llm_output(msg)
-                if cleaned:
-                    return cleaned + f"\n\n---\n> 🖥️ **로컬 모델**: {model} (Ollama)"
+                if cleaned and len(cleaned) > 100:
+                    return cleaned + f"\n\n---\n> 🖥️ **로컬 모델**: {configured_model or 'gemma-4-e4b'} (Ollama)"
         except Exception:
             continue
             
@@ -144,8 +160,7 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     return _call_local_llm(system_prompt, user_prompt, max_tokens)
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
-    """Fallback Gemini & Cloud API call wrapper - only v1beta, valid model names only."""
-    # 여러 이름으로 저장된 Gemini 키를 순서대로 시도
+    """Fallback Gemini & Cloud API call wrapper - with thinkingBudget fix and robust fallbacks."""
     gemini_key = (
         os.getenv("GEMINI_API_KEY", "").strip()
         or os.getenv("GEMINI_API_KEY_0817", "").strip()
@@ -157,52 +172,86 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
         return "⚠️ AI 응답 생성에 실패했습니다. Vercel 환경변수 GEMINI_API_KEY 또는 GROQ_API_KEY를 설정해주세요."
 
     last_error = ""
-    combined_prompt = f"{system_prompt}\n\n[데이터 및 분석 요청]\n{user_prompt}"
+    best_response = ""
+    best_model_tag = ""
 
-    # 1. Gemini API - v1beta ONLY (v1 경로는 대부분 404)
+    # 1. Gemini API - v1beta ONLY
     if gemini_key:
         gemini_models = [
-            "gemini-2.5-flash",          # 현재 최신 (2026)
-            "gemini-2.5-flash-lite",     # 경량 최신
-            "gemini-1.5-flash",          # 안정 버전
-            "gemini-1.5-pro",            # 고품질 안정 버전
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+            "gemini-2.5-flash-lite",
         ]
         for g_model in gemini_models:
             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
-            try:
-                # Attempt A: systemInstruction 분리 방식
-                resp = requests.post(g_url, json={
+            
+            # Gemini 2.5 Flash의 Thinking 버짓 문제를 해결하기 위한 요청 생성
+            # thinkingBudget: 0 으로 설정하여 추론 토큰 소진 없이 100% 한국어 임상 분석 본문 출력에 집중
+            req_configs = [
+                # Config 1: thinkingBudget: 0 (Gemini 2.5 Flash용 초고속/전체 토큰 출력)
+                {
                     "systemInstruction": {"parts": [{"text": system_prompt}]},
                     "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": min(max_tokens, 8192)}
-                }, timeout=60)
-
-                if resp.status_code == 200:
-                    resp_json = resp.json()
-                    candidates = resp_json.get("candidates", [])
-                    if candidates:
-                        text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])).strip()
-                        finish_reason = candidates[0].get("finishReason", "UNKNOWN")
-                        usage = resp_json.get("usageMetadata", {})
-                        out_tokens = usage.get("candidatesTokenCount", "?")
-                        in_tokens = usage.get("promptTokenCount", "?")
-                        if text:
+                    "generationConfig": {
+                        "temperature": 0.6,
+                        "maxOutputTokens": 8192,
+                        "thinkingConfig": {"thinkingBudget": 0}
+                    }
+                },
+                # Config 2: 기본 generationConfig (Gemini 1.5 등 thinkingConfig 미지원 모델용)
+                {
+                    "systemInstruction": {"parts": [{"text": system_prompt}]},
+                    "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.6,
+                        "maxOutputTokens": 8192
+                    }
+                }
+            ]
+            
+            for req_body in req_configs:
+                try:
+                    resp = requests.post(g_url, json=req_body, timeout=55)
+                    if resp.status_code == 200:
+                        resp_json = resp.json()
+                        candidates = resp_json.get("candidates", [])
+                        if candidates:
+                            text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", [])).strip()
+                            finish_reason = candidates[0].get("finishReason", "UNKNOWN")
+                            usage = resp_json.get("usageMetadata", {})
+                            out_tokens = usage.get("candidatesTokenCount", 0)
+                            in_tokens = usage.get("promptTokenCount", 0)
+                            
+                            if not text:
+                                continue
+                            
                             diag = f"| 종료: {finish_reason} | 입력: {in_tokens}토큰, 출력: {out_tokens}토큰"
-                            return _clean_llm_output(text) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini) {diag}"
+                            model_tag = f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini) {diag}"
+                            cleaned = _clean_llm_output(text)
+                            
+                            # 정상 완료 (STOP) 이거나 충분한 분량 (1200자 이상)이면 즉시 반환
+                            if finish_reason == "STOP" or len(cleaned) >= 1200:
+                                return cleaned + model_tag
+                            
+                            # 너무 짧게 잘린 경우 저장 후 다음 시도
+                            if len(cleaned) > len(best_response):
+                                best_response = cleaned
+                                best_model_tag = model_tag
+                                
+                    elif resp.status_code == 429:
+                        last_error = f"{g_model} 429 한도 초과"
+                        break
+                    else:
+                        last_error = f"{g_model} HTTP {resp.status_code}"
+                except Exception as e:
+                    last_error = f"{g_model} 예외: {str(e)[:100]}"
+                    continue
 
-                last_error = f"{g_model} HTTP {resp.status_code}: {resp.text[:200]}"
-            except Exception as e:
-                last_error = f"{g_model} 예외: {str(e)}"
-                continue
-
-    # 2. Groq Fallback (Gemini 실패 시)
+    # 2. Groq Fallback (Gemini 실패 또는 잘림 시)
     if groq_key:
-        # Groq 무료 티어 제한: 요청 본문 약 6000 토큰 → 문자 기준 약 20000자로 자름
         GROQ_MAX_CHARS = 18000
         groq_system = system_prompt[:3000] if len(system_prompt) > 3000 else system_prompt
         groq_user = user_prompt[:GROQ_MAX_CHARS] if len(user_prompt) > GROQ_MAX_CHARS else user_prompt
-        if len(user_prompt) > GROQ_MAX_CHARS:
-            groq_user += "\n\n[참고: 데이터가 길어 앞부분만 분석합니다. 전체 분석은 Gemini API 설정 후 가능합니다.]"
 
         for g_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
             try:
@@ -215,7 +264,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                             {"role": "system", "content": groq_system},
                             {"role": "user", "content": groq_user}
                         ],
-                        "max_tokens": min(max_tokens, 2048),
+                        "max_tokens": min(max_tokens, 4096),
                         "temperature": 0.6
                     },
                     timeout=45
@@ -223,19 +272,27 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                 if resp.status_code == 200:
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content:
-                        return _clean_llm_output(content) + f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Groq)"
+                        cleaned = _clean_llm_output(content)
+                        groq_tag = f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Groq)"
+                        if len(cleaned) > len(best_response):
+                            return cleaned + groq_tag
                 elif resp.status_code == 429:
-                    # Rate limit - 더 이상 다른 모델 시도해도 429 연속됨, 바로 종료
-                    return "⏳ AI 분석 요청이 너무 많아 잠시 대기 중입니다. 1분 후 다시 [Refresh]를 눌러주세요. (Groq 무료 한도 초과)"
+                    if not best_response:
+                        return "⏳ AI 분석 요청이 너무 많아 잠시 대기 중입니다. 1분 후 다시 [Refresh]를 눌러주세요. (Groq 무료 한도 초과)"
+                    break
                 last_error = f"Groq {g_model} HTTP {resp.status_code}"
             except Exception as e:
                 last_error = f"Groq {g_model}: {str(e)}"
                 continue
 
+    # 최장 응답 반환
+    if best_response:
+        return best_response + best_model_tag
+
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
-def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
-    """Primary LLM dispatcher: tries Local Ollama first, falls back to Gemini API."""
+def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> str:
+    """Primary LLM dispatcher: tries Local Ollama/LM Studio first, falls back to Gemini API."""
     ollama_result = _call_ollama(system_prompt, user_prompt, max_tokens)
     if ollama_result:
         return ollama_result
