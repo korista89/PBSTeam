@@ -51,9 +51,11 @@ def _filter_student_logs(records: list, student_code: str, beable_code: str = ""
 
 @router.get("/students/{student_code}/bip")
 async def get_student_bip(student_code: str):
-    from app.services.sheets import fetch_bip_by_code
-    result = fetch_bip_by_code(student_code)
-    if "error" in result:
+    from app.services.sheets import get_bip
+    result = get_bip(student_code)
+    if result is None:
+        return {"StudentCode": student_code, "TargetBehavior": "", "Hypothesis": "", "Goals": ""}
+    if isinstance(result, dict) and "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
@@ -187,15 +189,21 @@ async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
             
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
     
-    target_behavior = "신체적 공격 및 과제 거부/이탈"
-    if norm_logs:
-        target_behavior = f"{norm_logs[0]['behavior_type']} (평균 강도 {round(sum(l['intensity'] for l in norm_logs)/len(norm_logs),1)}/5, 누적 {len(norm_logs)}건)"
+    if not norm_logs:
+        return {"analysis": "INSUFFICIENT_DATA: 행동 관찰 기록이 부족하여 기능적 가설 및 BIP를 자동 생성할 수 없습니다. 직접 관찰 기록을 먼저 수집해 주세요."}
+        
+    tb_list = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
+    avg_int = round(sum(l['intensity'] for l in norm_logs)/len(norm_logs), 1) if norm_logs else 0
+    target_behavior = f"{', '.join(tb_list)} (평균 강도 {avg_int}/5, 누적 {len(norm_logs)}건)"
+    
+    func_list = list(dict.fromkeys([','.join(l['function_labels']) for l in norm_logs if l['function_labels']]))
+    hypothesis_data = f"관찰된 추정 기능: {', '.join(func_list)}" if func_list else "기능 미상 (추가 FBA 직접 관찰 필요)"
         
     result = generate_full_bip(
         student_info=student_info,
         target_behavior=target_behavior,
-        hypothesis_data="과제 제시 및 급식/전이 상황에서의 불편해소 및 회피",
-        strategies_data=f"투약: {req.medication_status}, 선호강화제: {req.reinforcer_info}, 기타: {req.other_considerations}",
+        hypothesis_data=hypothesis_data,
+        strategies_data=f"건강/복약 관찰: {req.medication_status}, 선호강화제: {req.reinforcer_info}, 기타: {req.other_considerations}",
         school_crisis_protocol="경은학교 위기관리 4단계 프로토콜 (전조-고조-위기-회복 및 최소제한원칙 준수)",
         behavior_logs=norm_logs
     )

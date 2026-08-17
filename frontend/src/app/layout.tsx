@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "./components/AuthProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,7 +28,9 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={inter.className}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <footer style={{ textAlign: "center", padding: "20px", backgroundColor: "#f8f9fa", color: "#6c757d", fontSize: "14px", letterSpacing: "0.5px" }}>
             &copy; 2026 Jongho Park. All rights reserved.
         </footer>

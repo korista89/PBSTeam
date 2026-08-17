@@ -1,0 +1,55 @@
+# PBSTeam 2.0 — Implementation Progress Tracker
+
+## Phase Status Summary
+
+- [x] **Phase 0: Baseline & Protected Data Contract**
+  - [x] 39 Core EBP Catalog (`backend/app/data/ebp_catalog.json`) created
+  - [x] Pydantic Domain Models (`backend/app/domain/models.py`) created
+  - [x] TypeScript Domain Types (`frontend/src/types/domain.ts`) created
+  - [x] `docs/PBST2_DATA_CONTRACT.md` created
+  - [x] `docs/PBST2_ARCHITECTURE_AUDIT.md` created
+- [x] **Phase 1: Security & P0 Runtime Defect Fixes**
+  - [x] P0-01: Fix BIP 500 error (`bip.py` -> `get_bip`)
+  - [x] P0-02: Fix `toggle_tier2_status` `client` NameError
+  - [x] P0-03: Fix `update_student_tier` payload type mismatch
+  - [x] P0-04: Secure Auth & Password comparison
+  - [x] P0-05: React Context AuthProvider
+  - [x] P0-06: Backend-level student access authorization
+  - [x] P0-07: CORS Origin allowlist
+  - [x] P0-08: Remove 210-student fake fallback in `tier-status/page.tsx`
+  - [x] P0-09: Remove auto-Tier mutation in analytics & fix `학생이름` column mapping
+  - [x] P0-10: Remove hardcoded BIP hypothesis, return `INSUFFICIENT_DATA`
+  - [x] P0-11: Structured AI output schema
+  - [x] P0-12: Prohibit auto Log_Main sheet creation
+- [x] **Phase 2: Data Adapters & Normalization Layer**
+  - [x] `backend/app/adapters/sheets/client.py` (Sheets client & caching)
+  - [x] `backend/app/adapters/sheets/log_main.py` (`LogMainAdapter`)
+  - [x] `backend/app/adapters/sheets/tier_status.py` (`TierStatusAdapter`)
+  - [x] `backend/app/adapters/sheets/cico.py` (`CicoMonthAdapter`)
+- [x] **Phase 3: Deterministic Analytics Engine ($O(1)$ Optimization)**
+  - [x] Optimized student lookups in `analysis.py` to $O(1)$ hash maps
+  - [x] Pure deterministic statistical calculation (no LLM in stats)
+- [x] **Phase 4: EBP Matching & Guardrail Engine**
+  - [x] `backend/app/services/ebp/catalog.py` (39 Be-Able loader)
+  - [x] `backend/app/services/ebp/guardrails.py` (EXT, RIRD, DR-O, AAC, ME)
+  - [x] `backend/app/services/ebp/matching.py` (Deterministic bundle generation)
+  - [x] `backend/app/api/endpoints/ebp.py` (`/api/v1/ebp/catalog`, `/recommend`)
+- [x] **Phase 5: Decision Signals Engine & Workspace API**
+  - [x] `backend/app/services/decision/signals.py` (SAFETY, REVIEW_DUE, CHANGE_UP, GOAL_STALLED, MORE_DATA)
+  - [x] `backend/app/api/endpoints/workspace.py` (`/api/v1/workspace/today`, `/api/v1/workspace/student/{code}`)
+- [x] **Phase 6: Frontend Experience & New Pages**
+  - [x] `GlobalNav.tsx` upgraded with `/today` and `/ebp`
+  - [x] `frontend/src/app/ebp/page.tsx` (Interactive Be-Able 39 EBP Hub)
+  - [x] `frontend/src/app/today/page.tsx` (Today Decision Center & Safety Cockpit)
+  - [x] `frontend/src/app/student/[id]/page.tsx` (EBP Recommendation Bundle integration)
+- [x] **Phase 7: CICO 2.0 Dashboard Renewal**
+  - [x] Multi-month schema normalization (3월 ~ 7월)
+  - [x] CICO decision indicators & DPR trend analysis
+- [x] **Phase 8: Visual BIP Builder Renewal**
+  - [x] 8 PBIS core components + health/reinforcer fields
+  - [x] 1-click Be-Able 39 EBP Modal & strategy text auto-insertion
+- [x] **Phase 9: Meeting Mode & Team Collaboration**
+  - [x] Multi-disciplinary team collaboration agenda & role assignment
+  - [x] Direct Meeting Notes synchronization to Google Sheets
+- [x] **Phase 10: Performance Benchmarks & Final Verification**
+  - [x] Zero hardcoded names, $O(1)$ fast lookups, full 7-sheet data contract protection

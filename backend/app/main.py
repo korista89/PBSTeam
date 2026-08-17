@@ -13,10 +13,20 @@ from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
 
-# CORS setup
+# CORS setup — specific allowlist + regex for preview deployments
+cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+]
+frontend_env = os.environ.get("FRONTEND_URL")
+if frontend_env:
+    cors_origins.append(frontend_env)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for Vercel deployment
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,9 +53,14 @@ app.include_router(board.router, prefix="/api/v1/board", tags=["board"])
 from app.api.endpoints import bip
 from app.api.endpoints import picture_words
 from app.api.endpoints import behavior
+from app.api.endpoints import ebp
+from app.api.endpoints import workspace
+
 app.include_router(bip.router, prefix="/api/v1/bip", tags=["bip"])
 app.include_router(picture_words.router, prefix="/api/v1/picture-words", tags=["picture-words"])
 app.include_router(behavior.router, prefix="/api/v1/behavior-log", tags=["behavior-log"])
+app.include_router(ebp.router, prefix="/api/v1/ebp", tags=["ebp"])
+app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspace"])
 
 @app.get("/")
 async def root():

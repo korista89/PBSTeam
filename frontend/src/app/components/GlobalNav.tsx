@@ -51,7 +51,9 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
 
     const navItems = [
         { href: "/", label: "📊 대시보드", key: "dashboard" },
-        { href: "/behavior", label: "✍️ 행동기록(신규)", key: "behavior" },
+        { href: "/today", label: "🧭 Today결정", key: "today" },
+        { href: "/ebp", label: "📚 Be-Able EBP", key: "ebp" },
+        { href: "/behavior", label: "✍️ 행동기록", key: "behavior" },
         { href: "/tier-status", label: "📋 Tier현황", key: "tier-status" },
         { href: "/cico", label: "📝 CICO입력", key: "cico" },
         { href: "/report/tier2", label: "📈 CICO리포트", key: "report-tier2" },

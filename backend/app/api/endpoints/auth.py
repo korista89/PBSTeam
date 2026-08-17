@@ -13,6 +13,16 @@ class PasswordUpdateRequest(BaseModel):
     user_id: str
     new_password: str
 
+import hashlib
+
+def verify_password(plain_password: str, stored_password: str) -> bool:
+    if not stored_password or not plain_password:
+        return False
+    if stored_password == plain_password:
+        return True
+    sha256_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
+    return stored_password == sha256_hash
+
 @router.post("/login")
 async def login(request: LoginRequest):
     user = get_user_by_id(request.user_id)
@@ -20,7 +30,7 @@ async def login(request: LoginRequest):
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     
-    if user.get("Password") != request.password:
+    if not verify_password(request.password, str(user.get("Password", ""))):
         raise HTTPException(status_code=401, detail="Invalid password")
     
     return {

@@ -40,6 +40,30 @@ export default function MeetingPage() {
         }
     };
 
+    const [saving, setSaving] = useState(false);
+
+    const handleSaveToSheet = async () => {
+        if (!result) return;
+        setSaving(true);
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+                meeting_type: "tier1",
+                date: new Date().toISOString().split('T')[0],
+                content: result,
+                author: "PBS Coordinator",
+                period_start: startDate,
+                period_end: endDate
+            });
+            alert("협의록이 시스템 및 구글 시트에 성공적으로 저장되었습니다.");
+        } catch (e: any) {
+            console.error(e);
+            alert("저장 실패: " + (e.response?.data?.detail || e.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleCopy = () => {
         if (!result) return;
         navigator.clipboard.writeText(result);
@@ -135,14 +159,21 @@ export default function MeetingPage() {
                             <section>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '1rem' }}>
                                     <button
+                                        onClick={handleSaveToSheet}
+                                        disabled={saving}
+                                        style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', background: '#10b981', color: 'white', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                        {saving ? "저장 중..." : "💾 시트에 저장"}
+                                    </button>
+                                    <button
                                         onClick={handleCopy}
-                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}
                                     >
                                         📋 복사하기
                                     </button>
                                     <button
                                         onClick={handlePrint}
-                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
+                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}
                                     >
                                         🖨️ 인쇄하기
                                     </button>

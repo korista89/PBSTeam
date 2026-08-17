@@ -106,43 +106,33 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     df = pd.DataFrame(raw_data)
     
-    # 2. Get BeAble code mapping
-    beable_mapping = get_beable_code_mapping()
-    
-    # 3. Filter & Map Data
-    # Use '학생코드' (4-digit) as primary, fallback to name
-    def resolve_student_info(row):
-        # Primary Student Code
-        s_code = str(row.get('학생코드', '')).strip()
-        
-        # In our updated system, beable_to_info might have BeAble OR student_code as key.
-        # But we know info dict ALWAYS has 'student_code'.
-        # Let's find the matching info directly by its inner 'student_code' property.
-        if s_code:
-            for info in beable_mapping.values():
-                if info.get('student_code') == s_code:
-                    return info
-            
-        # Fallback to pure Name mapping
-        s_name = str(row.get('학생명', '')).strip()
-        for info in beable_mapping.values():
-            if info.get('student_name') == s_name:
-                return info
-        return None
+    # 2. Get BeAble code mapping & Prebuild O(1) Lookup Maps
+    beable_mapping = get_beable_code_mapping() or {}
+    code_map = {}
+    name_map = {}
+    for info in beable_mapping.values():
+        sc = str(info.get('student_code', '')).strip()
+        sn = str(info.get('student_name', '')).strip()
+        if sc: code_map[sc] = info
+        if sn: name_map[sn] = info
 
+    # 3. Filter & Map Data in O(N) instead of O(N * M)
     resolved_records = []
-    for _, row in df.iterrows():
-        info = resolve_student_info(row)
-        new_row = row.to_dict()
+    records_list = df.to_dict('records')
+    for row in records_list:
+        s_code = str(row.get('학생코드', '')).strip()
+        s_name = str(row.get('학생명', '')).strip()
+        
+        info = code_map.get(s_code) or name_map.get(s_name)
         if info:
-            new_row['student_code'] = info['student_code']
-            new_row['student_name_labeled'] = info.get('student_name', info['student_code'])
+            row['student_code'] = info['student_code']
+            row['student_name_labeled'] = info.get('student_name', info['student_code'])
         else:
-            raw_name = str(row.get('학생명', '')).strip()
-            new_row['student_code'] = raw_name if raw_name else "Unknown"
-            new_row['student_name_labeled'] = raw_name if raw_name else "Unknown"
+            raw_name = s_name or s_code or "Unknown"
+            row['student_code'] = raw_name
+            row['student_name_labeled'] = raw_name
             
-        resolved_records.append(new_row)
+        resolved_records.append(row)
     
     if not resolved_records:
         return empty_res
@@ -730,14 +720,16 @@ def analyze_meeting_data(target_date: str = None):
     for s in all_status:
         # Determine max tier
         tier = "Tier 1"
-        if s.get('Tier3+') == 'O': tier = "Tier 3+"
-        elif s.get('Tier3') == 'O': tier = "Tier 3"
-        elif s.get('Tier2(CICO)') == 'O' or s.get('Tier2(SST)') == 'O': tier = "Tier 2"
+        if s.get('Tier3+') in ['O', 'o', True]: tier = "Tier 3+"
+        elif s.get('Tier3') in ['O', 'o', True]: tier = "Tier 3"
+        elif s.get('Tier2(CICO)') in ['O', 'o', True] or s.get('Tier2(SST)') in ['O', 'o', True]: tier = "Tier 2"
         
-        # Map by Name (assuming unique names for now, or use Code if available)
-        s_name = s.get('학생명')
+        s_name = s.get('학생이름') or s.get('학생명') or s.get('Name')
+        s_code = s.get('학생코드') or s.get('Code')
         if s_name:
-            student_tier_map[s_name] = tier
+            student_tier_map[str(s_name).strip()] = tier
+        if s_code:
+            student_tier_map[str(s_code).strip()] = tier
 
     # --- Decision Algorithm ---
     student_analysis = []

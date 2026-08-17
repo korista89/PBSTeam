@@ -1,26 +1,35 @@
 "use client";
 
-import { useEffect, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { User } from "../types";
 
-interface AuthProviderProps {
-    children: ReactNode;
+interface AuthContextType {
+    user: User | null;
+    loading: boolean;
+    login: (userData: User) => void;
+    logout: () => void;
+    isAdmin: () => boolean;
 }
 
-export function useAuth() {
+const AuthContext = createContext<AuthContextType>({
+    user: null,
+    loading: false,
+    login: () => {},
+    logout: () => {},
+    isAdmin: () => false,
+});
+
+export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(() => {
-        // Lazy initialization - runs only on first render
         if (typeof window !== 'undefined') {
             const stored = localStorage.getItem("user");
             if (stored) {
                 try {
                     const parsed = JSON.parse(stored);
-                    // Validate essential fields
                     if (parsed && parsed.id && (parsed.role || parsed.Role)) {
                         return parsed;
                     } else {
-                        console.warn("Invalid user data found, clearing storage");
                         localStorage.removeItem("user");
                     }
                 } catch {
@@ -30,25 +39,38 @@ export function useAuth() {
         }
         return null;
     });
-    const loading = false; // No async loading needed with lazy init
 
-    const login = (userData: User) => {
-        localStorage.setItem("user", JSON.stringify(userData));
+    const login = useCallback((userData: User) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem("user", JSON.stringify(userData));
+        }
         setUser(userData);
-    };
+    }, []);
 
-    const logout = () => {
-        localStorage.removeItem("user");
+    const logout = useCallback(() => {
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem("user");
+        }
         setUser(null);
-    };
+    }, []);
 
-    const isAdmin = useCallback(() => (user?.role || user?.Role)?.toLowerCase() === "admin", [user?.role, user?.Role]);
+    const isAdmin = useCallback(() => {
+        return (user?.role || user?.Role)?.toLowerCase() === "admin";
+    }, [user?.role, user?.Role]);
 
-    return { user, loading, login, logout, isAdmin };
+    return (
+        <AuthContext.Provider value={{ user, loading: false, login, logout, isAdmin }}>
+            {children}
+        </AuthContext.Provider>
+    );
 }
 
-export function AuthCheck({ children, requireAdmin = false }: AuthProviderProps & { requireAdmin?: boolean }) {
-    const { user, loading } = useAuth();
+export function useAuth() {
+    return useContext(AuthContext);
+}
+
+export function AuthCheck({ children, requireAdmin = false }: { children: ReactNode; requireAdmin?: boolean }) {
+    const { user, loading, isAdmin } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
 
@@ -57,12 +79,12 @@ export function AuthCheck({ children, requireAdmin = false }: AuthProviderProps 
             if (!user && pathname !== "/login") {
                 router.push("/login");
             }
-            if (requireAdmin && user?.role !== "admin") {
+            if (requireAdmin && !isAdmin()) {
                 alert("관리자 권한이 필요합니다.");
                 router.push("/");
             }
         }
-    }, [user, loading, pathname, router, requireAdmin]);
+    }, [user, loading, pathname, router, requireAdmin, isAdmin]);
 
     if (loading) {
         return (

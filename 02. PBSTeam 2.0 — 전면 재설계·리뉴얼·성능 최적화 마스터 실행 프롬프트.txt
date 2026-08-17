@@ -1,0 +1,3157 @@
+
+# PBSTeam 2.0 — 전면 재설계·리뉴얼·성능 최적화 마스터 실행 프롬프트
+
+## 0. YOUR ROLE
+
+당신은 이 프로젝트의 단순 코딩 보조자가 아니다.
+
+당신은 동시에 다음 역할을 수행하는 **Senior Product Architect + Full-stack Engineer + Data Engineer + UX Architect + ABA/PBS Decision-System Designer + QA Engineer**이다.
+
+이 프로젝트의 목표는 기존 PBSTeam의 화면을 예쁘게 바꾸는 것이 아니다.
+
+기존 PBSTeam을 근본적으로 재설계하여,
+
+> **학교 행동 데이터를 기록하는 사이트 → 데이터를 근거로 교사가 다음 지원을 결정하도록 돕는 PBST 의사결정 플랫폼**
+
+으로 재탄생시켜라.
+
+작업 대상은 현재 PBSTeam 전체 코드베이스이다.
+
+Google Sheets 원자료:
+
+https://docs.google.com/spreadsheets/d/1pMQIowYYBIk-6owcJqCNK5mA8GtssEEr6XdUq8gC9Cs/edit?usp=sharing
+
+반드시 실제 Repository와 실제 Google Sheet 구조를 먼저 조사한 뒤 작업하라.
+
+추측해서 코드를 작성하지 마라.
+
+---
+
+# 1. 절대적인 DATA PROTECTION RULE
+
+다음 7개 Google Sheets 탭은 현재 학교 PBST의 핵심 원자료이다.
+
+1. `Log_Main`
+2. `TierStatus`
+3. `3월`
+4. `4월`
+5. `5월`
+6. `6월`
+7. `7월`
+
+이 7개 시트에 대해서는 다음 규칙이 절대적이다.
+
+## 보호 대상
+
+- 기존 시트명
+- 기존 컬럼
+- 기존 컬럼 순서
+- 기존 원자료
+- 학생코드
+- 과거 기록
+- 기존 CICO 값
+
+을 임의로 삭제하거나 변환하거나 마이그레이션하지 않는다.
+
+### 허용되는 작업
+
+기존 웹사이트가 원래 수행하던 정상적인:
+
+- 행동기록 추가
+- CICO 입력 및 수정
+- Tier 상태 변경
+
+등의 명시적인 사용자 쓰기 작업은 기존 데이터 계약을 준수한 범위에서 유지할 수 있다.
+
+하지만 리팩토링을 이유로 기존 역사적 데이터를 일괄 수정하지 마라.
+
+---
+
+# 2. 나머지는 모두 재설계 가능
+
+위 7개 핵심 시트 이외에는 기존 구조를 성역으로 생각하지 마라.
+
+다음은 모두 필요에 따라:
+
+- 삭제
+- 통합
+- 이름 변경
+- 구조 변경
+- 코드 제거
+- 기능 재설계
+- 데이터 저장방식 변경
+- 새로운 구조로 교체
+
+할 수 있다.
+
+예:
+
+- BIP
+- Users
+- MeetingNotes
+- Tier2_대시보드
+- 날짜 관리
+- PW 관련 시트
+- StudentCodes
+- 기타 보조시트
+
+모두 현 구조를 그대로 유지할 필요가 없다.
+
+단, 실제 삭제 전에는:
+
+1. Reference Search
+2. Backup
+3. 대체 기능 동작 확인
+4. Regression Test
+
+를 완료하라.
+
+---
+
+# 3. 현재 시스템의 근본적인 문제부터 다시 정의하라
+
+현재 시스템을 단순히 “느린 Dashboard”라고 정의하지 마라.
+
+더 근본적인 문제는 다음이다.
+
+### 문제 A — 데이터와 의사결정이 분리되어 있다
+
+교사는 데이터를 보고 다시 머릿속에서 해석해야 한다.
+
+시스템은 다음 질문에 직접 답해주지 못한다.
+
+- 지금 중요한 학생은 누구인가?
+- 왜 중요한가?
+- 무엇이 변하고 있는가?
+- 행동의 패턴은 무엇인가?
+- 기능 가설의 근거는 충분한가?
+- 더 관찰해야 하는가?
+- 예방 전략을 바꿔야 하는가?
+- 대체행동을 무엇으로 가르칠 것인가?
+- 강화 계획은 적절한가?
+- Tier를 유지할 것인가?
+- 지원을 강화할 것인가?
+- 회의를 열어야 하는가?
+- BIP를 수정해야 하는가?
+
+PBSTeam 2.0은 바로 이 질문에 답해야 한다.
+
+---
+
+# 4. PRODUCT PHILOSOPHY
+
+새 PBSTeam의 핵심 원칙은 다음과 같다.
+
+## DATA → PATTERN → HYPOTHESIS → ACTION → REVIEW
+
+단순 데이터 표시가 아니다.
+
+모든 주요 화면은 교사에게 다음을 보여줘야 한다.
+
+### ① 무엇이 관찰되었는가
+
+FACT
+
+### ② 어떤 패턴이 있는가
+
+PATTERN
+
+### ③ 무엇을 의미할 가능성이 있는가
+
+HYPOTHESIS
+
+### ④ 다음에 무엇을 해야 하는가
+
+ACTION
+
+### ⑤ 이후 무엇을 확인할 것인가
+
+REVIEW
+
+---
+
+# 5. AI의 역할을 명확히 제한하라
+
+AI는 의사결정자가 아니다.
+
+AI는:
+
+> **Decision Support**
+
+이다.
+
+절대로:
+
+> **Decision Replacement**
+
+가 되어서는 안 된다.
+
+Tier 변경, 기능 확정, BIP 확정 등 중요한 결정은 교사가 최종 승인한다.
+
+UI에서도 다음 표현을 구분하라.
+
+- 데이터에서 확인됨
+- 가능성이 있음
+- 추가 확인 필요
+- 데이터 부족
+- 팀 결정 필요
+
+AI가 확신에 찬 문장으로 불확실한 기능을 단정하지 않도록 한다.
+
+---
+
+# 6. 현재 Sheet의 구조적 문제를 Application Layer에서 해결하라
+
+원자료를 수정하지 않고 내부 Adapter Layer를 만든다.
+
+예:
+
+```text
+Google Sheet RAW
+        ↓
+Sheet Adapter
+        ↓
+Normalization
+        ↓
+Canonical Domain Model
+        ↓
+Analysis Engine
+        ↓
+Decision Engine
+        ↓
+UI
+```
+
+---
+
+# 7. CANONICAL DOMAIN MODEL
+
+Google Sheets 컬럼명을 앱 전체에서 직접 사용하지 마라.
+
+다음 내부 모델을 중심으로 다시 설계하라.
+
+```text
+Student
+TierAssignment
+
+BehaviorEvent
+CicoTarget
+CicoObservation
+
+BehaviorPattern
+FunctionHypothesis
+
+StudentProfile
+BIPPlan
+
+Strategy
+StrategySelection
+
+DecisionSignal
+DecisionRecord
+
+Meeting
+MeetingDecision
+
+CrisisRecord
+```
+
+---
+
+# 8. 월별 CICO Schema Drift 해결
+
+현재 월별 CICO는 월에 따라 구조가 조금씩 다르다.
+
+예를 들어:
+
+- 학생코드가 별도 컬럼인 구조
+- 학생명과 코드가 결합된 구조
+- 날짜 컬럼 형식 차이
+- 컬럼 수 차이
+- 목표 유형 차이
+
+가 존재한다.
+
+원자료는 변경하지 않는다.
+
+대신:
+
+```text
+CicoMonthlyAdapter
+```
+
+를 만든다.
+
+예:
+
+```python
+normalize_cico_month(sheet_name, raw_rows)
+```
+
+결과는 항상 동일한 내부 형태로 반환한다.
+
+예:
+
+```text
+student_code
+student_name
+class_name
+
+target_behavior
+target_type
+
+scale_type
+baseline
+
+criterion
+
+date
+value
+```
+
+이를 통해 3월~7월뿐 아니라 향후:
+
+```text
+8월
+9월
+10월
+11월
+12월
+```
+
+도 자동으로 대응할 수 있게 설계한다.
+
+---
+
+# 9. Log_Main NORMALIZATION
+
+`Log_Main`에는 매우 풍부한 데이터가 있다.
+
+이를 단순 빈도 데이터로 취급하지 마라.
+
+내부적으로 최소 다음 정보를 분리하여 활용한다.
+
+```text
+student
+date
+time_block
+location
+
+behavior_type
+intensity
+frequency
+
+reported_function
+
+notes
+
+crisis_flag
+
+ABC
+A = antecedent
+B = behavior
+C = consequence
+
+support_episode
+
+injury
+administrator_report
+guardian_contact
+student_consultation
+guardian_consultation
+emergency_meeting
+```
+
+---
+
+# 10. 원자료의 자유기술을 그대로 사실로 취급하지 마라
+
+특히:
+
+```text
+추정기능
+특기사항
+ABC
+```
+
+은 교사의 자연어 기록이다.
+
+예를 들어 추정기능 셀에:
+
+```text
+회피
+관심
+감각
+```
+
+이 들어올 수도 있고,
+
+학생의 발화나 상황 설명이 들어올 수도 있다.
+
+따라서:
+
+```text
+raw_function
+normalized_function
+confidence
+evidence
+```
+
+를 분리하라.
+
+---
+
+# 11. FUNCTION TAXONOMY
+
+내부 분석에서는 다음 수준으로 정규화할 수 있다.
+
+### 사회적 정적강화
+
+- 관심·상호작용
+- 물건·활동 접근
+
+### 사회적 부적강화
+
+- 과제·상황 회피
+
+### 자동강화
+
+- 감각 추구
+- 신체적·감각적 불편 감소
+
+추가로:
+
+```text
+복합 가능성
+불명확
+추가관찰 필요
+```
+
+를 허용한다.
+
+절대로 모든 사건을 억지로 하나의 기능에 넣지 마라.
+
+---
+
+# 12. PBSTeam 2.0 INFORMATION ARCHITECTURE
+
+기존 기능 중심 메뉴에서 **교사의 업무 흐름 중심**으로 바꿔라.
+
+권장 Navigation:
+
+```text
+🏠 오늘의 PBST
+
+📊 학교 현황
+
+👥 학생
+
+✅ CICO
+
+🔎 행동·FBA
+
+🧩 BIP Builder
+
+🗂 전략 라이브러리
+
+🤝 회의·의사결정
+
+🚨 위기행동
+
+⚙ 관리자
+```
+
+---
+
+# 13. HOME을 “오늘의 의사결정 센터”로 바꿔라
+
+홈페이지 첫 화면은 예쁜 차트 모음이 아니다.
+
+교사가 출근해서 바로:
+
+> “오늘 무엇을 확인해야 하지?”
+
+를 알 수 있어야 한다.
+
+## 상단
+
+### 오늘의 PBST
+
+예:
+
+```text
+확인 필요한 학생       5
+Tier 검토 예정          3
+위기행동 후속처리       2
+CICO 미입력             4
+BIP 검토 예정           2
+```
+
+---
+
+# 14. ACTION INBOX
+
+Home에서 가장 중요한 요소다.
+
+예:
+
+### 🔴 우선 확인
+
+```text
+강도 높은 행동 증가
+지난 2주 대비 ↑
+→ 학생 데이터 보기
+```
+
+### 🟠 팀 검토
+
+```text
+4주간 CICO 목표 미달
+→ 지원 수정 검토
+```
+
+### 🟡 데이터 부족
+
+```text
+최근 행동기록은 증가했으나
+ABC 기록 부족
+→ 추가관찰 권장
+```
+
+### 🔵 BIP 검토 예정
+
+```text
+계획 적용 4주 경과
+→ 실행결과 평가
+```
+
+---
+
+# 15. SCHOOL DASHBOARD
+
+학교 전체를 다음 관점으로 보여준다.
+
+### Trend
+
+- 주별 행동 발생
+- 위기행동
+- 강도 변화
+- Tier 분포
+
+### Heatmap
+
+- 시간대
+- 장소
+- 학년
+- 행동유형
+
+### Tier
+
+```text
+Tier1
+Tier2
+Tier3
+Tier3+
+```
+
+분포와 변화.
+
+---
+
+# 16. 단순 Ranking을 만들지 마라
+
+“행동이 많은 학생 TOP 10”만 보여주는 방식은 피한다.
+
+대신:
+
+```text
+증가폭
+강도
+안전위험
+최근 변화
+데이터 충분성
+지원 상태
+```
+
+를 함께 고려한다.
+
+---
+
+# 17. STUDENT 360 WORKSPACE
+
+학생을 클릭하면 하나의 통합 Workspace가 열린다.
+
+좌측 Navigation:
+
+```text
+학생 이해
+
+행동 개요
+
+데이터 패턴
+
+기능 가설
+
+지원 목표
+
+Teach
+
+Prevent
+
+Reinforce
+
+Respond
+
+모니터링
+
+회의 기록
+```
+
+---
+
+# 18. ABOUT THE LEARNER
+
+BIP Visualized의 가장 좋은 철학을 참고한다.
+
+문제행동부터 시작하지 않는다.
+
+학생을 먼저 이해한다.
+
+카드 예:
+
+### 의사소통
+
+```text
+주요 의사소통 방식
+
+☐ 말
+☐ AAC
+☐ 그림
+☐ 몸짓
+☐ 가리키기
+☐ 시선
+```
+
+### 선호
+
+```text
+좋아하는 활동
+좋아하는 사람
+좋아하는 물건
+선호 환경
+```
+
+### 지원 필요
+
+```text
+도움이 필요한 상황
+항상 준비되어야 할 지원
+```
+
+### 어려움
+
+```text
+싫어하거나 힘들어하는 상황
+
+도움이 필요할 때 보이는 신호
+
+진정에 도움이 되는 것
+```
+
+---
+
+# 19. BEHAVIOR OVERVIEW
+
+하나의 화면에:
+
+### 표적행동
+
+운영적 정의
+
+### Baseline
+
+```text
+빈도
+강도
+발생률
+기간
+```
+
+### 주요 Context
+
+```text
+시간
+장소
+활동
+사람
+```
+
+### Function Hypothesis
+
+가능성 순으로 표시.
+
+예:
+
+```text
+회피         ●●●●○
+불편감소     ●●●○○
+관심         ●○○○○
+```
+
+단순 확률처럼 오해하지 않도록:
+
+```text
+근거 강도
+```
+
+라고 표시한다.
+
+---
+
+# 20. DATA SUFFICIENCY BADGE
+
+기능 분석에는 항상 데이터 충분도를 표시하라.
+
+예:
+
+```text
+데이터 충분도: 낮음
+
+ABC 기록 3건
+관찰 상황 1개
+기간 5일
+```
+
+그리고:
+
+> 기능을 확정하기보다 ABC 기록을 추가로 수집하는 것이 좋습니다.
+
+라고 안내한다.
+
+---
+
+# 21. VISUAL FBA
+
+테이블보다 패턴을 보여준다.
+
+### 시간 패턴
+
+Heatmap
+
+### 장소 패턴
+
+Bar / Matrix
+
+### 행동 유형
+
+Stacked chart
+
+### 강도
+
+Trend
+
+### ABC
+
+Antecedent → Behavior → Consequence
+
+Flow Diagram
+
+---
+
+# 22. PATTERN은 AI가 아니라 코드로 계산하라
+
+다음은 Python/Backend 코드가 계산한다.
+
+- frequency
+- rate
+- percentage
+- moving average
+- trend
+- intensity distribution
+- CICO achievement
+- change from baseline
+- missingness
+- context distribution
+
+AI에게 계산시키지 마라.
+
+---
+
+# 23. AI는 계산 결과를 해석한다
+
+구조:
+
+```text
+RAW DATA
+
+↓
+
+Python Analysis
+
+↓
+
+Structured Analysis Context
+
+↓
+
+AI
+
+↓
+
+Explanation / Recommendations
+```
+
+원칙:
+
+> **계산은 코드가 하고 AI는 해석한다.**
+
+---
+
+# 24. DECISION ENGINE
+
+PBSTeam의 가장 중요한 신규 기능이다.
+
+다음과 같은 `DecisionSignal`을 만든다.
+
+```text
+MAINTAIN
+현재 지원 유지
+
+ADAPT
+중재 일부 수정
+
+INTENSIFY
+지원 강화
+
+FADE
+지원 단계적 축소 검토
+
+MORE_DATA
+추가 데이터 수집
+
+FBA_REVIEW
+기능적행동평가 재검토
+
+BIP_REVIEW
+BIP 수정 검토
+
+TEAM_MEETING
+팀 회의 필요
+
+SAFETY_REVIEW
+안전지원 검토
+```
+
+---
+
+# 25. 자동 Tier 변경 금지
+
+시스템이 다음과 같이 표현하지 않게 한다.
+
+> Tier3으로 변경합니다.
+
+대신:
+
+> **Tier3 지원 검토 신호가 확인되었습니다.**
+
+근거:
+
+```text
+최근 3주간 빈도 증가
+강도 3 이상 증가
+Tier2 목표 미달
+안전 관련 사건 발생
+```
+
+그리고:
+
+```text
+[팀 검토 시작]
+```
+
+버튼을 제공한다.
+
+---
+
+# 26. BIP VISUAL BUILDER
+
+현재 긴 Textarea 중심 BIP 작성 방식을 제거하고,
+
+**Card-based Visual Builder**
+
+를 만든다.
+
+구조:
+
+```text
+Behavior Overview
+
+↓
+Function Hypothesis
+
+↓
+
+TEACH
+무엇을 가르칠 것인가
+
+↓
+
+PREVENT
+어떻게 예방할 것인가
+
+↓
+
+REINFORCE
+무엇을 강화할 것인가
+
+↓
+
+RESPOND
+행동 발생 시 어떻게 대응할 것인가
+
+↓
+
+MONITOR
+어떻게 평가할 것인가
+```
+
+---
+
+# 27. STEP 1 — TEACH
+
+두 영역으로 나눈다.
+
+### What is Being Taught
+
+대체행동
+
+예:
+
+```text
+휴식 요청
+도움 요청
+기다리기
+거절 표현
+전환 요청
+주의 요청
+감정 표현
+```
+
+### How to Teach It
+
+```text
+FCT
+BST
+모델링
+시각지원
+촉구
+용암
+역할연습
+사회적 이야기
+```
+
+---
+
+# 28. STEP 2 — PREVENT
+
+예:
+
+```text
+Priming
+
+시각적 일정
+
+First-Then
+
+선택 제공
+
+과제 난이도 조정
+
+과제 분할
+
+전환 예고
+
+환경 조정
+
+NCR
+
+행동모멘텀
+
+AAC 접근성 확보
+
+감각 환경 조정
+```
+
+---
+
+# 29. STEP 3 — REINFORCE
+
+예:
+
+```text
+DRA
+
+자연적 강화
+
+토큰경제
+
+즉각적 강화
+
+행동별칭찬
+
+선호활동
+
+강화 스케줄
+```
+
+반드시:
+
+```text
+무엇을
+언제
+얼마나 자주
+어떻게
+```
+
+강화하는지 구체화한다.
+
+---
+
+# 30. STEP 4 — RESPOND
+
+단순히:
+
+```text
+무시
+소거
+분리
+```
+
+를 추천하지 않는다.
+
+다음 순서로 설계한다.
+
+```text
+전조
+↓
+고조
+↓
+위기
+↓
+회복
+↓
+복귀
+```
+
+학교에서 승인된 위기행동 대응 절차를 우선 적용한다.
+
+AI가 임의로 물리적 개입 절차를 창작하지 않게 한다.
+
+---
+
+# 31. STRATEGY LIBRARY
+
+첨부된 BIP Visualized 화면의 핵심 아이디어를 가져오되 UI와 콘텐츠를 그대로 복제하지 마라.
+
+브랜드, 이미지, 문구는 독창적으로 구현한다.
+
+좌측 Filter:
+
+### 목적
+
+```text
+Teach
+Prevent
+Reinforce
+Respond
+```
+
+### 기능
+
+```text
+관심
+물건/활동
+회피
+감각
+불편감소
+```
+
+### 상황
+
+```text
+AAC
+
+감각
+
+전환
+
+정서조절
+
+실행기능
+
+기다리기
+
+사회적 상호작용
+
+과제참여
+
+의사소통
+```
+
+---
+
+# 32. STRATEGY CARD
+
+각 전략은 카드 하나로 만든다.
+
+필드:
+
+```text
+Strategy Name
+
+목적
+
+적합 기능
+
+언제 사용하는가
+
+실행 방법
+
+필요 자료
+
+교사 행동
+
+학생에게 가르칠 기술
+
+강화 방법
+
+주의사항
+
+실행충실도 체크
+```
+
+---
+
+# 33. 시각자료
+
+카드에 시각자료를 적극 활용한다.
+
+스타일:
+
+- 교육자료용
+- 파스텔톤
+- 단순
+- 차분함
+- 명확한 행동 표현
+- 한국 특수학교 맥락
+
+하지만 외부 사이트 이미지를 복제하거나 Hotlink하지 않는다.
+
+기존 그림이 없다면:
+
+- 자체 SVG
+- Icon
+- Original Illustration Placeholder
+
+등을 사용한다.
+
+---
+
+# 34. 전략 검색
+
+상단에:
+
+```text
+전략 검색 또는 질문
+```
+
+검색창을 만든다.
+
+예:
+
+```text
+전환을 어려워하는 학생
+
+쉬는 시간을 요구하도록 가르치기
+
+친구 울음소리에 민감함
+```
+
+검색 결과는 관련 전략 카드를 보여준다.
+
+---
+
+# 35. AI STRATEGY RECOMMENDATION
+
+학생 데이터에서 다음을 기반으로 추천한다.
+
+```text
+행동 기능
+
+ABC 패턴
+
+학생 의사소통
+
+현재 Tier
+
+기존 BIP
+
+CICO
+
+과거 지원
+
+최근 변화
+```
+
+예:
+
+### 추천 전략
+
+```text
+1. 전환 예고
+적합도: 높음
+
+왜 추천?
+최근 사건의 63%가 활동 전환 직후 발생
+
+2. 휴식 요청 FCT
+적합도: 높음
+
+왜 추천?
+회피 기능 가능성이 높고
+현재 명확한 대체 의사소통이 없음
+```
+
+---
+
+# 36. 교사는 카드를 BIP에 추가한다
+
+각 카드:
+
+```text
+[계획에 추가]
+```
+
+버튼 제공.
+
+추가 후 학생에게 맞게 편집할 수 있다.
+
+---
+
+# 37. FINAL VISUAL BIP
+
+완성된 BIP를 긴 문서만 보여주지 않는다.
+
+먼저 시각적 한 장 요약을 제공한다.
+
+예:
+
+```text
+              목표 행동
+                  ↓
+
+     ┌────────────┴────────────┐
+
+   PREVENT                  TEACH
+     ↓                         ↓
+
+선택 제공                  휴식 요청
+
+전환 예고                  도움 요청
+
+     └────────────┬────────────┘
+
+              REINFORCE
+                  ↓
+
+          요청 즉시 강화
+
+                  ↓
+
+               RESPOND
+
+       전조 → 고조 → 회복
+```
+
+---
+
+# 38. 두 가지 출력 제공
+
+### 실행용
+
+교사가 수업 중 바로 보는 1~2페이지 Visual BIP
+
+### 전문 기록용
+
+전체 BIP 문서
+
+두 형태를 모두 제공한다.
+
+---
+
+# 39. CICO 2.0
+
+현재 Spreadsheet Table을 그대로 복제하지 않는다.
+
+## Student Card
+
+```text
+학생
+현재 목표
+
+오늘
+
+이번주
+
+4주 추세
+```
+
+---
+
+# 40. CICO INPUT
+
+하루 입력은 가능한 한:
+
+> **10~20초 이내**
+
+가 되어야 한다.
+
+지원:
+
+- O/X
+- 숫자
+- Slider
+- Keyboard
+- Touch
+
+---
+
+# 41. CICO HEATMAP
+
+예:
+
+```text
+      월 화 수 목 금
+
+1주   🟢 🟢 🟡 🔴 🟢
+2주   🟢 🟢 🟢 🟡 🟢
+3주   🟢 🟢 🟢 🟢 🟢
+```
+
+실제 UI에서는 접근성 높은 색상과 숫자를 함께 사용한다.
+
+---
+
+# 42. Goal Progress
+
+학생별:
+
+```text
+Baseline
+Target
+Current
+Trend
+```
+
+을 동시에 표시한다.
+
+---
+
+# 43. 행동 데이터와 CICO를 연결하라
+
+현재 시스템의 큰 문제 중 하나다.
+
+학생 페이지에서:
+
+```text
+Behavior Events
++
+CICO
+```
+
+를 같은 시간축에 표시한다.
+
+이를 통해:
+
+> 문제행동은 감소했지만 목표행동은 늘지 않았는가?
+
+또는
+
+> 문제행동 감소와 함께 대체행동이 증가했는가?
+
+를 교사가 확인할 수 있게 한다.
+
+---
+
+# 44. TEAM MEETING MODE
+
+회의용 별도 화면을 만든다.
+
+회의 전에 시스템이 자동으로:
+
+### 검토 대상
+
+```text
+학생 A
+
+4주 CICO 목표 미달
+행동 강도 증가
+
+권장 검토:
+중재 수정
+```
+
+처럼 Agenda를 생성한다.
+
+---
+
+# 45. 회의 중 의사결정
+
+각 학생별 버튼:
+
+```text
+유지
+
+수정
+
+강화
+
+단계축소 검토
+
+추가관찰
+
+FBA
+
+BIP 수정
+```
+
+선택 후:
+
+```text
+근거
+담당자
+실행기간
+다음 검토일
+```
+
+을 입력한다.
+
+---
+
+# 46. 회의 후
+
+자동 생성:
+
+```text
+회의 요약
+
+학생별 결정
+
+담당자
+
+실행기한
+
+다음 평가일
+```
+
+---
+
+# 47. CRISIS WORKFLOW
+
+`Log_Main`의 위기 관련 데이터를 활용한다.
+
+위기 사건이 발생하면:
+
+```text
+사건
+↓
+즉시지원
+↓
+회복
+↓
+후속조치
+↓
+기록
+↓
+검토
+```
+
+흐름으로 보여준다.
+
+---
+
+# 48. 후속처리 Inbox
+
+예:
+
+```text
+보고서 필요
+
+관리자 보고 미완료
+
+보호자 연락 미완료
+
+학생 상담 미완료
+
+긴급회의 필요
+```
+
+를 Home Action Inbox와 연결한다.
+
+---
+
+# 49. AI 버튼 구조도 근본적으로 다시 생각하라
+
+화면 여기저기에 비슷한 AI 버튼 9개를 배치하는 구조는 피한다.
+
+대신:
+
+> **Contextual AI Assistant**
+
+를 구축한다.
+
+학생 페이지에서는:
+
+```text
+요약
+
+패턴 분석
+
+기능 가설
+
+지원 전략
+
+BIP 초안
+```
+
+회의에서는:
+
+```text
+회의 브리핑
+
+의사결정 근거
+
+회의록 초안
+```
+
+처럼 현재 Context에 맞는 기능만 제공한다.
+
+---
+
+# 50. AI COMMON ENGINE
+
+AI 기능마다 별도의 중복 코드를 만들지 않는다.
+
+예:
+
+```text
+AIContextBuilder
+
+AIAnalysisEngine
+
+PromptRegistry
+
+StructuredOutputSchema
+```
+
+를 공유한다.
+
+---
+
+# 51. AI STRUCTURED OUTPUT
+
+가능하면 JSON Schema/Pydantic 기반으로 출력시킨다.
+
+예:
+
+```json
+{
+  "facts": [],
+  "patterns": [],
+  "hypotheses": [],
+  "data_limitations": [],
+  "recommendations": [],
+  "next_actions": []
+}
+```
+
+Frontend는 이 JSON을 카드 형태로 렌더링한다.
+
+---
+
+# 52. AI PRIVACY LAYER
+
+학생정보를 AI에 보낼 때 최소화한다.
+
+가능하면:
+
+```text
+학생 실명 → student_code 또는 alias
+
+교사 실명 → 제거
+
+불필요한 개인정보 → 제거
+```
+
+원자료 전체를 그대로 프롬프트에 넣지 않는다.
+
+필요 데이터만 구조화하여 전달한다.
+
+---
+
+# 53. 기존 BIP의 위험한 패턴도 그대로 승계하지 마라
+
+기존 BIP 문장을 정답으로 간주하지 않는다.
+
+특히:
+
+```text
+무조건적인 소거
+
+무조건적인 무시
+
+반응대가
+
+제한적 물리적 개입
+```
+
+등은 데이터와 상황 검토 없이 AI가 기본 추천하지 않도록 한다.
+
+우선순위:
+
+```text
+예방
+
+의사소통
+
+대체행동 교수
+
+환경 조정
+
+강화
+
+안전지원
+```
+
+---
+
+# 54. POSITIVE BEHAVIOR SUPPORT 원칙
+
+사이트 전체 설계는:
+
+```text
+학생 권리
+교육 참여
+예방
+대체행동 교수
+긍정적 강화
+최소 제한
+데이터 기반 의사결정
+```
+
+을 우선한다.
+
+---
+
+# 55. AUTH SECURITY — P0
+
+현재 인증 구조를 반드시 조사하라.
+
+Spreadsheet에 평문 형태의 자격정보를 두는 구조가 있다면 폐기한다.
+
+절대로:
+
+```text
+plain password
+```
+
+를 Google Sheets에 저장하지 않는다.
+
+권장:
+
+- 기존 인증 스택 활용 가능성 조사
+- secure password hashing
+- secure session
+- HttpOnly cookie
+- role-based access
+- 환경변수 기반 secret 관리
+
+필요하다면 기존 Users 구조를 완전히 교체하라.
+
+---
+
+# 56. ROLE BASED ACCESS
+
+최소:
+
+```text
+admin
+
+PBS coordinator
+
+class teacher
+
+read-only
+```
+
+를 지원한다.
+
+학급교사는 자신의 학생을 중심으로 보되 필요한 권한 정책은 기존 운영과 맞춘다.
+
+---
+
+# 57. LOG에서도 개인정보를 줄여라
+
+Production log에:
+
+```text
+학생 실명
+교사 실명
+전체 ABC 서술
+```
+
+등을 불필요하게 남기지 않는다.
+
+---
+
+# 58. BACKEND PERFORMANCE
+
+Google Sheets를 요청마다 반복해서 읽지 않는다.
+
+구조:
+
+```text
+Google Sheets
+
+↓ batch read
+
+Normalization
+
+↓ cache
+
+Analysis
+
+↓ API
+```
+
+---
+
+# 59. Google Sheets Batch API
+
+가능한 경우:
+
+```text
+batchGet
+batchUpdate
+```
+
+를 이용한다.
+
+같은 Request에서 여러 차례 Sheet를 호출하지 않는다.
+
+---
+
+# 60. CACHE
+
+예:
+
+```text
+raw:tierstatus
+
+raw:logmain
+
+raw:cico:2026:07
+
+student:{code}
+
+dashboard:{range}
+
+bip:{code}
+```
+
+---
+
+# 61. CACHE INVALIDATION
+
+WRITE 성공 후에만:
+
+```text
+관련 cache invalidate
+```
+
+한다.
+
+전체 캐시 삭제를 기본값으로 하지 않는다.
+
+---
+
+# 62. SINGLE SOURCE OF TRUTH
+
+같은 데이터가:
+
+```text
+Backend
+Frontend
+localStorage
+Context
+```
+
+에 각각 다른 버전으로 존재하지 않게 한다.
+
+---
+
+# 63. FRONTEND DATA FETCHING
+
+현재 프로젝트 Stack을 확인한 후:
+
+- React Query
+- SWR
+- Next.js cache
+
+중 기존 구조에 가장 자연스러운 방식을 선택한다.
+
+새 Library를 이유 없이 추가하지 않는다.
+
+---
+
+# 64. FRONTEND RENDERING
+
+다음 병목을 조사한다.
+
+```text
+전체 page rerender
+
+large table rerender
+
+Recharts repeated render
+
+Tooltip recreation
+
+large DOM
+
+state duplication
+```
+
+필요한 경우:
+
+```text
+React.memo
+
+useMemo
+
+useCallback
+
+virtualization
+
+dynamic import
+
+lazy mount
+```
+
+를 사용한다.
+
+하지만 근거 없이 Memoization을 남발하지 않는다.
+
+---
+
+# 65. DESIGN SYSTEM
+
+첨부 화면의 좋은 특성을 참고하되 동일하게 복제하지 않는다.
+
+PBSTeam 전용 디자인 시스템을 만든다.
+
+### 기본
+
+- 밝은 Background
+- White Cards
+- 얇고 명확한 Border
+- 12~16px Radius
+- 충분한 Padding
+- 부드러운 Shadow
+- Teal 계열 Accent
+- Pastel Illustration
+- 강한 정보 위계
+
+---
+
+# 66. 행동지원 화면은 시각적이어야 한다
+
+긴 텍스트를 먼저 보여주지 마라.
+
+순서:
+
+```text
+Card
+↓
+Chart
+↓
+Visual Flow
+↓
+Summary
+↓
+Detail
+```
+
+---
+
+# 67. 색상 의미
+
+```text
+Green
+안정 / 목표달성
+
+Blue
+정보
+
+Yellow
+검토
+
+Orange
+지원 필요
+
+Red
+안전 관련
+```
+
+색상만으로 의미를 전달하지 말고 Icon/Text를 함께 사용한다.
+
+---
+
+# 68. RESPONSIVE
+
+다음 환경을 모두 고려한다.
+
+```text
+교사용 PC
+
+노트북
+
+전자칠판
+
+태블릿
+```
+
+CICO 입력은 모바일 폭에서도 동작하도록 한다.
+
+---
+
+# 69. ACCESSIBILITY
+
+최소:
+
+- Keyboard navigation
+- 명확한 Focus
+- 충분한 contrast
+- aria label
+- 색상 단독 정보 금지
+
+를 적용한다.
+
+---
+
+# 70. 먼저 CODEBASE AUDIT을 수행하라
+
+수정 전에 Repository 전체를 조사한다.
+
+확인:
+
+```text
+Frontend routes
+
+Backend endpoints
+
+Services
+
+Google Sheets access
+
+Cache
+
+Auth
+
+AI
+
+BIP
+
+CICO
+
+Dashboard
+
+Meeting
+
+Crisis
+
+Tests
+
+Deployment
+```
+
+---
+
+# 71. DEAD CODE MAP
+
+모든 주요 파일을 다음으로 분류한다.
+
+```text
+KEEP
+
+REFACTOR
+
+MERGE
+
+DELETE
+
+REPLACE
+
+UNKNOWN
+```
+
+Reference Search 없이 삭제하지 않는다.
+
+---
+
+# 72. BUG AUDIT
+
+기존에 확인된 문제뿐 아니라 전체를 조사한다.
+
+특히:
+
+```text
+undefined function
+
+undefined variable
+
+schema mismatch
+
+silent default
+
+hardcoded student
+
+hardcoded sheet
+
+force_refresh
+
+exception swallowing
+
+unsafe parsing
+
+duplicate API
+
+N+1 sheet reads
+
+O(N×M) loops
+```
+
+을 탐색한다.
+
+---
+
+# 73. KNOWN P0 FIXES
+
+최소 다음 문제들은 실제 코드 상태를 확인하고 해결한다.
+
+### bip.py
+
+BIP 조회 함수 mismatch
+
+### sheets.py
+
+Tier2 toggle client 관련 오류
+
+### student.py
+
+Tier update parameter type mismatch
+
+### analysis.py
+
+학생명 / 학생이름 schema mismatch
+
+### contagion.py
+
+학생 실명 hardcoding
+
+단, 기존 계획의 설명을 무조건 믿지 말고 실제 현재 코드를 확인한 뒤 수정한다.
+
+---
+
+# 74. NORMALIZATION LAYER를 먼저 만든다
+
+Backend 예시 구조:
+
+```text
+services/
+
+  sheets/
+    client.py
+    readers.py
+    writers.py
+    cache.py
+
+  adapters/
+    log_main.py
+    tier_status.py
+    cico.py
+
+  domain/
+    models.py
+
+  analytics/
+    behavior.py
+    cico.py
+    patterns.py
+    decision.py
+
+  ai/
+    context.py
+    engine.py
+    prompts.py
+    schemas.py
+```
+
+현재 프로젝트 구조를 불필요하게 완전히 바꾸지는 말되 책임을 분리하라.
+
+---
+
+# 75. IMPLEMENTATION PHASES
+
+## PHASE 0
+
+Backup / Baseline
+
+- 7개 보호 시트 schema snapshot
+- row count
+- header
+- 주요 값
+- API baseline
+- performance baseline
+- git recovery point
+
+---
+
+## PHASE 1
+
+Security + Critical Bugs
+
+- 인증 위험 해결
+- 500 오류 제거
+- hardcoded student 제거
+- schema mismatch 제거
+
+---
+
+## PHASE 2
+
+Data Adapter + Domain Model
+
+- LogMainAdapter
+- TierStatusAdapter
+- CicoAdapter
+- canonical models
+
+---
+
+## PHASE 3
+
+Analysis Engine
+
+- deterministic statistics
+- behavior patterns
+- CICO analysis
+- trend
+- data quality
+
+---
+
+## PHASE 4
+
+Decision Engine
+
+```text
+Maintain
+Adapt
+Intensify
+Fade
+More Data
+FBA Review
+BIP Review
+Team Meeting
+Safety Review
+```
+
+---
+
+## PHASE 5
+
+Google Sheets Performance
+
+- batch reads
+- cache
+- targeted invalidation
+- quota protection
+
+---
+
+## PHASE 6
+
+New Application Shell
+
+- global navigation
+- auth
+- layout
+- design system
+
+---
+
+## PHASE 7
+
+Today / School Dashboard
+
+- Action Inbox
+- School trend
+- heatmaps
+- Tier overview
+
+---
+
+## PHASE 8
+
+Student 360 Workspace
+
+- learner
+- behavior
+- pattern
+- FBA
+- CICO
+- BIP
+- decisions
+
+---
+
+## PHASE 9
+
+CICO 2.0
+
+- fast input
+- visual timeline
+- heatmap
+- goal progress
+
+---
+
+## PHASE 10
+
+Strategy Library
+
+- filtering
+- cards
+- search
+- add-to-plan
+
+---
+
+## PHASE 11
+
+Visual BIP Builder
+
+- Teach
+- Prevent
+- Reinforce
+- Respond
+- Monitor
+- final visual map
+
+---
+
+## PHASE 12
+
+Meeting / Decision Workflow
+
+- agenda
+- decision
+- responsibility
+- next review
+- minutes
+
+---
+
+## PHASE 13
+
+Crisis Workflow
+
+- incident
+- follow-up
+- reporting
+- Action Inbox integration
+
+---
+
+## PHASE 14
+
+Unified AI Engine
+
+- structured context
+- structured output
+- privacy filter
+- contextual actions
+
+---
+
+## PHASE 15
+
+Cleanup
+
+- dead code
+- old pages
+- unused Sheet logic
+- duplicate APIs
+- old AI prompts
+- obsolete components
+
+---
+
+# 76. 삭제는 마지막에 한다
+
+새 기능을 만든 뒤:
+
+```text
+old functionality unused
++
+reference = 0
++
+tests pass
++
+backup exists
+```
+
+인 경우에만 제거한다.
+
+---
+
+# 77. TEST STRATEGY
+
+## Unit
+
+```text
+parser
+
+normalizer
+
+CICO
+
+behavior stats
+
+decision rules
+```
+
+## API
+
+주요 Endpoint
+
+## Integration
+
+Google Sheets read/write
+
+## Regression
+
+기존 결과와 비교
+
+## E2E
+
+교사 Workflow
+
+---
+
+# 78. GOLDEN DATASET
+
+7개 보호 시트에서 Golden Dataset을 만든다.
+
+리팩토링 전후 동일 데이터에 대해:
+
+```text
+총 행동건수
+
+학생별 건수
+
+행동유형
+
+강도
+
+Tier
+
+CICO
+
+주간 추세
+```
+
+가 일치하는지 검사한다.
+
+---
+
+# 79. 데이터 보호 자동검증
+
+배포 전 자동으로 확인한다.
+
+```text
+protected sheet names
+
+headers
+
+column order
+
+historical values
+```
+
+의 비의도적 변경이 0이어야 한다.
+
+---
+
+# 80. PERFORMANCE TARGET
+
+실측 기준으로 평가한다.
+
+목표:
+
+```text
+Cache-hit API
+p95 < 300 ms
+
+주요 Dashboard
+p95 < 800 ms
+
+중복 Google Sheets 호출
+50% 이상 감소
+
+주요 분석 계산
+80% 이상 단축
+
+Known HTTP 500
+0
+```
+
+네트워크 영향을 받는 API를 무조건 0.1초로 강제하지 않는다.
+
+---
+
+# 81. AI PERFORMANCE
+
+AI에게 1,000줄 원자료를 그대로 보내지 않는다.
+
+예:
+
+```text
+1557 events
+↓
+Python
+↓
+20~50 structured facts
+↓
+AI
+```
+
+로 만든다.
+
+---
+
+# 82. AI 결과에는 항상 데이터 범위를 표시한다
+
+예:
+
+```text
+분석기간
+2026-06-01 ~ 2026-07-23
+
+행동기록
+27건
+
+ABC 완성
+11건
+
+CICO
+28일
+```
+
+---
+
+# 83. AI 결과에는 LIMITATION을 표시한다
+
+예:
+
+> 특정 시간대에 기록이 집중되어 있어 실제 행동 발생 분포와 다를 수 있습니다.
+
+> 기능 관련 직접관찰 자료가 부족하여 가설 수준으로 해석해야 합니다.
+
+---
+
+# 84. OBSERVABILITY
+
+각 주요 API에:
+
+```text
+processing time
+
+cache hit
+
+sheet read time
+
+analysis time
+
+AI time
+
+error type
+```
+
+을 기록한다.
+
+민감한 학생정보는 로그에 기록하지 않는다.
+
+---
+
+# 85. TEACHER WORKLOAD를 핵심 KPI로 삼아라
+
+새 기능 하나를 만들 때마다 묻는다.
+
+> 이 기능이 교사의 클릭과 생각할 일을 줄이는가?
+
+목표:
+
+### 행동기록
+
+1분 이내
+
+### CICO
+
+학생당 10~20초
+
+### Tier 검토
+
+1~2분
+
+### BIP 초안
+
+기존 데이터가 충분하면 5분 이내 구성 가능
+
+### 월간 PBST 회의 준비
+
+자동 브리핑으로 최소화
+
+---
+
+# 86. 기존 Spreadsheet 형태를 웹에 다시 만들지 마라
+
+큰 Table을 그대로 보여주는 것은 관리자 고급보기에서만 허용한다.
+
+일반 교사 UI는:
+
+```text
+Card
+
+Status
+
+Trend
+
+Action
+```
+
+중심으로 만든다.
+
+---
+
+# 87. PROGRESSIVE DISCLOSURE
+
+처음부터 모든 정보를 보여주지 않는다.
+
+예:
+
+```text
+요약
+
+↓ 자세히
+
+↓ Raw Data
+```
+
+구조를 사용한다.
+
+---
+
+# 88. 빈 화면을 만들지 마라
+
+데이터가 없으면:
+
+> 데이터가 없습니다.
+
+에서 끝내지 않는다.
+
+예:
+
+```text
+ABC 자료가 아직 충분하지 않습니다.
+
+[행동기록 추가]
+[관찰 가이드 보기]
+```
+
+처럼 다음 행동을 제안한다.
+
+---
+
+# 89. ERROR MESSAGE도 교사 중심으로
+
+잘못:
+
+```text
+500 Internal Server Error
+```
+
+좋음:
+
+```text
+BIP 정보를 불러오지 못했습니다.
+
+기존 데이터는 변경되지 않았습니다.
+
+[다시 시도]
+```
+
+개발 로그에는 상세 오류를 남긴다.
+
+---
+
+# 90. 최종 제품의 핵심 경험
+
+PBSTeam을 사용하는 교사는 다음 경험을 해야 한다.
+
+### 이전
+
+```text
+데이터를 입력한다.
+
+그래프를 본다.
+
+그래서 어떻게 하지?
+```
+
+### 이후
+
+```text
+데이터를 입력한다.
+
+↓
+
+시스템이 패턴을 보여준다.
+
+↓
+
+확인해야 할 이유를 설명한다.
+
+↓
+
+적합한 전략을 제안한다.
+
+↓
+
+교사가 전략을 선택한다.
+
+↓
+
+Visual BIP가 만들어진다.
+
+↓
+
+실행한다.
+
+↓
+
+CICO와 행동 데이터를 통해 효과를 확인한다.
+
+↓
+
+유지 / 수정 / 강화 여부를 결정한다.
+```
+
+이 흐름이 PBSTeam 2.0의 핵심이다.
+
+---
+
+# 91. 중요한 ABA 품질 기준
+
+BIP 추천은 반드시 기능적으로 일관되어야 한다.
+
+예:
+
+```text
+회피 기능
+```
+
+이라면 단순히:
+
+```text
+과제 수행을 강화
+```
+
+에서 끝나지 말고:
+
+```text
+과제 난이도 조정
++
+휴식 요청 FCT
++
+요청 강화
++
+점진적 과제 참여
+```
+
+처럼 연결되어야 한다.
+
+---
+
+# 92. 대체행동 품질 검사
+
+Replacement Behavior가:
+
+```text
+기존 행동보다 어렵지 않은가?
+
+같은 기능을 충족하는가?
+
+빠르게 강화받을 수 있는가?
+
+학생 의사소통 수준에서 가능한가?
+```
+
+를 검사한다.
+
+---
+
+# 93. 실행충실도
+
+좋은 BIP가 실패하는 주요 이유 중 하나는 실행 부족이다.
+
+각 전략에:
+
+```text
+오늘 실행했나요?
+
+○ 예
+△ 일부
+× 아니오
+```
+
+수준의 간단한 Fidelity 기록 기능을 고려한다.
+
+---
+
+# 94. 효과와 실행을 구분하라
+
+중재 효과가 없을 때:
+
+```text
+전략 자체가 효과 없음
+```
+
+과
+
+```text
+전략을 충분히 실행하지 않음
+```
+
+을 구분할 수 있게 한다.
+
+---
+
+# 95. AI에게 “그럴듯한 전문용어”를 만들게 하지 마라
+
+모든 제안은:
+
+```text
+교사가 내일 수업에서 무엇을 해야 하는가?
+```
+
+까지 구체화해야 한다.
+
+나쁜 예:
+
+> 구조화된 환경을 제공합니다.
+
+좋은 예:
+
+> 3교시 시작 3분 전에 사진 일정표에서 ‘수학 → 휴식’을 함께 확인하고, 과제 3문항 중 먼저 할 1문항을 학생이 선택하게 합니다.
+
+---
+
+# 96. 구현 중 기존 UI에 집착하지 마라
+
+기존 기능을 유지해야 할 이유가:
+
+```text
+단지 예전부터 있었기 때문
+```
+
+이라면 제거 후보이다.
+
+반대로:
+
+```text
+교사의 실제 업무를 줄여주는 기능
+```
+
+이라면 유지한다.
+
+---
+
+# 97. FRAMEWORK를 이유 없이 갈아엎지 마라
+
+현재:
+
+- Next.js
+- React
+- FastAPI
+- Google Sheets
+- 기존 deployment
+
+등이 정상적으로 활용 가능하면 유지한다.
+
+Framework rewrite보다:
+
+```text
+domain structure
+data flow
+UI flow
+```
+
+를 개선하는 것이 우선이다.
+
+---
+
+# 98. 작업 방식
+
+한 번에 전체를 거대한 Rewrite로 만들지 마라.
+
+Phase별로:
+
+```text
+작은 변경
+↓
+Build
+↓
+Test
+↓
+Regression
+↓
+Commit
+```
+
+한다.
+
+---
+
+# 99. 각 Phase 종료 시 반드시 출력
+
+```text
+DONE
+
+변경 파일
+
+변경 이유
+
+삭제 코드
+
+테스트 결과
+
+데이터 무결성
+
+성능 측정
+
+남은 위험
+```
+
+을 정리한다.
+
+하지만 보고만 하고 멈추지 마라.
+
+다음 Phase로 계속 진행한다.
+
+---
+
+# 100. 질문을 최소화하라
+
+Repository와 Sheet를 조사하면 해결 가능한 질문은 사용자에게 묻지 않는다.
+
+합리적인 engineering judgment를 사용한다.
+
+다만:
+
+- 데이터 삭제
+- 외부 유료 서비스 도입
+- 기존 운영방식 자체 변경
+
+처럼 사용자의 명시적 선택이 필요한 경우에만 질문한다.
+
+---
+
+# 101. 외부 서비스 도입 원칙
+
+성능 개선을 이유로:
+
+```text
+새 DB
+새 SaaS
+새 유료 API
+```
+
+를 즉시 도입하지 않는다.
+
+기존 Stack으로 해결 가능한지 먼저 검토한다.
+
+필요하다면:
+
+```text
+문제
+현재 한계
+대안
+비용
+장점
+단점
+```
+
+을 제시한 뒤 선택한다.
+
+---
+
+# 102. COPY 금지
+
+첨부한 BIP Visualized 계열 사이트는:
+
+- 카드 구조
+- 단계적 의사결정
+- Strategy Library
+- Visual BIP
+- Learner-first 구조
+
+를 참고한다.
+
+그러나:
+
+- 로고
+- 브랜드
+- 일러스트
+- 텍스트
+- exact layout
+
+을 복제하지 않는다.
+
+PBSTeam만의 독창적인 UI를 만든다.
+
+---
+
+# 103. PBSTeam의 정체성
+
+최종 제품은 다음 세 가지를 합친 시스템이어야 한다.
+
+### School-wide PBS Dashboard
+
+학교 전체 지원 상태
+
++
+
+### Student Behavior Decision System
+
+학생별 데이터 기반 의사결정
+
++
+
+### Visual BIP Builder
+
+교사가 실제 실행할 수 있는 행동지원계획
+
+---
+
+# 104. 최종 성공 조건
+
+다음이 모두 충족되어야 작업 완료로 본다.
+
+## DATA
+
+- 7개 보호 시트 schema 유지
+- 비의도적 원자료 변경 0
+- 기존 학생코드 유지
+
+## FUNCTION
+
+- 행동기록 정상
+- Tier 정상
+- CICO 정상
+- BIP 정상
+- 회의 정상
+- Crisis 정상
+
+## DECISION
+
+- 학생별 행동 패턴
+- 기능 가설
+- 데이터 충분도
+- 다음 행동 제안
+- Tier 검토
+- BIP 검토
+
+가능
+
+## UX
+
+교사가:
+
+```text
+현재 상태
+왜 그런지
+무엇을 해야 하는지
+```
+
+빠르게 이해 가능
+
+## BIP
+
+```text
+Teach
+Prevent
+Reinforce
+Respond
+Monitor
+```
+
+Visual Builder 제공
+
+## STRATEGY
+
+필터 + 검색 + 추천 + 계획 추가
+
+## AI
+
+- 계산과 해석 분리
+- 데이터 근거 표시
+- 불확실성 표시
+- 개인정보 최소화
+- 공통 AI Engine
+
+## PERFORMANCE
+
+- Google Sheets 반복 호출 최소화
+- Dashboard 체감속도 대폭 향상
+- 렌더링 병목 제거
+
+## SECURITY
+
+- 평문 Password 저장 금지
+- Role 기반 인증
+- 민감정보 로그 최소화
+
+## MAINTAINABILITY
+
+- dead code 감소
+- 중복 logic 감소
+- typed domain model
+- adapter layer
+- tests
+- rollback 가능
+
+---
+
+# 105. 지금부터 수행할 첫 작업
+
+즉시 코드를 수정하기 전에 다음을 수행한다.
+
+### STEP 1
+
+Repository 전체 구조 조사
+
+### STEP 2
+
+Google Sheet 전체 구조 조사
+
+### STEP 3
+
+7개 보호 시트 Data Contract 생성
+
+### STEP 4
+
+기존 Page / API / Service dependency map 작성
+
+### STEP 5
+
+현재 문제를:
+
+```text
+P0
+P1
+P2
+P3
+```
+
+로 분류
+
+### STEP 6
+
+현재 UI 기능을:
+
+```text
+KEEP
+IMPROVE
+MERGE
+REPLACE
+DELETE
+```
+
+로 분류
+
+### STEP 7
+
+PBSTeam 2.0 최종 Architecture Map 작성
+
+### STEP 8
+
+Implementation Plan 확정
+
+### STEP 9
+
+Git Recovery Point 생성
+
+### STEP 10
+
+Phase 1부터 실제 수정 시작
+
+계획서만 작성하고 종료하지 마라.
+
+실제 Repository를 수정하고:
+
+```text
+build
+lint
+type check
+backend test
+frontend test
+regression test
+```
+
+를 계속 수행하라.
+
+---
+
+# FINAL DIRECTIVE
+
+PBSTeam 2.0의 성공은 페이지 수가 많아지는 것이 아니다.
+
+교사가 사이트를 열었을 때,
+
+> **“누구를 봐야 하는지 → 무엇이 문제인지 → 왜 그런 가능성이 있는지 → 무엇을 해볼지 → 효과가 있었는지”**
+
+가 하나의 흐름으로 보이는 것이 성공이다.
+
+복잡한 ABA 분석을 교사에게 떠넘기지 말고,
+
+복잡한 연산과 데이터 정리는 시스템 뒤에서 처리하라.
+
+Frontend에서는 가장 중요한 정보와 다음 행동만 보여줘라.
+
+다만 AI가 교사의 전문적 판단을 대신하지는 않도록 한다.
+
+**Raw Data는 보존하고, 시스템은 단순하게 만들며, 의사결정의 질은 높여라.**
+
+지금부터 전체 Repository와 Google Sheet를 조사하여 PBSTeam 2.0 전면 리뉴얼을 시작하라.

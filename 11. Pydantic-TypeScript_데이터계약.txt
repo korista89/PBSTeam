@@ -1,0 +1,792 @@
+Pydantic ↔ TypeScript 1:1 데이터계약
+핵심 원칙부터 확정합니다.
+원자료 Sheet → Adapter → Canonical Domain Model → Deterministic Analytics → API Schema → UI 순입니다.
+Google Sheet의 행을 React에서 직접 해석하지 않습니다. AI 역시 Sheet raw row를 직접 해석하지 않습니다.
+현재 PBSTeam은 이미 normalize.py에서 시간대·장소·기능·행동유형 등을 정규화하고 있고, evidence_packet.py에서 Python으로 통계를 먼저 계산해 AI에 압축 Context를 전달하는 좋은 기반이 있습니다. 이 두 방향은 유지해야 합니다.  
+2-1. Python Canonical Schema
+# backend/app/domain/models.py
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True
+    )
+
+
+class TierCode(str, Enum):
+    TIER_1 = "TIER_1"
+    TIER_2_CICO = "TIER_2_CICO"
+    TIER_2_SST = "TIER_2_SST"
+    TIER_3 = "TIER_3"
+    TIER_3_PLUS = "TIER_3_PLUS"
+
+
+class FunctionCode(str, Enum):
+    ATTENTION = "ATTENTION"
+    TANGIBLE_ACTIVITY = "TANGIBLE_ACTIVITY"
+    ESCAPE_DEMAND = "ESCAPE_DEMAND"
+    AUTOMATIC_SENSORY = "AUTOMATIC_SENSORY"
+    DISCOMFORT_RELIEF = "DISCOMFORT_RELIEF"
+    MULTIPLE = "MULTIPLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class HypothesisStatus(str, Enum):
+    PROPOSED = "PROPOSED"
+    NEEDS_MORE_DATA = "NEEDS_MORE_DATA"
+    TEACHER_CONFIRMED = "TEACHER_CONFIRMED"
+    TEAM_CONFIRMED = "TEAM_CONFIRMED"
+    REJECTED = "REJECTED"
+
+
+class PlanStatus(str, Enum):
+    DRAFT = "DRAFT"
+    REVIEW_REQUESTED = "REVIEW_REQUESTED"
+    ACTIVE = "ACTIVE"
+    SUPERSEDED = "SUPERSEDED"
+    CLOSED = "CLOSED"
+
+
+class SignalSeverity(str, Enum):
+    INFO = "INFO"
+    REVIEW = "REVIEW"
+    PRIORITY = "PRIORITY"
+    URGENT = "URGENT"
+
+
+class DecisionSignalType(str, Enum):
+    SAFETY = "SAFETY"
+    REVIEW_DUE = "REVIEW_DUE"
+    CHANGE_UP = "CHANGE_UP"
+    GOAL_STALLED = "GOAL_STALLED"
+    MORE_DATA = "MORE_DATA"
+    FIDELITY_LOW = "FIDELITY_LOW"
+    MEETING_ACTION = "MEETING_ACTION"
+    DATA_MISSING = "DATA_MISSING"
+
+
+class DecisionStatus(str, Enum):
+    OPEN = "OPEN"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    ACTION_PLANNED = "ACTION_PLANNED"
+    RESOLVED = "RESOLVED"
+    DISMISSED = "DISMISSED"
+
+
+class WorkloadLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class EBPCategory(str, Enum):
+    ASSESSMENT = "ASSESSMENT"
+    SETTING_EVENT = "SETTING_EVENT"
+    ANTECEDENT = "ANTECEDENT"
+    TEACHING = "TEACHING"
+    REINFORCEMENT = "REINFORCEMENT"
+    CONSEQUENCE = "CONSEQUENCE"
+
+
+class EvidenceRef(StrictModel):
+    source_type: str
+    source_id: str
+    log_id: Optional[str] = None
+    event_date: Optional[date] = None
+    label: str
+    excerpt: Optional[str] = None
+
+
+class TierSnapshot(StrictModel):
+    active_tiers: list[TierCode] = Field(default_factory=list)
+    changed_at: Optional[datetime] = None
+    memo: Optional[str] = None
+
+
+class StudentProfile(StrictModel):
+    student_code: str
+    display_name: str
+    class_name: str
+    enrolled: bool = True
+    beable_code: Optional[str] = None
+
+    tier: TierSnapshot
+
+    communication_modes: list[str] = Field(default_factory=list)
+    preferred_supports: list[str] = Field(default_factory=list)
+    preferences: list[str] = Field(default_factory=list)
+    challenge_contexts: list[str] = Field(default_factory=list)
+    early_signs: list[str] = Field(default_factory=list)
+    accessibility_notes: list[str] = Field(default_factory=list)
+
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+
+
+class SafetyFlags(StrictModel):
+    self_injury: bool = False
+    injury_to_others: bool = False
+    staff_injury: bool = False
+    physical_restraint: bool = False
+    separation_support: bool = False
+    emergency_response: bool = False
+
+
+class FunctionEstimate(StrictModel):
+    function_code: FunctionCode
+    source: str = "teacher_estimate"
+    raw_label: Optional[str] = None
+
+
+class BehaviorEvent(StrictModel):
+    event_id: str
+    source_log_id: Optional[str] = None
+    student_code: str
+
+    event_date: date
+    entered_at: Optional[datetime] = None
+    entered_by: Optional[str] = None
+
+    time_slot_codes: list[int] = Field(default_factory=list)
+    time_slot_labels: list[str] = Field(default_factory=list)
+
+    location_codes: list[str] = Field(default_factory=list)
+    primary_location: Optional[str] = None
+
+    behavior_code: str
+    behavior_raw: Optional[str] = None
+
+    intensity: Optional[int] = Field(default=None, ge=1, le=5)
+    occurrence_count: Optional[int] = Field(default=None, ge=0)
+
+    antecedent: Optional[str] = None
+    consequence: Optional[str] = None
+    setting_events: list[str] = Field(default_factory=list)
+
+    teacher_function_estimates: list[FunctionEstimate] = Field(default_factory=list)
+
+    safety: SafetyFlags = Field(default_factory=SafetyFlags)
+
+    notes: Optional[str] = None
+    source: str = "Log_Main"
+
+
+class CicoObservation(StrictModel):
+    observation_id: str
+    student_code: str
+    month: int = Field(ge=1, le=12)
+
+    observation_date: Optional[date] = None
+    session_label: Optional[str] = None
+
+    target_behavior: str
+    target_type: str
+    scale: str
+    baseline_rule: Optional[str] = None
+    goal_rule: Optional[str] = None
+
+    raw_value: str
+    numeric_value: Optional[float] = None
+    goal_met: Optional[bool] = None
+
+    source_sheet: str
+    source_row: int
+    source_column: int
+
+    recorded_at: Optional[datetime] = None
+    recorded_by: Optional[str] = None
+
+
+class DataSufficiency(StrictModel):
+    direct_observation_n: int = 0
+    unique_days_n: int = 0
+    unique_contexts_n: int = 0
+    abc_complete_n: int = 0
+    contradictory_evidence_n: int = 0
+
+    status: str
+    reasons: list[str] = Field(default_factory=list)
+
+
+class FunctionHypothesis(StrictModel):
+    hypothesis_id: str
+    student_code: str
+
+    target_behavior: str
+
+    setting_event: Optional[str] = None
+    antecedent_condition: str
+    consequence_pattern: str
+
+    function_code: FunctionCode
+    hypothesis_statement: str
+
+    evidence_for: list[EvidenceRef] = Field(default_factory=list)
+    evidence_against: list[EvidenceRef] = Field(default_factory=list)
+
+    data_sufficiency: DataSufficiency
+
+    status: HypothesisStatus = HypothesisStatus.PROPOSED
+
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+
+
+class EBPStrategy(StrictModel):
+    id: int
+    code: str
+    name: str
+    category: EBPCategory
+
+    summary: str
+    when_to_use: str
+
+    function_fits: list[FunctionCode] = Field(default_factory=list)
+    prerequisites: list[str] = Field(default_factory=list)
+    implementation_steps: list[str] = Field(default_factory=list)
+    guardrails: list[str] = Field(default_factory=list)
+    recommended_pairings: list[str] = Field(default_factory=list)
+
+    outcome_measures: list[str] = Field(default_factory=list)
+    fidelity_items: list[str] = Field(default_factory=list)
+
+    workload: WorkloadLevel
+
+
+class EBPRecommendation(StrictModel):
+    ebp_code: str
+    recommendation_level: str
+
+    reasons: list[str]
+    matched_evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    unmet_prerequisites: list[str] = Field(default_factory=list)
+    guardrail_flags: list[str] = Field(default_factory=list)
+
+    excluded: bool = False
+
+
+class StrategyImplementation(StrictModel):
+    implementation_id: str
+    ebp_code: str
+
+    context: str
+    teacher_action: str
+    expected_student_response: str
+
+    prompt_plan: Optional[str] = None
+    functional_outcome: Optional[str] = None
+    reinforcement_plan: Optional[str] = None
+    return_plan: Optional[str] = None
+
+    measurement: list[str] = Field(default_factory=list)
+    fidelity_items: list[str] = Field(default_factory=list)
+
+    owner: Optional[str] = None
+
+
+class MonitoringPlan(StrictModel):
+    measures: list[str]
+    collection_frequency: str
+    review_frequency: str
+
+    success_criteria: list[str]
+    modify_criteria: list[str]
+
+
+class CrisisSupportPlan(StrictModel):
+    enabled: bool = False
+    early_signs: list[str] = Field(default_factory=list)
+    prevention_supports: list[str] = Field(default_factory=list)
+    escalation_supports: list[str] = Field(default_factory=list)
+    safety_actions: list[str] = Field(default_factory=list)
+    recovery_supports: list[str] = Field(default_factory=list)
+    documentation_required: bool = True
+
+
+class BIPPlan(StrictModel):
+    plan_id: str
+    student_code: str
+    version: int = Field(ge=1)
+
+    status: PlanStatus = PlanStatus.DRAFT
+
+    target_behaviors: list[str]
+    baseline_summary: str
+
+    hypotheses: list[FunctionHypothesis]
+    strategies: list[StrategyImplementation]
+
+    monitoring: MonitoringPlan
+    crisis_support: CrisisSupportPlan = Field(default_factory=CrisisSupportPlan)
+
+    rationale: Optional[str] = None
+
+    created_by: str
+    created_at: datetime
+
+    updated_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+
+
+class FidelityObservation(StrictModel):
+    fidelity_id: str
+    plan_id: str
+    student_code: str
+    observed_date: date
+
+    ebp_code: str
+    item: str
+    status: str
+
+    note: Optional[str] = None
+    recorded_by: str
+
+
+class DecisionSignal(StrictModel):
+    signal_id: str
+    student_code: Optional[str] = None
+
+    signal_type: DecisionSignalType
+    severity: SignalSeverity
+
+    title: str
+    reason: str
+
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    recommended_next_action: str
+
+    status: DecisionStatus = DecisionStatus.OPEN
+
+    owner: Optional[str] = None
+    due_date: Optional[date] = None
+
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+
+class TeacherDecision(StrictModel):
+    decision_id: str
+    signal_id: Optional[str] = None
+    student_code: Optional[str] = None
+
+    decision: str
+    rationale: str
+
+    evidence_snapshot: list[EvidenceRef] = Field(default_factory=list)
+
+    owner: Optional[str] = None
+    due_date: Optional[date] = None
+    next_review_date: Optional[date] = None
+
+    decided_by: str
+    decided_at: datetime
+
+
+class StudentWorkspace(StrictModel):
+    student: StudentProfile
+
+    recent_events: list[BehaviorEvent]
+    cico: list[CicoObservation]
+
+    hypotheses: list[FunctionHypothesis]
+    active_bip: Optional[BIPPlan] = None
+
+    open_signals: list[DecisionSignal]
+2-2. TypeScript 1:1 Interface
+// frontend/src/types/domain.ts
+
+export type TierCode =
+  | "TIER_1"
+  | "TIER_2_CICO"
+  | "TIER_2_SST"
+  | "TIER_3"
+  | "TIER_3_PLUS";
+
+export type FunctionCode =
+  | "ATTENTION"
+  | "TANGIBLE_ACTIVITY"
+  | "ESCAPE_DEMAND"
+  | "AUTOMATIC_SENSORY"
+  | "DISCOMFORT_RELIEF"
+  | "MULTIPLE"
+  | "UNKNOWN";
+
+export type HypothesisStatus =
+  | "PROPOSED"
+  | "NEEDS_MORE_DATA"
+  | "TEACHER_CONFIRMED"
+  | "TEAM_CONFIRMED"
+  | "REJECTED";
+
+export type PlanStatus =
+  | "DRAFT"
+  | "REVIEW_REQUESTED"
+  | "ACTIVE"
+  | "SUPERSEDED"
+  | "CLOSED";
+
+export type SignalSeverity =
+  | "INFO"
+  | "REVIEW"
+  | "PRIORITY"
+  | "URGENT";
+
+export type DecisionSignalType =
+  | "SAFETY"
+  | "REVIEW_DUE"
+  | "CHANGE_UP"
+  | "GOAL_STALLED"
+  | "MORE_DATA"
+  | "FIDELITY_LOW"
+  | "MEETING_ACTION"
+  | "DATA_MISSING";
+
+export type DecisionStatus =
+  | "OPEN"
+  | "ACKNOWLEDGED"
+  | "ACTION_PLANNED"
+  | "RESOLVED"
+  | "DISMISSED";
+
+export type WorkloadLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export type EBPCategory =
+  | "ASSESSMENT"
+  | "SETTING_EVENT"
+  | "ANTECEDENT"
+  | "TEACHING"
+  | "REINFORCEMENT"
+  | "CONSEQUENCE";
+
+export interface EvidenceRef {
+  source_type: string;
+  source_id: string;
+  log_id?: string | null;
+  event_date?: string | null;
+  label: string;
+  excerpt?: string | null;
+}
+
+export interface TierSnapshot {
+  active_tiers: TierCode[];
+  changed_at?: string | null;
+  memo?: string | null;
+}
+
+export interface StudentProfile {
+  student_code: string;
+  display_name: string;
+  class_name: string;
+  enrolled: boolean;
+  beable_code?: string | null;
+
+  tier: TierSnapshot;
+
+  communication_modes: string[];
+  preferred_supports: string[];
+  preferences: string[];
+  challenge_contexts: string[];
+  early_signs: string[];
+  accessibility_notes: string[];
+
+  updated_at?: string | null;
+  updated_by?: string | null;
+}
+
+export interface SafetyFlags {
+  self_injury: boolean;
+  injury_to_others: boolean;
+  staff_injury: boolean;
+  physical_restraint: boolean;
+  separation_support: boolean;
+  emergency_response: boolean;
+}
+
+export interface FunctionEstimate {
+  function_code: FunctionCode;
+  source: string;
+  raw_label?: string | null;
+}
+
+export interface BehaviorEvent {
+  event_id: string;
+  source_log_id?: string | null;
+  student_code: string;
+
+  event_date: string;
+  entered_at?: string | null;
+  entered_by?: string | null;
+
+  time_slot_codes: number[];
+  time_slot_labels: string[];
+
+  location_codes: string[];
+  primary_location?: string | null;
+
+  behavior_code: string;
+  behavior_raw?: string | null;
+
+  intensity?: number | null;
+  occurrence_count?: number | null;
+
+  antecedent?: string | null;
+  consequence?: string | null;
+  setting_events: string[];
+
+  teacher_function_estimates: FunctionEstimate[];
+
+  safety: SafetyFlags;
+
+  notes?: string | null;
+  source: string;
+}
+
+export interface CicoObservation {
+  observation_id: string;
+  student_code: string;
+  month: number;
+
+  observation_date?: string | null;
+  session_label?: string | null;
+
+  target_behavior: string;
+  target_type: string;
+  scale: string;
+
+  baseline_rule?: string | null;
+  goal_rule?: string | null;
+
+  raw_value: string;
+  numeric_value?: number | null;
+  goal_met?: boolean | null;
+
+  source_sheet: string;
+  source_row: number;
+  source_column: number;
+
+  recorded_at?: string | null;
+  recorded_by?: string | null;
+}
+
+export interface DataSufficiency {
+  direct_observation_n: number;
+  unique_days_n: number;
+  unique_contexts_n: number;
+  abc_complete_n: number;
+  contradictory_evidence_n: number;
+
+  status: string;
+  reasons: string[];
+}
+
+export interface FunctionHypothesis {
+  hypothesis_id: string;
+  student_code: string;
+
+  target_behavior: string;
+
+  setting_event?: string | null;
+  antecedent_condition: string;
+  consequence_pattern: string;
+
+  function_code: FunctionCode;
+  hypothesis_statement: string;
+
+  evidence_for: EvidenceRef[];
+  evidence_against: EvidenceRef[];
+
+  data_sufficiency: DataSufficiency;
+
+  status: HypothesisStatus;
+
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface EBPStrategy {
+  id: number;
+  code: string;
+  name: string;
+  category: EBPCategory;
+
+  summary: string;
+  when_to_use: string;
+
+  function_fits: FunctionCode[];
+  prerequisites: string[];
+  implementation_steps: string[];
+  guardrails: string[];
+  recommended_pairings: string[];
+
+  outcome_measures: string[];
+  fidelity_items: string[];
+
+  workload: WorkloadLevel;
+}
+
+export interface EBPRecommendation {
+  ebp_code: string;
+  recommendation_level: string;
+
+  reasons: string[];
+  matched_evidence: EvidenceRef[];
+
+  unmet_prerequisites: string[];
+  guardrail_flags: string[];
+
+  excluded: boolean;
+}
+
+export interface StrategyImplementation {
+  implementation_id: string;
+  ebp_code: string;
+
+  context: string;
+  teacher_action: string;
+  expected_student_response: string;
+
+  prompt_plan?: string | null;
+  functional_outcome?: string | null;
+  reinforcement_plan?: string | null;
+  return_plan?: string | null;
+
+  measurement: string[];
+  fidelity_items: string[];
+
+  owner?: string | null;
+}
+
+export interface MonitoringPlan {
+  measures: string[];
+  collection_frequency: string;
+  review_frequency: string;
+
+  success_criteria: string[];
+  modify_criteria: string[];
+}
+
+export interface CrisisSupportPlan {
+  enabled: boolean;
+  early_signs: string[];
+  prevention_supports: string[];
+  escalation_supports: string[];
+  safety_actions: string[];
+  recovery_supports: string[];
+  documentation_required: boolean;
+}
+
+export interface BIPPlan {
+  plan_id: string;
+  student_code: string;
+  version: number;
+
+  status: PlanStatus;
+
+  target_behaviors: string[];
+  baseline_summary: string;
+
+  hypotheses: FunctionHypothesis[];
+  strategies: StrategyImplementation[];
+
+  monitoring: MonitoringPlan;
+  crisis_support: CrisisSupportPlan;
+
+  rationale?: string | null;
+
+  created_by: string;
+  created_at: string;
+
+  updated_by?: string | null;
+  updated_at?: string | null;
+
+  approved_by?: string | null;
+  approved_at?: string | null;
+}
+
+export interface FidelityObservation {
+  fidelity_id: string;
+  plan_id: string;
+  student_code: string;
+  observed_date: string;
+
+  ebp_code: string;
+  item: string;
+  status: string;
+
+  note?: string | null;
+  recorded_by: string;
+}
+
+export interface DecisionSignal {
+  signal_id: string;
+  student_code?: string | null;
+
+  signal_type: DecisionSignalType;
+  severity: SignalSeverity;
+
+  title: string;
+  reason: string;
+
+  evidence: EvidenceRef[];
+
+  recommended_next_action: string;
+
+  status: DecisionStatus;
+
+  owner?: string | null;
+  due_date?: string | null;
+
+  created_at: string;
+  resolved_at?: string | null;
+}
+
+export interface TeacherDecision {
+  decision_id: string;
+  signal_id?: string | null;
+  student_code?: string | null;
+
+  decision: string;
+  rationale: string;
+
+  evidence_snapshot: EvidenceRef[];
+
+  owner?: string | null;
+  due_date?: string | null;
+  next_review_date?: string | null;
+
+  decided_by: string;
+  decided_at: string;
+}
+
+export interface StudentWorkspace {
+  student: StudentProfile;
+
+  recent_events: BehaviorEvent[];
+  cico: CicoObservation[];
+
+  hypotheses: FunctionHypothesis[];
+  active_bip?: BIPPlan | null;
+
+  open_signals: DecisionSignal[];
+}
+2-3. 중요한 데이터계약 결정 7개
+첫째, **학생 식별 Primary Key는 이름이 아니라 student_code**입니다. 이름은 표시용 속성입니다.
+둘째, TierStatus는 실제 Tier의 Single Source of Truth입니다. Analytics는 Tier를 계산하지 않습니다.
+셋째, FunctionEstimate와 FunctionHypothesis를 분리합니다. 교사의 Form 입력은 teacher_function_estimates, FBA에서 자료를 종합한 것은 FunctionHypothesis입니다.
+넷째, FunctionHypothesis에는 확률 값이 없습니다. 대신 evidence_for, evidence_against, DataSufficiency가 있습니다.
+다섯째, BIPPlan.strategies에는 EBP 코드뿐 아니라 누가 언제 무엇을 어떻게 하고 학생이 어떤 반응을 하며 어떤 결과를 제공할 것인지가 들어갑니다.
+여섯째, DecisionSignal과 TeacherDecision은 완전히 분리합니다. 시스템은 검토 신호를 제안할 수 있지만 교사의 결정 기록을 대신하지 않습니다.
+일곱째, 모든 AI가 만들어 낸 분석은 EvidenceRef를 통해 원 행동사건·CICO 관찰·BIP·회의결정으로 되돌아갈 수 있어야 합니다.

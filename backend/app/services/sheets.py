@@ -110,11 +110,8 @@ def get_main_worksheet():
             if name in existing_ws:
                 return existing_ws[name]
                 
-        print("Creating 'Log_Main' worksheet...")
-        headers = ['타임스탬프', '학생명', '입력교사명', '행동발생날짜', '시간대', '행동 발생 장소', '행동유형(핵심행동으로택1)', '강도(1~5점 척도)', '기능(이번 행동을 통해 파악된 기능)', '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부', '발생횟수(한 에피소드 당 1회로 입력 권장)', '특기사항(기타)', '학생코드', 'Log_ID', 'Status', 'Source', 'Approval_Meta']
-        ws = sheet.add_worksheet(title="Log_Main", rows=1000, cols=20)
-        ws.append_row(headers)
-        return ws
+        print("CRITICAL_DATA_CONTRACT_ERROR: 'Log_Main' sheet not found in spreadsheet")
+        return None
     except Exception as e:
         print(f"Error connecting to sheet: {e}")
         return None
@@ -823,12 +820,21 @@ def fetch_student_status():
         return []
 
 
-def update_student_tier(code: str, tier_values: dict, memo: str = ""):
+def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""):
     """
     Update a student's tier status with 5 separate O/X columns.
-    tier_values: dict with keys 'Tier1', 'Tier2(CICO)', 'Tier2(SST)', 'Tier3', 'Tier3+'
-    Each value should be 'O' or 'X'
+    tier_values: dict with keys 'Tier1', 'Tier2(CICO)', 'Tier2(SST)', 'Tier3', 'Tier3+' or string
     """
+    if isinstance(tier_values, str):
+        t_clean = tier_values.strip().replace(" ", "")
+        tier_values = {
+            'Tier1': 'O' if 'Tier1' in t_clean else 'X',
+            'Tier2(CICO)': 'O' if ('Tier2' in t_clean and 'SST' not in t_clean) else 'X',
+            'Tier2(SST)': 'O' if 'SST' in t_clean else 'X',
+            'Tier3': 'O' if (t_clean in ['Tier3', '3단계'] or ('Tier3' in t_clean and '+' not in t_clean)) else 'X',
+            'Tier3+': 'O' if 'Tier3+' in t_clean else 'X',
+        }
+
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
@@ -2311,7 +2317,9 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
 
 def toggle_tier2_status(month: int, student_code: str, status: str):
     """Toggle Tier2 status (O/X) for a student in a monthly sheet."""
-    if not client: return {"error": "Sheet not accessible"}
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return {"error": "Sheet not accessible"}
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"

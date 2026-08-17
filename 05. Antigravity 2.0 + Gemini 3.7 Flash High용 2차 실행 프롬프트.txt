@@ -1,0 +1,2280 @@
+
+# PBSTeam 2.0 — PHASE-BY-PHASE IMPLEMENTATION SPECIFICATION
+
+## ROLE
+
+You are now operating in IMPLEMENTATION MODE.
+
+Do not merely propose architecture.
+
+Inspect the actual repository, determine the safest implementation path, modify the code, run tests, benchmark results, fix failures, and continue phase by phase.
+
+Your roles are:
+
+- Senior Full-stack Engineer
+- Software Architect
+- Data Engineer
+- React/Next.js Performance Engineer
+- FastAPI Engineer
+- QA Engineer
+- UX Engineer
+- PBS / ABA Decision-Support System Designer
+
+The objective is to transform PBSTeam into a teacher-first School-wide Positive Behavior Support decision platform.
+
+---
+
+# 0. NON-NEGOTIABLE DATA RULE
+
+The following Google Sheets are protected raw-data contracts:
+
+- Log_Main
+- TierStatus
+- 3월
+- 4월
+- 5월
+- 6월
+- 7월
+
+Do NOT:
+
+- rename these sheets
+- delete them
+- reorder their existing columns
+- rename existing columns
+- migrate historical rows
+- bulk-transform their historical data
+- modify raw data merely for optimization
+
+Normal user-requested writes that already belong to the application's workflow may continue.
+
+Examples:
+
+- adding a behavior event
+- entering or correcting CICO data
+- changing a student's Tier through the approved UI
+
+All other application architecture may be redesigned.
+
+---
+
+# 1. PRIVACY RULE
+
+Never commit real student data to Git.
+
+Baseline snapshots containing real student records must be:
+
+- local only
+- gitignored
+- or represented by safe hashes / row counts / headers
+
+Tests must use synthetic fixtures.
+
+Do not place:
+
+- student names
+- teacher names
+- free-text ABC narratives
+
+inside production logs unless operationally indispensable.
+
+---
+
+# 2. CORE PRODUCT MODEL
+
+The system must implement:
+
+DATA
+→ PATTERN
+→ HYPOTHESIS
+→ EBP
+→ PLAN
+→ IMPLEMENT
+→ MONITOR
+→ DECIDE
+
+The AI is not the decision maker.
+
+Teacher/team approval is required for:
+
+- function hypothesis confirmation
+- Tier changes
+- BIP approval
+- intervention modification
+- fading or intensification
+
+---
+
+# 3. CORE 39 EBP CATALOG
+
+The attached 경기 Be-Able EBP document is the source of truth.
+
+Create exactly these 39 core EBP records.
+
+## Assessment
+
+01 FBA — 기능적행동평가  
+02 ME — 의학적평가
+
+## Setting Event Intervention
+
+03 EXM — 운동중재  
+04 ASI — 감각통합
+
+## Antecedent Prevention
+
+05 ABI-EM — 환경조정  
+06 ABI-EE — 환경풍부화  
+07 ABI-CM — 선택권제공  
+08 ABI-TM — 과제조정  
+09 VS — 시각적지원  
+10 SN — 사회적이야기  
+11 MMI — 음악매개중재  
+12 BMI — 행동모멘텀중재  
+13 R-NCR — 비유관강화
+
+## Teaching
+
+14 PP — 촉구  
+15 PP-EL — 무오류학습  
+16 TD — 시간지연  
+17 MD — 모델링  
+18 VM — 비디오모델링  
+19 DTT — 개별시도교수  
+20 DI — 직접교수  
+21 TA — 과제분석  
+22 TAII — 기술보조교수중재  
+23 NI — 자연주의중재  
+24 FCT — 기능적의사소통훈련  
+25 AAC — 보완대체의사소통  
+26 SST — 사회적기술훈련  
+27 CBIS — 인지행동중재  
+28 SM — 자기관리  
+29 PBII — 또래매개교수  
+30 PII — 부모실행중재
+
+## Reinforcement
+
+31 R-PP — 프리맥원리  
+32 R-TE — 토큰경제  
+33 R-BC — 행동계약  
+34 R-GR — 집단강화  
+35 R-DG — 만족지연훈련  
+36 DR-A — 대체행동차별강화  
+37 DR-O — 타행동차별강화
+
+## Consequence / Response
+
+38 EXT — 소거  
+39 RIRD — 반응차단 및 재지시
+
+There must be an automated test asserting:
+
+```text
+catalog_count == 39
+unique_code_count == 39
+
+assessment == 2
+setting_event == 2
+antecedent == 9
+teaching == 17
+reinforcement == 7
+consequence == 2
+```
+
+Do not invent additional “core EBP” entries.
+
+Custom school strategies may be supported later as a separate layer.
+
+---
+
+# 4. EBP RECORD SCHEMA
+
+Create a typed schema similar to:
+
+```python
+EBPStrategy:
+    number
+    code
+    name
+    source_category
+
+    definition
+    when_to_use
+
+    implementation_steps
+    classroom_example
+
+    why_it_works
+    cautions
+    bip_examples
+    references
+
+    workflow_roles
+    function_fits
+    contexts
+
+    prerequisites
+    exclusions
+    student_characteristics
+
+    guardrail_level
+
+    outcome_measures
+    fidelity_items
+```
+
+Keep source-derived content separate from application metadata.
+
+Example:
+
+```text
+source_content
+application_metadata
+```
+
+Do not silently rewrite the source EBP definitions.
+
+---
+
+# 5. EBP GUARDRAILS
+
+## FBA
+
+When function confidence/data sufficiency is inadequate, recommend additional data collection instead of pretending the function is known.
+
+## ME
+
+When abrupt behavior change and health-related indicators exist, surface:
+
+"의학적·건강 요인 확인 필요"
+
+Do not diagnose.
+
+## ASI
+
+Do not present generic sensory tools as equivalent to ASI.
+
+Respect professional collaboration prerequisites.
+
+## FCT
+
+Replacement communication must:
+
+- access the same functional outcome
+- be easier than the problem behavior
+- receive strong reinforcement initially
+
+## AAC
+
+AAC must remain communication access.
+
+Never treat AAC access as:
+
+- a reward
+- a privilege to remove
+- a punishment contingency
+
+## DR-O
+
+Do not use DR-O as a replacement-behavior teaching strategy by itself.
+
+Require an accompanying replacement skill when applicable.
+
+## EXT
+
+guardrail_level = HIGH
+
+Never default-recommend EXT.
+
+Eligibility requires:
+
+- plausible/confirmed function
+- replacement skill plan
+- safety review
+- consistent implementation capacity
+
+## RIRD
+
+guardrail_level = HIGH
+
+Never target harmless self-regulation merely because it is repetitive.
+
+Require:
+
+- meaningful learning/safety interference
+- minimal-intrusion procedure
+- easy redirection response
+- monitoring for distress/escape escalation
+
+---
+
+# 6. RECOMMENDATION ENGINE
+
+Do not create an AI-only recommendation engine.
+
+Build deterministic rules first.
+
+Architecture:
+
+```text
+Student Data
+   ↓
+Deterministic Analytics
+   ↓
+Data Sufficiency
+   ↓
+Function / Context Evidence
+   ↓
+EBP Eligibility Rules
+   ↓
+Candidate Ranking
+   ↓
+AI Explanation
+   ↓
+Teacher Selection
+```
+
+---
+
+# 7. RECOMMENDATION OUTPUT
+
+Return a bundle rather than one "best treatment".
+
+Target structure:
+
+```json
+{
+  "assessment": [],
+  "setting_event": [],
+  "prevent": [],
+  "teach": [],
+  "reinforce": [],
+  "respond": [],
+  "monitor": [],
+  "limitations": [],
+  "missing_data": []
+}
+```
+
+Recommended default bundle size:
+
+- assessment: 0–1
+- setting event: 0–1
+- prevention: 1–2
+- teaching: 1–2
+- reinforcement: 1
+- response: 0–1
+- monitoring: required
+
+Do not overwhelm the teacher with ten strategies.
+
+---
+
+# 8. EXAMPLE RULE
+
+Example:
+
+```text
+IF
+behavior occurs mainly after difficult tasks
+AND
+consequence frequently includes task delay/removal
+AND
+data sufficiency >= threshold
+
+THEN
+function hypothesis:
+escape/task avoidance
+
+candidate strategies:
+ABI-TM
+ABI-CM
+FCT
+AAC if needed
+DR-A
+```
+
+EXT must not appear automatically.
+
+---
+
+# 9. DATA SUFFICIENCY ENGINE
+
+Create a data-sufficiency object.
+
+Suggested inputs:
+
+```text
+observation_count
+ABC_complete_count
+days_observed
+distinct_context_count
+missingness
+function_consistency
+```
+
+Output:
+
+```text
+LOW
+MODERATE
+SUFFICIENT
+```
+
+Do NOT convert this directly into fake probability.
+
+UI labels:
+
+```text
+데이터 부족
+추가 확인 권장
+분석 가능
+```
+
+---
+
+# 10. DECISION SIGNAL ENGINE
+
+Supported signals:
+
+```text
+MAINTAIN
+ADAPT
+INTENSIFY
+FADE
+MORE_DATA
+FBA_REVIEW
+BIP_REVIEW
+TEAM_MEETING
+SAFETY_REVIEW
+```
+
+These are recommendations for review, not automatic actions.
+
+Each signal must contain:
+
+```json
+{
+  "signal": "BIP_REVIEW",
+  "evidence": [],
+  "limitations": [],
+  "suggested_next_action": ""
+}
+```
+
+---
+
+# 11. TARGET FRONTEND ROUTES
+
+Use the current Next.js routing structure if compatible.
+
+Target pages:
+
+```text
+/today
+
+/school
+
+/students
+
+/students/[studentCode]
+
+/students/[studentCode]/fba
+
+/students/[studentCode]/cico
+
+/students/[studentCode]/bip
+
+/students/[studentCode]/review
+
+/ebp
+
+/meetings
+
+/crisis
+
+/admin
+```
+
+Do not mechanically rewrite routes if current routes can be migrated safely.
+
+Maintain redirects/compatibility for actively used old routes when needed.
+
+---
+
+# 12. TARGET SCREEN 01 — TODAY
+
+Build:
+
+`Today Decision Center`
+
+Components:
+
+```text
+TodayHeader
+MetricCards
+ActionInbox
+StudentSignalCard
+DailyBrief
+CicoMissingCard
+BipReviewCard
+CrisisFollowupCard
+QuickActions
+```
+
+Actions should answer:
+
+"What requires my attention today?"
+
+Do not show a stigmatizing student leaderboard.
+
+---
+
+# 13. TARGET SCREEN 02 — SCHOOL
+
+Components:
+
+```text
+SchoolFilterBar
+BehaviorTrendChart
+IntensityDistribution
+TimeHeatmap
+LocationBehaviorMatrix
+TierOverview
+PatternInsightCards
+```
+
+All charts require:
+
+- accessible labels
+- text interpretation
+- drill-down
+
+---
+
+# 14. TARGET SCREEN 03 — STUDENT HUB
+
+Components:
+
+```text
+StudentSearch
+StudentFilters
+StudentCard
+SupportStatusBadge
+TrendBadge
+ReviewDueBadge
+DataSufficiencyBadge
+```
+
+Supported filters:
+
+```text
+tier
+class
+review status
+BIP status
+signal
+```
+
+---
+
+# 15. TARGET SCREEN 04 — STUDENT 360
+
+Tabs:
+
+```text
+학생 이해
+행동
+FBA
+CICO
+BIP
+평가·검토
+```
+
+Core cards:
+
+```text
+CommunicationCard
+PreferenceCard
+SupportNeedCard
+ChallengeCard
+CurrentSupportCard
+StudentTimeline
+```
+
+Do not make problem behavior the first identity-defining information shown.
+
+---
+
+# 16. TARGET SCREEN 05 — FBA WORKSPACE
+
+Components:
+
+```text
+OperationalDefinitionCard
+BaselineCard
+BehaviorTrendChart
+ABCFlow
+AntecedentDistribution
+ConsequenceDistribution
+ContextHeatmap
+FunctionEvidenceCard
+DataSufficiencyCard
+HypothesisEditor
+```
+
+AI may explain patterns.
+
+AI must not fabricate observations.
+
+---
+
+# 17. TARGET SCREEN 06 — CICO 2.0
+
+Components:
+
+```text
+CicoGoalCard
+FastDailyInput
+CicoHeatmap
+GoalProgress
+WeeklyTrend
+BehaviorEventOverlay
+CicoDecisionCard
+```
+
+Target interaction time:
+
+```text
+10–20 seconds per student per daily entry
+```
+
+Do not render a spreadsheet as the primary interface.
+
+Raw table may remain under:
+
+```text
+고급보기
+```
+
+---
+
+# 18. TARGET SCREEN 07 — EBP LIBRARY
+
+Components:
+
+```text
+EBPSearch
+EBPFilterSidebar
+EBPCardGrid
+EBPCard
+EBPDetailDrawer
+EBPGuardrailBadge
+AddToBIPButton
+```
+
+Filters:
+
+```text
+source category
+workflow stage
+function fit
+context
+communication
+student characteristics
+guardrail level
+```
+
+Each card must display:
+
+```text
+illustration or original visual
+name
+code
+one-sentence definition
+when-to-use summary
+```
+
+Detail view:
+
+```text
+한 문장으로 이해하기
+언제 쓰나요
+3단계 실행
+교실 적용 예시
+왜 효과적일까요
+놓치지 마세요
+BIP 문장 예시
+근거
+```
+
+---
+
+# 19. TARGET SCREEN 08 — VISUAL BIP BUILDER
+
+Builder steps:
+
+```text
+1 Learner
+2 Behavior & Function
+3 Setting Events
+4 Prevent
+5 Teach
+6 Reinforce
+7 Respond
+8 Monitor
+```
+
+Layout:
+
+```text
+Left:
+stepper
+
+Center:
+selected EBP strategy cards
+
+Right:
+evidence drawer
+data limitations
+recommendation rationale
+```
+
+Teacher must be able to:
+
+- add
+- remove
+- edit
+- reorder
+- personalize
+
+all strategies before approval.
+
+---
+
+# 20. BIP VALIDATION
+
+Before allowing "BIP Finalize", validate:
+
+```text
+target behavior operational definition exists
+
+measurement exists
+
+function hypothesis or documented uncertainty exists
+
+at least one preventive component exists
+
+replacement/skill teaching exists
+
+reinforcement exists
+
+monitoring measure exists
+```
+
+If function is uncertain:
+
+Do not block the entire BIP.
+
+Allow:
+
+```text
+provisional support plan
+```
+
+with explicit `MORE_DATA` status.
+
+---
+
+# 21. TARGET SCREEN 09 — VISUAL EXECUTION PLAN
+
+Generate a teacher-facing one/two-page view:
+
+```text
+Context / Trigger
+↓
+PREVENT
+↓
+TEACH
+↓
+REINFORCE
+↓
+EARLY SIGN
+↓
+RESPOND
+↓
+RECOVER / RETURN
+↓
+MONITOR
+```
+
+Add quick Fidelity entry:
+
+```text
+○ 실행
+△ 일부
+× 미실행
+```
+
+Never collapse "strategy effectiveness" and "implementation fidelity" into one metric.
+
+---
+
+# 22. TARGET SCREEN 10 — REVIEW
+
+Components:
+
+```text
+BaselineVsCurrent
+TargetBehaviorOutcome
+ReplacementBehaviorOutcome
+CicoOutcome
+FidelityTrend
+DecisionSignal
+TeacherDecisionForm
+NextReviewDate
+```
+
+Decision options:
+
+```text
+유지
+일부 수정
+지원 강화
+단계적 축소
+추가 관찰
+FBA 재검토
+BIP 재검토
+```
+
+---
+
+# 23. TARGET SCREEN 11 — MEETING MODE
+
+Build automatic agenda candidates from deterministic signals.
+
+Components:
+
+```text
+MeetingAgenda
+StudentReviewCard
+EvidenceSummary
+DecisionForm
+OwnerSelector
+DueDate
+NextReview
+MeetingSummary
+```
+
+After meeting:
+
+generate:
+
+```text
+decision
+evidence
+owner
+deadline
+next review
+```
+
+---
+
+# 24. TARGET SCREEN 12 — CRISIS FOLLOW-UP
+
+Use current Log_Main crisis/follow-up fields when possible.
+
+Components:
+
+```text
+CrisisInbox
+CrisisEventTimeline
+SafetyStatus
+FollowupChecklist
+GuardianContactStatus
+AdministratorReportStatus
+StudentConsultStatus
+EmergencyMeetingStatus
+```
+
+Do not let this screen invent crisis procedures.
+
+Use existing school-approved procedures and stored workflows.
+
+---
+
+# 25. PROPOSED BACKEND STRUCTURE
+
+Do not force this structure if the repository already has a cleaner equivalent.
+
+Target responsibility separation:
+
+```text
+backend/app/
+
+  api/
+    v1/
+    v2/
+
+  core/
+    config.py
+    auth.py
+    cache.py
+    logging.py
+
+  domain/
+    student.py
+    behavior.py
+    cico.py
+    fba.py
+    bip.py
+    ebp.py
+    decision.py
+    meeting.py
+    crisis.py
+
+  adapters/
+    sheets/
+      client.py
+      log_main.py
+      tier_status.py
+      cico.py
+
+  repositories/
+    student_repository.py
+    behavior_repository.py
+    cico_repository.py
+    bip_repository.py
+
+  services/
+    analytics/
+      behavior.py
+      cico.py
+      patterns.py
+      data_quality.py
+
+    fba/
+      evidence.py
+      hypothesis.py
+
+    ebp/
+      catalog.py
+      matching.py
+      guardrails.py
+
+    decision/
+      signals.py
+      review.py
+
+    ai/
+      context.py
+      engine.py
+      schemas.py
+      prompts.py
+      privacy.py
+
+  schemas/
+
+  tests/
+```
+
+---
+
+# 26. FRONTEND STRUCTURE
+
+Suggested:
+
+```text
+frontend/src/
+
+  app/
+    today/
+    school/
+    students/
+    ebp/
+    meetings/
+    crisis/
+    admin/
+
+  features/
+    today/
+    school-dashboard/
+    student/
+    fba/
+    cico/
+    ebp/
+    bip/
+    review/
+    meeting/
+    crisis/
+
+  components/
+    ui/
+    charts/
+    feedback/
+
+  lib/
+    api/
+    query/
+    auth/
+    dates/
+
+  hooks/
+
+  types/
+```
+
+Do not create hundreds of tiny files without clear responsibility.
+
+---
+
+# 27. SHARED UI COMPONENTS
+
+Create reusable primitives such as:
+
+```text
+PageShell
+PageHeader
+
+SectionCard
+MetricCard
+
+StatusBadge
+DataSufficiencyBadge
+GuardrailBadge
+
+FilterBar
+
+ActionInbox
+ActionCard
+
+TrendChart
+Heatmap
+DistributionChart
+
+EvidenceDrawer
+EvidenceList
+
+EBPCard
+EBPDetailDrawer
+
+DecisionCard
+
+EmptyState
+ErrorState
+Skeleton
+```
+
+---
+
+# 28. DESIGN SYSTEM
+
+Create PBSTeam-specific tokens.
+
+Target feel:
+
+```text
+light warm background
+white cards
+subtle dark borders
+12–16px radius
+clear spacing
+limited shadows
+teal primary accent
+pastel support colors
+strong typography hierarchy
+```
+
+Meaning:
+
+```text
+green = stable / achieved
+blue = information
+yellow = review
+orange = support needed
+red = safety
+```
+
+Never rely on color alone.
+
+Include icon + text.
+
+---
+
+# 29. ILLUSTRATION POLICY
+
+Do not copy third-party BIP Visualized illustrations or layout.
+
+Use:
+
+- authorized existing local assets
+- original illustrations
+- original SVG
+- simple educational icons
+
+If the attached EBP deck contains project-approved local artwork and its reuse is authorized in the project, map those assets to EBP cards.
+
+Otherwise create placeholders and preserve the asset mapping field.
+
+---
+
+# 30. API V2 TARGET
+
+Do not break existing V1 clients.
+
+Prefer a compatibility layer.
+
+Suggested endpoints:
+
+```text
+GET /api/v2/today
+
+GET /api/v2/school/overview
+
+GET /api/v2/students
+GET /api/v2/students/{code}/workspace
+
+GET /api/v2/students/{code}/behavior-summary
+
+GET /api/v2/students/{code}/fba
+
+GET /api/v2/students/{code}/cico
+PATCH /api/v2/students/{code}/cico/{date}
+
+GET /api/v2/ebp
+GET /api/v2/ebp/{code}
+POST /api/v2/ebp/recommendations
+
+GET /api/v2/students/{code}/bip
+PUT /api/v2/students/{code}/bip
+
+GET /api/v2/students/{code}/bip/visual
+
+GET /api/v2/students/{code}/review
+POST /api/v2/students/{code}/decisions
+
+GET /api/v2/meetings
+POST /api/v2/meetings
+
+GET /api/v2/crisis/followups
+
+GET /api/v2/admin/data-health
+```
+
+Adapt names if the existing routing conventions are better.
+
+---
+
+# 31. API RESPONSE PRINCIPLE
+
+Do not make the frontend reconstruct business logic.
+
+Backend should return structured data.
+
+Example:
+
+```json
+{
+  "student": {},
+  "period": {},
+  "facts": {},
+  "patterns": [],
+  "data_sufficiency": {},
+  "signals": [],
+  "actions": []
+}
+```
+
+---
+
+# 32. GOOGLE SHEETS ADAPTER
+
+Create a boundary between raw Sheets schemas and domain models.
+
+Never scatter:
+
+```python
+row.get("학생이름")
+```
+
+through dozens of services.
+
+Example:
+
+```text
+LogMainAdapter
+TierStatusAdapter
+CicoMonthAdapter
+```
+
+Raw:
+
+```text
+학생이름
+학생명
+학생코드
+```
+
+Domain:
+
+```text
+student_name
+student_code
+```
+
+---
+
+# 33. CICO MONTH ADAPTER
+
+3월–7월 must remain untouched.
+
+The adapter must normalize schema differences.
+
+Implement something similar to:
+
+```python
+normalize_cico_month(
+    sheet_name,
+    rows
+) -> list[CicoObservation]
+```
+
+Future months should be detectable without copying entire code files.
+
+---
+
+# 34. GOOGLE SHEETS PERFORMANCE
+
+Inspect actual call patterns.
+
+Then:
+
+- batch reads when useful
+- avoid N+1 reads
+- remove unnecessary force refresh
+- cache read-heavy stable data
+- invalidate only affected keys after successful writes
+
+Do not promise a theoretical speed number.
+
+Measure.
+
+---
+
+# 35. CACHE KEY DESIGN
+
+Suggested:
+
+```text
+sheet:tier-status
+sheet:log-main:<version-or-range>
+sheet:cico:<year>:<month>
+
+student:<code>:workspace
+
+dashboard:<from>:<to>
+
+bip:<code>
+```
+
+---
+
+# 36. CACHE INVALIDATION ORDER
+
+Use:
+
+```text
+1 write Google Sheets/persistence
+
+2 verify success
+
+3 invalidate related cache
+
+4 optionally fresh-read
+
+5 return response
+```
+
+Never invalidate first and then fail the write.
+
+---
+
+# 37. AUTHENTICATION
+
+Audit the current authentication system.
+
+If passwords or sensitive authentication credentials are stored as plaintext in Sheets:
+
+replace the mechanism.
+
+Requirements:
+
+```text
+secure password hashing
+secure sessions
+HttpOnly cookie when appropriate
+role based access
+environment variable secrets
+```
+
+Roles:
+
+```text
+admin
+PBS coordinator
+teacher
+read-only
+```
+
+Do not add an external paid auth provider unless necessary and approved.
+
+---
+
+# 38. AI CONTEXT BUILDER
+
+AI receives structured summaries rather than raw worksheets.
+
+Example:
+
+```text
+1557 raw rows
+↓
+deterministic analysis
+↓
+structured facts
+↓
+AI
+```
+
+Context fields:
+
+```text
+analysis_period
+
+behavior_summary
+
+intensity_summary
+
+ABC_patterns
+
+function_evidence
+
+CICO_summary
+
+current_BIP
+
+selected_EBP
+
+fidelity
+
+data_limitations
+```
+
+---
+
+# 39. AI PRIVACY
+
+Before sending AI context:
+
+remove or pseudonymize unnecessary:
+
+```text
+student names
+teacher names
+free-text identifying information
+```
+
+Use:
+
+```text
+student_code
+```
+
+where possible.
+
+---
+
+# 40. AI STRUCTURED OUTPUT
+
+Use schema validation.
+
+Example:
+
+```json
+{
+  "facts": [],
+  "patterns": [],
+  "limitations": [],
+  "hypotheses": [],
+  "ebp_candidates": [],
+  "teacher_actions": []
+}
+```
+
+Reject unknown EBP codes.
+
+An AI response cannot invent:
+
+```text
+FCT-X
+sensory reset therapy
+custom ABA method
+```
+
+as if it were one of the 39 core EBP items.
+
+---
+
+# 41. CONTEXTUAL AI
+
+Do not create nine independent giant AI systems.
+
+Use one engine with different actions.
+
+Example:
+
+```text
+student.summary
+
+student.patterns
+
+fba.explain
+
+ebp.explain-recommendations
+
+bip.draft
+
+review.explain
+
+meeting.brief
+
+meeting.minutes
+```
+
+---
+
+# 42. PHASE 0 — AUDIT AND BASELINE
+
+Tasks:
+
+- inspect repository
+- inspect routes
+- inspect services
+- inspect all Sheet access
+- inspect auth
+- inspect AI calls
+- inspect caching
+- inspect deployment
+- identify tests
+- identify dead code
+
+Create:
+
+```text
+docs/PBST2_ARCHITECTURE_AUDIT.md
+docs/PBST2_IMPLEMENTATION.md
+docs/PBST2_DATA_CONTRACT.md
+```
+
+Create a safe baseline.
+
+Record:
+
+```text
+protected sheet names
+headers
+column order
+row count
+safe hashes
+API response schemas
+performance
+```
+
+Do not commit raw student data.
+
+### DONE when
+
+- architecture map exists
+- protected contract exists
+- rollback point exists
+- baseline exists
+
+---
+
+# 43. PHASE 1 — P0 BUGS + SECURITY
+
+Verify and fix known issues:
+
+```text
+BIP read 500
+Tier2 toggle NameError
+student Tier type mismatch
+학생명 / 학생이름 mismatch
+hardcoded student names
+```
+
+Search for additional:
+
+```text
+undefined symbols
+silent fallbacks
+hardcoded Sheet names
+exception swallowing
+unsafe parsing
+```
+
+Audit authentication.
+
+### Tests
+
+- BIP existing data reads
+- missing BIP
+- Tier update
+- Tier2 toggle
+- dashboard
+- authentication
+
+### GATE
+
+Do not enter Phase 2 until regression passes.
+
+---
+
+# 44. PHASE 2 — DOMAIN + ADAPTER LAYER
+
+Implement:
+
+```text
+BehaviorEvent
+Student
+TierAssignment
+CicoObservation
+FunctionHypothesis
+EBPStrategy
+BIPPlan
+DecisionSignal
+```
+
+Implement adapters.
+
+Remove raw Sheet schema interpretation from analytical services.
+
+### Tests
+
+synthetic:
+
+- Korean column aliases
+- empty cells
+- malformed dates
+- multiple months
+- missing student
+- student code mapping
+
+---
+
+# 45. PHASE 3 — ANALYTICS
+
+Implement deterministic:
+
+```text
+frequency
+rate
+intensity distribution
+time distribution
+location distribution
+behavior distribution
+
+ABC patterns
+
+baseline comparison
+
+trend
+
+CICO progress
+
+data missingness
+```
+
+Avoid AI.
+
+Remove O(N×M) student matching.
+
+Prefer indexed dictionaries or vectorized operations only where benchmarked.
+
+---
+
+# 46. PHASE 4 — EBP CATALOG + MATCHING
+
+Create all 39 records.
+
+Create:
+
+```text
+catalog
+search
+filters
+matching
+guardrails
+```
+
+Tests must include:
+
+- exactly 39
+- valid categories
+- unique codes
+- EXT guardrail
+- RIRD guardrail
+- DR-O replacement requirement
+- FCT function-match requirement
+- AAC access rule
+- ME health-signal route
+
+---
+
+# 47. PHASE 5 — DATA + API PERFORMANCE
+
+Implement:
+
+- batch Sheets access
+- cache
+- targeted invalidation
+- API V2 serializers
+
+Benchmark before and after.
+
+Measure:
+
+```text
+cold
+warm
+cache hit
+cache miss
+Sheet reads per request
+total response time
+```
+
+---
+
+# 48. PHASE 6 — APP SHELL + DESIGN SYSTEM
+
+Build:
+
+```text
+navigation
+page shell
+auth provider
+common cards
+status badges
+filter controls
+loading states
+error states
+empty states
+```
+
+Remove duplicated localStorage/auth handling.
+
+---
+
+# 49. PHASE 7 — TODAY + SCHOOL DASHBOARD
+
+Implement the first two decision screens.
+
+Validate:
+
+Teacher can answer within seconds:
+
+```text
+What changed?
+Who requires review?
+Why?
+What is the next action?
+```
+
+---
+
+# 50. PHASE 8 — STUDENT 360 + FBA
+
+Build Student workspace and Visual FBA.
+
+Ensure all AI statements can open an:
+
+```text
+근거 보기
+```
+
+drawer.
+
+The drawer must expose the data supporting the statement.
+
+---
+
+# 51. PHASE 9 — CICO 2.0
+
+Keep original monthly raw sheets.
+
+Replace primary user workflow with:
+
+```text
+fast input
+heatmap
+trend
+goal progress
+behavior overlay
+```
+
+Benchmark large table rendering.
+
+---
+
+# 52. PHASE 10 — EBP LIBRARY
+
+Implement:
+
+```text
+39 cards
+filters
+search
+details
+references
+BIP add action
+```
+
+Do not wait for perfect illustrations before completing functionality.
+
+Use placeholders where necessary.
+
+---
+
+# 53. PHASE 11 — VISUAL BIP
+
+Implement the eight-step builder.
+
+Add:
+
+```text
+dependency validation
+EBP recommendations
+evidence drawer
+teacher editing
+visual execution plan
+print-friendly view
+```
+
+Never finalize strategies automatically.
+
+---
+
+# 54. PHASE 12 — REVIEW + MEETING + CRISIS
+
+Implement:
+
+```text
+outcome vs baseline
+fidelity
+decision signal
+
+meeting agenda
+team decision
+owner
+review date
+
+crisis follow-up
+```
+
+Reuse Log_Main crisis data where appropriate.
+
+---
+
+# 55. PHASE 13 — UNIFIED AI ENGINE
+
+Migrate duplicated AI buttons into shared context/action architecture.
+
+Maintain contextual buttons at the UI level.
+
+Example:
+
+Student:
+
+```text
+패턴 설명
+```
+
+FBA:
+
+```text
+기능 가설 지원
+```
+
+BIP:
+
+```text
+EBP 조합 설명
+```
+
+Meeting:
+
+```text
+회의 브리핑
+```
+
+One engine underneath.
+
+---
+
+# 56. PHASE 14 — PERFORMANCE + OBSERVABILITY
+
+Capture:
+
+```text
+endpoint
+status
+processing time
+cache hit/miss
+Sheets time
+analytics time
+AI time
+error type
+```
+
+No unnecessary student-identifying content in logs.
+
+Frontend:
+
+use React Profiler or equivalent evidence before applying broad memoization.
+
+Optimize:
+
+```text
+large tables
+charts
+accordion lazy mount
+expensive selectors
+duplicate requests
+```
+
+---
+
+# 57. PHASE 15 — CLEANUP
+
+Only now remove:
+
+```text
+dead routes
+duplicate services
+old AI prompts
+unused components
+obsolete Sheet helpers
+duplicate state logic
+```
+
+Requirements for deletion:
+
+```text
+reference count verified
+replacement working
+tests passing
+rollback available
+```
+
+---
+
+# 58. PHASE 16 — FINAL REGRESSION
+
+Compare against baseline.
+
+Protected Sheets:
+
+```text
+names
+headers
+column order
+historical value hashes
+```
+
+must be unchanged except intentional user writes.
+
+Compare analytical outputs:
+
+```text
+total events
+student events
+behavior categories
+intensity
+Tier
+CICO
+```
+
+---
+
+# 59. PERFORMANCE TARGETS
+
+Use measured p95.
+
+Initial target:
+
+```text
+cache hit API       < 300ms p95
+
+common dashboard    < 800ms p95
+when no external AI generation is involved
+
+duplicate Sheets reads
+>= 50% reduction
+
+deterministic analysis
+>= 80% faster where current bottleneck is CPU/mapping
+
+known runtime 500
+0
+```
+
+Targets are not excuses to change raw data.
+
+---
+
+# 60. TEACHER WORKLOAD KPI
+
+Measure product success by reducing teacher effort.
+
+Goals:
+
+```text
+behavior entry
+< 1 minute
+
+daily CICO
+10–20 sec / student
+
+student review
+1–2 minutes for common cases
+
+BIP initial construction
+few minutes when data is already sufficient
+
+monthly meeting preparation
+largely automated
+```
+
+---
+
+# 61. DATA QUALITY STATES
+
+Never treat blanks as real negative observations.
+
+Represent:
+
+```text
+unknown
+not collected
+not applicable
+observed zero
+```
+
+where relevant.
+
+This is especially important for historical Sheet data.
+
+---
+
+# 62. EMPTY STATE
+
+Bad:
+
+```text
+데이터 없음
+```
+
+Good:
+
+```text
+기능 가설을 검토하기 위한 ABC 자료가 부족합니다.
+
+현재 ABC 완성 기록: 2건
+
+[행동기록 추가]
+```
+
+---
+
+# 63. ERROR STATE
+
+User-facing:
+
+```text
+BIP 정보를 불러오지 못했습니다.
+
+기존 데이터는 변경되지 않았습니다.
+
+[다시 시도]
+```
+
+Detailed technical error goes to developer logs.
+
+---
+
+# 64. BUILD QUALITY
+
+After every significant phase run applicable:
+
+```text
+backend tests
+frontend tests
+lint
+typecheck
+build
+regression
+```
+
+Fix errors immediately.
+
+Do not allow an increasing pile of known test failures.
+
+---
+
+# 65. PHASE REPORT
+
+After each Phase record:
+
+```text
+PHASE
+STATUS
+
+Files changed
+
+What changed
+
+Why
+
+Tests
+
+Data integrity
+
+Performance
+
+Known risks
+
+Next phase
+```
+
+Save concise summaries in:
+
+```text
+docs/PBST2_PROGRESS.md
+```
+
+Continue to the next safe Phase without waiting for user confirmation.
+
+---
+
+# 66. ASK BEFORE ONLY WHEN NECESSARY
+
+Do not ask for approval for:
+
+```text
+safe refactors
+tests
+new internal modules
+UI component work
+local benchmark scripts
+```
+
+Ask before:
+
+```text
+irreversible production data deletion
+new paid external service
+production credential changes
+destructive infrastructure changes
+```
+
+---
+
+# 67. GIT STRATEGY
+
+Before implementation create a recovery point.
+
+Then use logical commits such as:
+
+```text
+pbst2: baseline and contracts
+
+pbst2: fix p0 runtime issues
+
+pbst2: add domain adapters
+
+pbst2: analytics engine
+
+pbst2: ebp catalog and matching
+
+pbst2: api v2 and cache
+
+pbst2: app shell
+
+pbst2: today and school
+
+pbst2: student and fba
+
+pbst2: cico
+
+pbst2: ebp library
+
+pbst2: visual bip
+
+pbst2: review meeting crisis
+
+pbst2: unified ai
+
+pbst2: cleanup and regression
+```
+
+Do not create arbitrary enormous commits.
+
+---
+
+# 68. FINAL ACCEPTANCE CHECKLIST
+
+## Data protection
+
+- [ ] Log_Main preserved
+- [ ] TierStatus preserved
+- [ ] 3월 preserved
+- [ ] 4월 preserved
+- [ ] 5월 preserved
+- [ ] 6월 preserved
+- [ ] 7월 preserved
+- [ ] no unintended historical changes
+
+## Runtime
+
+- [ ] known 500 errors fixed
+- [ ] no hardcoded student results
+- [ ] no known undefined runtime variables
+- [ ] no silent Tier misclassification
+
+## Architecture
+
+- [ ] Sheet adapters exist
+- [ ] domain model exists
+- [ ] analytics separated from AI
+- [ ] EBP engine separated from AI
+- [ ] cache invalidation is targeted
+
+## EBP
+
+- [ ] 39 core EBP entries
+- [ ] definitions sourced correctly
+- [ ] implementation steps available
+- [ ] cautions available
+- [ ] source category retained
+- [ ] workflow roles added
+- [ ] EXT guardrail
+- [ ] RIRD guardrail
+- [ ] AAC access safeguard
+- [ ] FCT function match
+- [ ] DR-O replacement support rule
+
+## UX
+
+- [ ] Today Decision Center
+- [ ] School Dashboard
+- [ ] Student Hub
+- [ ] Student 360
+- [ ] Visual FBA
+- [ ] CICO 2.0
+- [ ] EBP Library
+- [ ] Visual BIP Builder
+- [ ] Visual Execution Plan
+- [ ] Review & Decision
+- [ ] Meeting Mode
+- [ ] Crisis Follow-up
+
+## AI
+
+- [ ] deterministic calculations outside LLM
+- [ ] structured context
+- [ ] structured output
+- [ ] data limitations shown
+- [ ] evidence drawer
+- [ ] unknown EBP codes rejected
+- [ ] unnecessary personal data removed
+
+## Performance
+
+- [ ] baseline measured
+- [ ] final benchmark measured
+- [ ] Sheet calls reduced
+- [ ] cache hit paths verified
+- [ ] large render bottlenecks addressed
+
+## Quality
+
+- [ ] backend tests pass
+- [ ] frontend tests pass
+- [ ] typecheck passes
+- [ ] lint passes
+- [ ] production build passes
+- [ ] regression passes
+- [ ] rollback available
+
+---
+
+# 69. FINAL PRODUCT TEST
+
+Use the following question as the final UX test:
+
+A classroom teacher opens PBSTeam.
+
+Within approximately one minute, can the teacher answer:
+
+1. Which student needs review?
+2. What changed?
+3. What evidence supports that?
+4. Is there enough data?
+5. What is the current function hypothesis?
+6. Which 경기 Be-Able EBP strategies are relevant?
+7. Why are they relevant?
+8. What exactly should the teacher do?
+9. How will the team know whether it worked?
+10. When should the team review the plan?
+
+If these questions still require manually opening several spreadsheets and interpreting raw charts, the redesign is not finished.
+
+---
+
+# FINAL DIRECTIVE
+
+Do not optimize PBSTeam around pages.
+
+Optimize it around decisions.
+
+Do not expose the complexity of the spreadsheet to teachers.
+
+Put complexity behind:
+
+- adapters
+- analytics
+- matching rules
+- caching
+- AI explanation
+
+The teacher-facing interface should primarily expose:
+
+```text
+CURRENT STATE
+WHY
+EVIDENCE
+NEXT ACTION
+```
+
+Preserve raw data.
+
+Use the 39 경기 Be-Able EBP practices as the intervention knowledge base.
+
+Use deterministic rules for facts and eligibility.
+
+Use AI for explanation, personalization, and drafting.
+
+Keep the final decision with the teacher/team.
+
+Begin with Phase 0 repository audit and protected-data baseline, create the recovery point, and then proceed through the phases while continuously building, testing, and documenting the implementation.

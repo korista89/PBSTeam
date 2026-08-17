@@ -231,6 +231,13 @@ export default function StudentDetail() {
                   </ChartSection>
                </div>
             </div>
+
+            {/* Be-Able 39 EBP Matched Recommendations */}
+            <EBPRecommendationSection 
+                studentCode={profile.student_code} 
+                topFunction={(data.functions || [])?.[0]?.name || "도피/회피"} 
+                apiUrl={apiUrl} 
+            />
           </main>
         </div>
       </div>
@@ -391,5 +398,104 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
          </div>
        )}
     </div>
+  );
+}
+
+function EBPRecommendationSection({ studentCode, topFunction, apiUrl }: { studentCode: string; topFunction: string; apiUrl: string }) {
+  const [bundle, setBundle] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let fnCode = "ESCAPE_DEMAND";
+    if (topFunction.includes("관심")) fnCode = "ATTENTION";
+    else if (topFunction.includes("물질") || topFunction.includes("활동")) fnCode = "TANGIBLE_ACTIVITY";
+    else if (topFunction.includes("감각")) fnCode = "AUTOMATIC_SENSORY";
+
+    const fetchBundle = async () => {
+      try {
+        setLoading(true);
+        const res = await axios.post(`${apiUrl}/api/v1/ebp/recommend`, {
+          function_code: fnCode,
+          student_code: studentCode
+        });
+        setBundle(res.data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBundle();
+  }, [studentCode, topFunction, apiUrl]);
+
+  if (loading) return null;
+  if (!bundle) return null;
+
+  return (
+    <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', border: '1px solid #e2e8f0', boxShadow: '0 4px 25px rgba(0,0,0,0.03)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span>📚</span> 경기 Be-Able 39 EBP 맞춤 추천 번들
+          </h3>
+          <p style={{ margin: '6px 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
+            학생의 기능 추정({topFunction})에 부합하는 근거기반 3단계(예방-교수-강화) 중재 후보군
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+        {/* Prevent */}
+        <div style={{ background: '#f0f9ff', padding: '20px', borderRadius: '16px', border: '1px solid #bae6fd' }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0369a1', marginBottom: '12px' }}>
+            🛡️ 1단계 선행사건 예방 전략
+          </div>
+          {bundle.prevent?.map((s: any) => (
+            <div key={s.ebp_code} style={{ background: '#fff', padding: '14px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #e0f2fe' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{s.name}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7' }}>{s.ebp_code}</span>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#475569', margin: '4px 0 8px 0' }}>{s.summary}</p>
+              <div style={{ fontSize: '0.75rem', color: '#0369a1', fontWeight: 600 }}>권장: {s.reasons?.[0]}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Teach */}
+        <div style={{ background: '#f0fdf4', padding: '20px', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#15803d', marginBottom: '12px' }}>
+            💡 2단계 기능적 대체행동 교수
+          </div>
+          {bundle.teach?.map((s: any) => (
+            <div key={s.ebp_code} style={{ background: '#fff', padding: '14px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #dcfce7' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{s.name}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a' }}>{s.ebp_code}</span>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#475569', margin: '4px 0 8px 0' }}>{s.summary}</p>
+              <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 600 }}>권장: {s.reasons?.[0]}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Reinforce */}
+        <div style={{ background: '#fffbeb', padding: '20px', borderRadius: '16px', border: '1px solid #fde68a' }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#b45309', marginBottom: '12px' }}>
+            ⭐ 3단계 차별강화 및 유지
+          </div>
+          {bundle.reinforce?.map((s: any) => (
+            <div key={s.ebp_code} style={{ background: '#fff', padding: '14px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #fef3c7' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{s.name}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#d97706' }}>{s.ebp_code}</span>
+              </div>
+              <p style={{ fontSize: '0.82rem', color: '#475569', margin: '4px 0 8px 0' }}>{s.summary}</p>
+              <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 600 }}>권장: {s.reasons?.[0]}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

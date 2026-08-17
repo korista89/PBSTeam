@@ -1,0 +1,761 @@
+9. 실제 PBSTeam Repository → PBSTeam 2.0 Migration Map
+현재 Repository는 Next.js 14 + React 18 + FastAPI + Google Sheets 구조입니다.  Frontend dependency도 Next 14.2, React 18.3, Axios, Recharts 정도로 비교적 가볍습니다. 
+Framework는 갈아엎지 않는 것이 맞습니다.
+A. Root
+현재	결정	최종
+.gitignore	KEEP+FIX	유지
+README.md	REWRITE	PBSTeam2 설명
+Modelfile.txt	KEEP/MOVE	tools/local-ai/
+do_push.py	DELETE 후보	임시 스크립트
+push_fix.py	DELETE 후보	임시
+fix_cico_front.py	DELETE 후보	migration 후 제거
+update_frontend.patch	DELETE	history에 이미 존재
+start_local_ai_tunnel.py	MOVE	tools/local-ai/
+start_tunnel.ps1	MOVE	tools/local-ai/
+test_normalization_and_prompts.py	MOVE+EXPAND	backend/tests/
+verify_schema_alignment.py	KEEP+MOVE	scripts/audit/
+vercel.json	VERIFY	유지
+
+
+매우 중요한 Repo 정리
+현재 Repository tree에 backend/.venv가 실제 추적되어 있습니다. 
+.gitignore에는 이미 backend/.venv/가 들어 있으므로 과거에 Git에 들어간 뒤 계속 추적되는 상태로 보입니다. 
+Antigravity 작업 초기에:
+git rm -r --cached backend/.venv
+후 Commit.
+Git history 전체 rewrite까지는 하지 말 것.
+B. Backend Service
+sheets.py
+현재 약 148KB의 거대한 파일입니다. 
+결정
+SPLIT + LEGACY SHIM
+현재
+services/sheets.py
+
+↓
+
+adapters/sheets/
+    client.py
+    log_main.py
+    tier_status.py
+    cico.py
+
+repositories/
+    student_repository.py
+    behavior_repository.py
+    cico_repository.py
+    bip_repository.py
+    meeting_repository.py
+
+services/cache/
+    cache.py
+    keys.py
+이행 기간 동안 기존:
+services/sheets.py
+에는 wrapper만 남깁니다.
+normalize.py
+이 파일은 버리지 않습니다.
+이미:
+시간대 파싱
+학교급별 시간구간
+장소 정규화
+기능 정규화
+발생횟수
+행동유형
+등 상당히 좋은 로직이 들어 있습니다. 
+결정
+KEEP + REFACTOR
+
+services/normalize.py
+→
+domain/normalization/
+그리고 analysis.py에 중복된 normalizer는 삭제합니다.
+analysis.py
+결정
+SPLIT
+현재:
+분석
+학생 mapping
+Tier 판정
+기능 normalization
+회의 분석
+AI 연결
+이 섞여 있습니다.
+목표:
+analytics/
+    school.py
+    student.py
+    behavior.py
+    cico.py
+    trends.py
+    data_quality.py
+특히 자동 Tier 생성 제거.
+evidence_packet.py
+이건 중요한 자산입니다.
+현재 이미:
+원자료 → Python 결정론적 통계 → 압축 Evidence Packet → LLM
+
+구조를 사용하고 있습니다. 
+이 방향은 PBSTeam 2.0 철학과 정확히 맞습니다.
+결정
+KEEP + EXPAND
+→
+ai/context_builder.py
+단 top risk student 식 ranking 제거.
+pattern_detector.py
+분석 구조는 유지.
+다만:
+clinical_patterns
+라는 용어는 학교 시스템에서는:
+behavior_patterns
+로 변경.
+또 코드 주석에 특정 학생 실명 예시가 들어가 있으므로 제거합니다. 
+contagion.py
+결정
+REPLACE
+현재는 다른 학생 이름이 자유기술에 등장하면:
+Source → Reactor
+관계로 추론합니다.
+게다가 key_findings가 특정 학생 실명으로 하드코딩되어 있습니다. 
+PBST/ABA 관점에서도 이걸 바로 행동 전염의 인과관계라고 부르는 것은 과도합니다.
+새 이름:
+interaction_signals.py
+출력:
+동시발생 신호
+또래 자극 언급
+공동 상황
+
+추가 확인 필요
+로 제한합니다.
+ai_insight.py
+현재 42KB가 넘는 대형 AI 모듈이며 Local LLM → Gemini 등의 fallback과 큰 공통 Prompt가 한 파일에 들어 있습니다. 
+좋은 부분은 유지합니다.
+현재 Prompt에도 이미:
+추정기능을 확정하지 말 것
+분모·표본수
+관찰기회가 없으면 rate 계산 금지
+n<5 해석 보류
+기능적으로 동등한 대체행동
+데이터 한계 표시
+등 좋은 원칙이 있습니다. 
+목표
+ai/
+
+providers/
+    local.py
+    gemini.py
+
+context.py
+privacy.py
+
+schemas.py
+
+prompts/
+    system.py
+    school.py
+    student.py
+    fba.py
+    bip.py
+    meeting.py
+
+engine.py
+Runtime AI 제공자는 기존 Local Gemma/Gemini fallback을 유지해도 됩니다.
+Antigravity의 Gemini 3.7 Flash High는 개발 Agent와 별개입니다.
+C. Backend Endpoints
+현재 엔드포인트는 analytics, auth, behavior, bip, board, cico, meeting_notes, picture_words, roster, student, tier로 나뉘어 있습니다. 
+Migration
+analytics.py
+→ school.py + today.py + review.py
+
+student.py
+→ students.py
+
+roster.py
+→ students/admin 기능으로 통합
+
+tier.py
+→ tier.py + decisions.py
+
+cico.py
+→ cico.py
+
+bip.py
+→ bip.py + fba.py + ebp.py
+
+meeting_notes.py
+→ meetings.py
+
+behavior.py
+→ behaviors.py
+
+auth.py
+→ 전면 교체
+
+picture_words.py
+→ 별도 기능으로 유지
+
+board.py
+→ Core navigation에서는 제외 가능
+API V2
+GET  /api/v2/today
+
+GET  /api/v2/school/overview
+
+GET  /api/v2/students
+GET  /api/v2/students/{code}
+GET  /api/v2/students/{code}/workspace
+
+GET  /api/v2/students/{code}/fba
+POST /api/v2/students/{code}/hypotheses
+
+GET  /api/v2/students/{code}/cico
+PATCH /api/v2/students/{code}/cico/{date}
+
+GET  /api/v2/ebp
+GET  /api/v2/ebp/{code}
+POST /api/v2/students/{code}/ebp/recommendations
+
+GET  /api/v2/students/{code}/bip
+PUT  /api/v2/students/{code}/bip
+POST /api/v2/students/{code}/bip/activate
+
+POST /api/v2/students/{code}/fidelity
+
+GET  /api/v2/students/{code}/review
+POST /api/v2/students/{code}/decisions
+
+GET/POST /api/v2/meetings
+
+GET /api/v2/crisis/followups
+V1은 즉시 제거하지 않습니다.
+V1
+↓ Compatibility
+V2
+가 안정된 뒤 제거합니다.
+D. Frontend Migration
+현재 Frontend에는 admin, behavior, board, cico, consultation, meeting, meeting-minutes, protocol, report, roster, student, tier-status 등이 각각 Route로 있습니다. 
+app/page.tsx
+현재 약 55KB짜리 대형 Dashboard입니다. 
+결정
+REPLACE
+최종 /:
+redirect → /today
+기존 Dashboard 통계 중 유용한 부분은:
+/school
+로 이동.
+AI 버튼들
+현재 메인 페이지 내부에:
+학교 전체 AI 분석
+섹션별 AI 분석
+등이 각각 컴포넌트로 들어가 있습니다. 
+결정
+DELETE duplicated button logic
+
+→ AIActionButton
+→ ContextualAssistant
+내부는 한 Engine 사용.
+AuthProvider.tsx
+결정
+REPLACE
+현재는 Context가 아닙니다. 
+최종:
+<AuthContext.Provider>
+실제 Context + Backend session.
+GlobalNav.tsx
+결정
+REFACTOR
+최종:
+오늘
+학교
+학생
+CICO
+행동·FBA
+BIP
+EBP
+회의
+위기
+BehaviorForm.tsx
+현재 31KB가 넘습니다. 
+결정
+기능은 KEEP.
+분할:
+BehaviorQuickEntry
+BehaviorABCEntry
+CrisisFollowupEntry
+평소 기록과 위기보고를 한 거대한 Form으로 유지할 필요가 없습니다.
+cico/page.tsx
+현재 35KB 규모이며 월별 Spreadsheet 형태와 optimistic update를 구현합니다. 
+기존 코드에는 날짜 필터, 입력 option, debounce batch 저장 등 재활용 가능한 로직이 있습니다. 
+결정
+REUSE DATA LOGIC
+REPLACE UI
+새 UI:
+CicoStudentCard
+CicoFastEntry
+CicoHeatmap
+CicoGoalProgress
+BehaviorOverlay
+tier-status/page.tsx
+결정
+MERGE
+→ /students
+→ /admin
+교사 화면:
+학생 지원상태
+관리자:
+Tier 편집
+재학상태
+코드관리
+하드코딩 210명 fallback은 완전 삭제합니다. 
+student/[id]/page.tsx
+결정
+REPLACE + MIGRATE
+중요:
+현재 URL이 학생 이름입니다. 
+최종:
+/students/2621
+처럼 student_code를 URL key로 사용.
+화면은 Student 360으로 개편.
+student/[id]/bip/page.tsx
+결정
+FULL REPLACEMENT
+기존 BIP는 Migration Adapter를 만들어 읽어오기만 합니다.
+새 UI는 Visual Builder.
+protocol/page.tsx
+이 파일은 상당히 흥미롭습니다.
+이미 Tier Decision Tree가 구현되어 있습니다. 그러나:
+2주 연속 주 2회 → Tier2
+물리적 제지 → 즉시 Tier3
+성공 시 2주 후 Tier1
+같은 기준이 UI 코드 안에 하드코딩되어 있습니다. 
+결정
+페이지 자체는:
+/admin/policy
+로 이동.
+기준은 코드가 아닌:
+PBST2_Config
+에서 관리.
+그리고 자동 Tier 변경 규칙이 아니라 검토 신호 규칙으로 작동.
+meeting + meeting-minutes
+각각 별도의 화면입니다.  
+결정
+MERGE
+→ /meetings
+한 화면에서:
+회의 전 Agenda
+↓
+회의 중 Decision
+↓
+회의 후 Minutes
+처리.
+report/tier2, report/tier3
+결정
+별도의 계층형 Report page보다는:
+Student Review
+Meeting
+Export
+로 흡수.
+E. 새 Backend 폴더 구조
+backend/app/
+
+├── api/
+│   ├── v1/                  # legacy
+│   └── v2/
+│       ├── auth.py
+│       ├── today.py
+│       ├── school.py
+│       ├── students.py
+│       ├── behaviors.py
+│       ├── fba.py
+│       ├── cico.py
+│       ├── ebp.py
+│       ├── bip.py
+│       ├── decisions.py
+│       ├── meetings.py
+│       └── crisis.py
+│
+├── core/
+│   ├── config.py
+│   ├── security.py
+│   ├── auth.py
+│   ├── cache.py
+│   └── logging.py
+│
+├── domain/
+│   ├── student.py
+│   ├── behavior.py
+│   ├── cico.py
+│   ├── fba.py
+│   ├── ebp.py
+│   ├── bip.py
+│   ├── decision.py
+│   └── meeting.py
+│
+├── adapters/
+│   └── sheets/
+│       ├── client.py
+│       ├── log_main.py
+│       ├── tier_status.py
+│       └── cico.py
+│
+├── repositories/
+│   ├── student.py
+│   ├── behavior.py
+│   ├── cico.py
+│   ├── bip.py
+│   └── meeting.py
+│
+├── services/
+│   ├── analytics/
+│   ├── fba/
+│   ├── ebp/
+│   ├── decision/
+│   ├── bip/
+│   └── ai/
+│
+└── tests/
+F. 새 Frontend 구조
+frontend/src/
+
+app/
+├── today/
+├── school/
+├── students/
+│   └── [studentCode]/
+│       ├── fba/
+│       ├── cico/
+│       ├── bip/
+│       └── review/
+├── cico/
+├── ebp/
+├── meetings/
+├── crisis/
+└── admin/
+
+features/
+├── today/
+├── student/
+├── behavior/
+├── fba/
+├── cico/
+├── ebp/
+├── bip/
+├── review/
+├── meetings/
+└── crisis/
+
+components/
+├── ui/
+├── charts/
+├── evidence/
+└── feedback/
+
+lib/
+├── api/
+├── auth/
+└── query/
+
+types/
+G. 새로 추가할 저장 구조
+7개 보호 원자료는 그대로 둡니다.
+새로운 데이터는 별도 저장.
+1. PBST2_StudentProfile
+StudentCode
+CommunicationModes
+Preferences
+PreferredSupports
+ChallengeContexts
+EarlySigns
+HelpfulSupports
+Accessibility
+UpdatedAt
+UpdatedBy
+상세 건강·진단정보 저장소로 만들지 않습니다.
+2. PBST2_BIPPlans
+PlanID
+StudentCode
+Version
+Status
+
+TargetBehaviorJSON
+BaselineJSON
+HypothesesJSON
+
+SelectedEBPsJSON
+StrategyPlanJSON
+
+MonitoringJSON
+FidelityJSON
+
+CreatedBy
+ApprovedBy
+CreatedAt
+UpdatedAt
+3. PBST2_Decisions
+중요합니다.
+DecisionID
+StudentCode
+Date
+
+SystemSignal
+EvidenceSnapshot
+
+TeacherDecision
+
+Reason
+
+Owner
+DueDate
+NextReview
+
+DecidedBy
+즉:
+시스템이 무엇을 추천했는지
+
+와
+교사가 무엇을 결정했는지
+
+를 분리해 기록합니다.
+4. PBST2_Fidelity
+StudentCode
+PlanID
+Date
+
+StrategyCode
+Status
+O / △ / X
+
+Note
+Recorder
+5. PBST2_Meetings
+MeetingID
+Date
+AgendaJSON
+DecisionIDs
+Summary
+CreatedBy
+6. PBST2_Config
+decision_signal_rules
+review_periods
+school_protocol
+roles
+feature_flags
+Tier 기준이나 Review 기준을 Source code에 하드코딩하지 않습니다.
+EBP 39개는 Sheet에 넣지 않는 것을 권함
+39개 EBP는 학교 운영 데이터가 아니라 버전 관리되는 지식베이스입니다.
+따라서:
+backend/app/data/ebp_catalog.json
+또는:
+ebp/
+catalog.py
+가 더 좋습니다.
+Git history로 변경 이력을 추적할 수 있기 때문입니다.
+H. CICO Adapter는 꼭 이렇게 구현
+직접 확인한 실제 Sheet 구조상 3월과 4~7월의 Schema가 같지 않습니다.
+3월:
+학생코드
+학생명
+Tier2
+목표행동
+...
+4~7월:
+학생명(코드)
+Tier2
+Tier3
+목표행동
+...
+그리고 날짜 열 개수도 월마다 다릅니다.
+따라서 절대로:
+row[3]
+row[4]
+식의 고정 index에 의존하지 않습니다.
+CicoMonthAdapter
+가 Header를 보고:
+학생명(코드)
+→ 학생명 + 학생코드
+
+입력 기준
+입력 기준(베이스라인)
+→ baseline
+
+04-01
+04-02
+...
+→ observations[]
+으로 변환합니다.
+I. 인증 최종 권고
+새 유료 Auth 서비스는 아직 필요 없습니다.
+현재 Stack에서 충분히 개선 가능합니다.
+PBST2_Users
+
+ID
+PasswordHash
+Role
+ClassID
+Name
+Active
+비밀번호:
+Argon2 또는 bcrypt hash
+로그인 성공:
+Signed JWT/session
+→ HttpOnly
+→ Secure
+→ SameSite
+Frontend localStorage에 사용자 인증 증거를 두지 않습니다.
+그리고 모든 Backend endpoint에:
+current_user
+require_role(...)
+require_student_access(...)
+dependency를 적용합니다.
+J. 현재 구조에서 가장 좋은 재사용 자산
+전부 버리고 새로 만드는 것은 잘못된 선택입니다.
+반드시 살릴 것:
+normalize.py의 정규화 로직
+
+evidence_packet.py의
+"Python 계산 → AI 해석" 구조
+
+CICO의 batch update 아이디어
+
+StudentTimeline
+
+WeeklyAnalysisChart의 일부
+
+Google Sheets 연결
+
+Local Gemma/Gemini provider 구조
+
+기존 행동입력 흐름
+PBSTeam README가 원래 목표로 한 Tier1/2/3 통합 관리와 AI 회의·리포트라는 방향 자체도 유지할 가치가 있습니다. 
+K. 반대로 확실히 제거해야 할 것
+학생 실명 hardcoding
+
+학생코드 210명 fallback
+
+자동 Tier 판정
+
+AI가 만든 가짜 기능가설
+
+Regex 기반 AI BIP parsing
+
+Plain password
+
+Frontend-only authorization
+
+전체 Origin CORS
+
+중복 function normalizer
+
+대형 AI 버튼마다 별도 상태/Prompt
+
+Spreadsheet = UI 구조
+
+Risk student 단순 순위
+
+행동 전염의 과도한 인과 추론
+
+Log_Main 자동생성
+
+보호 시트 자동 수정 fallback
+L. Antigravity가 따라야 할 개발 순서도 수정
+이제 실제 코드까지 본 뒤에는 이 순서가 더 안전합니다.
+PHASE 0
+Recovery / Protected Data Contract
+         ↓
+PHASE 1
+Security + Known Runtime Bugs
+         ↓
+PHASE 2
+Canonical Model + Sheet Adapters
+         ↓
+PHASE 3
+Deterministic Analytics
+         ↓
+PHASE 4
+39 EBP Catalog
+         ↓
+PHASE 5
+EBP Matching + Guardrail
+         ↓
+PHASE 6
+Decision Signal Engine
+         ↓
+PHASE 7
+API V2
+         ↓
+PHASE 8
+Design System + App Shell
+         ↓
+PHASE 9
+Today + School
+         ↓
+PHASE 10
+Student360 + Visual FBA
+         ↓
+PHASE 11
+CICO 2.0
+         ↓
+PHASE 12
+EBP Library
+         ↓
+PHASE 13
+Visual BIP
+         ↓
+PHASE 14
+Review + Fidelity
+         ↓
+PHASE 15
+Meeting + Crisis
+         ↓
+PHASE 16
+Unified AI
+         ↓
+PHASE 17
+Performance
+         ↓
+PHASE 18
+Legacy Cleanup
+         ↓
+PHASE 19
+Regression + Production
+M. Antigravity 작업 규칙도 꼭 메모장에 저장
+이건 상당히 중요합니다.
+[ANTIGRAVITY OPERATING RULES]
+
+1. main branch에서 직접 대규모 작업하지 않는다.
+2. 먼저 recovery branch/tag를 만든다.
+3. Log_Main, TierStatus, 3월~7월 원자료를 수정하지 않는다.
+4. 보호 Sheet가 없거나 Schema가 다르면 자동 복구하지 말고 즉시 실패한다.
+5. 학생 실명/학생코드를 테스트코드에 하드코딩하지 않는다.
+6. Synthetic fixture를 사용한다.
+7. AI는 통계를 계산하지 않는다.
+8. AI가 39개 EBP 외의 전략을 Core EBP처럼 만들어내지 못하게 한다.
+9. Tier를 자동 변경하지 않는다.
+10. 기능을 확률로 위장하지 않는다.
+11. 실제 학생명으로 URL을 만들지 않는다.
+12. 실제 학생정보를 log에 기록하지 않는다.
+13. 인증은 Backend에서 강제한다.
+14. 데이터가 없으면 fallback 데이터를 만들지 않는다.
+15. 모든 쓰기 작업은 성공 후 cache invalidation한다.
+16. 각 Phase 후 build/test/typecheck를 실행한다.
+17. 하나의 Phase가 실패한 상태로 다음 Phase를 계속 쌓지 않는다.
+18. old code는 replacement가 검증되기 전 삭제하지 않는다.
+19. 각 변경은 가능한 한 독립 commit으로 만든다.
+20. 최종 판단은 교사/팀에 남긴다.
+N. Antigravity에게 한 거대한 메모 하나만 주는 것보다 더 좋은 방법
+최종적으로는 메모장 하나를 아래 6개 구역으로 나누는 것을 권합니다.
+01_MASTER_DIRECTIVE
+
+02_PRODUCT_UI_SPEC
+
+03_BEABLE_39_EBP_SPEC
+
+04_DATA_CONTRACT
+
+05_MIGRATION_MAP
+
+06_ACCEPTANCE_TESTS
+그리고 최종 명령을:
+위 6개 명세를 모두 읽고 충돌 여부를 먼저 검사한 뒤 Phase 0부터 작업하라.
+
+로 주는 방식입니다.

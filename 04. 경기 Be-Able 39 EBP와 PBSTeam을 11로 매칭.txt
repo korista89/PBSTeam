@@ -1,0 +1,215 @@
+경기 Be-Able 39 EBP와 PBSTeam을 1:1로 매칭
+이 부분은 일반적인 인터넷 행동전략 목록을 추가하지 않고 첨부자료의 39개를 Core EBP Library로 고정하는 것이 좋습니다.
+첨부자료에서 FCT는 문제행동과 같은 기능을 더 쉽고 빠르게 얻을 수 있는 대체 의사소통을 선정하고, 초기에는 즉시 충분히 강화한 뒤 기다림 등을 점진적으로 가르치도록 구성되어 있습니다.  AAC 역시 단순 그림카드 훈련이 아니라 학생에게 실제 의사소통 접근을 보장하고 다양한 표현에 반응하는 방식으로 설명되어 있습니다. 
+따라서 EBP Library의 단순 카테고리를 Teach/Prevent/Reinforce 정도로만 만들지 말고 첨부자료의 원래 범주 + BIP 내 역할을 동시에 보존해야 합니다.
+39 EBP → PBSTeam 역할표
+No	경기 Be-Able EBP	원자료 범주	PBSTeam 주 역할	주요 매칭 조건
+01	기능적행동평가 FBA	평가	Assess	기능 불명확, 중재 실패, 패턴 분석 필요
+02	의학적평가 ME	평가	Assess / Safety	급격한 변화, 통증·수면·복약·건강 신호
+03	운동중재 EXM	배경사건 중재	Setting Event / Prevent	각성조절·신체활동 관련 패턴
+04	감각통합 ASI	배경사건 중재	Setting Event	감각처리·참여 문제 + 전문가 협력
+05	환경조정 ABI-EM	선행사건 예방	Prevent	소음·시각·동선·혼잡 등 환경 antecedent
+06	환경풍부화 ABI-EE	선행사건 예방	Prevent	자동강화·감각추구·대기시간
+07	선택권제공 ABI-CM	선행사건 예방	Prevent	회피·거부·통제감 부족
+08	과제조정 ABI-TM	선행사건 예방	Prevent	과제 회피·난이도·분량
+09	시각적지원 VS	선행사건 예방	Prevent / Teach Support	예측·전환·언어이해
+10	사회적이야기 SN	선행사건 예방	Prevent / Teach	낯선 상황·사회적 맥락
+11	음악매개중재 MMI	선행사건 예방	Prevent / Teach	전환·일과 단서
+12	행동모멘텀중재 BMI	선행사건 예방	Prevent	요구 시작·지시 거부
+13	비유관강화 R-NCR	선행사건 예방	Prevent	기능이 확인된 관심·유형물·회피·감각
+14	촉구 PP	교수 전략	Teach	새로운 기술, 독립반응 부족
+15	무오류학습 PP-EL	교수 전략	Teach	오류·실패 경험이 많은 학습
+16	시간지연 TD	교수 전략	Teach / Independence	촉구의존
+17	모델링 MD	교수 전략	Teach	모방 가능
+18	비디오모델링 VM	교수 전략	Teach	시각적 강점, 반복 시범
+19	개별시도교수 DTT	교수 전략	Teach	초기 기술 습득·명확한 trial
+20	직접교수 DI	교수 전략	Teach	체계적 기술 교수
+21	과제분석 TA	교수 전략	Teach	다단계 생활·직업기술
+22	기술보조교수중재 TAII	교수 전략	Teach	기술매체가 핵심 교수수단
+23	자연주의중재 NI	교수 전략	Teach / Generalization	자연적 동기·일과
+24	기능적의사소통훈련 FCT	교수 전략	Teach Replacement	기능기반 대체행동
+25	보완대체의사소통 AAC	교수 전략	Communication Access	제한된 구어·의사소통 접근
+26	사회적기술훈련 SST	교수 전략	Teach	실제 사회기술 부족
+27	인지행동중재 CBIS	교수 전략	Teach / Self-regulation	언어·인지적 자기반성 가능
+28	자기관리 SM	교수 전략	Teach / Monitor	자기관찰·독립성
+29	또래매개교수 PBII	교수 전략	Teach / Generalization	또래 상호작용
+30	부모실행중재 PII	교수 전략	Generalization / Partnership	학교-가정 일관성
+31	프리맥원리 R-PP	강화 전략	Reinforce	고빈도 선호활동 활용
+32	토큰경제 R-TE	강화 전략	Reinforce	지연강화·학교 시스템
+33	행동계약 R-BC	강화 전략	Reinforce / Self-management	약속·기준 이해 가능
+34	집단강화 R-GR	강화 전략	Reinforce / Tier1	모둠·학급 수준
+35	만족지연훈련 R-DG	강화 전략	Reinforce / Teach Waiting	기다림·즉각적 요구
+36	대체행동차별강화 DR-A	강화 전략	Reinforce Replacement	기능이 같은 대체행동
+37	타행동차별강화 DR-O	강화 전략	Reinforce	무발생 간격 강화 + 대체행동 병행
+38	소거 EXT	후속결과 전략	Respond	기능 명확 + 안전 + 팀 일관성
+39	반응차단 및 재지시 RIRD	후속결과 전략	Respond	실제 방해가 큰 자동강화 반복행동
+
+
+첨부자료에서도 부모실행중재는 부모 책임을 묻는 방식이 아니라 가족의 우선순위·문화·일과를 반영한 공동 의사결정과 부담 조정으로 설계되어 있습니다. 따라서 PII 카드는 “보호자에게 숙제 주기”가 아니라 협력 전략으로 구현해야 합니다. 
+EBP 추천 엔진은 단순 태그 검색이면 안 됩니다
+제가 권하는 구조는 3층 구조입니다.
+Layer 1
+Deterministic Data Engine
+       ↓
+Layer 2
+EBP Matching / Guardrail Engine
+       ↓
+Layer 3
+AI Explanation & Personalization
+Layer 1 — 사실 계산
+AI 사용 금지.
+행동 빈도
+강도
+시간대
+장소
+ABC 패턴
+CICO
+Baseline 대비 변화
+실행충실도
+결측률
+는 Backend가 계산합니다.
+Layer 2 — EBP Eligibility
+예를 들어:
+과제 제시
+→ 공격행동
+→ 과제 중단
+이 반복된다면:
+Function hypothesis
+과제 회피
+후보:
+ABI-TM
+ABI-CM
+FCT
+AAC (필요 시)
+DR-A
+가 나올 수 있습니다.
+그러나:
+EXT
+를 곧바로 추천해서는 안 됩니다.
+EBP Recommendation Bundle
+한 전략을 정답처럼 제시하지 않습니다.
+가장 좋은 방식은:
+1. Setting Event       0~1개
+2. Prevent             1~2개
+3. Teach               1~2개
+4. Reinforce           1개
+5. Respond             필요 시
+6. Monitor             측정계획
+입니다.
+예:
+기능: 과제 회피
+
+PREVENT
+ABI-TM 과제조정
+ABI-CM 선택권제공
+
+TEACH
+FCT 휴식요청
+
+REINFORCE
+DR-A
+
+RESPOND
+현재 별도 후속결과 전략 권장하지 않음
+이게 훨씬 좋은 BIP입니다.
+매우 중요한 High-Guardrail EBP
+EXT
+소거는 자동추천하지 않습니다.
+첨부자료도 기능이 확인되고 팀이 안전하고 일관되게 실행할 수 있을 때만 선택하며, 초기 증가·변산성·자발적 회복을 예상하고 단독 사용하지 말고 대체행동을 우선하도록 명시합니다. 
+따라서 UI:
+🔒 고급 전략
+
+소거 EXT
+
+현재 자동추천 대상 아님
+
+사용 전 확인
+✓ 기능 확인
+✓ 대체행동 교수
+✓ 안전계획
+✓ 팀 실행 가능성
+RIRD
+첨부자료도 무해한 자기조절·신경다양성 행동은 표적으로 삼지 않고, 신체를 붙잡지 않으며, 불편·회피가 증가하면 중단하고 FCT·환경조정·감각대안을 우선하도록 되어 있습니다. 
+따라서 이것 역시:
+🔒 제한적 사용
+으로 둡니다.
+DR-O 역시 단독 추천하지 않는 것이 좋습니다
+첨부자료에서도 타행동차별강화는 “아무 행동도 하지 않기”를 가르치는 절차가 아니므로 대체행동 교수 병행을 강조합니다. 
+그러므로 PBSTeam Rule:
+IF DR-O selected
+
+THEN
+
+replacement_behavior_required = true
+로 두는 것이 좋습니다.
+EBP Card 데이터 모델
+각 EBP Card는 첨부자료의 프레임 자체를 데이터 구조로 만듭니다.
+EBPStrategy {
+  id
+  number
+  code
+  name
+
+  sourceCategory
+
+  oneSentenceDefinition
+  whenToUse
+
+  implementationSteps[3]
+
+  classroomExample
+
+  whyItWorks
+
+  cautions[]
+
+  bipExamples[]
+
+  references[]
+
+  // PBSTeam Metadata
+  workflowRoles[]
+  functionFits[]
+  contexts[]
+  prerequisites[]
+  exclusions[]
+  studentCharacteristics[]
+
+  guardrailLevel
+  suggestedOutcomeMeasures[]
+  fidelityItems[]
+}
+즉 첨부자료의:
+한 문장으로 이해하기
+언제 쓰나요
+3단계 실행
+교실 적용 예시
+왜 효과적일까요
+놓치지 마세요
+BIP 문장 예시
+근거
+를 그대로 EBP Detail 화면의 골격으로 사용하는 것입니다.
+추천 결과도 이렇게 보여줍니다
+추천 1
+
+과제조정
+ABI-TM
+
+적합도   매우 높음
+
+추천 이유
+────────────────────
+최근 행동사건 14건 중
+8건이 어려운 과제 또는
+과제 시작 직후 발생했습니다.
+
+적합한 이유
+• 과제 회피 기능 가설
+• 과제 난이도 관련 기록 있음
+
+주의
+• 학습목표 자체를 제거하지 않음
+
+[상세보기]
+[BIP에 추가]
+“AI 추천: 93%” 같은 숫자는 쓰지 않는 것을 권합니다.

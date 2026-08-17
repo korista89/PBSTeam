@@ -129,14 +129,21 @@ def analyze_peer_contagion(normalized_logs: List[dict], tier_info_list: List[dic
         })
     formatted_nodes.sort(key=lambda x: (x["as_source_count"] + x["as_reactor_count"]), reverse=True)
 
+    dynamic_findings = []
+    if formatted_edges:
+        top_edge = formatted_edges[0]
+        dynamic_findings.append(f"상호작용 빈발 패턴: {top_edge['source']} ➔ {top_edge['target']} (총 {top_edge['count']}회 공동발생/언급)")
+    if significant_clusters:
+        top_cluster = significant_clusters[0]
+        dynamic_findings.append(f"학급 내 동시 사건 클러스터: {top_cluster.get('date', '')} ({top_cluster.get('time_slot', '')}) - 참여 학생 {top_cluster.get('count', 0)}명")
+    if not dynamic_findings:
+        dynamic_findings.append("현재 기간 내 뚜렷한 또래 상호작용 연쇄 패턴이 확인되지 않았습니다.")
+
     return {
         "total_contagion_events": sum(e["count"] for e in formatted_edges),
         "involved_students_count": len(formatted_nodes),
         "edges": formatted_edges,
         "nodes": formatted_nodes,
         "co_occurrence_clusters": significant_clusters[:10],
-        "key_findings": [
-            "초6-2반(곽승현 ➔ 이한결 ➔ 조성우): 청각 자극(울음소리, 짜증, 박수)에 의한 동요 연쇄",
-            "초2-2반(정재민/고범준/정재윤 ➔ 이엘): 소음 자극으로 인한 불안 고조 및 교사/지도사 공격성 전이"
-        ]
+        "key_findings": dynamic_findings
     }

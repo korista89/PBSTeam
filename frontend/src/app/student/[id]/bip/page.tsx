@@ -206,6 +206,36 @@ export default function BIPEditor() {
 
     const [hypLoading, setHypLoading] = useState(false);
     const [stratLoading, setStratLoading] = useState(false);
+    const [showEBPModal, setShowEBPModal] = useState(false);
+    const [targetFieldForEBP, setTargetFieldForEBP] = useState<keyof BIPData>("PreventionStrategies");
+    const [ebpCatalog, setEbpCatalog] = useState<any[]>([]);
+    const [ebpSearch, setEbpSearch] = useState("");
+
+    const openEBPModalForField = async (fieldKey: keyof BIPData) => {
+        setTargetFieldForEBP(fieldKey);
+        setShowEBPModal(true);
+        if (ebpCatalog.length === 0) {
+            try {
+                const res = await axios.get(`${apiUrl}/api/v1/ebp/catalog`);
+                setEbpCatalog(res.data.strategies || []);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    };
+
+    const handleInsertEBP = (strategy: any) => {
+        const textToInsert = `\n\n[${strategy.name} (${strategy.code})]\n• 요약: ${strategy.summary}\n• 실행 절차:\n${strategy.implementation_steps.map((s: string, i: number) => `  ${i+1}) ${s}`).join('\n')}\n• 주의사항: ${strategy.guardrails?.join(', ') || '최소 침습적 원칙 준수'}`;
+        
+        setBip(prev => {
+            const current = (prev[targetFieldForEBP] || "").trim();
+            return {
+                ...prev,
+                [targetFieldForEBP]: current ? `${current}${textToInsert}` : textToInsert.trim()
+            };
+        });
+        setShowEBPModal(false);
+    };
 
     // AI Functional Hypothesis (BIP Step 4 - 신규 추가)
     const handleAIHypothesis = async () => {
@@ -372,6 +402,13 @@ export default function BIPEditor() {
                             </p>
                         </div>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button onClick={() => openEBPModalForField("PreventionStrategies")} style={{
+                                padding: '10px 18px', backgroundColor: '#3b82f6', color: 'white',
+                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                                fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px'
+                            }}>
+                                📚 Be-Able 39 EBP 전략 삽입
+                            </button>
                             <button onClick={handleExcelDownload} style={{
                                 padding: '10px 20px', backgroundColor: '#047857', color: 'white',
                                 border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
@@ -417,6 +454,27 @@ export default function BIPEditor() {
                                 <h3 style={{ margin: 0, color: field.color, fontSize: '1rem', fontWeight: '600' }}>
                                     {field.title}
                                 </h3>
+
+                                {["PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies"].includes(field.key) && (
+                                    <button
+                                        onClick={() => openEBPModalForField(field.key)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            backgroundColor: '#eff6ff',
+                                            color: '#1d4ed8',
+                                            border: '1px solid #93c5fd',
+                                            borderRadius: '6px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                    >
+                                        📚 EBP 추가
+                                    </button>
+                                )}
 
                                 {field.key === "Hypothesis" && (
                                     <button
@@ -594,6 +652,90 @@ export default function BIPEditor() {
                             {saving ? "저장 중..." : "💾 저장"}
                         </button>
                     </div>
+
+                    {/* EBP Selection Modal */}
+                    {showEBPModal && (
+                        <div
+                            style={{
+                                position: 'fixed',
+                                top: 0, left: 0, right: 0, bottom: 0,
+                                background: 'rgba(15, 23, 42, 0.6)',
+                                backdropFilter: 'blur(4px)',
+                                zIndex: 2000,
+                                display: 'flex', justifyContent: 'center', alignItems: 'center',
+                                padding: '20px'
+                            }}
+                            onClick={() => setShowEBPModal(false)}
+                        >
+                            <div
+                                style={{
+                                    background: 'white', borderRadius: '16px',
+                                    maxWidth: '800px', width: '100%',
+                                    maxHeight: '85vh', overflowY: 'auto',
+                                    padding: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                                        📚 경기 Be-Able 39 EBP 전략 선택 ({targetFieldForEBP === "PreventionStrategies" ? "4. 예방 전략" : targetFieldForEBP === "TeachingStrategies" ? "5. 교수 전략" : "6. 강화 전략"})
+                                    </h3>
+                                    <button onClick={() => setShowEBPModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+                                </div>
+
+                                <input
+                                    type="text"
+                                    placeholder="EBP 전략명, 코드(FCT, DRA 등), 키워드 검색..."
+                                    value={ebpSearch}
+                                    onChange={(e) => setEbpSearch(e.target.value)}
+                                    style={{
+                                        width: '100%', padding: '10px 14px', borderRadius: '8px',
+                                        border: '1px solid #cbd5e1', marginBottom: '16px', fontSize: '0.9rem'
+                                    }}
+                                />
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '55vh', overflowY: 'auto' }}>
+                                    {ebpCatalog
+                                        .filter(s => !ebpSearch.trim() || s.name.includes(ebpSearch) || s.code.includes(ebpSearch) || s.summary.includes(ebpSearch))
+                                        .map((strat: any) => (
+                                            <div
+                                                key={strat.id}
+                                                style={{
+                                                    background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px',
+                                                    padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                                                    gap: '16px'
+                                                }}
+                                            >
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                        <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                                            {strat.code}
+                                                        </span>
+                                                        <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{strat.name}</strong>
+                                                    </div>
+                                                    <p style={{ fontSize: '0.82rem', color: '#475569', margin: '4px 0 8px 0', lineHeight: 1.5 }}>
+                                                        {strat.summary}
+                                                    </p>
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                                        <strong>실행 1단계:</strong> {strat.implementation_steps?.[0]}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleInsertEBP(strat)}
+                                                    style={{
+                                                        padding: '8px 14px', background: '#2563eb', color: 'white',
+                                                        border: 'none', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 700,
+                                                        cursor: 'pointer', flexShrink: 0
+                                                    }}
+                                                >
+                                                    선택 및 추가 ➔
+                                                </button>
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </AuthCheck>

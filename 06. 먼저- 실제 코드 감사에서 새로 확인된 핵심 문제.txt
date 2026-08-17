@@ -1,0 +1,108 @@
+먼저: 실제 코드 감사에서 새로 확인된 핵심 문제
+이 부분은 메모장에 반드시 별도 P0 섹션으로 저장하세요.
+P0-1. BIP 500 오류는 실제 코드로 확인됨
+현재 bip.py는 존재하지 않는 fetch_bip_by_code()를 import합니다. 
+반면 sheets.py에는 실제로:
+def get_bip(student_code: str):
+가 존재합니다. 
+즉 원래 진단이 맞습니다.
+P0-2. Tier2 toggle의 client 미정의도 실제 확인됨
+현재:
+def toggle_tier2_status(...):
+    if not client:
+인데 함수 안에서 client = get_sheets_client()가 없습니다. 
+P0-3. 학생 Tier 변경 Type mismatch도 실제 확인
+엔드포인트는:
+update_student_tier(req.student_code, req.tier)
+처럼 문자열을 넘깁니다. 
+그러나 실제 서비스는:
+def update_student_tier(code: str, tier_values: dict, ...)
+이며 5개 Tier O/X 딕셔너리를 요구합니다. 
+P0-4. 인증이 생각보다 훨씬 위험함
+현재 Backend 로그인은:
+if user.get("Password") != request.password:
+처럼 평문 비밀번호 비교입니다. 또한 코드상 Admin only라고 주석은 있지만 /users, 비밀번호 변경, 사용자 생성·삭제 등에 실제 인증 dependency가 붙어 있지 않습니다. 
+Frontend도 인증 토큰이 아니라:
+localStorage.setItem("user", JSON.stringify(userData))
+만 사용합니다. 더구나 현재 AuthProvider.tsx는 이름과 달리 실제 React Context Provider가 아니어서 useAuth()를 호출할 때마다 별도 state가 생성됩니다. 
+따라서 이번 리뉴얼에서 성능보다 먼저 인증을 고쳐야 합니다.
+P0-5. 권한 검사를 브라우저에서 한 뒤 이미 데이터를 받아옴
+학생 화면은 먼저 학생 데이터를 API로 가져온 뒤:
+const isUnauthorized = ...
+로 Frontend에서 접근권한을 검사합니다. 
+즉 접근할 권한이 없는 학생 데이터도 먼저 Browser까지 전달될 수 있는 구조입니다.
+PBSTeam 2.0에서는 반드시 Backend에서:
+사용자 인증
+→ 권한
+→ 학급 scope
+→ 학생 조회
+순서로 막아야 합니다.
+P0-6. CORS도 전면 허용
+현재 Backend는:
+allow_origins=["*"]
+allow_credentials=True
+입니다. 
+Production에서는 PBSTeam 도메인과 Preview/Local 개발 Origin만 명시해야 합니다.
+P0-7. TierStatus API 장애 시 “가짜 210명 명단” 생성
+현재 Tier 화면에는 210개의 학생코드가 하드코딩되어 있고, API 오류가 나면 이 명단으로 fallback합니다. 
+이건 UI 친절함이 아니라 데이터 오류를 정상 데이터처럼 보이게 하는 위험한 fallback입니다.
+PBSTeam 2.0 원칙:
+데이터를 못 읽었으면 오류라고 말한다. 데이터를 만들어내지 않는다.
+
+P0-8. 분석기가 실제 Tier와 별개로 Tier를 자동 생성
+현재 analysis.py에는:
+if freq_count >= 6 or max_intensity >= 5:
+    tier = "Tier 3"
+elif freq_count >= 3:
+    tier = "Tier 2"
+식의 Tier 판정이 들어 있습니다. 
+이것은 앞으로 제거해야 합니다.
+Tier의 Single Source of Truth는 TierStatus입니다.
+분석기는:
+Tier3으로 변경
+이 아니라:
+지원 강화 검토 신호
+Tier 검토 필요
+만 생성해야 합니다.
+P0-9. BIP AI에 이미 결과를 유도하는 하드코딩이 있음
+현재 ai-bip-full에는 데이터가 없어도:
+target_behavior = "신체적 공격 및 과제 거부/이탈"
+이 기본값으로 들어가고,
+hypothesis_data="과제 제시 및 급식/전이 상황에서의 불편해소 및 회피"
+가 고정되어 있습니다. 
+이건 반드시 제거해야 합니다.
+데이터가 없으면 데이터 부족이어야 합니다.
+P0-10. 현재 BIP는 AI 결과를 Regex로 쪼개는 구조
+현재 BIP Frontend는 AI 문자열에서:
+/1. 표적행동/
+/2. 가설/
+/3. 목표/
+...
+를 Regex로 찾아 textarea에 넣습니다. 
+PBSTeam 2.0에서는 이걸 완전히 버리고:
+Pydantic JSON Schema
+→ AI Structured Output
+→ 검증
+→ Card rendering
+으로 갑니다.
+P0-11. 현재 BIP의 약물 UI도 수정 필요
+현재 BIP에 실제 약물명과 복용량까지 쓰도록 예시가 들어가 있습니다. 
+경기 Be-Able의 의학적평가(ME)는 교사가 진단하거나 약을 조절하는 구조가 아니라 행동·통증·수면·식사·배변·복약 변화 등의 관찰 사실을 제공하고 보호자·전문가와 교육지원을 조정하는 구조입니다. 
+따라서 새 BIP에서는:
+최근 건강·수면·복약 변화
+○ 없음
+○ 있음
+○ 미상
+
+교육 중 관찰된 변화:
+________________
+수준이면 충분합니다.
+구체적인 처방약·용량을 AI Context에 보내는 것은 기본 동작에서 제외합니다.
+P0-12. Log_Main 자동생성도 막아야 함
+현재 get_main_worksheet()는 Log_Main을 못 찾으면 새로 생성하는 fallback이 있습니다. 
+PBSTeam 2.0에서는 절대 금지합니다.
+Log_Main 없음
+→ CRITICAL DATA CONTRACT ERROR
+→ 쓰기 중단
+→ 관리자 알림
+이어야 합니다.
