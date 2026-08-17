@@ -109,7 +109,7 @@ async def get_peer_contagion(start_date: str = None, end_date: str = None, with_
 
 class SectionAnalysisRequest(BaseModel):
     section_name: str
-    data_context: dict
+    data_context: Any = {}
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
@@ -161,8 +161,12 @@ async def ai_section_analysis(req: SectionAnalysisRequest):
     normalized_logs = _get_normalized_records(req.start_date, req.end_date)
     quality_report = calculate_data_quality_report(normalized_logs)
     
-    chart_data = req.data_context.get("chart_data", req.data_context)
-    top_items = req.data_context.get("top_items", [])
+    if isinstance(req.data_context, dict):
+        chart_data = req.data_context.get("chart_data", req.data_context)
+        top_items = req.data_context.get("top_items", [])
+    else:
+        chart_data = req.data_context
+        top_items = req.data_context if isinstance(req.data_context, list) else []
     
     result = generate_bcba_section_analysis(
         req.section_name,

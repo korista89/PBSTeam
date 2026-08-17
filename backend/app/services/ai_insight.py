@@ -347,23 +347,30 @@ def generate_bcba_comprehensive_analysis(
 - 총 행동 발생 건수: {total_incidents}건 (에피소드 행 기준)
 - 행동 기록이 발생한 학생 수: {unique_students}명 (전교생 {total_school_students}명 중 {round(unique_students/total_school_students*100, 1) if total_school_students else 0}%)
 - 무발생 학생 비율: {round((total_school_students - unique_students)/total_school_students*100, 1) if total_school_students else 0}% (Tier 1 보편적 지원 효과 지표)
-- 데이터 품질 및 입력 지연: 평균 기록 지연일 {avg_lag}일
+- 데이터 입력 지연일: {avg_lag}일
 
-[상위 고위험군 학생 상세 근거]
+[상위 고위험군 학생 현황]
 {risk_text}
 
-[지시사항]
-공통 시스템 프롬프트 원칙을 엄격히 준수하여 다음 5개 영역으로 분석 리포트를 작성하라.
-1. **데이터 신뢰도 및 해석 경고**: 평균 기록 지연일({avg_lag}일)을 바탕으로 선행사건 기억 왜곡 가능성 및 관찰시간 미통제에 따른 전월 대비 단순 증감 해석 주의점 명시.
-2. **학교 전체 SW-PBIS 3층(Tier 1/2/3) 현황 요약**:
-   - Tier 1(보편): 무발생 학생 비율 및 전교 긍정적 환경 조성 평가.
-   - Tier 2(표적): 3건 이상 반복 학생군과 CICO 지원 연계 상태.
-   - Tier 3(집중): 강도 4~5 및 물리적 제지(O) 발생 학생 집중도.
-3. **고위험군 학생 임상적 위험 근거**: 빈도·강도·제지 여부를 조합하여 왜 위험한지 기술.
-4. **학급 단위 밀집 및 환경 분석**: 특정 학급 편중 시 (a) 실제 행동 밀집 (b) 교사 기록 성실도 양측 가능성 명시.
-5. **이번 주 학교 차원 3대 실행 우선순위**: 정확히 3가지를 도출하고 각각 `[담당 주체]`(담임/PBS담당/관리자/외부전문가), `[실행 기간]`, `[성공 기준]`을 명시."""
+[작성 지침 - 3대 핵심 섹션으로 명료하게 작성 (개조식, 군더더기 없이 실무 중심)]
+다음 3개 섹션으로 핵심만 간결하게 작성하라:
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+### 1. 📌 핵심 요약 (3줄)
+- 전교 무발생률 및 Tier 1 보편적 지원 체계 작동 수준 평가
+- 발생 건수 및 상위 위험군 학생의 비중
+- 데이터 해석 시 주의점 (관찰시간 미통제에 따른 단순 증감 비교 지양)
+
+### 2. 🏛️ SW-PBIS 3층 구조 & 고위험군 임상 분석
+- **Tier 1 (보편 지원)**: {round((total_school_students - unique_students)/total_school_students*100, 1) if total_school_students else 0}% 무발생 유지 및 환경적 지원 상태
+- **Tier 2 (표적 지원)**: 3건 이상 반복 학생 CICO 연계 및 지속 관찰 필요성
+- **Tier 3 (개별 집중 지원)**: 상위 5명 학생의 빈도·강도·물리적제지 여부 분석 및 ABC 직접 관찰 시급성
+
+### 3. 🚀 이번 주 학교 차원 3대 실행 우선순위
+- **🥇 우선순위 1**: [담당 주체], [실행 기간], [성공 기준]
+- **🥈 우선순위 2**: [담당 주체], [실행 기간], [성공 기준]
+- **🥉 우선순위 3**: [담당 주체], [실행 기간], [성공 기준]"""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1200)
 
 
 def generate_ai_insight(summary: dict, trends: list, risk_list: list) -> str:

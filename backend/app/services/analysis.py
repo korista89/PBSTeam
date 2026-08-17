@@ -370,17 +370,9 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     except Exception:
         tier_stats = None
 
-    try:
-        ai_report = generate_meeting_agent_report(
-            summary={"total_incidents": total_incidents, "risk_student_count": len(at_risk_list)},
-            trends=[],
-            risk_list=at_risk_list,
-            tier_stats=tier_stats
-        )
-        ai_comment = ai_report.get("briefing_text", "") if isinstance(ai_report, dict) else str(ai_report)
-    except Exception as e:
-        ai_report = {"briefing_text": "대시보드 분석 요약", "error": str(e)}
-        ai_comment = "대시보드 분석 요약"
+    # 대시보드 로딩 속도 최적화: 접속 시 자동 LLM 호출을 제거하고, 사용자가 버튼 클릭 시에만 AI 분석 수행
+    ai_comment = f"총 {total_incidents}건의 행동 기록이 집계되었습니다. (집중지원 대상: {risk_student_count}명)"
+    ai_report = {"briefing_text": ai_comment}
 
     # Monthly trend — row count per month (for monthly bar chart)
     monthly_trend = []

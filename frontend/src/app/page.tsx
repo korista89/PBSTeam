@@ -160,7 +160,12 @@ function SectionAIButton({
       }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch (e: any) {
-      setAnalysis("⚠️ AI 영역별 정밀 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
+      const errDetail = typeof e?.response?.data?.detail === "string" 
+        ? e.response.data.detail 
+        : Array.isArray(e?.response?.data?.detail)
+          ? e.response.data.detail.map((d: any) => d.msg).join(", ")
+          : e?.message || "요청 실패";
+      setAnalysis(`⚠️ AI 영역별 정밀 분석 요청 실패. (${errDetail})`);
     } finally {
       setLoading(false);
     }
