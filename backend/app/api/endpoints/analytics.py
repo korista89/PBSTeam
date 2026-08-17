@@ -355,3 +355,62 @@ async def refresh_dashboard():
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
+
+
+@router.get("/debug-ai")
+async def debug_ai_keys():
+    """AI API 키 상태 실시간 진단 - Gemini/Groq 각각 테스트 호출"""
+    import os, requests as req
+    results = {}
+
+    # 1. 환경변수 감지 (값 일부만 노출)
+    gemini_key = (
+        os.getenv("GEMINI_API_KEY", "").strip()
+        or os.getenv("GEMINI_API_KEY_0817", "").strip()
+        or os.getenv("GOOGLE_AI_API_KEY", "").strip()
+    )
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+
+    results["env"] = {
+        "GEMINI_API_KEY": f"{gemini_key[:8]}...{gemini_key[-4:]}" if len(gemini_key) > 12 else ("(없음)" if not gemini_key else "(너무 짧음)"),
+        "GROQ_API_KEY": f"{groq_key[:8]}...{groq_key[-4:]}" if len(groq_key) > 12 else ("(없음)" if not groq_key else "(너무 짧음)"),
+    }
+
+    # 2. Gemini 실제 호출 테스트
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+            r = req.post(url, json={
+                "contents": [{"role": "user", "parts": [{"text": "안녕? 한 단어로만 답해줘."}]}],
+                "generationConfig": {"maxOutputTokens": 20}
+            }, timeout=20)
+            if r.status_code == 200:
+                txt = r.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                results["gemini"] = {"status": "✅ 정상", "http": 200, "response": txt[:50]}
+            else:
+                results["gemini"] = {"status": f"❌ 실패", "http": r.status_code, "body": r.text[:300]}
+        except Exception as e:
+            results["gemini"] = {"status": "❌ 예외 발생", "error": str(e)[:200]}
+    else:
+        results["gemini"] = {"status": "⚠️ 키 없음"}
+
+    # 3. Groq 실제 호출 테스트
+    if groq_key:
+        try:
+            r2 = req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": "안녕?"}], "max_tokens": 10},
+                timeout=15
+            )
+            if r2.status_code == 200:
+                txt2 = r2.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                results["groq"] = {"status": "✅ 정상", "http": 200, "response": txt2[:50]}
+            else:
+                results["groq"] = {"status": f"❌ 실패", "http": r2.status_code, "body": r2.text[:300]}
+        except Exception as e:
+            results["groq"] = {"status": "❌ 예외 발생", "error": str(e)[:200]}
+    else:
+        results["groq"] = {"status": "⚠️ 키 없음"}
+
+    return results
