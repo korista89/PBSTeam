@@ -4,7 +4,7 @@ import { maskName } from "../utils";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import GlobalNav from "../components/GlobalNav";
-import { AuthCheck } from "../components/AuthProvider";
+import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { DOMAINS, VBS } from "./constants";
 
 // ── 타입 정의 ─────────────────────────────────────────────────
@@ -97,21 +97,10 @@ export default function PictureWordPage() {
   const [loading, setLoading] = useState(false);
 
   // ── 로그인 유저 정보 ─────────────────────────────────────
-  const [userClassId, setUserClassId] = useState<string>("");
-  const [userRole, setUserRole] = useState<string>("");
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("user");
-      if (stored) {
-        const u = JSON.parse(stored);
-        setUserClassId(u.class_id || "");
-        setUserRole((u.role || u.Role || "").toLowerCase());
-      }
-    } catch {}
-  }, []);
-
-  const isAdmin = userRole === "admin" || userRole === "superadmin";
+  const { user, isAdmin: checkIsAdmin } = useAuth();
+  const userClassId = user?.class_id || "";
+  const userRole = (user?.role || user?.Role || "").toLowerCase();
+  const isAdmin = checkIsAdmin();
 
   // ── 학생 명부 ────────────────────────────────────────────
   const [allStudents, setAllStudents] = useState<Student[]>([]);

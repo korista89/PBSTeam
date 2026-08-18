@@ -44,10 +44,7 @@ export default function UserHeader({ title }: UserHeaderProps = {}) {
                     </div>
                 </div>
                 <button
-                    onClick={() => {
-                        logout();
-                        window.location.href = '/login';
-                    }}
+                    onClick={logout}
                     style={{
                         padding: '5px 12px',
                         backgroundColor: 'rgba(255,255,255,0.2)',

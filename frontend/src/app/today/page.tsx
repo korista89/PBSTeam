@@ -50,6 +50,11 @@ export default function TodayDecisionCenterPage() {
         }, 1500);
     };
 
+    const navigateToStudent = (studentCode?: string | null) => {
+        if (!studentCode) return;
+        router.push(`/student/${encodeURIComponent(studentCode)}`);
+    };
+
     return (
         <AuthCheck>
             <div style={{ background: "#f8fafc", minHeight: "100vh" }}>
@@ -189,16 +194,17 @@ export default function TodayDecisionCenterPage() {
 
                                                 <div style={{ display: "flex", gap: "8px" }}>
                                                     <button
-                                                        onClick={() => router.push(`/student/${encodeURIComponent(sig.student_code)}`)}
+                                                        disabled={!sig.student_code}
+                                                        onClick={() => navigateToStudent(sig.student_code)}
                                                         style={{
                                                             padding: "8px 14px",
-                                                            background: "#f1f5f9",
-                                                            color: "#334155",
+                                                            background: sig.student_code ? "#f1f5f9" : "#e2e8f0",
+                                                            color: sig.student_code ? "#334155" : "#94a3b8",
                                                             border: "1px solid #cbd5e1",
                                                             borderRadius: "8px",
                                                             fontSize: "0.85rem",
                                                             fontWeight: 700,
-                                                            cursor: "pointer"
+                                                            cursor: sig.student_code ? "pointer" : "not-allowed"
                                                         }}
                                                     >
                                                         학생 360 보기 ➔
@@ -271,14 +277,15 @@ export default function TodayDecisionCenterPage() {
 
                                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #f1f5f9" }}>
                                                     <button
-                                                        onClick={() => router.push(`/student/${encodeURIComponent(sig.student_code)}`)}
+                                                        disabled={!sig.student_code}
+                                                        onClick={() => navigateToStudent(sig.student_code)}
                                                         style={{
                                                             background: "none",
                                                             border: "none",
-                                                            color: "#3b82f6",
+                                                            color: sig.student_code ? "#3b82f6" : "#94a3b8",
                                                             fontSize: "0.85rem",
                                                             fontWeight: 700,
-                                                            cursor: "pointer",
+                                                            cursor: sig.student_code ? "pointer" : "not-allowed",
                                                             padding: 0
                                                         }}
                                                     >

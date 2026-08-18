@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
+import { useAuth } from "../components/AuthProvider";
 
 // 34 Classes Definition
 const ALL_CLASSES = [
@@ -25,10 +26,10 @@ interface User {
 }
 
 export default function AdminPage() {
+    const { user, loading: authLoading, isAdmin, logout } = useAuth();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUser, setSelectedUser] = useState<string>("");
-    const [currentUser, setCurrentUser] = useState<{ id: string, role: string } | null>(null);
     const [holidays, setHolidays] = useState<any[]>([]); // Expecting list of dicts or strings
     const [newHolidayDate, setNewHolidayDate] = useState("");
     const [newHolidayName, setNewHolidayName] = useState("");
@@ -36,24 +37,20 @@ export default function AdminPage() {
     const [message, setMessage] = useState("");
 
     useEffect(() => {
-        // Check if user is admin
-        const stored = localStorage.getItem("user");
-        if (stored) {
-            const user = JSON.parse(stored);
-            setCurrentUser(user);
-            if (user.role?.toLowerCase() !== "admin") {
+        if (!authLoading) {
+            if (!user) {
+                window.location.href = "/login";
+                return;
+            }
+            if (!isAdmin()) {
                 alert("관리자 권한이 필요합니다.");
                 window.location.href = "/";
                 return;
             }
-        } else {
-            window.location.href = "/login";
-            return;
+            fetchUsers();
+            fetchHolidays();
         }
-
-        fetchUsers();
-        fetchHolidays();
-    }, []);
+    }, [user, authLoading, isAdmin]);
 
     const fetchHolidays = async () => {
         try {
@@ -159,10 +156,7 @@ export default function AdminPage() {
                         🏠 대시보드로
                     </button>
                     <button
-                        onClick={() => {
-                            localStorage.removeItem("user");
-                            window.location.href = '/login';
-                        }}
+                        onClick={logout}
                         style={{ padding: '8px 16px', cursor: 'pointer', background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px' }}
                     >
                         🚪 로그아웃

@@ -18,33 +18,15 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-                const response = await axios.get(`${apiUrl}/api/v1/auth/users`);
-                const users = response.data;
-                const teachers = users
-                    .filter((u: any) => u.Role !== 'admin' && u.ID)
-                    .map((u: any) => ({
-                        id: u.ID,
-                        name: u.ID // Display Column A (ID)
-                    }));
-                
-                setTeacherList(teachers);
-                if (teachers.length > 0) {
-                    setSelectedUserId(teachers[0].id);
-                }
-            } catch (err) {
-                console.error("Failed to fetch users", err);
-                // Fallback to constants if API fails
-                const fallback = CLASS_LIST.map(c => ({ id: c.id || c.code, name: c.id || c.name }));
-                setTeacherList(fallback);
-                if (fallback.length > 0) {
-                    setSelectedUserId(fallback[0].id);
-                }
-            }
-        };
-        fetchUsers();
+        // Initialize teacher account selector using non-sensitive static CLASS_LIST
+        const teachers = CLASS_LIST.map(c => ({
+            id: c.id || c.code,
+            name: c.name ? `${c.name} (${c.id || c.code})` : (c.id || c.code)
+        }));
+        setTeacherList(teachers);
+        if (teachers.length > 0) {
+            setSelectedUserId(teachers[0].id);
+        }
     }, []);
 
     const handleLogin = async (e?: React.FormEvent) => {
@@ -54,7 +36,6 @@ export default function LoginPage() {
         setError("");
 
         try {
-            // Construct user_id
             let userId = "";
 
             if (loginType === "teacher") {
@@ -73,11 +54,12 @@ export default function LoginPage() {
             const response = await axios.post(`${apiUrl}/api/v1/auth/login`, {
                 user_id: userId,
                 password: password
+            }, {
+                withCredentials: true
             });
 
-            console.log("Login success:", response.data);
-            const userData = response.data.user; // Extract user object
-            login(userData); // Context update
+            const userData = response.data.user;
+            login(userData);
 
             // Redirect based on role
             if (userData.role === 'admin') {
@@ -87,7 +69,6 @@ export default function LoginPage() {
             }
 
         } catch (err: any) {
-            console.error(err);
             setError(err.response?.data?.detail || "로그인에 실패했습니다.");
         } finally {
             setLoading(false);

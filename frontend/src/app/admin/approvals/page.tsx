@@ -5,12 +5,14 @@ import axios from 'axios';
 import { API_BASE_URL } from '../../constants';
 import GlobalNav from '../../components/GlobalNav';
 import UserHeader from '../../components/UserHeader';
+import { useAuth } from '../../components/AuthProvider';
 
 export default function AdminApprovalsPage() {
+  const { user } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [adminId, setAdminId] = useState('');
+  const [adminId, setAdminId] = useState('Admin');
 
   const fetchPendingLogs = async () => {
     setLoading(true);
@@ -25,20 +27,11 @@ export default function AdminApprovalsPage() {
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const u = JSON.parse(storedUser);
-        setAdminId(u.name || u.id || 'Admin');
-      } catch (e) {
-        setAdminId('Admin');
-      }
-    } else {
-      setAdminId('Admin');
+    if (user) {
+      setAdminId(user.name || user.id || 'Admin');
     }
-
     fetchPendingLogs();
-  }, []);
+  }, [user]);
 
   const handleApprove = async (logId: string) => {
     if (!confirm('해당 위기행동 기록 및 보고서를 승인하시겠습니까?')) return;
