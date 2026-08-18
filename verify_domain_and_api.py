@@ -348,6 +348,31 @@ def test_health_routes():
     
     return True
 
+def test_p0_security_lockdown():
+    print("\n" + "=" * 60)
+    print("STEP 7: Testing P0-A Security Lockdown (Destructive Endpoints)")
+    print("=" * 60)
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.config import settings
+
+    client = TestClient(app)
+
+    # In production mode, destructive resets must be blocked with HTTP 403
+    settings.ENVIRONMENT = "production"
+
+    res_reset_users = client.post("/api/v1/auth/reset-users")
+    assert res_reset_users.status_code == 403, f"Expected 403 for reset-users in production, got {res_reset_users.status_code}"
+    print("✅ POST /api/v1/auth/reset-users in Production -> 403 Forbidden: OK")
+
+    res_reset_sheet = client.post("/api/v1/tier/reset-sheet")
+    assert res_reset_sheet.status_code == 403, f"Expected 403 for reset-sheet in production, got {res_reset_sheet.status_code}"
+    print("✅ POST /api/v1/tier/reset-sheet in Production -> 403 Forbidden: OK")
+
+    # Reset environment back
+    settings.ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+    return True
+
 if __name__ == "__main__":
     t1 = test_imports()
     t2 = test_ebp_catalog()
@@ -355,10 +380,11 @@ if __name__ == "__main__":
     t4 = test_synthetic_log_main_adapter()
     t5 = test_decision_signals_regression()
     t6 = test_health_routes()
+    t7 = test_p0_security_lockdown()
 
     print("\n" + "=" * 60)
-    if t1 and t2 and t3 and t4 and t5 and t6:
-        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, TIMEZONE & SIGNAL CHECKS PASSED!")
+    if t1 and t2 and t3 and t4 and t5 and t6 and t7:
+        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, TIMEZONE, HEALTH & P0 SECURITY CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")
     print("=" * 60)

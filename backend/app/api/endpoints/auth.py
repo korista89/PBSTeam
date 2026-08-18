@@ -146,6 +146,12 @@ async def update_role(user_id: str, request: UserRoleUpdateRequest):
 @router.post("/reset-users")
 async def reset_users_db():
     """DEV ONLY: Reset Users sheet to default Admin + 34 Class Teachers"""
+    from app.core.config import settings
+    if settings.ENVIRONMENT.lower() != "development":
+        raise HTTPException(
+            status_code=403,
+            detail="Destructive reset endpoints are strictly disabled in production environment."
+        )
     from app.services.sheets import reset_users_sheet
     result = reset_users_sheet()
     if "error" in result:

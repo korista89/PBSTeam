@@ -143,6 +143,12 @@ async def get_beable_mapping():
 @router.post("/reset-sheet")
 async def reset_sheet():
     """Reset TierStatus sheet with all 210 students (Admin only)"""
+    from app.core.config import settings
+    if settings.ENVIRONMENT.lower() != "development":
+        raise HTTPException(
+            status_code=403,
+            detail="Destructive reset endpoints are strictly disabled in production environment."
+        )
     result = reset_tier_status_sheet()
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
