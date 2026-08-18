@@ -1655,6 +1655,504 @@ def test_p0_b4_password_storage_hardening():
     return True
 
 
+def test_phase3_b_cache_suite():
+    print("\n" + "=" * 60)
+    print("STEP 11: Testing Phase 3-B Cache Read Layer & Targeted Invalidation (C1~C10)")
+    print("=" * 60)
+    from unittest import mock
+    import time
+    from app.adapters.sheets.client import get_cached, set_cached, invalidate_cache, _cache as adapter_cache
+    from app.services.sheets import (
+        _cache as legacy_cache,
+        clear_cache,
+        get_monthly_cico_data,
+        get_cico_report_data,
+        get_bip,
+        save_bip,
+        fetch_meeting_notes,
+        add_meeting_note,
+        update_meeting_note,
+        delete_meeting_note,
+        create_user,
+        delete_user,
+        update_user_password,
+        fetch_all_records,
+        fetch_all_users,
+        fetch_student_status,
+        get_holidays_from_config,
+        add_holiday,
+        delete_holiday
+    )
+    from app.core.time import now_kst
+
+    cur_year = now_kst().year
+
+    # ----------------------------------------------------
+    # C1. Monthly CICO cold/warm cache test
+    # ----------------------------------------------------
+    clear_cache()
+    mock_cico_rows = [
+        ["번호", "학급", "학생명", "학생코드", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "05-01", "05-02"],
+        ["1", "초1-1", "김철수", "21101", "O", "X", "자리에 앉기", "증가", "O/X", "수업시간", "80% 이상", "100%", "O", "O", "O"],
+        ["2", "초1-1", "이영희", "21102", "O", "X", "손들고 말하기", "증가", "O/X", "수업시간", "80% 이상", "50%", "X", "O", "X"]
+    ]
+
+    with mock.patch("app.services.sheets.get_sheets_client") as mock_client_cico:
+        mock_sheet = mock.MagicMock()
+        mock_ws = mock.MagicMock()
+        mock_client_cico.return_value = mock_sheet
+        mock_sheet.open_by_url.return_value = mock_sheet
+        mock_sheet.worksheets.return_value = [mock_ws]
+        mock_ws.title = "5월"
+        mock_sheet.worksheet.return_value = mock_ws
+
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows) as mock_safe_vals:
+            # Cold Call
+            res_cold = get_monthly_cico_data(5)
+            assert res_cold.get("month") == "5월"
+            assert len(res_cold.get("students", [])) == 2
+            cold_reads = mock_safe_vals.call_count
+            assert cold_reads == 1, f"Expected 1 sheet read on cold CICO, got {cold_reads}"
+
+            # Warm Call
+            res_warm = get_monthly_cico_data(5)
+            assert res_warm.get("month") == "5월"
+            assert len(res_warm.get("students", [])) == 2
+            warm_reads = mock_safe_vals.call_count - cold_reads
+            assert warm_reads == 0, f"Expected 0 sheet reads on warm CICO, got {warm_reads}"
+
+    print("✅ [C1] Monthly CICO cold/warm cache (Cold=1 read, Warm=0 read): OK")
+
+    # ----------------------------------------------------
+    # C2. CICO Report reuse (No duplicate sheet reads)
+    # ----------------------------------------------------
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mock_client_rep:
+        mock_sheet = mock.MagicMock()
+        mock_ws = mock.MagicMock()
+        mock_client_rep.return_value = mock_sheet
+        mock_sheet.open_by_url.return_value = mock_sheet
+        mock_sheet.worksheets.return_value = [mock_ws]
+        mock_ws.title = "5월"
+        mock_sheet.worksheet.return_value = mock_ws
+
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows) as mock_safe_vals:
+            with mock.patch("app.services.sheets.fetch_student_status", return_value=[{"학생코드": "21101", "Tier2(CICO)": "O"}]):
+                rep_cold = get_cico_report_data(5)
+                assert "students" in rep_cold
+                cold_rep_reads = mock_safe_vals.call_count
+
+                rep_warm = get_cico_report_data(5)
+                warm_rep_reads = mock_safe_vals.call_count - cold_rep_reads
+                assert warm_rep_reads == 0, f"Expected 0 sheet reads on warm CICO report, got {warm_rep_reads}"
+                assert len(rep_cold["students"]) == len(rep_warm["students"])
+
+    print("✅ [C2] CICO Report reuse & raw values caching (Warm=0 read): OK")
+
+    # ----------------------------------------------------
+    # C3. BIP cache hit
+    # ----------------------------------------------------
+    clear_cache()
+    mock_bip_records = [
+        {"StudentCode": "21101", "TargetBehavior": "이탈행동", "Hypothesis": "회피", "Goals": "착석유지"},
+        {"StudentCode": "21102", "TargetBehavior": "소리지르기", "Hypothesis": "관심", "Goals": "대체행동"}
+    ]
+
+    with mock.patch("app.services.sheets.ensure_bip_sheet") as mock_ensure_bip:
+        mock_bip_ws = mock.MagicMock()
+        mock_ensure_bip.return_value = mock_bip_ws
+
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_bip_records) as mock_bip_records_call:
+            # Cold
+            bip1 = get_bip("21101")
+            assert bip1 is not None and bip1.get("StudentCode") == "21101"
+            assert mock_bip_records_call.call_count == 1
+
+            # Warm
+            bip2 = get_bip("21101")
+            assert bip2 is not None and bip2.get("StudentCode") == "21101"
+            assert mock_bip_records_call.call_count == 1, "Warm get_bip must not trigger additional sheet read"
+
+    print("✅ [C3] BIP cache hit (Cold=1 read, Warm=0 read): OK")
+
+    # ----------------------------------------------------
+    # C4. BIP targeted invalidation
+    # ----------------------------------------------------
+    # Seed unrelated caches
+    legacy_cache["records"]["data"] = [{"Log_ID": "log1"}]
+    legacy_cache["records"]["timestamp"] = time.time()
+    legacy_cache["users"]["data"] = [{"ID": "u1"}]
+    legacy_cache["users"]["timestamp"] = time.time()
+    legacy_cache["tierstatus"]["data"] = [{"학생코드": "21101"}]
+    legacy_cache["tierstatus"]["timestamp"] = time.time()
+    set_cached("sheet:cico:2026:05", {"month": "5월"})
+    set_cached("sheet:log-main", [{"Log_ID": "log1"}])
+    set_cached("bip:21101", {"StudentCode": "21101", "TargetBehavior": "Old"})
+
+    with mock.patch("app.services.sheets.ensure_bip_sheet") as mock_ensure_bip:
+        mock_bip_ws = mock.MagicMock()
+        mock_ensure_bip.return_value = mock_bip_ws
+        mock_bip_ws.find.return_value = mock.MagicMock(row=2)
+        mock_bip_ws.row_values.return_value = ["StudentCode", "TargetBehavior", "Hypothesis", "Goals"]
+
+        save_res = save_bip({"StudentCode": "21101", "TargetBehavior": "NewBehavior"})
+        assert save_res.get("message") == "BIP saved successfully"
+
+    # BIP cache for 21101 must be invalidated
+    assert get_cached("bip:21101") is None, "bip:21101 must be invalidated after save_bip"
+    # Unrelated caches MUST remain intact
+    assert len(legacy_cache["records"]["data"]) == 1, "Log_Main legacy cache must be preserved"
+    assert len(legacy_cache["users"]["data"]) == 1, "Users legacy cache must be preserved"
+    assert len(legacy_cache["tierstatus"]["data"]) == 1, "TierStatus legacy cache must be preserved"
+    assert get_cached("sheet:cico:2026:05") is not None, "CICO cache must be preserved"
+    assert get_cached("sheet:log-main") is not None, "LogMain adapter cache must be preserved"
+
+    print("✅ [C4] BIP targeted invalidation (Target invalidated, Log_Main/Users/TierStatus/CICO preserved): OK")
+
+    # ----------------------------------------------------
+    # C5. MeetingNotes cache
+    # ----------------------------------------------------
+    clear_cache()
+    mock_meeting_records = [
+        {"Date": "2026-05-10", "MeetingType": "tier1", "Content": "1차 협의", "Author": "교사A", "UUID": "m-uuid-1", "StudentCode": "21101", "CreatedAt": "2026-05-10 10:00:00"},
+        {"Date": "2026-05-12", "MeetingType": "tier2", "Content": "2차 협의", "Author": "교사B", "UUID": "m-uuid-2", "StudentCode": "21102", "CreatedAt": "2026-05-12 11:00:00"}
+    ]
+
+    with mock.patch("app.services.sheets.get_meeting_notes_worksheet") as mock_get_mn_ws:
+        mock_mn_ws = mock.MagicMock()
+        mock_get_mn_ws.return_value = mock_mn_ws
+
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_meeting_records) as mock_mn_records:
+            mn_cold = fetch_meeting_notes()
+            assert len(mn_cold) == 2
+            assert mock_mn_records.call_count == 1
+
+            mn_warm = fetch_meeting_notes()
+            assert len(mn_warm) == 2
+            assert mock_mn_records.call_count == 1, "Warm fetch_meeting_notes must not re-read sheets"
+
+            # Filtered call also uses warm raw cache
+            mn_filtered = fetch_meeting_notes(meeting_type="tier1")
+            assert len(mn_filtered) == 1
+            assert mock_mn_records.call_count == 1, "Filtered fetch_meeting_notes must reuse warm raw cache"
+
+    print("✅ [C5] MeetingNotes cache (Cold=1 read, Warm=0 read, Filter reuse=0 read): OK")
+
+    # ----------------------------------------------------
+    # C6. MeetingNotes write invalidation
+    # ----------------------------------------------------
+    # Seed unrelated caches
+    set_cached("sheet:meeting_notes:raw", mock_meeting_records)
+    legacy_cache["users"]["data"] = [{"ID": "u1"}]
+    legacy_cache["users"]["timestamp"] = time.time()
+    set_cached("bip:21101", {"StudentCode": "21101"})
+    set_cached("sheet:cico:2026:05", {"month": "5월"})
+
+    with mock.patch("app.services.sheets.get_meeting_notes_worksheet") as mock_get_mn_ws:
+        mock_mn_ws = mock.MagicMock()
+        mock_get_mn_ws.return_value = mock_mn_ws
+        add_res = add_meeting_note({"date": "2026-05-20", "meeting_type": "tier1", "content": "신규 협의", "author": "교사A", "student_code": "21101"})
+        assert "uuid" in add_res
+
+    # MeetingNotes raw cache must be invalidated
+    assert get_cached("sheet:meeting_notes:raw") is None, "MeetingNotes cache must be invalidated on write"
+    # Unrelated caches preserved
+    assert len(legacy_cache["users"]["data"]) == 1, "Users cache must be preserved on MeetingNote write"
+    assert get_cached("bip:21101") is not None, "BIP cache must be preserved on MeetingNote write"
+    assert get_cached("sheet:cico:2026:05") is not None, "CICO cache must be preserved on MeetingNote write"
+
+    print("✅ [C6] MeetingNotes write targeted invalidation (Unrelated caches preserved): OK")
+
+    # ----------------------------------------------------
+    # C7. User cache isolation
+    # ----------------------------------------------------
+    clear_cache()
+    legacy_cache["records"]["data"] = [{"Log_ID": "log1"}]
+    legacy_cache["records"]["timestamp"] = time.time()
+    legacy_cache["tierstatus"]["data"] = [{"학생코드": "21101"}]
+    legacy_cache["tierstatus"]["timestamp"] = time.time()
+    set_cached("sheet:cico:2026:05", {"month": "5월"})
+    set_cached("bip:21101", {"StudentCode": "21101"})
+    legacy_cache["users"]["data"] = [{"ID": "teacher1", "Password": "pw"}]
+    legacy_cache["users"]["timestamp"] = time.time()
+
+    with mock.patch("app.services.sheets.get_sheets_client") as mock_user_client:
+        mock_sh = mock.MagicMock()
+        mock_uws = mock.MagicMock()
+        mock_user_client.return_value = mock_sh
+        mock_sh.open_by_url.return_value = mock_sh
+        mock_sh.worksheet.return_value = mock_uws
+        mock_uws.row_values.return_value = ["ID", "Password", "Role", "Name", "ClassID", "ClassName"]
+        mock_uws.find.return_value = mock.MagicMock(row=2)
+
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=[]):
+            create_res = create_user({"ID": "new_t", "Password": "password123!", "Role": "teacher"})
+            assert "created successfully" in create_res.get("message", "")
+
+    # Users cache must be invalidated
+    assert len(legacy_cache["users"]["data"]) == 0, "Users cache must be cleared after create_user"
+    # Unrelated caches MUST remain intact
+    assert len(legacy_cache["records"]["data"]) == 1, "Log_Main cache must remain intact after user write"
+    assert len(legacy_cache["tierstatus"]["data"]) == 1, "TierStatus cache must remain intact after user write"
+    assert get_cached("sheet:cico:2026:05") is not None, "CICO cache must remain intact after user write"
+    assert get_cached("bip:21101") is not None, "BIP cache must remain intact after user write"
+
+    print("✅ [C7] User cache isolation (create_user clears Users only; Records/TierStatus/CICO/BIP preserved): OK")
+
+    # ----------------------------------------------------
+    # C8. No global flush on single-entity mutations
+    # ----------------------------------------------------
+    clear_cache()
+    # Populate all caches
+    legacy_cache["records"]["data"] = [{"Log_ID": "log_active"}]
+    legacy_cache["records"]["timestamp"] = time.time()
+    legacy_cache["users"]["data"] = [{"ID": "u_active"}]
+    legacy_cache["users"]["timestamp"] = time.time()
+    legacy_cache["tierstatus"]["data"] = [{"학생코드": "s_active"}]
+    legacy_cache["tierstatus"]["timestamp"] = time.time()
+    legacy_cache["board"]["data"] = [{"id": 1, "title": "공지"}]
+    legacy_cache["board"]["timestamp"] = time.time()
+    set_cached("config:holidays", ["2026-05-05"])
+    set_cached("bip:s_active", {"StudentCode": "s_active"})
+    set_cached("sheet:cico:2026:05", {"month": "5월"})
+
+    # Test Holiday write targeted invalidation
+    with mock.patch("app.services.sheets.get_sheets_client") as mock_hol_client:
+        mock_sh = mock.MagicMock()
+        mock_hws = mock.MagicMock()
+        mock_hol_client.return_value = mock_sh
+        mock_sh.open_by_url.return_value = mock_sh
+        mock_sh.worksheet.return_value = mock_hws
+        mock_hws.col_values.return_value = ["공휴일 날짜 (YYYY-MM-DD)", "※ 안내", "2026-05-05"]
+
+        add_hol_res = add_holiday("2026-06-06", "현충일")
+        assert "added" in add_hol_res.get("message", "")
+
+    # Holidays cache cleared
+    assert get_cached("config:holidays") is None, "Holidays cache must be cleared"
+    # Unrelated caches 100% preserved
+    assert len(legacy_cache["records"]["data"]) == 1
+    assert len(legacy_cache["users"]["data"]) == 1
+    assert len(legacy_cache["tierstatus"]["data"]) == 1
+    assert len(legacy_cache["board"]["data"]) == 1
+    assert get_cached("bip:s_active") is not None
+    assert get_cached("sheet:cico:2026:05") is not None
+
+    print("✅ [C8] No global flush on entity write (Holiday write preserves Records/Users/TierStatus/Board/BIP/CICO): OK")
+
+    # ----------------------------------------------------
+    # C9. force_refresh contract
+    # ----------------------------------------------------
+    clear_cache()
+    records_v1 = [{"Log_ID": "log_v1", "학생코드": "21101", "학생명": "김철수", "발생날짜": "2026-05-01", "시간대": "1교시", "행동유형": "이탈", "타임스탬프": "2026-05-01 09:00:00"}]
+    records_v2 = [{"Log_ID": "log_v2", "학생코드": "21101", "학생명": "김철수", "발생날짜": "2026-05-02", "시간대": "2교시", "행동유형": "공격", "타임스탬프": "2026-05-02 10:00:00"}]
+
+    with mock.patch("app.services.sheets.get_sheets_client") as mock_rec_client:
+        mock_sh = mock.MagicMock()
+        mock_rws = mock.MagicMock()
+        mock_rws.title = "Log_Main"
+        mock_rec_client.return_value = mock_sh
+        mock_sh.open_by_url.return_value = mock_sh
+        mock_sh.worksheets.return_value = [mock_rws]
+
+        with mock.patch("app.services.sheets.safe_get_all_records", side_effect=[records_v1, records_v2]) as mock_get_recs:
+            # 1. Normal fetch (Cold -> Sheet read)
+            r1 = fetch_all_records(force_refresh=False)
+            assert len(r1) == 1 and r1[0]["Log_ID"] == "log_v1"
+            assert mock_get_recs.call_count == 1
+
+            # 2. Normal fetch (Warm -> Cache hit)
+            r2 = fetch_all_records(force_refresh=False)
+            assert len(r2) == 1 and r2[0]["Log_ID"] == "log_v1"
+            assert mock_get_recs.call_count == 1, "Warm fetch must not re-read sheet"
+
+            # 3. force_refresh=True (Bypasses cache -> Sheet read)
+            r3 = fetch_all_records(force_refresh=True)
+            assert len(r3) == 1 and r3[0]["Log_ID"] == "log_v2"
+            assert mock_get_recs.call_count == 2
+
+            # 4. Next normal fetch (Uses newly refreshed cache)
+            r4 = fetch_all_records(force_refresh=False)
+            assert len(r4) == 1 and r4[0]["Log_ID"] == "log_v2"
+            assert mock_get_recs.call_count == 2, "Next normal fetch must use refreshed cache"
+
+    print("✅ [C9] force_refresh contract (normal=cache, force_refresh=True=sheet read, next=refreshed cache): OK")
+
+    # ----------------------------------------------------
+    # C10. Data Parity Verification
+    # ----------------------------------------------------
+    # Verify that data structure and calculations remain identical across cold/warm cache
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mock_cico_client:
+        mock_sheet = mock.MagicMock()
+        mock_ws = mock.MagicMock()
+        mock_cico_client.return_value = mock_sheet
+        mock_sheet.open_by_url.return_value = mock_sheet
+        mock_sheet.worksheets.return_value = [mock_ws]
+        mock_ws.title = "5월"
+        mock_sheet.worksheet.return_value = mock_ws
+
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+            cold_cico = get_monthly_cico_data(5)
+            warm_cico = get_monthly_cico_data(5)
+            assert cold_cico == warm_cico, "Monthly CICO parity violation between cold and warm"
+
+    print("✅ [C10] Data parity verification (Cold/Warm parity 100% match): OK")
+    return True
+
+
+def benchmark_workflows():
+    print("\n" + "=" * 60)
+    print("STEP 12: Phase 3-B Cold vs Warm Execution & Sheets Read Benchmark")
+    print("=" * 60)
+    import time
+    from unittest import mock
+    from app.services.sheets import (
+        clear_cache,
+        get_monthly_cico_data,
+        get_cico_report_data,
+        get_bip,
+        fetch_meeting_notes,
+        fetch_all_records,
+        fetch_student_status
+    )
+
+    workflows = [
+        "Monthly CICO (5월)",
+        "CICO Report (5월)",
+        "BIP (21101)",
+        "MeetingNotes",
+        "Log_Main Records",
+        "TierStatus Roster",
+    ]
+
+    benchmark_results = []
+
+    # Mock datasets
+    mock_cico_rows = [
+        ["번호", "학급", "학생명", "학생코드", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "05-01", "05-02"],
+        ["1", "초1-1", "김철수", "21101", "O", "X", "자리에 앉기", "증가", "O/X", "수업시간", "80% 이상", "100%", "O", "O", "O"],
+        ["2", "초1-1", "이영희", "21102", "O", "X", "손들고 말하기", "증가", "O/X", "수업시간", "80% 이상", "50%", "X", "O", "X"]
+    ]
+    mock_bip_records = [{"StudentCode": "21101", "TargetBehavior": "이탈행동", "Hypothesis": "회피", "Goals": "착석유지"}]
+    mock_meeting_records = [{"Date": "2026-05-10", "MeetingType": "tier1", "Content": "협의", "Author": "교사A", "UUID": "u1", "StudentCode": "21101", "CreatedAt": "2026-05-10"}]
+    mock_log_records = [{"Log_ID": "l1", "학생코드": "21101", "학생명": "김철수", "발생날짜": "2026-05-01", "시간대": "1교시", "행동유형": "이탈", "타임스탬프": "2026-05-01"}]
+    mock_tier_records = [{"학생코드": "21101", "학생이름": "김철수", "학급": "초1-1", "Tier2(CICO)": "O", "재학여부": "O"}]
+
+    # 1. Monthly CICO
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "5월"
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows) as mv:
+            t0 = time.perf_counter()
+            get_monthly_cico_data(5)
+            cold_ms = (time.perf_counter() - t0) * 1000
+            cold_reads = mv.call_count
+
+            t0 = time.perf_counter()
+            get_monthly_cico_data(5)
+            warm_ms = (time.perf_counter() - t0) * 1000
+            warm_reads = mv.call_count - cold_reads
+            benchmark_results.append(("Monthly CICO", cold_reads, cold_ms, warm_reads, warm_ms))
+
+    # 2. CICO Report
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "5월"
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows) as mv:
+            with mock.patch("app.services.sheets.fetch_student_status", return_value=mock_tier_records):
+                t0 = time.perf_counter()
+                get_cico_report_data(5)
+                cold_ms = (time.perf_counter() - t0) * 1000
+                cold_reads = mv.call_count
+
+                t0 = time.perf_counter()
+                get_cico_report_data(5)
+                warm_ms = (time.perf_counter() - t0) * 1000
+                warm_reads = mv.call_count - cold_reads
+                benchmark_results.append(("CICO Report", cold_reads, cold_ms, warm_reads, warm_ms))
+
+    # 3. BIP
+    clear_cache()
+    with mock.patch("app.services.sheets.ensure_bip_sheet") as meb:
+        mws = mock.MagicMock()
+        meb.return_value = mws
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_bip_records) as mr:
+            t0 = time.perf_counter()
+            get_bip("21101")
+            cold_ms = (time.perf_counter() - t0) * 1000
+            cold_reads = mr.call_count
+
+            t0 = time.perf_counter()
+            get_bip("21101")
+            warm_ms = (time.perf_counter() - t0) * 1000
+            warm_reads = mr.call_count - cold_reads
+            benchmark_results.append(("BIP", cold_reads, cold_ms, warm_reads, warm_ms))
+
+    # 4. MeetingNotes
+    clear_cache()
+    with mock.patch("app.services.sheets.get_meeting_notes_worksheet") as mgw:
+        mws = mock.MagicMock()
+        mgw.return_value = mws
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_meeting_records) as mr:
+            t0 = time.perf_counter()
+            fetch_meeting_notes()
+            cold_ms = (time.perf_counter() - t0) * 1000
+            cold_reads = mr.call_count
+
+            t0 = time.perf_counter()
+            fetch_meeting_notes()
+            warm_ms = (time.perf_counter() - t0) * 1000
+            warm_reads = mr.call_count - cold_reads
+            benchmark_results.append(("MeetingNotes", cold_reads, cold_ms, warm_reads, warm_ms))
+
+    # 5. Log_Main Records
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mws.title = "Log_Main"
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value = msh, msh, [mws]
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_log_records) as mr:
+            t0 = time.perf_counter()
+            fetch_all_records(force_refresh=False)
+            cold_ms = (time.perf_counter() - t0) * 1000
+            cold_reads = mr.call_count
+
+            t0 = time.perf_counter()
+            fetch_all_records(force_refresh=False)
+            warm_ms = (time.perf_counter() - t0) * 1000
+            warm_reads = mr.call_count - cold_reads
+            benchmark_results.append(("Log_Main Records", cold_reads, cold_ms, warm_reads, warm_ms))
+
+    # 6. TierStatus Roster
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mws.title = "TierStatus"
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value = msh, msh, [mws]
+        with mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_tier_records) as mr:
+            t0 = time.perf_counter()
+            fetch_student_status()
+            cold_ms = (time.perf_counter() - t0) * 1000
+            cold_reads = mr.call_count
+
+            t0 = time.perf_counter()
+            fetch_student_status()
+            warm_ms = (time.perf_counter() - t0) * 1000
+            warm_reads = mr.call_count - cold_reads
+            benchmark_results.append(("TierStatus Roster", cold_reads, cold_ms, warm_reads, warm_ms))
+
+    # Print Table
+    print(f"\n{'Workflow':<22} | {'Cold Reads':<10} | {'Cold Latency':<12} | {'Warm Reads':<10} | {'Warm Latency':<12}")
+    print("-" * 75)
+    for name, c_reads, c_time, w_reads, w_time in benchmark_results:
+        print(f"{name:<22} | {c_reads:<10} | {c_time:8.2f} ms   | {w_reads:<10} | {w_time:8.2f} ms")
+    print("-" * 75)
+    return True
+
+
 if __name__ == "__main__":
     t1 = test_imports()
     t2 = test_ebp_catalog()
@@ -1666,10 +2164,12 @@ if __name__ == "__main__":
     t8 = test_p0_b1_auth_foundation()
     t9 = test_p0_b3_authorization_and_class_scope()
     t10 = test_p0_b4_password_storage_hardening()
+    t11 = test_phase3_b_cache_suite()
+    t12 = benchmark_workflows()
 
     print("\n" + "=" * 60)
-    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8 and t9 and t10:
-        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, HEALTH, P0-B1 AUTH, P0-B3 SCOPE & P0-B4 PASSWORD CHECKS PASSED!")
+    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8 and t9 and t10 and t11 and t12:
+        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, HEALTH, P0-B1 AUTH, P0-B3 SCOPE, P0-B4 PASSWORD & PHASE 3-B CACHE CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")
     print("=" * 60)

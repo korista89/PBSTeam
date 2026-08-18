@@ -124,6 +124,7 @@ async def approve_behavior_log(
                 
                 log_main_ws.update_cell(i + 2, status_idx + 1, "Approved")
                 log_main_ws.update_cell(i + 2, approval_idx + 1, meta)
+                clear_cache("records")
                 
                 return {"success": True, "message": "Log approved"}
                 
@@ -178,6 +179,7 @@ async def revise_behavior_log(
                 
                 log_main_ws.update_cell(i + 2, status_idx + 1, "Revision Requested")
                 log_main_ws.update_cell(i + 2, approval_idx + 1, meta)
+                clear_cache("records")
                 
                 return {"success": True, "message": "Revision requested"}
                 
@@ -195,7 +197,7 @@ async def get_student_timeline(
     Fetch merged timeline of behaviors for a student with scope check.
     """
     check_student_scope(student_id, current_user)
-    records = fetch_all_records(force_refresh=True)
+    records = fetch_all_records(force_refresh=False)
     student_logs = []
     
     for r in records:
@@ -209,7 +211,7 @@ async def get_pending_logs(current_admin: Dict[str, Any] = Depends(require_admin
     """
     Fetch all pending logs requiring admin approval (Admin only).
     """
-    records = fetch_all_records(force_refresh=True)
+    records = fetch_all_records(force_refresh=False)
     pending_logs = [r for r in records if r.get("Status") == "Pending"]
         
     return {"success": True, "logs": pending_logs}

@@ -8,6 +8,8 @@ import re
 import datetime
 import time
 from typing import Optional, List, Dict, Any, Union
+from app.adapters.sheets.client import get_cached, set_cached, invalidate_cache
+from app.core.time import now_kst
 
 # Simple in-memory cache
 _cache = {
@@ -16,7 +18,9 @@ _cache = {
     "board": {"data": [], "timestamp": 0},
     "evaluation_sentences": {"data": [], "timestamp": 0},
     "tierstatus": {"data": [], "timestamp": 0},
-    "daily_cico": {"data": [], "timestamp": 0}
+    "daily_cico": {"data": [], "timestamp": 0},
+    "meeting_notes": {"data": [], "timestamp": 0},
+    "holidays": {"data": [], "timestamp": 0}
 }
 CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
 
@@ -137,17 +141,44 @@ def fetch_evaluation_sentences():
         return []
 
 def clear_cache(key: Optional[str] = None):
-    if key and key in _cache:
-        _cache[key] = {"data": [], "timestamp": 0.0}
-    elif key is None:
-        for k in _cache:
-            _cache[k] = {"data": [], "timestamp": 0.0}
+    global _cache
+    try:
+        if key:
+            if key in _cache:
+                _cache[key] = {"data": [], "timestamp": 0.0}
+            else:
+                _cache[key] = {"data": [], "timestamp": 0.0}
 
-    if key == "tierstatus" and "tierstatus" not in _cache:
-        _cache["tierstatus"] = {"data": [], "timestamp": 0}
-
-    if key == "daily_cico" and "daily_cico" not in _cache:
-        _cache["daily_cico"] = {"data": [], "timestamp": 0}
+            # Propagate targeted invalidations to adapter generic cache
+            if key == "records":
+                invalidate_cache("records")
+                invalidate_cache("sheet:log-main")
+            elif key == "users":
+                invalidate_cache("users")
+                invalidate_cache("sheet:users")
+            elif key == "tierstatus":
+                invalidate_cache("tierstatus")
+                invalidate_cache("sheet:tier-status")
+            elif key == "board":
+                invalidate_cache("board")
+                invalidate_cache("sheet:board")
+            elif key == "meeting_notes":
+                invalidate_cache("meeting:notes")
+                invalidate_cache("sheet:meeting_notes")
+            elif key == "daily_cico":
+                invalidate_cache("sheet:cico")
+            elif key == "holidays":
+                invalidate_cache("config:holidays")
+            elif key.startswith("bip"):
+                invalidate_cache(key)
+            else:
+                invalidate_cache(key)
+        else:
+            for k in _cache:
+                _cache[k] = {"data": [], "timestamp": 0.0}
+            invalidate_cache()
+    except Exception as e:
+        print(f"clear_cache error: {e}")
 
 def normalize_date_string(date_str: str) -> str:
     """Normalize typical forms date format 'YYYY. M. D.' or similar to 'YYYY-MM-DD'."""
@@ -471,7 +502,6 @@ def create_user(user_data: dict):
 
         ws.append_row(row)
         clear_cache("users")
-        clear_cache()
         return {"message": f"User {user_data.get('ID')} created successfully"}
 
     except Exception as e:
@@ -500,7 +530,6 @@ def delete_user(user_id: str):
 
         ws.delete_rows(cell.row)
         clear_cache("users")
-        clear_cache()
         return {"message": f"User {user_id} deleted successfully"}
 
     except Exception as e:
@@ -1384,12 +1413,22 @@ def get_meeting_notes_worksheet():
         return None
 
 def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
-    ws = get_meeting_notes_worksheet()
-    if not ws:
-        return []
+    raw_cache_key = "sheet:meeting_notes:raw"
+    records = get_cached(raw_cache_key, ttl=120)
+
+    if records is None:
+        ws = get_meeting_notes_worksheet()
+        if not ws:
+            return []
+        try:
+            records = safe_get_all_records(ws)
+            if records is not None:
+                set_cached(raw_cache_key, records)
+        except Exception as e:
+            print(f"Error fetching meeting notes: {e}")
+            return []
 
     try:
-        records = safe_get_all_records(ws)
         valid_records = []
 
         # Clean student code for filtering if provided
@@ -1429,7 +1468,7 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
             pass
         return valid_records
     except Exception as e:
-        print(f"Error fetching meeting notes: {e}")
+        print(f"Error filtering meeting notes: {e}")
         return []
 
 def add_meeting_note(data: dict):
@@ -1529,8 +1568,6 @@ def delete_meeting_note(note_id: str):
     except Exception as e:
         print(f"Error deleting meeting note: {e}")
         return {"error": str(e)}
-        print(f"Error deleting meeting note: {e}")
-        return {"error": str(e)}
 
 
 # =============================
@@ -1570,7 +1607,11 @@ def set_default_holidays(ws):
 
 
 def get_holidays_from_config():
-    """Get holidays list from '날짜 관리' sheet (fallback to '설정(Config)')"""
+    """Get holidays list from '날짜 관리' sheet (fallback to '설정(Config)') with caching."""
+    cached = get_cached("config:holidays", ttl=3600)
+    if cached is not None:
+        return cached
+
     client = get_sheets_client()
     if not client: return []
     if not settings.SHEET_URL:
@@ -1612,6 +1653,8 @@ def get_holidays_from_config():
             val = str(val).strip()
             if val and not val.startswith("※"):
                 holidays.append(val)
+        if holidays:
+            set_cached("config:holidays", holidays)
         return holidays
     except Exception as e:
         print(f"Error getting holidays: {e}")
@@ -1934,32 +1977,85 @@ def get_worksheet_fuzzy(sheet, name):
     return None
 
 
+def get_cico_raw_sheet_values(month: int) -> List[List[Any]]:
+    """
+    Fetch raw values from a monthly CICO sheet with cache-aware behavior.
+    Cache key: sheet:cico:raw:{year}:{month:02d}
+    TTL: 60s for current/future month, 3600s for completed past months (KST).
+    """
+    kst_now = now_kst()
+    target_year = kst_now.year
+    cache_key = f"sheet:cico:raw:{target_year}:{month:02d}"
+
+    if month == kst_now.month:
+        ttl = 60
+    elif month < kst_now.month:
+        ttl = 3600
+    else:
+        ttl = 60
+
+    cached = get_cached(cache_key, ttl=ttl)
+    if cached is not None:
+        return cached
+
+    client = get_sheets_client()
+    if not client or not settings.SHEET_URL:
+        return []
+
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        month_name = f"{month}월"
+        ws = get_worksheet_fuzzy(sheet, month_name)
+        if not ws:
+            return []
+        all_values = safe_get_all_values(ws)
+        if all_values:
+            set_cached(cache_key, all_values)
+        return all_values
+    except Exception as e:
+        print(f"Error fetching raw CICO values for {month}월: {e}")
+        return []
+
+
 def get_monthly_cico_data(month: int):
     """
     Get all student data from a monthly sheet for the CICO grid view.
     Returns structured data with headers, students, and day columns.
+    Cache key: sheet:cico:{year}:{month:02d}
+    TTL: 60s for current month, 3600s for completed past months (KST).
     """
+    kst_now = now_kst()
+    target_year = kst_now.year
+    cache_key = f"sheet:cico:{target_year}:{month:02d}"
+
+    if month == kst_now.month:
+        ttl = 60
+    elif month < kst_now.month:
+        ttl = 3600
+    else:
+        ttl = 60
+
+    cached = get_cached(cache_key, ttl=ttl)
+    if cached is not None:
+        return cached
+
     col_map = {}
-    client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
-        return {"error": "Sheet not accessible"}
-
-    if not client: return {"error": "Sheet not accessible"}
-    try:
-        sheet = client.open_by_url(settings.SHEET_URL)
-        month_name = f"{month}월"
-
+    month_name = f"{month}월"
+    all_values = get_cico_raw_sheet_values(month)
+    if not all_values:
+        client = get_sheets_client()
+        if not client or not settings.SHEET_URL:
+            return {"error": "Sheet not accessible"}
         try:
+            sheet = client.open_by_url(settings.SHEET_URL)
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
+        return {"error": "Empty sheet"}
 
-        all_values = safe_get_all_values(ws)
-        if not all_values:
-            return {"error": "Empty sheet"}
-
+    try:
         headers = all_values[0]
 
         # Find key column indices
@@ -2108,7 +2204,7 @@ def get_monthly_cico_data(month: int):
             "weekly_trend": weekly_summary
         }
 
-        return {
+        result = {
             "month": month_name,
             "day_columns": day_columns,
             "students": students,
@@ -2116,6 +2212,8 @@ def get_monthly_cico_data(month: int):
             "weekly_trend": weekly_summary,
             "col_map": {k: v for k, v in col_map.items()}
         }
+        set_cached(cache_key, result)
+        return result
 
     except Exception as e:
         print(f"Error getting monthly CICO data: {e}")
@@ -2362,6 +2460,13 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                 "values": c["values"]
             } for c in cells_to_update])
 
+        # Invalidate CICO cache for this month
+        cur_year = now_kst().year
+        invalidate_cache(f"sheet:cico:{cur_year}:{month:02d}")
+        invalidate_cache(f"sheet:cico:raw:{cur_year}:{month:02d}")
+        invalidate_cache(f"sheet:cico:{month}")
+        clear_cache("daily_cico")
+
         return {"message": f"{len(cells_to_update)} cells updated"}
 
     except Exception as e:
@@ -2431,6 +2536,13 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         if updates:
             ws.batch_update(updates)
 
+        # Invalidate CICO cache for this month
+        cur_year = now_kst().year
+        invalidate_cache(f"sheet:cico:{cur_year}:{month:02d}")
+        invalidate_cache(f"sheet:cico:raw:{cur_year}:{month:02d}")
+        invalidate_cache(f"sheet:cico:{month}")
+        clear_cache("daily_cico")
+
         return {"message": f"Settings updated for {student_code} at row {target_row}"}
 
     except Exception as e:
@@ -2461,6 +2573,11 @@ def toggle_tier2_status(month: int, student_code: str, status: str):
         for i, row in enumerate(all_values[1:], start=2):
             if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
                 ws.update_cell(i, tier2_idx + 1, status)  # 1-based column
+                cur_year = now_kst().year
+                invalidate_cache(f"sheet:cico:{cur_year}:{month:02d}")
+                invalidate_cache(f"sheet:cico:raw:{cur_year}:{month:02d}")
+                invalidate_cache(f"sheet:cico:{month}")
+                clear_cache("daily_cico")
                 return {"message": f"Tier2 status for {student_code} → {status}"}
 
         return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
@@ -2560,29 +2677,40 @@ def get_student_dashboard_analysis(student_code: str):
 
 def get_cico_report_data(month: int):
     """
-    Get T2 CICO report data for decision making.
+    Get T2 CICO report data for decision making with cache optimization.
     Returns per-student data with monthly trends and system recommendations.
     """
-    client = get_sheets_client()
-    if not client or not settings.SHEET_URL:
-        return {"error": "Sheet not accessible"}
+    kst_now = now_kst()
+    target_year = kst_now.year
+    report_cache_key = f"sheet:cico:report:{target_year}:{month:02d}"
 
-    try:
-        sheet = client.open_by_url(settings.SHEET_URL)
-        month_name = f"{month}월"
+    if month == kst_now.month:
+        report_ttl = 60
+    elif month < kst_now.month:
+        report_ttl = 3600
+    else:
+        report_ttl = 60
 
-        # Get current month data
+    cached_report = get_cached(report_cache_key, ttl=report_ttl)
+    if cached_report is not None:
+        return cached_report
+
+    month_name = f"{month}월"
+    all_values = get_cico_raw_sheet_values(month)
+    if not all_values or len(all_values) < 2:
+        client = get_sheets_client()
+        if not client or not settings.SHEET_URL:
+            return {"error": "Sheet not accessible"}
         try:
+            sheet = client.open_by_url(settings.SHEET_URL)
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
+        return {"students": [], "summary": {}}
 
-        all_values = safe_get_all_values(ws)
-        if not all_values or len(all_values) < 2:
-            return {"students": [], "summary": {}}
-
+    try:
         headers = all_values[0]
 
         # Column indices
@@ -2619,16 +2747,16 @@ def get_cico_report_data(month: int):
         months_list = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
         month_idx = months_list.index(month_name) if month_name in months_list else -1
 
-        # Collect rates from previous months
+        # Collect rates from previous months using cached raw values
         prev_rates = {}  # {code: [rate_list]}
         if month_idx >= 0:
             start_m = max(0, month_idx - 2)
             for mi in range(start_m, month_idx):
                 m_name = months_list[mi]
                 try:
-                    m_ws = sheet.worksheet(m_name)
-                    m_rows = safe_get_all_values(m_ws)
-                    if len(m_rows) < 2:
+                    m_num = int(m_name.replace("월", ""))
+                    m_rows = get_cico_raw_sheet_values(m_num)
+                    if not m_rows or len(m_rows) < 2:
                         continue
                     m_headers = m_rows[0]
                     m_tier_idx = m_headers.index("Tier2") if "Tier2" in m_headers else -1
@@ -2644,7 +2772,7 @@ def get_cico_report_data(month: int):
                                     if code not in prev_rates:
                                         prev_rates[code] = []
                                     prev_rates[code].append({"month": m_name, "rate": rate})
-                except gspread.WorksheetNotFound:
+                except Exception:
                     continue
 
         # Build student report data
@@ -2667,57 +2795,55 @@ def get_cico_report_data(month: int):
             elif "회차" in h_str:
                 date_cols_cur.append({"index": i, "label": h_str})
 
-        # Load previous month daily data (improved matching)
+        # Load previous month daily data (improved matching) using cached raw values
         prev_month_num = month - 1
         prev_daily = {}  # {code: [daily_entries]}
         if prev_month_num >= 3:
             try:
-                pm_ws = get_worksheet_fuzzy(sheet, f"{prev_month_num}월")
-                if pm_ws:
-                    pm_vals = safe_get_all_values(pm_ws)
-                    if pm_vals and len(pm_vals) >= 2:
-                        pm_hdrs = pm_vals[0]
-                        pm_date_cols = []
-                        for i, h in enumerate(pm_hdrs):
-                            h_str = str(h).strip()
-                            if _re.match(r"^\d{2}-\d{2}$", h_str):
-                                pm_date_cols.append({"index": i, "label": h_str})
-                            elif h_str.isdigit() and 1 <= int(h_str) <= 31:
-                                pm_date_cols.append({"index": i, "label": h_str})
-                            elif "회차" in h_str:
-                                pm_date_cols.append({"index": i, "label": h_str})
-                        pm_code_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생코드","Code","코드"]), -1)
-                        pm_name_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생명","Name","이름","학생"]), -1)
-                        pm_tier2_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["Tier2","CICO","Tier2(CICO)"]), -1)
-                        for pm_row in pm_vals[1:]:
-                            if len(pm_row) == 0:
+                pm_vals = get_cico_raw_sheet_values(prev_month_num)
+                if pm_vals and len(pm_vals) >= 2:
+                    pm_hdrs = pm_vals[0]
+                    pm_date_cols = []
+                    for i, h in enumerate(pm_hdrs):
+                        h_str = str(h).strip()
+                        if _re.match(r"^\d{2}-\d{2}$", h_str):
+                            pm_date_cols.append({"index": i, "label": h_str})
+                        elif h_str.isdigit() and 1 <= int(h_str) <= 31:
+                            pm_date_cols.append({"index": i, "label": h_str})
+                        elif "회차" in h_str:
+                            pm_date_cols.append({"index": i, "label": h_str})
+                    pm_code_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생코드","Code","코드"]), -1)
+                    pm_name_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["학생명","Name","이름","학생"]), -1)
+                    pm_tier2_idx = next((j for j, h in enumerate(pm_hdrs) if str(h).strip() in ["Tier2","CICO","Tier2(CICO)"]), -1)
+                    for pm_row in pm_vals[1:]:
+                        if len(pm_row) == 0:
+                            continue
+                        # Filter: only Tier2=O rows, but if col not found include all
+                        if pm_tier2_idx >= 0 and len(pm_row) > pm_tier2_idx:
+                            if str(pm_row[pm_tier2_idx]).strip() not in ["O", "o", "V"]:
                                 continue
-                            # Filter: only Tier2=O rows, but if col not found include all
-                            if pm_tier2_idx >= 0 and len(pm_row) > pm_tier2_idx:
-                                if str(pm_row[pm_tier2_idx]).strip() not in ["O", "o", "V"]:
-                                    continue
-                            # Get code (primary) or name (fallback)
-                            pcode = ""
-                            if pm_code_idx >= 0 and len(pm_row) > pm_code_idx:
-                                pcode = str(pm_row[pm_code_idx]).strip()
-                            if not pcode and pm_name_idx >= 0 and len(pm_row) > pm_name_idx:
-                                pcode = str(pm_row[pm_name_idx]).strip()
-                            if not pcode:
-                                continue
-                            day_entries = [
-                                {"date": dc["label"], "value": str(pm_row[dc["index"]]).strip() if dc["index"] < len(pm_row) else "", "is_prev": True}
-                                for dc in pm_date_cols
-                            ]
-                            # Store under both raw code and name-stripped versions for fuzzy match
-                            prev_daily[pcode] = day_entries
-                            # Also store under code-only if pcode contains parentheses
-                            if "(" in pcode:
-                                inner = pcode[pcode.index("(")+1:pcode.rindex(")")] if ")" in pcode else ""
-                                if inner:
-                                    prev_daily[inner] = day_entries
-                                outer = pcode[:pcode.index("(")].strip()
-                                if outer:
-                                    prev_daily[outer] = day_entries
+                        # Get code (primary) or name (fallback)
+                        pcode = ""
+                        if pm_code_idx >= 0 and len(pm_row) > pm_code_idx:
+                            pcode = str(pm_row[pm_code_idx]).strip()
+                        if not pcode and pm_name_idx >= 0 and len(pm_row) > pm_name_idx:
+                            pcode = str(pm_row[pm_name_idx]).strip()
+                        if not pcode:
+                            continue
+                        day_entries = [
+                            {"date": dc["label"], "value": str(pm_row[dc["index"]]).strip() if dc["index"] < len(pm_row) else "", "is_prev": True}
+                            for dc in pm_date_cols
+                        ]
+                        # Store under both raw code and name-stripped versions for fuzzy match
+                        prev_daily[pcode] = day_entries
+                        # Also store under code-only if pcode contains parentheses
+                        if "(" in pcode:
+                            inner = pcode[pcode.index("(")+1:pcode.rindex(")")] if ")" in pcode else ""
+                            if inner:
+                                prev_daily[inner] = day_entries
+                            outer = pcode[:pcode.index("(")].strip()
+                            if outer:
+                                prev_daily[outer] = day_entries
             except Exception as e:
                 print(f"prev_daily load error: {e}")
                 pass
@@ -2951,7 +3077,7 @@ def get_cico_report_data(month: int):
         except Exception:
             pass
 
-        return {
+        result = {
             "month": month_name,
             "students": students,
             "summary": {
@@ -2963,6 +3089,8 @@ def get_cico_report_data(month: int):
                 "weekly_trend": overall_weekly_trend,
             }
         }
+        set_cached(report_cache_key, result)
+        return result
 
     except Exception as e:
         print(f"Error getting CICO report data: {e}")
@@ -3661,14 +3789,21 @@ def ensure_bip_sheet():
         return None
 
 def get_bip(student_code: str):
-    """Get BIP for a student."""
+    """Get BIP for a student with caching."""
+    clean_code = str(student_code).strip()
+    cache_key = f"bip:{clean_code}"
+    cached = get_cached(cache_key, ttl=300)
+    if cached is not None:
+        return cached
+
     ws = ensure_bip_sheet()
     if not ws: return None
 
     try:
         records = safe_get_all_records(ws)
         for r in records:
-            if str(r.get("StudentCode")) == str(student_code):
+            if str(r.get("StudentCode")).strip() == clean_code:
+                set_cached(cache_key, r)
                 return r
         return None
     except Exception as e:
@@ -3685,6 +3820,7 @@ def save_bip(bip_data: dict):
 
     student_code = bip_data.get("StudentCode")
     if not student_code: return {"error": "StudentCode required"}
+    clean_code = str(student_code).strip()
 
     try:
         cell = ws.find(student_code, in_column=1)
@@ -3701,7 +3837,9 @@ def save_bip(bip_data: dict):
             # Append
             ws.append_row(row)
 
-        clear_cache()
+        # Targeted invalidation for BIP cache only
+        invalidate_cache(f"bip:{clean_code}")
+        invalidate_cache("bip:")
         return {"message": "BIP saved successfully"}
     except Exception as e:
         print(f"Error saving BIP: {e}")
@@ -3729,7 +3867,7 @@ def add_holiday(date_str, name):
 
         # Append
         config_ws.append_row([date_str, name, "수동 추가됨"])
-        clear_cache() # Clear cache to refresh holidays
+        clear_cache("holidays") # Clear holidays cache only
         return {"message": f"Holiday {name} ({date_str}) added"}
     except Exception as e:
         print(f"Error adding holiday: {e}")
@@ -3749,7 +3887,7 @@ def delete_holiday(date_str):
         for i, d in enumerate(dates):
             if d == date_str:
                 config_ws.delete_rows(i + 1)  # 1-indexed
-                clear_cache()
+                clear_cache("holidays") # Clear holidays cache only
                 return {"message": f"Holiday {date_str} deleted"}
 
         return {"error": "Holiday not found"}

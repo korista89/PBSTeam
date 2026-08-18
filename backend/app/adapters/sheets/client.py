@@ -50,28 +50,37 @@ def get_sheets_client() -> Optional[gspread.Client]:
 
 
 def get_cached(key: str, ttl: int = CACHE_TTL) -> Optional[Any]:
-    now = time.time()
-    entry = _cache.get(key)
-    if entry and (now - entry.get("timestamp", 0) < ttl):
-        return entry.get("data")
+    try:
+        now = time.time()
+        entry = _cache.get(key)
+        if entry and (now - float(entry.get("timestamp", 0)) < ttl):
+            return entry.get("data")
+    except Exception as e:
+        print(f"get_cached error: {e}")
     return None
 
 
 def set_cached(key: str, data: Any):
-    _cache[key] = {
-        "data": data,
-        "timestamp": time.time()
-    }
+    try:
+        _cache[key] = {
+            "data": data,
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        print(f"set_cached error: {e}")
 
 
 def invalidate_cache(key_prefix: str = ""):
     global _cache
-    if not key_prefix:
-        _cache.clear()
-    else:
-        keys_to_remove = [k for k in _cache if k.startswith(key_prefix)]
-        for k in keys_to_remove:
-            _cache.pop(k, None)
+    try:
+        if not key_prefix:
+            _cache.clear()
+        else:
+            keys_to_remove = [k for k in _cache if k.startswith(key_prefix)]
+            for k in keys_to_remove:
+                _cache.pop(k, None)
+    except Exception as e:
+        print(f"invalidate_cache error: {e}")
 
 
 def safe_get_all_records(ws) -> List[Dict[str, Any]]:
