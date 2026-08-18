@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Response, Depends, status
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
-from app.services.sheets import get_user_by_id, update_user_password, get_all_users
+from app.services.sheets import get_user_by_id, update_user_password, update_user_password_cas, get_all_users
 from app.core.security import (
     verify_password_compat, create_access_token, set_session_cookie,
     delete_session_cookie, hash_password
@@ -31,6 +31,18 @@ async def login(request: LoginRequest, response: Response):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
+
+    # Login-time Progressive Rehash (Silent migration to Argon2id with CAS protection)
+    if ver_res.needs_rehash:
+        try:
+            update_user_password_cas(
+                user_id=str(user.get("ID", "")),
+                expected_stored_password=stored_pw,
+                new_plain_password=request.password
+            )
+        except Exception:
+            # Migration write failure must not break login authentication
+            pass
 
     # Issue signed JWT Session token & set HttpOnly Cookie
     user_id = str(user.get("ID", ""))

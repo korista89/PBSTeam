@@ -433,7 +433,7 @@ def fetch_all_users():
 
 def create_user(user_data: dict):
     """
-    Create a new user in the 'Users' sheet.
+    Create a new user in the 'Users' sheet with canonical Argon2id hashed password.
     user_data: {ID, Password, Role, Name, Phone, Email, ClassID, ClassName}
     """
     client = get_sheets_client()
@@ -454,13 +454,23 @@ def create_user(user_data: dict):
             if str(r.get("ID")) == str(user_data.get("ID")):
                 return {"error": "User ID already exists"}
 
-        # Prepare row
+        # Canonical boundary: Enforce Argon2id hashing before storage write
+        plain_pw = str(user_data.get("Password", ""))
+        if not plain_pw:
+            return {"error": "Password cannot be empty"}
+
+        from app.core.security import hash_password
+        user_row_data = dict(user_data)
+        user_row_data["Password"] = hash_password(plain_pw)
+
+        # Prepare row according to sheet headers
         headers = ws.row_values(1)
         row = []
         for h in headers:
-            row.append(user_data.get(h, ""))
+            row.append(user_row_data.get(h, ""))
 
         ws.append_row(row)
+        clear_cache("users")
         clear_cache()
         return {"message": f"User {user_data.get('ID')} created successfully"}
 
@@ -489,6 +499,7 @@ def delete_user(user_id: str):
             return {"error": "User not found"}
 
         ws.delete_rows(cell.row)
+        clear_cache("users")
         clear_cache()
         return {"message": f"User {user_id} deleted successfully"}
 
@@ -507,18 +518,38 @@ def get_user_by_id(user_id: str):
     return None
 
 def update_user_password(user_id: str, new_password: str):
+    """
+    Admin password change: Hashes plaintext new_password with Argon2id and updates the Users sheet.
+    Exact password characters (including any leading/trailing spaces) are preserved without stripping.
+    """
+    if not user_id or not new_password:
+        return {"error": "User ID and new password are required"}
+
     ws = get_users_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
 
     try:
+        from app.core.security import hash_password
+        hashed_pw = hash_password(str(new_password))
+
         records = safe_get_all_records(ws)
+        pw_col = 2
+        try:
+            headers = ws.row_values(1)
+            for h_idx, h in enumerate(headers):
+                if str(h).strip().lower() == "password":
+                    pw_col = h_idx + 1
+                    break
+        except Exception:
+            pass
+
         for idx, r in enumerate(records):
             if str(r.get('ID')) == str(user_id):
                 # Row index is idx + 2 (1 for header, 1 for 0-index)
-                ws.update_cell(idx + 2, 2, new_password)  # Column 2 is Password
+                ws.update_cell(idx + 2, pw_col, hashed_pw)
                 clear_cache("users")
-                return {"message": "업데이트 완료 (메모/변경일 없음)"}
+                return {"message": "비밀번호가 성공적으로 변경되었습니다."}
         return {"error": "User not found"}
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
@@ -526,6 +557,66 @@ def update_user_password(user_id: str, new_password: str):
         else:
             print("Error updating password")
         return {"error": str(e)}
+
+def update_user_password_cas(user_id: str, expected_stored_password: str, new_plain_password: str) -> bool:
+    """
+    Best-effort compare-before-write password upgrade for login-time progressive migration.
+    Updates password to Argon2id only if fresh read of stored password matches expected_stored_password.
+    Minimizes the race window by pre-computing hash and performing a fresh cell read immediately before write.
+    Fail-open design: does not raise exceptions, preserves login on failure.
+    """
+    if not user_id or not new_plain_password:
+        return False
+
+    ws = get_users_worksheet()
+    if not ws:
+        return False
+
+    try:
+        # 1. Locate user row and Password column
+        records = safe_get_all_records(ws)
+        pw_col = 2
+        try:
+            headers = ws.row_values(1)
+            for h_idx, h in enumerate(headers):
+                if str(h).strip().lower() == "password":
+                    pw_col = h_idx + 1
+                    break
+        except Exception:
+            pass
+
+        target_row = None
+        for idx, r in enumerate(records):
+            if str(r.get('ID')) == str(user_id):
+                target_row = idx + 2
+                break
+
+        if target_row is None:
+            return False
+
+        # 2. Pre-compute new Argon2 hash before cell read to minimize race window
+        from app.core.security import hash_password
+        new_hash = hash_password(str(new_plain_password))
+
+        # 3. Fresh read of specific Password cell immediately before write
+        fresh_cell_val = str(ws.cell(target_row, pw_col).value or "")
+
+        # 4. Exact comparison (no stripping or normalization)
+        if fresh_cell_val == str(expected_stored_password):
+            # 5. Match -> write new Argon2id hash immediately
+            ws.update_cell(target_row, pw_col, new_hash)
+            clear_cache("users")
+            return True
+        else:
+            # 6. Mismatch -> password was updated concurrently; skip silent migration
+            return False
+
+    except Exception as e:
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Password migration write skipped: {e}")
+        else:
+            print("Password migration write failed: non-fatal upgrade skipped")
+        return False
 
 def update_tierstatus_certification(student_code_or_name: str, cert_count: int):
     """

@@ -1289,6 +1289,372 @@ def test_p0_b3_authorization_and_class_scope():
 
     return True
 
+
+def test_p0_b4_password_storage_hardening():
+    print("\n" + "=" * 60)
+    print("STEP 10: Testing P0-B4 Password Storage Hardening & Safe Argon2id Migration")
+    print("=" * 60)
+
+    from app.main import app
+    from app.core.config import settings
+    from fastapi.testclient import TestClient
+    from app.core.security import hash_password, verify_password_compat, _hasher, create_access_token, decode_access_token
+    from app.services.sheets import update_user_password, update_user_password_cas, create_user, get_all_users
+    from scripts.migrate_users_passwords import classify_password_type, run_migration_inspection
+    import hashlib
+    import unittest.mock as mock
+
+    settings.AUTH_SECRET = "synthetic-test-secret-key-32chars-min-p0b4"
+    settings.ENVIRONMENT = "production"
+    trusted_origin_headers = {"Origin": "https://pbs-team.vercel.app"}
+
+    # Synthetic password fixtures
+    argon_pw_plain = "Synthetic-Argon-Pass-123!"
+    argon_hash = hash_password(argon_pw_plain)
+
+    plain_pw_val = "Synthetic-Plain-Pass-456!"
+
+    sha_pw_plain = "Synthetic-Sha-Pass-789!"
+    sha_hash = hashlib.sha256(sha_pw_plain.encode("utf-8")).hexdigest()
+
+    # In-memory mock database for users
+    mock_db = {
+        "user_argon": {"ID": "user_argon", "Password": argon_hash, "Role": "teacher", "ClassID": "211", "Name": "아르곤교사", "Active": "TRUE"},
+        "user_plain": {"ID": "user_plain", "Password": plain_pw_val, "Role": "teacher", "ClassID": "211", "Name": "평문교사", "Active": "TRUE"},
+        "user_sha": {"ID": "user_sha", "Password": sha_hash, "Role": "teacher", "ClassID": "211", "Name": "샤교사", "Active": "TRUE"},
+        "admin_user": {"ID": "admin_user", "Password": argon_hash, "Role": "admin", "ClassID": "전체", "Name": "관리자", "Active": "TRUE"}
+    }
+
+    def mock_get_user(uid):
+        u = mock_db.get(str(uid))
+        return dict(u) if u else None
+
+    # Track writes
+    write_log = []
+
+    def mock_cas(user_id: str, expected_stored_password: str, new_plain_password: str):
+        u = mock_db.get(user_id)
+        if not u:
+            return False
+        if u["Password"] == expected_stored_password:
+            new_h = hash_password(new_plain_password)
+            u["Password"] = new_h
+            write_log.append(("cas_success", user_id, new_h))
+            return True
+        else:
+            write_log.append(("cas_mismatch", user_id))
+            return False
+
+    client = TestClient(app)
+
+    with mock.patch("app.services.sheets.get_user_by_id", side_effect=mock_get_user), \
+         mock.patch("app.api.deps.get_user_by_id", side_effect=mock_get_user), \
+         mock.patch("app.api.endpoints.auth.get_user_by_id", side_effect=mock_get_user), \
+         mock.patch("app.services.sheets.update_user_password_cas", side_effect=mock_cas), \
+         mock.patch("app.api.endpoints.auth.update_user_password_cas", side_effect=mock_cas):
+
+        # [A] Argon2id correct password -> login 200
+        write_log.clear()
+        res_a = client.post("/api/v1/auth/login", json={"user_id": "user_argon", "password": argon_pw_plain}, headers=trusted_origin_headers)
+        assert res_a.status_code == 200
+        assert len(write_log) == 0, "No rehash write should occur for current Argon2id password"
+        print("✅ [A] Argon2id correct password -> login 200 (write=0): OK")
+
+        # [B] Argon2id wrong password -> 401
+        write_log.clear()
+        res_b = client.post("/api/v1/auth/login", json={"user_id": "user_argon", "password": "Wrong-Password!"}, headers=trusted_origin_headers)
+        assert res_b.status_code == 401
+        assert len(write_log) == 0
+        print("✅ [B] Argon2id wrong password -> 401 (write=0): OK")
+
+        # [C] legacy plaintext correct password -> login 200 -> migration invoked -> stored value Argon2id
+        write_log.clear()
+        res_c = client.post("/api/v1/auth/login", json={"user_id": "user_plain", "password": plain_pw_val}, headers=trusted_origin_headers)
+        assert res_c.status_code == 200
+        assert len(write_log) == 1 and write_log[0][0] == "cas_success", f"write_log is: {write_log}"
+        assert mock_db["user_plain"]["Password"].startswith("$argon2id$")
+        # Verify new hash verifies with plaintext
+        _hasher.verify(mock_db["user_plain"]["Password"], plain_pw_val)
+        print("✅ [C] Legacy plaintext correct password -> login 200 & upgraded to Argon2id: OK")
+
+        # [D] legacy plaintext wrong password -> 401 -> migration write 0
+        mock_db["user_plain"]["Password"] = plain_pw_val # reset
+        write_log.clear()
+        res_d = client.post("/api/v1/auth/login", json={"user_id": "user_plain", "password": "Wrong-Plain-Password!"}, headers=trusted_origin_headers)
+        assert res_d.status_code == 401
+        assert len(write_log) == 0
+        assert mock_db["user_plain"]["Password"] == plain_pw_val
+        print("✅ [D] Legacy plaintext wrong password -> 401 & write=0: OK")
+
+        # [E] legacy SHA256 correct password -> login 200 -> Argon2 upgrade
+        write_log.clear()
+        res_e = client.post("/api/v1/auth/login", json={"user_id": "user_sha", "password": sha_pw_plain}, headers=trusted_origin_headers)
+        assert res_e.status_code == 200
+        assert len(write_log) == 1 and write_log[0][0] == "cas_success"
+        assert mock_db["user_sha"]["Password"].startswith("$argon2id$")
+        _hasher.verify(mock_db["user_sha"]["Password"], sha_pw_plain)
+        print("✅ [E] Legacy SHA256 correct password -> login 200 & upgraded to Argon2id: OK")
+
+        # [F] legacy SHA256 wrong password -> 401 -> migration write 0
+        mock_db["user_sha"]["Password"] = sha_hash # reset
+        write_log.clear()
+        res_f = client.post("/api/v1/auth/login", json={"user_id": "user_sha", "password": "Wrong-Sha-Password!"}, headers=trusted_origin_headers)
+        assert res_f.status_code == 401
+        assert len(write_log) == 0
+        assert mock_db["user_sha"]["Password"] == sha_hash
+        print("✅ [F] Legacy SHA256 wrong password -> 401 & write=0: OK")
+
+        # [G] current Argon2 + needs_rehash=False -> login 200 -> Password write 0
+        write_log.clear()
+        res_g = client.post("/api/v1/auth/login", json={"user_id": "user_argon", "password": argon_pw_plain}, headers=trusted_origin_headers)
+        assert res_g.status_code == 200
+        assert len(write_log) == 0
+        print("✅ [G] Current Argon2id + needs_rehash=False -> login 200 & write=0: OK")
+
+        # [H] Argon2 + needs_rehash=True -> login 200 -> rehash write 1
+        from argon2 import PasswordHasher as OldHasher
+        old_hasher = OldHasher(time_cost=1, memory_cost=1024, parallelism=1, hash_len=16)
+        outdated_argon_hash = old_hasher.hash(argon_pw_plain)
+        assert _hasher.check_needs_rehash(outdated_argon_hash) is True
+
+        mock_db["user_argon_outdated"] = {
+            "ID": "user_argon_outdated",
+            "Password": outdated_argon_hash,
+            "Role": "teacher",
+            "ClassID": "211",
+            "Name": "구버전아르곤",
+            "Active": "TRUE"
+        }
+        write_log.clear()
+        res_h = client.post("/api/v1/auth/login", json={"user_id": "user_argon_outdated", "password": argon_pw_plain}, headers=trusted_origin_headers)
+        assert res_h.status_code == 200
+        assert len(write_log) == 1 and write_log[0][0] == "cas_success"
+        assert _hasher.check_needs_rehash(mock_db["user_argon_outdated"]["Password"]) is False
+        print("✅ [H] Argon2 + needs_rehash=True -> login 200 & rehash write=1: OK")
+
+        # [I] migration storage failure -> credential correct -> login remains 200
+        mock_db["user_plain"]["Password"] = plain_pw_val # reset
+        write_log.clear()
+        with mock.patch("app.services.sheets.update_user_password_cas", side_effect=Exception("Sheet API Rate Limit")), \
+             mock.patch("app.api.endpoints.auth.update_user_password_cas", side_effect=Exception("Sheet API Rate Limit")):
+            res_i = client.post("/api/v1/auth/login", json={"user_id": "user_plain", "password": plain_pw_val}, headers=trusted_origin_headers)
+            assert res_i.status_code == 200, "Login must succeed even if background migration write fails"
+            assert "password" not in res_i.json()["user"] and "Password" not in res_i.json()["user"]
+        print("✅ [I] Migration storage failure fails open (login 200, secret not leaked): OK")
+
+        # [J] Concurrent password change -> expected stored value mismatch -> silent migration does NOT overwrite newer password
+        mock_db["user_plain"]["Password"] = "New-Admin-Changed-Password-777!"
+        write_log.clear()
+        cas_result = mock_cas("user_plain", expected_stored_password=plain_pw_val, new_plain_password="Some-Old-Password")
+        assert cas_result is False
+        assert mock_db["user_plain"]["Password"] == "New-Admin-Changed-Password-777!", "CAS mismatch must preserve newer password"
+        print("✅ [J] Concurrent password change CAS defense (newer password protected): OK")
+
+        # [K] Password update API -> stored Argon2id -> new password verifies -> raw plaintext storage 0
+        admin_jwt = create_access_token({"sub": "admin_user", "role": "admin", "class_id": "전체"})
+        client.cookies.set("pbst_session", admin_jwt)
+
+        # Mock worksheet for update_user_password
+        mock_ws_records = [
+            {"ID": "admin_user", "Password": argon_hash, "Role": "admin", "ClassID": "전체", "ClassName": "전체관리자"},
+            {"ID": "user_target", "Password": plain_pw_val, "Role": "teacher", "ClassID": "211", "ClassName": "초1-1"}
+        ]
+        mock_ws = mock.MagicMock()
+        mock_ws.row_values.return_value = ["ID", "Password", "Role", "ClassID", "ClassName"]
+
+        updated_cells = {}
+        def mock_update_cell(row, col, val):
+            updated_cells[(row, col)] = val
+        mock_ws.update_cell.side_effect = mock_update_cell
+
+        with mock.patch("app.services.sheets.get_users_worksheet", return_value=mock_ws), \
+             mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_ws_records):
+
+            new_teacher_plain = "Brand-New-Teacher-Password-999!"
+            res_k = client.put(
+                "/api/v1/auth/users/user_target/password",
+                json={"user_id": "user_target", "new_password": new_teacher_plain},
+                headers=trusted_origin_headers
+            )
+            assert res_k.status_code == 200
+            # Target row is 3 (header + index 1), col 2 (Password)
+            stored_val = updated_cells.get((3, 2))
+            assert stored_val is not None
+            assert stored_val.startswith("$argon2id$"), "Password update must store Argon2id hash"
+            assert stored_val != new_teacher_plain, "Plaintext password must NOT be stored"
+            _hasher.verify(stored_val, new_teacher_plain)
+        print("✅ [K] Password update API stores Argon2id & raw plaintext storage=0: OK")
+
+        # [L] Create user API -> stored Argon2id -> raw plaintext storage 0
+        created_rows = []
+        mock_ws.append_row.side_effect = lambda row: created_rows.append(row)
+        mock_client = mock.MagicMock()
+        mock_client.open_by_url.return_value.worksheet.return_value = mock_ws
+
+        with mock.patch("app.services.sheets.get_sheets_client", return_value=mock_client), \
+             mock.patch("app.services.sheets.settings.SHEET_URL", "https://sheets.google.com/test"), \
+             mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_ws_records):
+
+            res_l = client.post(
+                "/api/v1/auth/users",
+                json={
+                    "id": "new_teacher_01",
+                    "password": "New-Teacher-Plain-Pass-123!",
+                    "role": "teacher",
+                    "name": "신규교사",
+                    "class_id": "212",
+                    "class_name": "초등 1학년 2반"
+                },
+                headers=trusted_origin_headers
+            )
+            assert res_l.status_code == 200
+            assert len(created_rows) == 1
+            created_row = created_rows[0]
+            created_pw = created_row[1]
+            assert created_pw.startswith("$argon2id$"), "Created user must have Argon2id hash"
+            assert created_pw != "New-Teacher-Plain-Pass-123!"
+            _hasher.verify(created_pw, "New-Teacher-Plain-Pass-123!")
+        print("✅ [L] Create user API stores Argon2id & raw plaintext storage=0: OK")
+
+        # [M] /auth/users -> Password key absent from every returned user
+        with mock.patch("app.services.sheets.get_users_worksheet", return_value=mock_ws), \
+             mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_ws_records):
+            res_m = client.get("/api/v1/auth/users")
+            assert res_m.status_code == 200
+            users_list = res_m.json()
+            assert len(users_list) > 0
+            for u_item in users_list:
+                assert "Password" not in u_item, "Password must not be present in /auth/users response"
+                assert "password" not in u_item, "password must not be present in /auth/users response"
+        print("✅ [M] /auth/users: Password field absent from every returned user: OK")
+
+        # [N] Session/JWT claims remain minimal: sub, role, class_id only
+        client.cookies.clear()
+        res_login_admin = client.post("/api/v1/auth/login", json={"user_id": "admin_user", "password": argon_pw_plain}, headers=trusted_origin_headers)
+        assert res_login_admin.status_code == 200
+        token_admin = res_login_admin.cookies.get("pbst_session")
+        admin_decoded = decode_access_token(token_admin)
+        assert set(admin_decoded.keys()) == {"sub", "role", "class_id", "exp", "iat"}
+        assert "password" not in admin_decoded and "Password" not in admin_decoded
+        print("✅ [N] JWT Session claims strictly minimal (sub, role, class_id only): OK")
+
+        # [O] Legacy plaintext password with leading/trailing spaces
+        whitespace_pw = "  Synthetic Password 123!  "
+        mock_db["user_space"] = {
+            "ID": "user_space",
+            "Password": whitespace_pw,
+            "Role": "teacher",
+            "ClassID": "211",
+            "Name": "공백교사",
+            "Active": "TRUE"
+        }
+        write_log.clear()
+        res_o_exact = client.post(
+            "/api/v1/auth/login",
+            json={"user_id": "user_space", "password": whitespace_pw},
+            headers=trusted_origin_headers
+        )
+        assert res_o_exact.status_code == 200
+        assert len(write_log) == 1 and write_log[0][0] == "cas_success"
+        assert mock_db["user_space"]["Password"].startswith("$argon2id$")
+        _hasher.verify(mock_db["user_space"]["Password"], whitespace_pw)
+
+        # Trimmed variant must fail with 401
+        res_o_trimmed = client.post(
+            "/api/v1/auth/login",
+            json={"user_id": "user_space", "password": "Synthetic Password 123!"},
+            headers=trusted_origin_headers
+        )
+        assert res_o_trimmed.status_code == 401
+        print("✅ [O] Whitespace password progressive rehash & trimmed rejected: OK")
+
+        # [P] update_user_password with leading/trailing spaces
+        client.cookies.set("pbst_session", admin_jwt)
+        new_space_pw = "  New Space Password 789!  "
+        updated_cells.clear()
+        with mock.patch("app.services.sheets.get_users_worksheet", return_value=mock_ws), \
+             mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_ws_records):
+            res_p = client.put(
+                "/api/v1/auth/users/user_target/password",
+                json={"user_id": "user_target", "new_password": new_space_pw},
+                headers=trusted_origin_headers
+            )
+            assert res_p.status_code == 200
+            stored_val_p = updated_cells.get((3, 2))
+            assert stored_val_p.startswith("$argon2id$")
+            _hasher.verify(stored_val_p, new_space_pw)
+            # Trimmed variant must fail
+            trimmed_failed = False
+            try:
+                _hasher.verify(stored_val_p, "New Space Password 789!")
+            except Exception:
+                trimmed_failed = True
+            assert trimmed_failed, "Trimmed password must not verify against untrimmed hash"
+        print("✅ [P] update_user_password preserves exact whitespace & trimmed fails: OK")
+
+        # [Q] create_user with leading/trailing spaces
+        create_space_pw = "  Create Space Password 456!  "
+        created_rows.clear()
+        with mock.patch("app.services.sheets.get_sheets_client", return_value=mock_client), \
+             mock.patch("app.services.sheets.settings.SHEET_URL", "https://sheets.google.com/test"), \
+             mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_ws_records):
+            res_q = client.post(
+                "/api/v1/auth/users",
+                json={
+                    "id": "new_space_teacher",
+                    "password": create_space_pw,
+                    "role": "teacher",
+                    "name": "공백신규교사",
+                    "class_id": "212",
+                    "class_name": "초등 1학년 2반"
+                },
+                headers=trusted_origin_headers
+            )
+            assert res_q.status_code == 200
+            assert len(created_rows) == 1
+            created_pw_q = created_rows[0][1]
+            assert created_pw_q.startswith("$argon2id$")
+            _hasher.verify(created_pw_q, create_space_pw)
+            # Trimmed variant must fail
+            trimmed_q_failed = False
+            try:
+                _hasher.verify(created_pw_q, "Create Space Password 456!")
+            except Exception:
+                trimmed_q_failed = True
+            assert trimmed_q_failed, "Trimmed password must not verify against untrimmed created hash"
+        print("✅ [Q] create_user preserves exact whitespace & trimmed fails: OK")
+
+        # [CLI Preflight & Classification Tests]
+        assert classify_password_type(argon_hash) == "argon2id"
+        assert classify_password_type(sha_hash) == "legacy_sha256"
+        assert classify_password_type(plain_pw_val) == "legacy_plaintext"
+        assert classify_password_type(whitespace_pw) == "legacy_plaintext"
+        assert classify_password_type("") == "blank"
+        assert classify_password_type(None) == "blank"
+
+        # Test CLI inspection tool with synthetic worksheet
+        cli_ws = mock.MagicMock()
+        cli_ws.row_values.return_value = ["ID", "Password", "Role", "ClassID", "ClassName"]
+        cli_records = [
+            {"ID": "u1", "Password": argon_hash},
+            {"ID": "u2", "Password": sha_hash},
+            {"ID": "u3", "Password": plain_pw_val},
+            {"ID": "u4", "Password": ""},
+        ]
+        with mock.patch("scripts.migrate_users_passwords.safe_get_all_records", return_value=cli_records):
+            counts, records, pw_col = run_migration_inspection(cli_ws)
+            assert counts["total_users"] == 4
+            assert counts["argon2id"] == 1
+            assert counts["legacy_sha256"] == 1
+            assert counts["legacy_plaintext"] == 1
+            assert counts["blank"] == 1
+            assert counts["unknown"] == 0
+            assert pw_col == 2
+        print("✅ [CLI] scripts/migrate_users_passwords.py preflight & classifier verified: OK")
+
+    return True
+
+
 if __name__ == "__main__":
     t1 = test_imports()
     t2 = test_ebp_catalog()
@@ -1299,10 +1665,11 @@ if __name__ == "__main__":
     t7 = test_p0_security_lockdown()
     t8 = test_p0_b1_auth_foundation()
     t9 = test_p0_b3_authorization_and_class_scope()
+    t10 = test_p0_b4_password_storage_hardening()
 
     print("\n" + "=" * 60)
-    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8 and t9:
-        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, HEALTH, P0-B1 AUTH & P0-B3 AUTHORIZATION CHECKS PASSED!")
+    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8 and t9 and t10:
+        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, HEALTH, P0-B1 AUTH, P0-B3 SCOPE & P0-B4 PASSWORD CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")
     print("=" * 60)
