@@ -10,8 +10,8 @@ from app.adapters.sheets.tier_status import TierStatusAdapter
 # Canonical class normalization mapping
 CLASS_MAP = {
     # 1. 유치원
-    "101": "유1", "유1": "유1", "유1관리자": "유1", "유치원 1반": "유1", "유치원1반": "유1",
-    "102": "유2", "유2": "유2", "유2관리자": "유2", "유치원 2반": "유2", "유치원2반": "유2",
+    "101": "유1", "유1": "유1", "유1관리자": "유1", "유치원 1반": "유1", "유치원1반": "유1", "유난초": "유1",
+    "102": "유2", "유2": "유2", "유2관리자": "유2", "유치원 2반": "유2", "유치원2반": "유2", "유백합": "유2",
     # 2. 초등
     "211": "초1-1", "초1-1": "초1-1", "초1-1관리자": "초1-1", "초등 1학년 1반": "초1-1", "초등1-1": "초1-1",
     "212": "초1-2", "초1-2": "초1-2", "초1-2관리자": "초1-2", "초등 1학년 2반": "초1-2", "초등1-2": "초1-2",
@@ -32,7 +32,7 @@ CLASS_MAP = {
     "322": "중2-2", "중2-2": "중2-2", "중2-2관리자": "중2-2", "중학교 2학년 2반": "중2-2", "중학2-2": "중2-2",
     "331": "중3-1", "중3-1": "중3-1", "중3-1관리자": "중3-1", "중학교 3학년 1반": "중3-1", "중학3-1": "중3-1",
     "332": "중3-2", "중3-2": "중3-2", "중3-2관리자": "중3-2", "중학교 3학년 2반": "중3-2", "중학3-2": "중3-2",
-    "340": "중순회", "중순회": "중순회", "중학교순회학급관리자": "중순회", "중학교 순회학급": "중순회", "순회(중)": "중순회",
+    "340": "중순회", "중순회": "중순회", "중학교순회학급관리자": "중순회", "중등순회학급관리자": "중순회", "중학교 순회학급": "중순회", "순회(중)": "중순회",
     # 4. 고등
     "411": "고1-1", "고1-1": "고1-1", "고1-1관리자": "고1-1", "고등학교 1학년 1반": "고1-1", "고등1-1": "고1-1",
     "412": "고1-2", "고1-2": "고1-2", "고1-2관리자": "고1-2", "고등학교 1학년 2반": "고1-2", "고등1-2": "고1-2",
@@ -60,6 +60,18 @@ def normalize_class_identifier(val: Optional[str]) -> str:
     return CLASS_MAP.get(clean, clean)
 
 
+def normalize_role(role_val: Optional[str]) -> str:
+    """Normalizes role strings (e.g. 'class_teacher' from Users sheet -> canonical 'teacher')."""
+    if not role_val:
+        return "teacher"
+    r = str(role_val).strip().lower()
+    if r in ["admin", "superadmin"]:
+        return r
+    if r in ["class_teacher", "teacher", "담임", "교사"]:
+        return "teacher"
+    return r
+
+
 async def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
     """
     Extracts session token from HttpOnly cookie and resolves current active user.
@@ -84,7 +96,7 @@ async def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]
         if is_active in ["false", "0", "inactive", "x", "no"]:
             return None
 
-        current_role = str(user.get("Role", "teacher")).lower()
+        current_role = normalize_role(user.get("Role", "teacher"))
         current_class_id = str(user.get("ClassID", "")).strip()
         current_class_name = str(user.get("ClassName", "")).strip()
         current_name = str(user.get("Name", "")).strip()
@@ -141,7 +153,7 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
             detail="User account is deactivated."
         )
 
-    current_role = str(user.get("Role", "teacher")).lower()
+    current_role = normalize_role(user.get("Role", "teacher"))
     current_class_id = str(user.get("ClassID", "")).strip()
     current_class_name = str(user.get("ClassName", "")).strip()
     current_name = str(user.get("Name", "")).strip()
@@ -174,7 +186,7 @@ async def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)
 
 async def require_teacher_or_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Requires TEACHER or ADMIN role. Returns HTTP 403 for unauthorized roles."""
-    if current_user.get("role") not in ["admin", "teacher", "superadmin"]:
+    if current_user.get("role") not in ["admin", "teacher", "class_teacher", "superadmin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Teacher or Administrator access required."

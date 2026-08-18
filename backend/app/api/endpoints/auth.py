@@ -34,7 +34,8 @@ async def login(request: LoginRequest, response: Response):
 
     # Issue signed JWT Session token & set HttpOnly Cookie
     user_id = str(user.get("ID", ""))
-    role_str = str(user.get("Role", "teacher")).lower()
+    from app.api.deps import normalize_role
+    role_str = normalize_role(user.get("Role", "teacher"))
     class_id = str(user.get("ClassID", ""))
 
     # Minimal claims only: sub, role, class_id (no names, no PII in JWT)

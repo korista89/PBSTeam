@@ -616,15 +616,23 @@ def test_p0_b3_authorization_and_class_scope():
     assert normalize_class_identifier("전공2-1") == "전2-1"
     assert normalize_class_identifier("전공2-2") == "전2-2"
     assert normalize_class_identifier("전공과 2학년 1반") == "전2-1"
-    print("✅ [Class Normalization] All 34 class codes/names correctly mapped: OK")
+    assert normalize_class_identifier("유난초") == "유1"
+    assert normalize_class_identifier("유백합") == "유2"
+    assert normalize_class_identifier("예비관리자") == "예비"
+    assert normalize_class_identifier("중등순회학급관리자") == "중순회"
+    print("✅ [Class Normalization] All 35 class codes/names correctly mapped: OK")
 
     # Mock Users Database
     mock_users = {
-        "admin_01": {"UserID": "admin_01", "Role": "admin", "ClassID": "전체", "Name": "관리자", "Active": "TRUE"},
-        "teacher_a": {"UserID": "teacher_a", "Role": "teacher", "ClassID": "211", "Name": "교사A", "Active": "TRUE"},
-        "teacher_b": {"UserID": "teacher_b", "Role": "teacher", "ClassID": "212", "Name": "교사B", "Active": "TRUE"},
-        "inactive_01": {"UserID": "inactive_01", "Role": "teacher", "ClassID": "211", "Name": "비활성", "Active": "FALSE"},
-        "demoted_01": {"UserID": "demoted_01", "Role": "teacher", "ClassID": "211", "Name": "강등교사", "Active": "TRUE"},
+        "admin_01": {"UserID": "admin_01", "ID": "admin_01", "Role": "admin", "ClassID": "전체", "Name": "관리자", "Active": "TRUE"},
+        "teacher_a": {"UserID": "teacher_a", "ID": "teacher_a", "Role": "teacher", "ClassID": "211", "Name": "교사A", "Active": "TRUE"},
+        "teacher_b": {"UserID": "teacher_b", "ID": "teacher_b", "Role": "teacher", "ClassID": "212", "Name": "교사B", "Active": "TRUE"},
+        "inactive_01": {"UserID": "inactive_01", "ID": "inactive_01", "Role": "teacher", "ClassID": "211", "Name": "비활성", "Active": "FALSE"},
+        "demoted_01": {"UserID": "demoted_01", "ID": "demoted_01", "Role": "teacher", "ClassID": "211", "Name": "강등교사", "Active": "TRUE"},
+        "초1-1": {"UserID": "초1-1", "ID": "초1-1", "Role": "class_teacher", "ClassID": "211", "Name": "초1-1담임", "Active": "TRUE", "Password": "teacherpassword123"},
+        "유난초": {"UserID": "유난초", "ID": "유난초", "Role": "class_teacher", "ClassID": "101", "Name": "유난초담임", "Active": "TRUE", "Password": "teacherpassword123"},
+        "유백합": {"UserID": "유백합", "ID": "유백합", "Role": "class_teacher", "ClassID": "102", "Name": "유백합담임", "Active": "TRUE", "Password": "teacherpassword123"},
+        "예비관리자": {"UserID": "예비관리자", "ID": "예비관리자", "Role": "class_teacher", "ClassID": "600", "Name": "예비담당", "Active": "TRUE", "Password": "teacherpassword123"},
     }
 
     # Mock Students Database (TierStatus & Roster)
@@ -1183,6 +1191,101 @@ def test_p0_b3_authorization_and_class_scope():
         assert client.get("/health").status_code == 200
         assert client.get("/api/health").status_code == 200
         print("✅ [V] Health endpoints remain open with 200: OK")
+
+        # [W] Real Users Sheet Contract & class_teacher Role Normalization
+        # 1. Login with user having Role="class_teacher" and ID="초1-1"
+        res_login_ct = client.post(
+            "/api/v1/auth/login",
+            json={"user_id": "초1-1", "password": "teacherpassword123"},
+            headers=trusted_origin_headers
+        )
+        assert res_login_ct.status_code == 200, f"Login failed for class_teacher: {res_login_ct.text}"
+        login_ct_json = res_login_ct.json()
+        assert login_ct_json["user"]["role"] == "teacher", "class_teacher must be normalized to canonical 'teacher' on login"
+        assert login_ct_json["user"]["id"] == "초1-1"
+        token_ct = res_login_ct.cookies.get("pbst_session")
+        if token_ct:
+            client.cookies.set("pbst_session", token_ct)
+
+        # 2. Revalidation & /me profile returns canonical role="teacher"
+        res_me_ct = client.get("/api/v1/auth/me")
+        assert res_me_ct.status_code == 200
+        assert res_me_ct.json()["role"] == "teacher"
+        assert res_me_ct.json()["class_id"] == "211"
+
+        # 3. Access own-class student 21101 -> 200 OK
+        res_own_ct = client.get("/api/v1/workspace/student/21101")
+        assert res_own_ct.status_code == 200
+
+        # 4. Access cross-class student 21201 -> 403 Forbidden
+        res_cross_ct = client.get("/api/v1/workspace/student/21201")
+        assert res_cross_ct.status_code == 403
+
+        # 5. Access admin endpoint -> 403 Forbidden
+        res_admin_ct = client.get("/api/v1/auth/users")
+        assert res_admin_ct.status_code == 403
+        print("✅ [W] Real Users contract (Role='class_teacher', ID='초1-1') login & scope verification: OK")
+
+        # [X] Frontend CLASS_LIST vs Backend Users class_teacher Contract Check (Set Equality for all 35 classes)
+        expected_35_classes = {
+            ("101", "유난초"),
+            ("102", "유백합"),
+            ("211", "초1-1"),
+            ("212", "초1-2"),
+            ("221", "초2-1"),
+            ("222", "초2-2"),
+            ("231", "초3-1"),
+            ("232", "초3-2"),
+            ("241", "초4-1"),
+            ("242", "초4-2"),
+            ("251", "초5-1"),
+            ("252", "초5-2"),
+            ("261", "초6-1"),
+            ("262", "초6-2"),
+            ("311", "중1-1"),
+            ("312", "중1-2"),
+            ("321", "중2-1"),
+            ("322", "중2-2"),
+            ("331", "중3-1"),
+            ("332", "중3-2"),
+            ("340", "중순회"),
+            ("411", "고1-1"),
+            ("412", "고1-2"),
+            ("421", "고2-1"),
+            ("422", "고2-2"),
+            ("431", "고3-1"),
+            ("432", "고3-2"),
+            ("440", "고순회"),
+            ("511", "전1-1"),
+            ("512", "전1-2"),
+            ("513", "전1-3"),
+            ("521", "전2-1"),
+            ("522", "전2-2"),
+            ("523", "전2-3"),
+            ("600", "예비관리자"),
+        }
+        assert len(expected_35_classes) == 35, "Expected class count must be exactly 35"
+
+        frontend_constants_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "src", "app", "constants.ts")
+        if os.path.exists(frontend_constants_path):
+            with open(frontend_constants_path, "r", encoding="utf-8") as f:
+                constants_content = f.read()
+            # Extract code and id pairs from CLASS_LIST in constants.ts
+            import re
+            class_list_matches = re.findall(r'\{\s*code:\s*"([^"]+)",\s*name:\s*"[^"]+",\s*id:\s*"([^"]+)"\s*\}', constants_content)
+            actual_frontend_classes = set(class_list_matches)
+            assert len(actual_frontend_classes) == 35, f"Expected 35 classes in CLASS_LIST, got {len(actual_frontend_classes)}"
+            assert actual_frontend_classes == expected_35_classes, (
+                f"CLASS_LIST does not match expected 35 classes. "
+                f"Diff: {actual_frontend_classes ^ expected_35_classes}"
+            )
+            # Ensure no 'X관리자' remains except '예비관리자'
+            assert "초1-1관리자" not in constants_content
+            assert "초2-2관리자" not in constants_content
+            assert "중1-1관리자" not in constants_content
+            assert "고1-1관리자" not in constants_content
+            assert "전1-1관리자" not in constants_content
+        print("✅ [X] Frontend CLASS_LIST contract alignment (Exact 35 class_teacher set equality): OK")
 
     return True
 
