@@ -106,8 +106,10 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     df = pd.DataFrame(raw_data)
     
-    # 2. Get BeAble code mapping & Prebuild O(1) Lookup Maps
+    # 2. Get BeAble code mapping & TierStatus for O(1) Indexed Lookups
+    all_status = fetch_student_status() or []
     beable_mapping = get_beable_code_mapping() or {}
+
     code_map = {}
     name_map = {}
     for info in beable_mapping.values():
@@ -115,6 +117,18 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         sn = str(info.get('student_name', '')).strip()
         if sc: code_map[sc] = info
         if sn: name_map[sn] = info
+
+    tier_status_cache = {}
+    for s in all_status:
+        sc = str(s.get('학생코드') or s.get('Code') or s.get('학번') or '').strip()
+        sn = str(s.get('학생이름') or s.get('학생명') or s.get('Name') or '').strip()
+        class_val = s.get('학급', s.get('Class', '-'))
+        if sc:
+            tier_status_cache[sc] = class_val
+            if sc not in code_map:
+                code_map[sc] = {'student_code': sc, 'student_name': sn or sc}
+        if sn and sn not in name_map:
+            name_map[sn] = {'student_code': sc or sn, 'student_name': sn}
 
     # 3. Filter & Map Data in O(N) instead of O(N * M)
     resolved_records = []
@@ -213,15 +227,6 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
 
     # 6. At Risk Students (Frequency >= 3 OR Intensity >= 5) - Use 학생코드
     at_risk_list = []
-    # Cache TierStatus for class lookup
-    tier_status_cache = {}
-    try:
-        for s in fetch_student_status():
-            code = str(s.get('학생코드', '')).strip()
-            if code:
-                tier_status_cache[code] = s.get('학급', '-')
-    except Exception:
-        pass
     
     if '학생코드' in df.columns:
         # Group by Student Code (4-digit), sum 발생횟수 for accurate PBIS incident count
@@ -453,11 +458,13 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     resolved_name = student_name
     resolved_code = "-"
 
-    # Strategy 1: Try exact match on '학생코드' (4-digit code) if input is numeric
-    if student_name.isdigit() and len(student_name) == 4 and '학생코드' in df.columns:
-        student_df = df[df['학생코드'] == student_name].copy()
-        resolved_code = student_name
-        resolved_name = student_df['학생명'].iloc[0] if not student_df.empty else student_name
+    # Strategy 1: Try exact match on '학생코드'
+    if '학생코드' in df.columns:
+        match_code = df[df['학생코드'].astype(str).str.strip() == str(student_name).strip()].copy()
+        if not match_code.empty:
+            student_df = match_code
+            resolved_code = str(student_name).strip()
+            resolved_name = student_df['학생명'].iloc[0] if ('학생명' in student_df.columns and pd.notna(student_df['학생명'].iloc[0])) else student_name
     
     # Strategy 2: Direct search by 학생명
     if student_df is None or student_df.empty:
@@ -514,14 +521,17 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     total_incidents = len(student_df)
     avg_intensity = float(student_df['강도'].mean()) if not student_df.empty and '강도' in student_df.columns else 0.0
     avg_intensity = round(avg_intensity, 2)
-    # Get class from TierStatus lookup using the resolved 4-digit student code
+    # Get class and manual tier flags from TierStatus lookup using indexed maps
     student_class = "-"
+    matched_status = None
     try:
-        tier_status = fetch_student_status()
-        for s in tier_status:
-            if str(s.get('학생코드', '')).strip() == str(resolved_code).strip():
-                student_class = s.get('학급', '-')
-                break
+        tier_status = fetch_student_status() or []
+        status_by_code = {str(s.get('학생코드', s.get('Code', ''))).strip(): s for s in tier_status if s.get('학생코드') or s.get('Code')}
+        status_by_name = {str(s.get('학생이름', s.get('학생명', s.get('Name', '')))).strip(): s for s in tier_status if s.get('학생이름') or s.get('학생명') or s.get('Name')}
+
+        matched_status = status_by_code.get(str(resolved_code).strip()) or status_by_name.get(str(resolved_name).strip())
+        if matched_status:
+            student_class = matched_status.get('학급', matched_status.get('Class', '-'))
     except Exception:
         pass
     
@@ -536,22 +546,16 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     else:
         detected_tiers.append("Tier 1")
 
-    # 2. Manual Sheet settings (from TierStatus)
-    try:
-        tier_status = fetch_student_status()
-        for s in tier_status:
-            if str(s.get('학생코드', '')).strip() == str(resolved_code).strip():
-                if str(s.get('Tier2(CICO)', '')).upper() == 'O':
-                    if "Tier 2" not in detected_tiers: detected_tiers.append("Tier 2(CICO)")
-                if str(s.get('Tier2(SST)', '')).upper() == 'O':
-                    if "Tier 2" not in detected_tiers: detected_tiers.append("Tier 2(SST)")
-                if str(s.get('Tier3', '')).upper() == 'O':
-                    if "Tier 3" not in detected_tiers: detected_tiers.append("Tier 3")
-                if str(s.get('Tier3+', '')).upper() == 'O':
-                    if "Tier 3+" not in detected_tiers: detected_tiers.append("Tier 3+")
-                break
-    except Exception:
-        pass
+    # 2. Manual Sheet settings (from TierStatus) using matched_status
+    if matched_status:
+        if str(matched_status.get('Tier2(CICO)', '')).upper() == 'O':
+            if "Tier 2" not in detected_tiers: detected_tiers.append("Tier 2(CICO)")
+        if str(matched_status.get('Tier2(SST)', '')).upper() == 'O':
+            if "Tier 2" not in detected_tiers: detected_tiers.append("Tier 2(SST)")
+        if str(matched_status.get('Tier3', '')).upper() == 'O':
+            if "Tier 3" not in detected_tiers: detected_tiers.append("Tier 3")
+        if str(matched_status.get('Tier3+', '')).upper() == 'O':
+            if "Tier 3+" not in detected_tiers: detected_tiers.append("Tier 3+")
     
     # Unique tiers while maintaining order, but Tier 1 is excluded if Tier 2/3 exists
     final_tiers = []
