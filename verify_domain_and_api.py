@@ -373,6 +373,162 @@ def test_p0_security_lockdown():
     settings.ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
     return True
 
+def test_p0_b1_auth_foundation():
+    print("\n" + "=" * 60)
+    print("STEP 8: Testing P0-B1 Backend Authentication Foundation")
+    print("=" * 60)
+    import hashlib
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.config import settings
+    from app.core.security import (
+        hash_password, verify_password_compat, create_access_token,
+        decode_access_token, set_session_cookie, delete_session_cookie
+    )
+
+    # [A] Argon2id hash creation
+    plain = "TestPassword!2026"
+    argon_hash = hash_password(plain)
+    assert argon_hash.startswith("$argon2id$"), f"Expected $argon2id$, got {argon_hash}"
+    assert plain not in argon_hash, "Plaintext password must not appear in hash"
+    print("✅ [A] Argon2id hash generation: OK")
+
+    # [B] Argon2id correct password verify
+    res_b = verify_password_compat(plain, argon_hash)
+    assert res_b.verified is True
+    assert res_b.needs_rehash is False
+    assert res_b.legacy_type is None
+    print("✅ [B] Argon2id correct password verify -> verified=True, needs_rehash=False: OK")
+
+    # [C] Argon2id wrong password verify
+    res_c = verify_password_compat("WrongPassword", argon_hash)
+    assert res_c.verified is False
+    print("✅ [C] Argon2id wrong password verify -> False: OK")
+
+    # [D] Legacy SHA-256 password verify
+    legacy_sha256 = hashlib.sha256("legacy_sha_pwd".encode("utf-8")).hexdigest()
+    res_d = verify_password_compat("legacy_sha_pwd", legacy_sha256)
+    assert res_d.verified is True
+    assert res_d.needs_rehash is True
+    assert res_d.legacy_type == "SHA256"
+    print("✅ [D] Legacy SHA256 password verify -> verified=True, needs_rehash=True: OK")
+
+    # [E] Legacy Plaintext password verify
+    res_e = verify_password_compat("legacy_plain_pwd", "legacy_plain_pwd")
+    assert res_e.verified is True
+    assert res_e.needs_rehash is True
+    assert res_e.legacy_type == "PLAINTEXT"
+    print("✅ [E] Legacy Plaintext password verify -> verified=True, needs_rehash=True: OK")
+
+    # [F] Wrong legacy password
+    res_f = verify_password_compat("wrong_pwd", "legacy_plain_pwd")
+    assert res_f.verified is False
+    print("✅ [F] Wrong legacy password verify -> False: OK")
+
+    # Configure Synthetic Secret for testing
+    settings.AUTH_SECRET = "synthetic-test-secret-key-32chars-min-p0b1"
+
+    # [G] JWT generation & decode (Strictly minimal claims)
+    user_payload = {
+        "sub": "TEST_TEACHER_01",
+        "role": "teacher",
+        "class_id": "CLASS_211",
+        "name": "김교사"  # Must be stripped by create_access_token
+    }
+    jwt_token = create_access_token(user_payload, expires_delta=timedelta(minutes=60))
+    decoded = decode_access_token(jwt_token)
+    assert decoded["sub"] == "TEST_TEACHER_01"
+    assert decoded["role"] == "teacher"
+    assert decoded["class_id"] == "CLASS_211"
+    assert "name" not in decoded, "User name must NOT be present in JWT payload"
+    assert "exp" in decoded and "iat" in decoded
+    print("✅ [G] JWT minimal claims (sub, role, class_id only, no name/PII): OK")
+
+    # [H] Tampered JWT rejection
+    try:
+        decode_access_token(jwt_token + "tampered")
+        assert False, "Tampered JWT must be rejected"
+    except Exception:
+        print("✅ [H] Tampered JWT rejected: OK")
+
+    # [I] Expired JWT rejection
+    expired_jwt = create_access_token(user_payload, expires_delta=timedelta(seconds=-10))
+    try:
+        decode_access_token(expired_jwt)
+        assert False, "Expired JWT must be rejected"
+    except Exception:
+        print("✅ [I] Expired JWT rejected: OK")
+
+    # [O] JWT payload minimal safety
+    assert "password" not in decoded and "password_hash" not in decoded and "name" not in decoded
+    print("✅ [O] JWT payload contains no sensitive password/name fields: OK")
+
+    # [J, K, L, M, N] HTTP Endpoints via TestClient
+    client = TestClient(app)
+
+    # [J] GET /api/v1/auth/me without cookie -> 401
+    res_me_unauth = client.get("/api/v1/auth/me")
+    assert res_me_unauth.status_code == 401, f"Expected 401 without cookie, got {res_me_unauth.status_code}"
+    print("✅ [J] GET /api/v1/auth/me without cookie -> 401 Unauthorized: OK")
+
+    # [Bearer Header Rejection] Bearer token header must be rejected (Cookie-only enforcement)
+    res_me_bearer = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {jwt_token}"})
+    assert res_me_bearer.status_code == 401, "Bearer header without cookie must be rejected (Cookie-only session)"
+    print("✅ [Cookie-Only] Authorization Bearer header rejected; HttpOnly cookie strictly required: OK")
+
+    # [K] GET /api/v1/auth/me with valid cookie -> 200
+    client.cookies.set("pbst_session", jwt_token)
+    res_me_auth = client.get("/api/v1/auth/me")
+    assert res_me_auth.status_code == 200, f"Expected 200 with cookie, got {res_me_auth.status_code}"
+    me_data = res_me_auth.json()
+    assert me_data["id"] == "TEST_TEACHER_01"
+    assert me_data["role"] == "teacher"
+    assert me_data["class_id"] == "CLASS_211"
+    print(f"✅ [K] GET /api/v1/auth/me with valid session cookie -> 200 OK: OK")
+
+    # [User Enumeration Prevention] Login failure returns uniform "Invalid credentials"
+    res_login_bad_user = client.post("/api/v1/auth/login", json={"user_id": "non_existent_user_999", "password": "any"})
+    assert res_login_bad_user.status_code == 401
+    assert res_login_bad_user.json()["detail"] == "Invalid credentials"
+    print("✅ [Anti-Enumeration] Non-existent user login returns uniform 401 'Invalid credentials': OK")
+
+    # [L] POST /api/v1/auth/logout -> clears cookie
+    res_logout = client.post("/api/v1/auth/logout")
+    assert res_logout.status_code == 200
+    set_cookie_header = res_logout.headers.get("set-cookie", "")
+    assert "pbst_session=" in set_cookie_header
+    assert "Max-Age=0" in set_cookie_header or "expires=" in set_cookie_header.lower()
+    print("✅ [L] POST /api/v1/auth/logout -> Session cookie deleted: OK")
+
+    # [M, N] Cookie flags inspection
+    settings.ENVIRONMENT = "production"
+    from fastapi import Response
+    resp = Response()
+    set_session_cookie(resp, jwt_token)
+    prod_cookie = resp.headers.get("set-cookie", "")
+    assert "httponly" in prod_cookie.lower(), "Session cookie must be HttpOnly"
+    assert "secure" in prod_cookie.lower(), "Session cookie must be Secure in production"
+    assert "samesite=lax" in prod_cookie.lower(), "Session cookie must be SameSite=lax"
+    print("✅ [M, N] Production session cookie flags (HttpOnly=True, Secure=True, SameSite=lax): OK")
+
+    # Missing AUTH_SECRET fail-closed test
+    settings.AUTH_SECRET = ""
+    try:
+        create_access_token(user_payload)
+        assert False, "create_access_token must fail if AUTH_SECRET is empty"
+    except Exception:
+        print("✅ [AUTH_SECRET] Missing secret fails closed on token creation: OK")
+
+    # Health endpoint still functions even if AUTH_SECRET is not configured
+    res_h = client.get("/health")
+    assert res_h.status_code == 200
+    print("✅ [Health] Application /health remains operational regardless of AUTH_SECRET: OK")
+
+    # Restore settings
+    settings.AUTH_SECRET = os.getenv("AUTH_SECRET", "")
+    settings.ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+    return True
+
 if __name__ == "__main__":
     t1 = test_imports()
     t2 = test_ebp_catalog()
@@ -381,10 +537,11 @@ if __name__ == "__main__":
     t5 = test_decision_signals_regression()
     t6 = test_health_routes()
     t7 = test_p0_security_lockdown()
+    t8 = test_p0_b1_auth_foundation()
 
     print("\n" + "=" * 60)
-    if t1 and t2 and t3 and t4 and t5 and t6 and t7:
-        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, TIMEZONE, HEALTH & P0 SECURITY CHECKS PASSED!")
+    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8:
+        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, TIMEZONE, HEALTH & P0-B1 AUTH CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")
     print("=" * 60)

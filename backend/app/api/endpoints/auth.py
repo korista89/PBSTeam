@@ -1,7 +1,12 @@
-from fastapi import APIRouter, HTTPException
-from app.services.sheets import get_user_by_id, update_user_password, get_all_users
+from fastapi import APIRouter, HTTPException, Response, Depends, status
+from typing import Optional, Dict, Any
 from pydantic import BaseModel
-from typing import Optional
+from app.services.sheets import get_user_by_id, update_user_password, get_all_users
+from app.core.security import (
+    verify_password_compat, create_access_token, set_session_cookie,
+    delete_session_cookie, hash_password
+)
+from app.api.deps import require_authenticated_user
 
 router = APIRouter()
 
@@ -13,37 +18,65 @@ class PasswordUpdateRequest(BaseModel):
     user_id: str
     new_password: str
 
-import hashlib
-
-def verify_password(plain_password: str, stored_password: str) -> bool:
-    if not stored_password or not plain_password:
-        return False
-    if stored_password == plain_password:
-        return True
-    sha256_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
-    return stored_password == sha256_hash
-
 @router.post("/login")
-async def login(request: LoginRequest):
-    user = get_user_by_id(request.user_id)
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    
-    if not verify_password(request.password, str(user.get("Password", ""))):
-        raise HTTPException(status_code=401, detail="Invalid password")
-    
+async def login(request: LoginRequest, response: Response):
+    user = get_user_by_id(request.user_id) if request.user_id else None
+
+    stored_pw = str(user.get("Password", "")) if user else ""
+    ver_res = verify_password_compat(request.password, stored_pw)
+
+    if not user or not ver_res.verified:
+        # Uniform 401 response to prevent user enumeration
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    # Issue signed JWT Session token & set HttpOnly Cookie
+    user_id = str(user.get("ID", ""))
+    role_str = str(user.get("Role", "teacher")).lower()
+    class_id = str(user.get("ClassID", ""))
+
+    # Minimal claims only: sub, role, class_id (no names, no PII in JWT)
+    token = create_access_token({
+        "sub": user_id,
+        "role": role_str,
+        "class_id": class_id
+    })
+    set_session_cookie(response, token)
+
     return {
         "message": "Login successful",
         "user": {
             "id": user.get("ID"),
-            "role": str(user.get("Role", "teacher")).lower(), 
+            "role": role_str,
             "Role": str(user.get("Role", "teacher")),
             "class_id": user.get("ClassID", ""),
             "class_name": user.get("ClassName", ""),
             "name": user.get("Name", "")
         }
     }
+
+@router.get("/me")
+async def get_current_user_profile(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """Returns the authenticated user's profile resolved from backend store using validated session."""
+    user_id = current_user.get("sub", "")
+    user = get_user_by_id(user_id) if user_id else None
+    name = user.get("Name", "") if user else ""
+    class_name = user.get("ClassName", "") if user else ""
+    return {
+        "id": user_id,
+        "role": current_user.get("role"),
+        "class_id": current_user.get("class_id", ""),
+        "class_name": class_name,
+        "name": name
+    }
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clears the session cookie."""
+    delete_session_cookie(response)
+    return {"message": "Logged out successfully"}
 
 @router.get("/users")
 async def list_users():
@@ -106,7 +139,7 @@ class CreateUserRequest(BaseModel):
 async def create_new_user(request: CreateUserRequest):
     """Admin only: Create a new user"""
     from app.services.sheets import create_user
-    
+
     user_data = {
         "ID": request.id,
         "Password": request.password,
@@ -118,7 +151,7 @@ async def create_new_user(request: CreateUserRequest):
         "ClassName": request.class_name,
         "Memo": request.memo
     }
-    
+
     result = create_user(user_data)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -128,7 +161,7 @@ async def create_new_user(request: CreateUserRequest):
 async def delete_existing_user(user_id: str):
     """Admin only: Delete a user"""
     from app.services.sheets import delete_user
-    
+
     result = delete_user(user_id)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])

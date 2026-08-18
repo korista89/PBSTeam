@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     GAS_WEB_APP_URL: str = ""
     LOCAL_LLM_URL: str = "http://localhost:1234/v1"
     LOCAL_LLM_MODEL: str = "gemma-4-E4B-it-GGUF"
+    AUTH_SECRET: str = os.getenv("AUTH_SECRET", "")
+    AUTH_TOKEN_TTL_MINUTES: int = int(os.getenv("AUTH_TOKEN_TTL_MINUTES", "480"))
+    AUTH_COOKIE_NAME: str = "pbst_session"
     
     class Config:
         env_file = ".env"
