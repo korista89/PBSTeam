@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from app.services.normalize import normalize_behavior_log
@@ -7,6 +7,7 @@ from app.services.ai_insight import (
     generate_bip_strategies,
     generate_full_bip
 )
+from app.api.deps import require_authenticated_user, check_student_scope
 
 router = APIRouter()
 
@@ -50,7 +51,11 @@ def _filter_student_logs(records: list, student_code: str, beable_code: str = ""
 
 
 @router.get("/students/{student_code}/bip")
-async def get_student_bip(student_code: str):
+async def get_student_bip(
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    check_student_scope(student_code, current_user)
     from app.services.sheets import get_bip
     result = get_bip(student_code)
     if result is None:
@@ -61,11 +66,16 @@ async def get_student_bip(student_code: str):
 
 
 @router.post("/students/{student_code}/bip")
-async def save_student_bip(student_code: str, data: BIPData):
-    from app.services.sheets import save_bip
+async def save_student_bip(
+    student_code: str,
+    data: BIPData,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    check_student_scope(student_code, current_user)
     if data.StudentCode != student_code:
         raise HTTPException(status_code=400, detail="Student Code mismatch")
     
+    from app.services.sheets import save_bip
     result = save_bip(data.dict())
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -77,8 +87,12 @@ async def save_student_bip(student_code: str, data: BIPData):
 # ============================================================
 
 @router.post("/students/{student_code}/ai-hypothesis")
-async def ai_bip_hypothesis(student_code: str):
+async def ai_bip_hypothesis(
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """⑦ 🤖 AI 기능적 가설 생성 (BIP Step 4)"""
+    check_student_scope(student_code, current_user)
     from app.services.sheets import fetch_all_records, fetch_student_status
     
     beable_code = _resolve_beable_code(student_code)
@@ -99,7 +113,6 @@ async def ai_bip_hypothesis(student_code: str):
             
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
     
-    # 텍스트 및 데이터 종합
     target_behaviors = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
     tb_str = ", ".join(target_behaviors) if target_behaviors else "수업 방해 및 과제 불응"
     
@@ -129,8 +142,13 @@ class AIStrategiesRequest(BaseModel):
     goals: str = ""
 
 @router.post("/students/{student_code}/ai-strategies")
-async def ai_bip_strategies(student_code: str, req: AIStrategiesRequest):
+async def ai_bip_strategies(
+    student_code: str,
+    req: AIStrategiesRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)"""
+    check_student_scope(student_code, current_user)
     from app.services.sheets import fetch_student_status
     
     status_records = fetch_student_status()
@@ -162,8 +180,13 @@ class AIBIPFullRequest(BaseModel):
     other_considerations: str = ""
 
 @router.post("/students/{student_code}/ai-bip-full")
-async def ai_bip_full(student_code: str, req: AIBIPFullRequest):
+async def ai_bip_full(
+    student_code: str,
+    req: AIBIPFullRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """⑨ 🤖 AI BIP 전체 계획서 제안 (BIP Step 12)"""
+    check_student_scope(student_code, current_user)
     from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
     
     beable_code = _resolve_beable_code(student_code)

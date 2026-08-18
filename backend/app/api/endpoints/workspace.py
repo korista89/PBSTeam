@@ -1,6 +1,6 @@
 # backend/app/api/endpoints/workspace.py
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List, Dict, Any
 from datetime import date, timedelta
 from app.core.time import now_kst, today_kst
@@ -15,26 +15,35 @@ from app.adapters.sheets.cico import CicoMonthAdapter
 from app.services.sheets import get_bip
 from app.services.ebp.matching import generate_ebp_recommendation_bundle
 from app.services.decision.signals import evaluate_decision_signals
+from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier
 
 router = APIRouter()
 
 @router.get("/today")
-async def get_today_decision_center():
+async def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """
-    Returns today's school-wide decision cockpit:
+    Returns today's decision cockpit (scoped to teacher class or school-wide for admin):
     - Urgent Safety Signals (Restraints / Injuries within 14d)
     - Review Due Signals (CICO stalled / Frequency spikes / Active missing data)
-    - School-wide Tier counts & High-risk highlights
+    - Tier counts & High-risk highlights
     """
     today = today_kst()
     students = TierStatusAdapter.fetch_students()
     all_events = LogMainAdapter.fetch_events()
 
+    role = str(current_user.get("role", "")).lower()
+    if role not in ["admin", "superadmin"]:
+        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        from app.api.deps import get_student_class_code
+        students = [s for s in students if get_student_class_code(s.student_code) == user_class]
+        student_codes = {s.student_code for s in students}
+        all_events = [e for e in all_events if e.student_code in student_codes]
+
     # Calculate 14-day recent window
     two_weeks_ago = today - timedelta(days=14)
     recent_events = [e for e in all_events if e.event_date >= two_weeks_ago]
 
-    # Evaluate signals across all students
+    # Evaluate signals across scoped students
     all_signals: List[DecisionSignal] = []
     events_by_student: Dict[str, List[BehaviorEvent]] = {}
     for ev in all_events:
@@ -82,7 +91,10 @@ async def get_today_decision_center():
 
 
 @router.get("/student/{student_code}")
-async def get_student_workspace(student_code: str):
+async def get_student_workspace(
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """
     Returns unified Student 360 Workspace:
     - Profile & Tiers
@@ -93,6 +105,7 @@ async def get_student_workspace(student_code: str):
     - Active BIP
     - Decision Signals & Data Quality check
     """
+    check_student_scope(student_code, current_user)
     today = today_kst()
     students = TierStatusAdapter.fetch_students()
     profile = next((s for s in students if s.student_code == student_code), None)

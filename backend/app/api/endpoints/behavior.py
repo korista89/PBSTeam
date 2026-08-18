@@ -1,18 +1,26 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from typing import Optional, List, Dict, Any
 from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records
 from app.core.config import settings
+from app.api.deps import require_authenticated_user, require_admin, check_student_scope
 import uuid
 import datetime
 
 router = APIRouter()
 
 @router.post("")
-async def submit_behavior_log(payload: dict = Body(...)):
+async def submit_behavior_log(
+    payload: dict = Body(...),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """
     Submit a new behavior log from Vercel Frontend.
-    Handles 'Intensity' branching and auto-forwards to Google Sheets.
+    Handles 'Intensity' branching and auto-forwards to Google Sheets with student scope validation.
     """
+    student_identifier = str(payload.get("학생코드") or payload.get("학생명") or "").strip()
+    if student_identifier:
+        check_student_scope(student_identifier, current_user)
+
     from app.services.sheets import get_main_worksheet, clear_cache
     log_main_ws = get_main_worksheet()
     if not log_main_ws:
@@ -49,13 +57,11 @@ async def submit_behavior_log(payload: dict = Body(...)):
         payload["Log_ID"] = log_id
         payload["Status"] = status
         payload["Source"] = source
-        # Match existing Google Forms timestamp format: "2026. 6. 19 오후 6:37:33"
         now = datetime.datetime.now()
         ampm = "오후" if now.hour >= 12 else "오전"
         hour12 = now.hour % 12 or 12
         payload["타임스탬프"] = f"{now.year}. {now.month}. {now.day} {ampm} {hour12}:{now.minute:02d}:{now.second:02d}"
         
-        # Match existing Google Forms date format: "2026. 6. 19" (from "2026-06-19")
         try:
             if "행동발생날짜" in payload and "-" in payload["행동발생날짜"]:
                 dt = datetime.datetime.strptime(payload["행동발생날짜"], "%Y-%m-%d")
@@ -74,16 +80,18 @@ async def submit_behavior_log(payload: dict = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/approve")
-async def approve_behavior_log(payload: dict = Body(...)):
+async def approve_behavior_log(
+    payload: dict = Body(...),
+    current_admin: Dict[str, Any] = Depends(require_admin)
+):
     """
-    Approve a pending behavior log.
-    Requires Admin ID.
+    Approve a pending behavior log (Admin only).
     """
     log_id = payload.get("log_id")
-    admin_id = payload.get("admin_id")
+    admin_id = current_admin.get("id") or current_admin.get("name") or "Admin"
     
-    if not log_id or not admin_id:
-        raise HTTPException(status_code=400, detail="log_id and admin_id required")
+    if not log_id:
+        raise HTTPException(status_code=400, detail="log_id required")
         
     client = get_sheets_client()
     if not client:
@@ -114,8 +122,6 @@ async def approve_behavior_log(payload: dict = Body(...)):
                 
                 meta = f"Approved by {admin_id} on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                 
-                # Update row
-                # +2 because enumerate is 0-indexed and row 1 is headers
                 log_main_ws.update_cell(i + 2, status_idx + 1, "Approved")
                 log_main_ws.update_cell(i + 2, approval_idx + 1, meta)
                 
@@ -127,17 +133,19 @@ async def approve_behavior_log(payload: dict = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/revise")
-async def revise_behavior_log(payload: dict = Body(...)):
+async def revise_behavior_log(
+    payload: dict = Body(...),
+    current_admin: Dict[str, Any] = Depends(require_admin)
+):
     """
-    Request revision for a pending behavior log.
-    Requires Admin ID and an optional memo.
+    Request revision for a pending behavior log (Admin only).
     """
     log_id = payload.get("log_id")
-    admin_id = payload.get("admin_id")
+    admin_id = current_admin.get("id") or current_admin.get("name") or "Admin"
     memo = payload.get("memo", "")
     
-    if not log_id or not admin_id:
-        raise HTTPException(status_code=400, detail="log_id and admin_id required")
+    if not log_id:
+        raise HTTPException(status_code=400, detail="log_id required")
         
     client = get_sheets_client()
     if not client:
@@ -179,10 +187,14 @@ async def revise_behavior_log(payload: dict = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/timeline/{student_id}")
-async def get_student_timeline(student_id: str):
+async def get_student_timeline(
+    student_id: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """
-    Fetch merged timeline of behaviors for a student.
+    Fetch merged timeline of behaviors for a student with scope check.
     """
+    check_student_scope(student_id, current_user)
     records = fetch_all_records(force_refresh=True)
     student_logs = []
     
@@ -193,9 +205,9 @@ async def get_student_timeline(student_id: str):
     return {"student_id": student_id, "logs": student_logs}
 
 @router.get("/pending")
-async def get_pending_logs():
+async def get_pending_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
     """
-    Fetch all pending logs requiring admin approval.
+    Fetch all pending logs requiring admin approval (Admin only).
     """
     records = fetch_all_records(force_refresh=True)
     pending_logs = [r for r in records if r.get("Status") == "Pending"]

@@ -1,11 +1,12 @@
 # backend/app/api/endpoints/ebp.py
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from app.domain.models import EBPStrategy, EBPCategory, FunctionCode, FunctionHypothesis, DataSufficiency, HypothesisStatus
 from app.services.ebp.catalog import load_ebp_catalog, get_ebp_by_code, search_ebp_catalog
 from app.services.ebp.matching import generate_ebp_recommendation_bundle
+from app.api.deps import require_authenticated_user
 
 router = APIRouter()
 
@@ -13,7 +14,8 @@ router = APIRouter()
 async def get_catalog(
     category: Optional[str] = Query(None, description="Filter by EBP category"),
     function_code: Optional[str] = Query(None, description="Filter by function code"),
-    query: Optional[str] = Query(None, description="Search keyword")
+    query: Optional[str] = Query(None, description="Search keyword"),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     """Retrieve canonical 39 경기 Be-Able EBP catalog"""
     cat_enum = None
@@ -33,7 +35,10 @@ async def get_catalog(
 
 
 @router.get("/catalog/{code}")
-async def get_strategy_detail(code: str):
+async def get_strategy_detail(
+    code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """Retrieve detailed implementation steps, guardrails, and pairings for a specific EBP code"""
     strategy = get_ebp_by_code(code)
     if not strategy:
@@ -49,7 +54,10 @@ class EBPRecommendationRequest(BaseModel):
     selected_ebps: List[str] = []
 
 @router.post("/recommend")
-async def recommend_ebp_bundle(req: EBPRecommendationRequest):
+async def recommend_ebp_bundle(
+    req: EBPRecommendationRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
     """Generate deterministic 39 Be-Able EBP candidate bundle with guardrails and pairings"""
     fn_enum = FunctionCode(req.function_code) if req.function_code in FunctionCode.__members__ else FunctionCode.UNKNOWN
     

@@ -496,7 +496,10 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
             for key, val in updates.items():
                 if key in col_map:
                     col_idx = col_map[key]
-                    print(f"[PW]   -> col {col_idx} ({key}) = '{val}'")
+                    if settings.ENVIRONMENT.lower() != "production":
+                        print(f"[PW]   -> col {col_idx} ({key}) = '{val}'")
+                    else:
+                        print(f"[PW]   -> updating col {col_idx} ({key})")
                     ws.update_cell(target_row, col_idx, str(val))
             
             clear_pw_cache()
@@ -504,7 +507,10 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
             
         except Exception as e:
             last_error = e
-            print(f"[PW] Update Error (Attempt {attempt+1}): {e}")
+            if settings.ENVIRONMENT.lower() != "production":
+                print(f"[PW] Update Error (Attempt {attempt+1}): {e}")
+            else:
+                print(f"[PW] Update Error (Attempt {attempt+1})")
             if attempt < max_retries:
                 time.sleep(1)
                 continue

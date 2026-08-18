@@ -74,7 +74,7 @@ def get_sheets_client():
         return _sheets_client
 
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    
+
     # 1. Try Environment Variable (Production)
     env_creds = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
     if env_creds:
@@ -92,7 +92,7 @@ def get_sheets_client():
         creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
         _sheets_client = gspread.authorize(creds)
         return _sheets_client
-        
+
     print(f"Warning: Credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
     return None
 
@@ -100,16 +100,16 @@ def get_main_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-        
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         primary_names = ["Log_Main", "BehaviorLogs1", "BehaviorLogs", "설문지 응답 시트1", "설문지 응답 1", "Form Responses 1", "시트1"]
         existing_ws = {ws.title: ws for ws in sheet.worksheets()}
-        
+
         for name in primary_names:
             if name in existing_ws:
                 return existing_ws[name]
-                
+
         print("CRITICAL_DATA_CONTRACT_ERROR: 'Log_Main' sheet not found in spreadsheet")
         return None
     except Exception as e:
@@ -142,10 +142,10 @@ def clear_cache(key: Optional[str] = None):
     elif key is None:
         for k in _cache:
             _cache[k] = {"data": [], "timestamp": 0.0}
-            
+
     if key == "tierstatus" and "tierstatus" not in _cache:
         _cache["tierstatus"] = {"data": [], "timestamp": 0}
-        
+
     if key == "daily_cico" and "daily_cico" not in _cache:
         _cache["daily_cico"] = {"data": [], "timestamp": 0}
 
@@ -158,17 +158,17 @@ def normalize_date_string(date_str: str) -> str:
     match = re.search(r'(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})', date_str)
     if match:
         return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
-    
+
     m2 = re.search(r'^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$', date_str)
     if m2:
         return f"{m2.group(1)}-{int(m2.group(2)):02d}-{int(m2.group(3)):02d}"
-        
+
     return date_str
 
 def fetch_all_records(force_refresh: bool = False):
     global _cache
     now = time.time()
-    
+
     cached_ts = _cache["records"].get("timestamp", 0.0)
     if not force_refresh and _cache["records"]["data"] and isinstance(cached_ts, (int, float)) and (now - cached_ts < CACHE_TTL):
         return _cache["records"]["data"]
@@ -176,25 +176,25 @@ def fetch_all_records(force_refresh: bool = False):
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return []
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         all_worksheets = sheet.worksheets()
-        
+
         exclude_titles = {
             "Users", "TierStatus", "CICODaily", "PW_기록", "PW_수업가이드", "PW_협의록",
             "StudentCodes", "평가문장", "Board", "MeetingNotes", "대시보드", "Dashboard"
         }
-        
+
         candidate_names = ["Log_Main", "BehaviorLogs1", "BehaviorLogs", "설문지 응답 시트1", "설문지 응답 1", "Form Responses 1", "시트1"]
-        
+
         ws_by_title = {ws.title: ws for ws in all_worksheets}
         target_worksheets = []
-        
+
         for name in candidate_names:
             if name in ws_by_title and ws_by_title[name] not in target_worksheets:
                 target_worksheets.append(ws_by_title[name])
-                
+
         if not target_worksheets:
             for ws in all_worksheets:
                 if ws.title not in exclude_titles:
@@ -209,7 +209,7 @@ def fetch_all_records(force_refresh: bool = False):
                 ws_records = safe_get_all_records(ws)
                 if not ws_records:
                     continue
-                
+
                 # Check if worksheet looks like behavior log records
                 sample = ws_records[0] if ws_records else {}
                 has_behavior_columns = any(
@@ -237,7 +237,7 @@ def fetch_all_records(force_refresh: bool = False):
                         dedup_key = f"{name}_{date_val}_{time_val}_{behavior_type}_{ts_val}"
                     else:
                         dedup_key = f"row_{ws.title}_{idx}"
-                        
+
                     if dedup_key in seen_keys:
                         continue
                     seen_keys.add(dedup_key)
@@ -275,7 +275,7 @@ def fetch_all_records(force_refresh: bool = False):
                     }
 
                     crisis_headers = [
-                        "발생 시 지도교사", 
+                        "발생 시 지도교사",
                         "1차_개별학생교육지원_시간", "1차_개별학생교육지원_장소", "1차_개별학생교육지원_교사",
                         "2차_개별학생교육지원_시간", "2차_개별학생교육지원_장소", "2차_개별학생교육지원_교사",
                         "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
@@ -287,7 +287,7 @@ def fetch_all_records(force_refresh: bool = False):
                         "학부모_상담_시간", "학부모_상담_내용",
                         "긴급회의_시간", "긴급회의_내용"
                     ]
-                    
+
                     crisis_details = {}
                     has_crisis = False
                     for ch in crisis_headers:
@@ -295,7 +295,7 @@ def fetch_all_records(force_refresh: bool = False):
                         crisis_details[ch] = val
                         if val:
                             has_crisis = True
-                            
+
                     if has_crisis:
                         mapped_row["crisis_details"] = crisis_details
 
@@ -314,7 +314,7 @@ def get_student_codes_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         # Try to open "StudentCodes" tab, create if not exists
@@ -324,7 +324,7 @@ def get_student_codes_worksheet():
             print("Creating 'StudentCodes' worksheet...")
             # Create with headers: Code, Name, Memo
             ws = sheet.add_worksheet(title="StudentCodes", rows=500, cols=10)
-            ws.append_row(["Code", "Name", "Memo"]) 
+            ws.append_row(["Code", "Name", "Memo"])
             return ws
     except Exception as e:
         print(f"Error accessing StudentCodes worksheet: {e}")
@@ -334,7 +334,7 @@ def fetch_student_codes():
     ws = get_student_codes_worksheet()
     if not ws:
         return {}
-    
+
     try:
         records = safe_get_all_records(ws)
         # Return dict: {Name: Code} for fast masking
@@ -383,7 +383,7 @@ def get_users_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
@@ -413,7 +413,7 @@ def get_users_worksheet():
 def fetch_all_users():
     global _cache
     now = time.time()
-    
+
     # Check cache
     cached_users = _cache.get("users")
     if cached_users and cached_users.get("data") and (now - float(cached_users.get("timestamp", 0)) < CACHE_TTL):
@@ -422,7 +422,7 @@ def fetch_all_users():
     ws = get_users_worksheet()
     if not ws:
         return []
-    
+
     try:
         records = safe_get_all_records(ws)
         _cache["users"] = {"data": records, "timestamp": float(now)}
@@ -440,32 +440,35 @@ def create_user(user_data: dict):
     if not client: return {"error": "Sheet not accessible"}
     if not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
             ws = sheet.worksheet("Users")
         except gspread.WorksheetNotFound:
             return {"error": "Users sheet not found"}
-            
+
         # Check if user already exists
         all_records = safe_get_all_records(ws)
         for r in all_records:
             if str(r.get("ID")) == str(user_data.get("ID")):
                 return {"error": "User ID already exists"}
-        
+
         # Prepare row
         headers = ws.row_values(1)
         row = []
         for h in headers:
             row.append(user_data.get(h, ""))
-            
+
         ws.append_row(row)
         clear_cache()
         return {"message": f"User {user_data.get('ID')} created successfully"}
-            
+
     except Exception as e:
-        print(f"Error creating user: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error creating user: {e}")
+        else:
+            print("Error creating user")
         return {"error": str(e)}
 
 def delete_user(user_id: str):
@@ -476,21 +479,24 @@ def delete_user(user_id: str):
     if not client: return {"error": "Sheet not accessible"}
     if not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         ws = sheet.worksheet("Users")
-        
+
         cell = ws.find(user_id, in_column=1) # Assuming ID is in Column 1
         if not cell:
             return {"error": "User not found"}
-            
+
         ws.delete_rows(cell.row)
         clear_cache()
         return {"message": f"User {user_id} deleted successfully"}
-            
+
     except Exception as e:
-        print(f"Error deleting user: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error deleting user: {e}")
+        else:
+            print("Error deleting user")
         return {"error": str(e)}
 
 def get_user_by_id(user_id: str):
@@ -504,7 +510,7 @@ def update_user_password(user_id: str, new_password: str):
     ws = get_users_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         for idx, r in enumerate(records):
@@ -515,7 +521,10 @@ def update_user_password(user_id: str, new_password: str):
                 return {"message": "업데이트 완료 (메모/변경일 없음)"}
         return {"error": "User not found"}
     except Exception as e:
-        print(f"Error updating password: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error updating password: {e}")
+        else:
+            print("Error updating password")
         return {"error": str(e)}
 
 def update_tierstatus_certification(student_code_or_name: str, cert_count: int):
@@ -526,7 +535,7 @@ def update_tierstatus_certification(student_code_or_name: str, cert_count: int):
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-        
+
     try:
         records = safe_get_all_records(ws)
         # 1-indexed column num: 7
@@ -544,13 +553,13 @@ def get_all_users():
     ws = get_users_worksheet()
     if not ws:
         return []
-    
+
     try:
         records = safe_get_all_records(ws)
         # Don't return passwords
         return [{
-            "ID": r.get("ID"), 
-            "Role": r.get("Role"), 
+            "ID": r.get("ID"),
+            "Role": r.get("Role"),
             "LastLogin": r.get("LastLogin"),
             "ClassID": r.get("ClassID"),
             "ClassName": r.get("ClassName"),
@@ -596,11 +605,11 @@ def code_to_class_name(code: str) -> str:
     """Convert 4-digit student code to class name"""
     if len(code) != 4:
         return ""
-    
+
     course = code[0]  # 천의 자리: 과정
     grade = code[1]   # 백의 자리: 학년
     cls = code[2]     # 십의 자리: 반
-    
+
     course_names = {
         "1": "유치원",
         "2": "초등",
@@ -609,7 +618,7 @@ def code_to_class_name(code: str) -> str:
         "5": "전공과",
         "6": "예비"
     }
-    
+
     # Special cases for visiting classes
     if code[:2] == "34":
         return "중학교 순회학급"
@@ -617,7 +626,7 @@ def code_to_class_name(code: str) -> str:
         return "고등 순회학급"
     if code[0] == "6":
         return "예비"
-    
+
     course_name = course_names.get(course, "")
     return f"{course_name} {grade}학년 {cls}반"
 
@@ -630,16 +639,16 @@ def get_unique_class_info() -> dict:
     classes = {}
     for code in STUDENT_CODES:
         if len(code) < 3: continue
-        
+
         # Determine Class ID (Provisional: first 3 digits)
         # For special classes (34xx, 44xx), we still use first 3 distinct digits if they distinguish classes
         # 3401 -> 340 (Visiting)
         class_id = code[:3]
         class_name = code_to_class_name(code)
-        
+
         if class_id not in classes:
             classes[class_id] = class_name
-            
+
     return classes
 
 
@@ -660,11 +669,11 @@ def _generate_teacher_id(class_name: str) -> str:
             # Find class num
             cls_num = parts[-1].replace("반", "")
             return f"유{cls_num}관리자"
-        
+
         prefix_map = {
             "초등": "초", "중학교": "중", "고등": "고", "전공과": "전", "예비": "예비"
         }
-        
+
         # Standard format: "Process Grade학년 Class반"
         # "초등 1학년 1반" -> ["초등", "1학년", "1반"]
         parts = class_name.split()
@@ -672,10 +681,10 @@ def _generate_teacher_id(class_name: str) -> str:
             process = parts[0]
             grade = parts[1].replace("학년", "")
             cls = parts[2].replace("반", "")
-            
+
             p_char = prefix_map.get(process, process[0])
             return f"{p_char}{grade}-{cls}관리자"
-            
+
         return class_name.replace(" ", "") + "관리자"
     except:
         return class_name + "관리자"
@@ -690,35 +699,35 @@ def reset_users_sheet():
     if not client: return {"error": "Cannot access Google Sheets"}
     if not settings.SHEET_URL:
         return {"error": "Cannot access Google Sheets"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        
+
         # Delete old if exists
         try:
             old_ws = sheet.worksheet("Users")
             sheet.del_worksheet(old_ws)
         except gspread.WorksheetNotFound:
             pass
-            
+
         print("Creating new 'Users' worksheet...")
         ws = sheet.add_worksheet(title="Users", rows=150, cols=6)
         ws.append_row(["ID", "Password", "Role", "LastLogin", "ClassID", "ClassName"])
-        
+
         all_rows = []
-        
+
         # 1. System Admin
         all_rows.append(["admin", "admin123", "admin", "", "", "전체관리자"])
-            
+
         # 2. Class Teachers
         class_info = get_unique_class_info()
         sorted_ids = sorted(class_info.keys())
-        
+
         for cid in sorted_ids:
             cname = class_info[cid]
             korean_id = _generate_teacher_id(cname)
             all_rows.append([korean_id, "teacher123", "class_teacher", "", cid, cname])
-            
+
         ws.update(all_rows, 'A2')
         clear_cache("users")
         return {"message": f"Users sheet reset. {len(all_rows)} users created. (Admin: 'admin', Teachers: '초1-1관리자' style)"}
@@ -731,7 +740,7 @@ def get_student_status_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
@@ -759,10 +768,10 @@ def reset_tier_status_sheet():
     if not client: return {"error": "Cannot access Google Sheets"}
     if not settings.SHEET_URL:
         return {"error": "Cannot access Google Sheets"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        
+
         # Try to delete existing TierStatus sheet
         try:
             old_ws = sheet.worksheet("TierStatus")
@@ -770,20 +779,20 @@ def reset_tier_status_sheet():
             print("Deleted old TierStatus worksheet")
         except gspread.WorksheetNotFound:
             print("No existing TierStatus worksheet to delete")
-        
+
         # Create new sheet with 210 students and 14 columns
         print(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students...")
         ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=14)
-        
+
         # Prepare all data at once for batch update
         all_data = [["번호", "학급", "학생코드", "학생이름", "재학여부", "BeAble코드", "그림말인증", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
         for idx, code in enumerate(STUDENT_CODES):
             class_name = code_to_class_name(code)
             all_data.append([idx + 1, class_name, code, code, "O", "", 0, "O", "X", "X", "X", "X", "", ""])
-        
+
         # Batch update all rows at once
         ws.update(all_data, 'A1')
-        
+
         return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students", "count": len(STUDENT_CODES)}
     except Exception as e:
         print(f"Error resetting TierStatus sheet: {e}")
@@ -795,24 +804,24 @@ def fetch_student_status():
     now = time.time()
     if "tierstatus" not in _cache:
         _cache["tierstatus"] = {"data": [], "timestamp": 0}
-        
+
     if _cache["tierstatus"]["data"] and now - _cache["tierstatus"]["timestamp"] < CACHE_TTL:
         return _cache["tierstatus"]["data"]
-        
+
     ws = get_student_status_worksheet()
     if not ws:
         return []
-    
+
     try:
         records = safe_get_all_records(ws)
-                
+
         # Add row_index for updates
         for idx, record in enumerate(records):
             record['row_index'] = idx + 2  # +2 for header and 1-indexing
             # Ensure student code is string
             if '학생코드' in record:
                 record['학생코드'] = str(record['학생코드'])
-                
+
         _cache["tierstatus"] = {"data": records, "timestamp": now}
         return records
     except Exception as e:
@@ -838,12 +847,12 @@ def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
-        
+
         # Column mapping (A=1, B=2, etc. H=8)
         tier_columns = {
             'Tier1': 'H',
@@ -852,31 +861,31 @@ def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""
             'Tier3': 'K',
             'Tier3+': 'L',
         }
-        
+
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2  # +2 for header and 1-indexing
                 batch_updates = []
-                
+
                 # Update each tier column
                 for tier_name, col_letter in tier_columns.items():
                     if tier_name in tier_values:
                         value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
                         batch_updates.append({"range": f"{col_letter}{row_num}", "values": [[value]]})
-                
+
                 # Update 변경일 (column 13 -> M)
                 batch_updates.append({"range": f"M{row_num}", "values": [[today]]})
-                
+
                 # Update 메모 (column 14 -> N)
                 if memo:
                     batch_updates.append({"range": f"N{row_num}", "values": [[memo]]})
-                
+
                 if batch_updates:
                     ws.batch_update(batch_updates)
                 clear_cache("tierstatus") # Invalidate cache if implemented
-                
+
                 return {"message": f"Tier updated for {code}", "code": code, "tiers": tier_values}
-        
+
         return {"error": f"Student code {code} not found"}
     except Exception as e:
         print(f"Error updating tier: {e}")
@@ -890,12 +899,12 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
-        
+
         tier_columns = {
             'Tier1': 'H',
             'Tier2(CICO)': 'I',
@@ -903,14 +912,14 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
             'Tier3': 'K',
             'Tier3+': 'L',
         }
-        
+
         for idx, r in enumerate(records):
             if str(r.get('학생코드')) == str(code):
                 row_num = idx + 2
-                
+
                 # Build batch update
                 batch_updates = []
-                
+
                 # Update tier columns
                 for tier_name, col_letter in tier_columns.items():
                     if tier_name in tier_values:
@@ -919,47 +928,47 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
                             "range": f"{col_letter}{row_num}",
                             "values": [[value]]
                         })
-                
+
                 # Update student name (column 4 / D)
                 if student_name is not None:
                     batch_updates.append({
                         "range": f"D{row_num}",
                         "values": [[student_name]]
                     })
-                
+
                 # Update enrollment (column 5 / E)
                 if enrolled is not None:
                     batch_updates.append({
                         "range": f"E{row_num}",
                         "values": [[enrolled]]
                     })
-                
+
                 # Update BeAble code (column 6 / F)
                 if beable_code is not None:
                     batch_updates.append({
                         "range": f"F{row_num}",
                         "values": [[beable_code]]
                     })
-                
+
                 # Update 변경일 (column 13 / M)
                 batch_updates.append({
                     "range": f"M{row_num}",
                     "values": [[today]]
                 })
-                
+
                 # Update 메모 (column 14 / N)
                 if memo is not None:
                     batch_updates.append({
                         "range": f"N{row_num}",
                         "values": [[memo]]
                     })
-                
+
                 # Execute batch update
                 if batch_updates:
                     ws.batch_update(batch_updates)
-                
+
                 return {"message": f"Student {code} updated successfully", "code": code}
-        
+
         return {"error": f"Student code {code} not found"}
     except Exception as e:
         print(f"Error in unified update: {e}")
@@ -971,7 +980,7 @@ def update_student_enrollment(code: str, enrolled: str):
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         for idx, r in enumerate(records):
@@ -989,7 +998,7 @@ def update_student_beable_code(code: str, beable_code: str):
     ws = get_student_status_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         for idx, r in enumerate(records):
@@ -1008,13 +1017,13 @@ def get_beable_code_mapping():
         records = fetch_student_status()
         if not records:
             return {}
-        
+
         mapping = {}
         for r in records:
             beable = str(r.get('BeAble코드', '')).strip()
             student_code = str(r.get('학생코드', '')).strip()
             enrolled = str(r.get('재학여부', 'O')).strip()
-            
+
             # Include ALL enrolled students (even if BeAble code is missing)
             if enrolled == 'O':
                 # Determine highest tier for this student
@@ -1024,10 +1033,10 @@ def get_beable_code_mapping():
                 if r.get('Tier2(SST)') == 'O': tiers.append('Tier2(SST)')
                 if r.get('Tier2(CICO)') == 'O': tiers.append('Tier2(CICO)')
                 if r.get('Tier1') == 'O': tiers.append('Tier1')
-                
+
                 # Use BeAble code as key if present, otherwise use student_code
                 mapping_key = beable if beable else student_code
-                
+
                 mapping[mapping_key] = {
                     'student_code': student_code,
                     'student_name': str(r.get('학생이름', student_code)).strip(),
@@ -1061,7 +1070,7 @@ def get_cico_daily_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
@@ -1078,17 +1087,17 @@ def get_cico_daily_worksheet():
 def fetch_cico_daily(student_code: str = None, start_date: str = None, end_date: str = None):
     global _cache
     now = time.time()
-    
+
     if "daily_cico" not in _cache:
         _cache["daily_cico"] = {"data": [], "timestamp": 0}
-        
+
     if _cache["daily_cico"]["data"] and now - _cache["daily_cico"]["timestamp"] < CACHE_TTL:
         records = _cache["daily_cico"]["data"]
     else:
         ws = get_cico_daily_worksheet()
         if not ws:
             return []
-        
+
         try:
             records = safe_get_all_records(ws)
             _cache["daily_cico"] = {"data": records, "timestamp": now}
@@ -1104,14 +1113,14 @@ def fetch_cico_daily(student_code: str = None, start_date: str = None, end_date:
         filtered = [r for r in filtered if r.get('Date', '') >= start_date]
     if end_date:
         filtered = [r for r in filtered if r.get('Date', '') <= end_date]
-    
+
     return filtered
 
 def add_cico_daily(data: dict):
     ws = get_cico_daily_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         from datetime import datetime
         date_str = data.get('date', datetime.now().strftime("%Y-%m-%d"))
@@ -1133,15 +1142,22 @@ def add_cico_daily(data: dict):
                 target1=data.get('target1', ''),
                 target2=data.get('target2', '')
             )
-            print(f"DEBUG: Sync result: {sync_result}")
+            if settings.ENVIRONMENT.lower() != "production":
+                print(f"DEBUG: Sync result: {sync_result}")
         except Exception as e:
-             print(f"Error syncing CICO daily to monthly (continuing): {e}")
+            if settings.ENVIRONMENT.lower() != "production":
+                print(f"Error syncing CICO daily to monthly (continuing): {e}")
+            else:
+                print("Error syncing CICO daily to monthly (continuing)")
 
         clear_cache("daily_cico")
 
         return {"message": "CICO daily record added"}
     except Exception as e:
-        print(f"Error adding CICO daily: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error adding CICO daily: {e}")
+        else:
+            print("Error adding CICO daily")
         return {"error": str(e)}
 
 def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, target2: str):
@@ -1151,22 +1167,22 @@ def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, 
     try:
         month = int(date_str.split("-")[1])
         day = int(date_str.split("-")[2])
-        
+
         # Determine Daily Outcome (O/X) for the cell
         # Logic: If both O -> O? Or if valid data exists?
         # The user said "Rate calculation not working".
         # We need to mark the day as something to count it.
-        
+
         t1 = target1.upper() == 'O'
         t2 = target2.upper() == 'O'
-        
+
         daily_val = ""
         # If at least one target is present
         if target1 or target2:
             daily_val = "O" if (t1 and t2) else "X"
             if not target2 and target1: daily_val = target1.upper()
             if not target1 and target2: daily_val = target2.upper()
-        
+
         if not daily_val:
             return {"message": "No targets to sync"}
 
@@ -1176,12 +1192,18 @@ def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, 
             "col": str(day),
             "value": daily_val
         }]
-        
-        print(f"DEBUG: Syncing Daily {date_str} for {student_code} -> {daily_val}")
+
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"DEBUG: Syncing Daily {date_str} for {student_code} -> {daily_val}")
+        else:
+            print("Syncing CICO daily to monthly sheet")
         return update_monthly_cico_cells(month, updates, student_code_override=student_code)
-        
+
     except Exception as e:
-        print(f"DEBUG: Sync Error: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"DEBUG: Sync Error: {e}")
+        else:
+            print("Error during CICO daily to monthly sync")
         return {"error": str(e)}
 
 
@@ -1191,18 +1213,18 @@ def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str
     if not client: return {"error": "Sheet not available"}
     if not settings.SHEET_URL:
         return {"error": "Sheet not available"}
-        
+
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         ws = sh.worksheet("Users")
-        
+
         cell = ws.find(user_id, in_column=1) # Assume ID is col 1
         if not cell:
             return {"error": "User not found"}
-            
+
         # Headers: ID, Password, Role, ClassID, ClassName, Name, Phone, Email, LastLogin, Memo
         headers = ws.row_values(1)
-        
+
         def get_col_index(header_name):
             try:
                 return headers.index(header_name) + 1
@@ -1214,20 +1236,20 @@ def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str
         # Update Role
         role_col = get_col_index("Role")
         if role_col: ws.update_cell(cell.row, role_col, new_role)
-        
+
         # Update ClassID
         class_id_col = get_col_index("ClassID")
         if class_id_col: ws.update_cell(cell.row, class_id_col, new_class)
-        
+
         # Update ClassName
         class_name_col = get_col_index("ClassName")
         if class_name_col: ws.update_cell(cell.row, class_name_col, new_class + "반" if new_class else "")
-        
+
         # Update Name
         if name:
             name_col = get_col_index("Name")
             if name_col: ws.update_cell(cell.row, name_col, name)
-            
+
         # Update Memo
         if memo:
             memo_col = get_col_index("Memo")
@@ -1236,11 +1258,14 @@ def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str
                 ws.update_cell(1, len(headers) + 1, "Memo")
                 memo_col = len(headers) + 1
             ws.update_cell(cell.row, memo_col, memo)
-        
+
         clear_cache("users")
         return {"message": f"User {user_id} updated"}
     except Exception as e:
-        print(f"Error updating user: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error updating user: {e}")
+        else:
+            print("Error updating user")
         return {"error": str(e)}
 
 
@@ -1252,7 +1277,7 @@ def get_meeting_notes_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
@@ -1271,14 +1296,14 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
     ws = get_meeting_notes_worksheet()
     if not ws:
         return []
-    
+
     try:
         records = safe_get_all_records(ws)
         valid_records = []
-        
+
         # Clean student code for filtering if provided
         clean_target_code = str(student_code).strip() if student_code else None
-        
+
         for r in records:
             # Filter by meeting_type if provided
             if meeting_type and str(r.get('MeetingType')).strip() != str(meeting_type).strip():
@@ -1288,13 +1313,13 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
                 row_code = str(r.get('StudentCode', '')).strip()
                 if row_code != clean_target_code:
                     continue
-            
+
             uid = r.get('UUID')
             if not uid:
                 uid = r.get('CreatedAt') or str(r.get('Date')) # Fallback for legacy
-            
+
             valid_records.append({
-                "id": uid, 
+                "id": uid,
                 "date": r.get('Date'),
                 "meeting_type": r.get('MeetingType'),
                 "content": r.get('Content'),
@@ -1305,7 +1330,7 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
                 "period_end": r.get('PeriodEnd', ''),
                 "uuid": uid
             })
-            
+
         # Sort descending by CreatedAt
         try:
             valid_records.sort(key=lambda x: x['created_at'], reverse=True)
@@ -1320,14 +1345,14 @@ def add_meeting_note(data: dict):
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         from datetime import datetime
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         import uuid
         note_uuid = str(uuid.uuid4())
-        
+
         row = [
             data.get('date', datetime.now().strftime("%Y-%m-%d")),
             data.get('meeting_type', 'tier1'),
@@ -1339,13 +1364,19 @@ def add_meeting_note(data: dict):
             data.get('period_end', ''),
             note_uuid
         ]
-        print(f"DEBUG: Appending meeting note: {row}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"DEBUG: Appending meeting note: {row}")
+            print("DEBUG: Meeting note added successfully")
+        else:
+            print("Meeting note added successfully")
         ws.append_row(row)
         clear_cache("meeting_notes") # Invalidate cache
-        print("DEBUG: Meeting note added successfully")
         return {"message": "Meeting note added", "created_at": created_at, "uuid": note_uuid}
     except Exception as e:
-        print(f"Error adding meeting note: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error adding meeting note: {e}")
+        else:
+            print("Error adding meeting note")
         return {"error": str(e)}
 
 def update_meeting_note(note_id: str, content: str):
@@ -1353,11 +1384,11 @@ def update_meeting_note(note_id: str, content: str):
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         row_idx = -1
-        
+
         # Search for note_id in UUID or ID/CreatedAt (legacy)
         for i, r in enumerate(records):
             # Column 9 is UUID, Column 5 is CreatedAt
@@ -1366,16 +1397,19 @@ def update_meeting_note(note_id: str, content: str):
                str(r.get('CreatedAt', '')).strip() == str(note_id).strip():
                 row_idx = i + 2 # +2 for header offset
                 break
-        
+
         if row_idx == -1:
             return {"error": f"Note not found with ID: {note_id}"}
-        
+
         # Update content (Column 3)
         ws.update_cell(row_idx, 3, content)
         clear_cache("meeting_notes")
         return {"message": "Note updated"}
     except Exception as e:
-        print(f"Error updating meeting note: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error updating meeting note: {e}")
+        else:
+            print("Error updating meeting note")
         return {"error": str(e)}
 
 def delete_meeting_note(note_id: str):
@@ -1383,21 +1417,21 @@ def delete_meeting_note(note_id: str):
     ws = get_meeting_notes_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         records = safe_get_all_records(ws)
         row_idx = -1
-        
+
         for i, r in enumerate(records):
             if str(r.get('UUID', '')).strip() == str(note_id).strip() or \
                str(r.get('id', '')).strip() == str(note_id).strip() or \
                str(r.get('CreatedAt', '')).strip() == str(note_id).strip():
                 row_idx = i + 2
                 break
-                
+
         if row_idx == -1:
             return {"error": f"Note not found with ID: {note_id}"}
-        
+
         ws.delete_rows(row_idx)
         clear_cache("meeting_notes")
         return {"message": "Note deleted"}
@@ -1425,7 +1459,7 @@ def set_default_holidays(ws):
         ["2025-10-05", "추석 연휴"], ["2025-10-06", "추석"], ["2025-10-07", "추석 연휴"], ["2025-10-08", "대체공휴일(추석)"],
         ["2025-10-09", "한글날"],
         ["2025-12-25", "성탄절"],
-        
+
         ["2026-01-01", "신정"],
         ["2026-02-16", "설날 연휴"], ["2026-02-17", "설날"], ["2026-02-18", "설날 연휴"],
         ["2026-03-01", "삼일절"], ["2026-03-02", "대체공휴일(삼일절)"],
@@ -1452,7 +1486,7 @@ def get_holidays_from_config():
         return []
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        
+
         # Try '날짜 관리' sheet first
         config_ws = None
         try:
@@ -1474,13 +1508,13 @@ def get_holidays_from_config():
                     config_ws = sheet.worksheet("설정(Config)")
                 except gspread.WorksheetNotFound:
                     return []
-        
+
         if not config_ws:
             return []
-            
+
         # Ensure defaults if empty
         set_default_holidays(config_ws)
-        
+
         raw = config_ws.col_values(1)  # Column A = holiday dates
         holidays = []
         for val in raw[2:]:  # Skip header rows
@@ -1498,7 +1532,7 @@ def get_business_days(year: int, month: int, holidays: list = None):
     import datetime
     if holidays is None:
         holidays = []
-    
+
     # Normalize holidays — only use full YYYY-MM-DD matching to prevent cross-year bleeding
     holiday_set = set()
     for h in holidays:
@@ -1507,24 +1541,24 @@ def get_business_days(year: int, month: int, holidays: list = None):
             holiday_set.add(h)
         elif len(h) == 5:  # MM-DD — assume current year
             holiday_set.add(f"{year}-{h}")
-    
+
     dates = []
-    
+
     try:
         d = datetime.date(year, month, 1)
     except ValueError:
         return []
-    
+
     while d.month == month:
         day_of_week = d.weekday()  # 0=Mon, 5=Sat, 6=Sun
         date_str = d.strftime("%Y-%m-%d")
         short_date = d.strftime("%m-%d")
-        
+
         if day_of_week < 5 and date_str not in holiday_set:
             dates.append(short_date)
-        
+
         d += datetime.timedelta(days=1)
-    
+
     return dates
 
 
@@ -1539,7 +1573,7 @@ def _calculate_cico_rate(student: dict) -> dict:
     behavior_type = student.get("목표행동 유형", "증가 목표행동")
     goal_criteria = student.get("목표 달성 기준", "80% 이상")
     baseline = student.get("입력 기준", 0) # Baseline (v3 I column)
-    
+
     # Collect non-empty day values
     filled_values = []
     # In v3, days might be "1회차", "2회차" ... or legacy dates if mixed
@@ -1547,16 +1581,16 @@ def _calculate_cico_rate(student: dict) -> dict:
         val = str(val).strip()
         if val and val not in ["", "-", "·"]:
             filled_values.append(val)
-    
+
     if not filled_values:
         return {"rate_str": "", "achieved": "", "rate_num": None, "input_days": 0, "total_days": len(days)}
-    
+
     input_days = len(filled_values)
     total_days = len(days)
-    
+
     # Calculate rate based on scale type
     rate_num = None
-    
+
     # Helper to clean numeric strings
     def clean_num(v):
         try:
@@ -1569,28 +1603,28 @@ def _calculate_cico_rate(student: dict) -> dict:
         total = len(filled_values)
         if total > 0:
             rate_num = (o_count / total) * 100
-    
+
     elif scale == "0점/1점/2점":
         total_score = sum(clean_num(v) for v in filled_values)
         count = len(filled_values)
         if count > 0:
             max_possible = count * 2
             rate_num = (total_score / max_possible) * 100
-    
+
     elif scale == "0~5":
         total_score = sum(clean_num(v) for v in filled_values)
         count = len(filled_values)
         if count > 0:
             max_possible = count * 5
             rate_num = (total_score / max_possible) * 100
-    
+
     elif scale == "0~7교시":
         total_score = sum(clean_num(v) for v in filled_values)
         count = len(filled_values)
         if count > 0:
             max_possible = count * 7
             rate_num = (total_score / max_possible) * 100
-    
+
     elif scale == "1~100회" or scale == "1~100분":
         total_score = sum(clean_num(v) for v in filled_values)
         count = len(filled_values)
@@ -1602,7 +1636,7 @@ def _calculate_cico_rate(student: dict) -> dict:
                     bl_val = float(str(baseline).replace("회", "").replace("분", "").strip())
                 except (ValueError, TypeError):
                     bl_val = 100.0 # Fallback
-                
+
                 if bl_val > 0:
                     rate_num = (avg_val / bl_val) * 100
                 else:
@@ -1610,34 +1644,34 @@ def _calculate_cico_rate(student: dict) -> dict:
             else:
                 # Increase: base is 100
                 rate_num = (avg_val / 100) * 100
-    
+
     else:
         # Fallback
         total_score = sum(clean_num(v) for v in filled_values)
         count = len(filled_values)
         if count > 0:
             rate_num = (total_score / count)
-    
+
     # Format rate string
     if rate_num is not None:
         rate_str = f"{round(rate_num)}%"
     else:
         rate_str = ""
-    
+
     # Determine achievement (달성 여부)
     achieved = ""
     if rate_num is not None and goal_criteria:
         try:
             goal_str = goal_criteria.replace("%", "").replace("이상", "").replace("이하", "").strip()
             goal_val = float(goal_str)
-            
+
             if "이하" in goal_criteria:
                 achieved = "O" if rate_num <= goal_val else "X"
             else:  # 이상 (default)
                 achieved = "O" if rate_num >= goal_val else "X"
         except (ValueError, TypeError):
             achieved = ""
-    
+
     return {
         "rate_str": rate_str,
         "achieved": achieved,
@@ -1656,38 +1690,38 @@ def create_monthly_cico_sheet(year: int, month: int):
     if not client: return {"error": "Sheet not available"}
     if not settings.SHEET_URL:
         return {"error": "Sheet not available"}
-        
+
     if not client: return {"error": "Sheet not available"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
-        
+
         # Check if exists
         ws = get_worksheet_fuzzy(sheet, month_name)
         if ws:
             return {"message": f"Sheet '{month_name}' already exists.", "exists": True}
-            
+
         # 1. Fetch CICO Students (Tier2(CICO) == 'O')
         status_records = fetch_student_status()
         cico_students = [s for s in status_records if s.get('Tier2(CICO)') == 'O']
-        
+
         if not cico_students:
             return {"error": "No students marked for CICO in TierStatus."}
-            
+
         # 2. Prepare Rows (CICO v3 Layout)
         # 1: 번호, 2: 학급, 3: 학생명(코드), 4: Tier2, 5: Tier3, 6: 목표행동, 7: 목표행동 유형, 8: 척도, 9: 입력 기준, 10: 목표 달성 기준
         fixed_headers = ["번호", "학급", "학생명(코드)", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준(베이스라인)", "목표 달성 기준"]
-        
+
         # 11~35: 25 Sessions (1회차 ~ 25회차)
         session_headers = [f"{i}회차" for i in range(1, 26)]
-        
+
         # 36~41: Stats and others
         tail_headers = ["수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
-        
+
         headers = fixed_headers + session_headers + tail_headers
-        
+
         rows = [headers]
-        
+
         for idx, s in enumerate(cico_students, 1):
             name_code = f"{s.get('학생이름', '')}({s.get('학생코드', '')})"
             row = [
@@ -1704,22 +1738,22 @@ def create_monthly_cico_sheet(year: int, month: int):
             ]
             # 25 session columns
             row += [""] * 25
-            
+
             # stats + others
             row += ["-", "-", "", "", "", ""]
             rows.append(row)
-            
+
         # 3. Create Sheet
         ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+2)
         ws.update(rows)
-        
+
         # 4. Add Dropdowns (Data Validation) matching v3 indices
         try:
             from gspread.utils import ValidationConditionType
-            
+
             start_row = 2
             end_row = len(rows)
-            
+
             # Column D: Tier2 (O/X)
             ws.add_validation(f'D{start_row}:D{end_row}', ValidationConditionType.one_of_list, ['O', 'X'], showCustomUi=True)
             # Column E: Tier3 (O/X)
@@ -1729,20 +1763,20 @@ def create_monthly_cico_sheet(year: int, month: int):
             # Column H: 척도
             ws.add_validation(f'H{start_row}:H{end_row}', ValidationConditionType.one_of_list, ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'], showCustomUi=True)
             # Column J: 달성기준
-            ws.add_validation(f'J{start_row}:J{end_row}', ValidationConditionType.one_of_list, 
+            ws.add_validation(f'J{start_row}:J{end_row}', ValidationConditionType.one_of_list,
                              ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
                               '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'], showCustomUi=True)
             # Column AO (41): 차월대상
             # AO is 41st column. A1 notation: AO
             ws.add_validation(f'AO{start_row}:AO{end_row}', ValidationConditionType.one_of_list, ['유지', '종료', '상향', '하향'], showCustomUi=True)
-                
+
         except Exception as e:
             print(f"Warning: Failed to set data validation: {e}")
             import traceback
             traceback.print_exc()
-        
+
         return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
-        
+
     except Exception as e:
         return {"error": str(e)}
 
@@ -1757,21 +1791,21 @@ def find_col_fuzzy(headers: Union[list, dict], candidates: list) -> int:
 
     # Normalize headers
     norm_headers = [str(h).strip().lower().replace(" ", "") for h in headers_list]
-    
+
     for c in candidates:
         norm_c = c.strip().lower().replace(" ", "")
         try:
             return norm_headers.index(norm_c)
         except ValueError:
             continue
-    
+
     # Try partial match for some keywords
     for idx, h in enumerate(norm_headers):
         for c in candidates:
             norm_c = c.strip().lower().replace(" ", "")
             if len(norm_c) > 2 and norm_c in h:
                 return idx
-                
+
     return -1
 
 
@@ -1785,7 +1819,7 @@ def get_worksheet_fuzzy(sheet, name):
         return sheet.worksheet(name)
     except gspread.WorksheetNotFound:
         pass
-    
+
     # Try variants
     clean_name = str(name).replace("월", "").strip()
     try:
@@ -1793,19 +1827,19 @@ def get_worksheet_fuzzy(sheet, name):
         variants = [clean_name, str(month_int), f"{month_int:02d}", f"{month_int}월", f"{month_int} Month"]
     except ValueError:
         variants = [clean_name]
-    
+
     all_ws = sheet.worksheets()
     ws_names = {ws.title: ws for ws in all_ws}
-    
+
     for v in variants:
         if v in ws_names:
             return ws_names[v]
-            
+
     # Last resort: partially match
     for title, ws in ws_names.items():
         if clean_name in title:
             return ws
-            
+
     return None
 
 
@@ -1818,25 +1852,25 @@ def get_monthly_cico_data(month: int):
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
-        
+
         try:
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
-        
+
         all_values = safe_get_all_values(ws)
         if not all_values:
             return {"error": "Empty sheet"}
-        
+
         headers = all_values[0]
-        
+
         # Find key column indices
         synonyms = {
             "번호": ["번호", "No", "연번"],
@@ -1857,12 +1891,12 @@ def get_monthly_cico_data(month: int):
             "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk", "협의"],
             "차월 대상여부": ["차월대상여부", "차월", "NextMonth", "next"]
         }
-        
+
         for key, candidates in synonyms.items():
             idx = find_col_fuzzy(headers, candidates)
             if idx != -1:
                 col_map[key] = idx
-        
+
         # v3 Specific: If session starts at indexed 11, we look for "회차"
         day_columns = []
         for i, h in enumerate(headers):
@@ -1878,17 +1912,17 @@ def get_monthly_cico_data(month: int):
         # Tier2 and Tier3 check columns
         tier2_idx = col_map.get("Tier2", 3)
         tier3_idx = col_map.get("Tier3", 4)
-        
+
         # Student code extraction if merged in column C: Name(Code)
         import re
-        
+
         # Build student rows
         students = []
-        
+
         for row_idx, row in enumerate(all_values[1:], start=2):
             if len(row) <= max(tier2_idx, tier3_idx, col_map.get("학생명", 2)):
                 continue
-            
+
             is_tier2 = str(row[tier2_idx]).strip().upper()
             # We treat CICO students as those with Tier2='O' or anything truthy
             if is_tier2 not in ["O", "V", "대상", "TRUE", "CHECK", "Y"]:
@@ -1902,7 +1936,7 @@ def get_monthly_cico_data(month: int):
             if code_match:
                 extracted_code = code_match.group(1).strip()
                 name_only = raw_name.replace(f"({extracted_code})", "").strip()
-            
+
             # Use explicit code column if found and not empty
             code_val = str(row[col_map["학생코드"]]).strip() if "학생코드" in col_map and col_map["학생코드"] < len(row) else ""
             if not code_val:
@@ -1925,13 +1959,13 @@ def get_monthly_cico_data(month: int):
                 "목표_달성_여부": "",
                 "days": {}
             }
-            
+
             # Fill day/session values
             for dc in day_columns:
                 idx = dc["index"]
                 val = row[idx] if idx < len(row) else ""
                 student["days"][dc["label"]] = val
-            
+
             # Auto-calculate rate
             calc_result = _calculate_cico_rate(student)
             student["수행_발생률"] = calc_result["rate_str"]
@@ -1939,13 +1973,13 @@ def get_monthly_cico_data(month: int):
             student["rate_num"] = calc_result["rate_num"]
             student["input_days"] = calc_result["input_days"]
             student["total_days"] = calc_result["total_days"]
-            
+
             students.append(student)
-        
+
         # Calculate individual and global weekly trends
         chunk_size = 5
         weekly_summary = []
-        
+
         # 1. Individual Weekly Trends
         for s in students:
             s["weekly_trend"] = []
@@ -1962,14 +1996,14 @@ def get_monthly_cico_data(month: int):
         for i in range(0, len(day_columns), chunk_size):
             chunk_cols = day_columns[i:i + chunk_size]
             week_label = f"W{i//chunk_size + 1}"
-            
+
             all_rates = []
             for s in students:
                 subset_days = {dc["label"]: s["days"].get(dc["label"], "") for dc in chunk_cols}
                 res = _calculate_cico_rate({**s, "days": subset_days})
                 if res["rate_num"] is not None:
                     all_rates.append(res["rate_num"])
-            
+
             if all_rates:
                 avg_rate = sum(all_rates) / len(all_rates)
                 weekly_summary.append({"week": week_label, "rate": round(avg_rate, 1)})
@@ -1982,7 +2016,7 @@ def get_monthly_cico_data(month: int):
             "not_achieved_count": sum(1 for s in students if s.get("목표_달성_여부", "") == "X"),
             "weekly_trend": weekly_summary
         }
-        
+
         return {
             "month": month_name,
             "day_columns": day_columns,
@@ -1991,7 +2025,7 @@ def get_monthly_cico_data(month: int):
             "weekly_trend": weekly_summary,
             "col_map": {k: v for k, v in col_map.items()}
         }
-    
+
     except Exception as e:
         print(f"Error getting monthly CICO data: {e}")
         return {"error": str(e)}
@@ -2006,22 +2040,22 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
-        
+
         try:
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
-        
+
         headers = ws.row_values(1)
-        all_values = safe_get_all_values(ws) 
-        
+        all_values = safe_get_all_values(ws)
+
         # Determine student_code column index for override lookup
         # Check for v3 column "학생명(코드)" or explicit "학생코드"
         code_col_idx = -1
@@ -2030,7 +2064,7 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             if "학생코드" in h_str or "Code" in h_str or "(코드)" in h_str:
                 code_col_idx = idx # 0-based
                 break
-        
+
         # Build batch update
         cells_to_update = []
         rows_to_recalc = set()
@@ -2041,31 +2075,32 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             row = u.get("row")
             col = u.get("col")
             value = u.get("value", "")
-            
+
             # If row is None, try to find by student_code_override
             if row is None and student_code_override and code_col_idx != -1:
                 found_row = -1
                 for r_idx, r_val in enumerate(all_values):
                     if r_idx == 0: continue
-                    
+
                     if len(r_val) > code_col_idx:
                         cell_val = str(r_val[code_col_idx]).strip()
                         # Direct match or extract from "Name(Code)"
                         if cell_val == str(student_code_override).strip():
                             found_row = r_idx + 1
                             break
-                        
+
                         # Check inside parentheses
                         match = re.search(r'\((.*?)\)', cell_val)
                         if match and match.group(1).strip() == str(student_code_override).strip():
                             found_row = r_idx + 1
                             break
-                
+
                 if found_row != -1:
                     row = found_row
-            
+
             if not row:
-                print("DEBUG: Row not specified and could not be resolved.")
+                if settings.ENVIRONMENT.lower() != "production":
+                    print("DEBUG: Row not specified and could not be resolved.")
                 continue
 
             # If col is a string (header name), convert to column index
@@ -2077,7 +2112,7 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                     "수행/발생률": ["수행/발생률", "수행률", "발생률", "Rate"],
                     "목표 달성 여부": ["목표 달성 여부", "달성여부", "Achieved"],
                 }
-                
+
                 if col in headers:
                     col_idx = headers.index(col) + 1
                 else:
@@ -2101,20 +2136,21 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                             if h_match and int(h_match.group(1)) == num:
                                 col_idx = idx + 1
                                 break
-                
+
                 if col_idx != -1:
                     col = col_idx
                 else:
-                    print(f"DEBUG: Column '{col}' not found in headers")
+                    if settings.ENVIRONMENT.lower() != "production":
+                        print(f"DEBUG: Column '{col}' not found in headers")
                     continue  # Skip unknown columns
-            
+
             if row and col:
                 cells_to_update.append({
                     "range": f"{_col_letter(col)}{row}",
                     "values": [[value]]
                 })
                 rows_to_recalc.add(row)
-        
+
         # Recalculate Logic
         try:
             # Identify columns using Regex loose matching
@@ -2129,37 +2165,31 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             achieved_idx = find_col_regex(r'달성.*여부|성공.*여부')
             goal_idx = find_col_regex(r'달성.*기준|목표.*기준')
             type_idx = find_col_regex(r'행동.*유형')
-            
+
             if rate_idx == -1:
-                print("DEBUG: '수행/발생률' column missing, skipping calculation")
-            
+                if settings.ENVIRONMENT.lower() != "production":
+                    print("DEBUG: '수행/발생률' column missing, skipping calculation")
+
             day_cols = []
             import re
             for idx, h in enumerate(headers):
-                # Assume day columns start with a number and are roughly in the middle
-                # Simple heuristic: header is just digits or digits+"일"
-                # But headers can be anything.
-                # Let's rely on range 1-31.
-                # Match "1", "1일", "03-03", "3-3"
-                # If MM-DD, we just need to know it's a day bucket.
-                # Actually we just need to capture it as a valid day column.
-                # We don't necessarily need the exact day number for calculation if we just iterate day_cols.
                 match = re.search(r'^(\d{1,2})[-/.](\d{1,2})$|^(\d{1,2})(일)?$', str(h).strip())
                 if match:
-                   # It's a date column
                    day_cols.append(idx)
-            
+
             if rate_idx != -1:
-                print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
+                if settings.ENVIRONMENT.lower() != "production":
+                    print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
                 for r_idx in rows_to_recalc:
                     # 0-based index for python list
                     row_data_idx = r_idx - 1
                     if row_data_idx < len(all_values):
                         row_data = list(all_values[row_data_idx])
                     else:
-                        print(f"DEBUG: Row {r_idx} out of bounds")
+                        if settings.ENVIRONMENT.lower() != "production":
+                            print(f"DEBUG: Row {r_idx} out of bounds")
                         continue
-                    
+
                     # Apply pending updates to memory for accurate calculation
                     for u in updates:
                         # Logic to find if this update applies to current row
@@ -2172,17 +2202,17 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                             elif isinstance(c, str):
                                 if c in headers: c_idx = headers.index(c)
                                 elif f"{c}일" in headers: c_idx = headers.index(f"{c}일")
-                            
+
                             if c_idx != -1 and 0 <= c_idx < len(row_data):
                                 row_data[c_idx] = u.get("value", "")
-                                
+
                     # Calculate Rate
                     target_type = row_data[type_idx] if (type_idx != -1 and len(row_data) > type_idx) else "증가 목표행동"
                     goal_criteria = row_data[goal_idx] if (goal_idx != -1 and len(row_data) > goal_idx) else "80% 이상"
-                    
+
                     total_days = 0
                     success_days = 0
-                    
+
                     for dc in day_cols:
                         if dc < len(row_data):
                             val = str(row_data[dc]).strip()
@@ -2193,13 +2223,13 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                                 else:
                                     # Default to Increase
                                     if val == "O": success_days += 1
-                    
+
                     rate_val = 0
                     if total_days > 0:
                         rate_val = (success_days / total_days) * 100
-                        
+
                     final_rate_str = f"{int(rate_val)}%" if total_days > 0 else None
-                    
+
                     # Achievement
                     is_achieved = "X"
                     try:
@@ -2207,16 +2237,16 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                         import re
                         match = re.search(r'\d+', str(goal_criteria))
                         criteria_num = int(match.group()) if match else 80
-                        
+
                         if "이하" in str(goal_criteria):
                             if rate_val <= criteria_num: is_achieved = "O"
                         else: # 이상
                             if rate_val >= criteria_num: is_achieved = "O"
                     except:
                         pass
-                    
+
                     if total_days == 0: is_achieved = None
-                    
+
                     cells_to_update.append({
                         "range": f"{_col_letter(rate_idx + 1)}{r_idx}",
                         "values": [[final_rate_str]]
@@ -2226,10 +2256,12 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                             "range": f"{_col_letter(achieved_idx + 1)}{r_idx}",
                             "values": [[is_achieved]]
                         })
-                    print(f"DEBUG: Row {r_idx} Calculated - Rate: {final_rate_str}, Achieved: {is_achieved}")
+                    if settings.ENVIRONMENT.lower() != "production":
+                        print(f"DEBUG: Row {r_idx} Calculated - Rate: {final_rate_str}, Achieved: {is_achieved}")
 
         except Exception as e:
-            print(f"DEBUG: Error in recalculation loop: {e}")
+            if settings.ENVIRONMENT.lower() != "production":
+                print(f"DEBUG: Error in recalculation loop: {e}")
             pass # Continue to update whatever we have
 
         # Batch update using gspread
@@ -2238,9 +2270,9 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                 "range": c["range"],
                 "values": c["values"]
             } for c in cells_to_update])
-        
+
         return {"message": f"{len(cells_to_update)} cells updated"}
-    
+
     except Exception as e:
         print(f"Error updating monthly CICO cells: {e}")
         return {"error": str(e)}
@@ -2255,22 +2287,22 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     if not client: return {"error": "Sheet not accessible"}
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
-        
+
         try:
             ws = sh.worksheet(month_name)
         except gspread.WorksheetNotFound:
             return {"error": f"'{month_name}' 시트가 없습니다."}
-        
+
         all_values = safe_get_all_values(ws)
         headers = all_values[0]
-        
+
         target_row = row_index
-        
+
         if not target_row:
             # Find student row by code if row_index not provided
             # Robust lookup for v3
@@ -2281,7 +2313,7 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
                 if "학생코드" in h_str or "Code" in h_str or "(코드)" in h_str:
                     code_idx = idx
                     break
-                    
+
             if code_idx != -1:
                 for i, row in enumerate(all_values[1:], start=2):
                     if len(row) > code_idx:
@@ -2294,22 +2326,22 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
                         if match and match.group(1).strip() == str(student_code).strip():
                             target_row = i
                             break
-        
+
         if not target_row:
             return {"error": f"학생코드 {student_code} 또는 행번호 {row_index}를 찾을 수 없습니다."}
-        
+
         # Update settings columns
         updates = []
         for key, value in settings_data.items():
             if key in headers:
                 col = headers.index(key) + 1  # 1-based
                 updates.append({"range": f"{_col_letter(col)}{target_row}", "values": [[value]]})
-        
+
         if updates:
             ws.batch_update(updates)
-        
+
         return {"message": f"Settings updated for {student_code} at row {target_row}"}
-    
+
     except Exception as e:
         print(f"Error updating CICO settings: {e}")
         return {"error": str(e)}
@@ -2323,25 +2355,25 @@ def toggle_tier2_status(month: int, student_code: str, status: str):
     try:
         sh = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
-        
+
         try:
             ws = sh.worksheet(month_name)
         except gspread.WorksheetNotFound:
             return {"error": f"'{month_name}' 시트가 없습니다."}
-        
+
         all_values = safe_get_all_values(ws)
         headers = all_values[0]
-        
+
         code_idx = headers.index("학생코드") if "학생코드" in headers else 2
         tier2_idx = headers.index("Tier2") if "Tier2" in headers else 3
-        
+
         for i, row in enumerate(all_values[1:], start=2):
             if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
                 ws.update_cell(i, tier2_idx + 1, status)  # 1-based column
                 return {"message": f"Tier2 status for {student_code} → {status}"}
-        
+
         return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
-    
+
     except Exception as e:
         print(f"Error toggling Tier2: {e}")
         return {"error": str(e)}
@@ -2372,15 +2404,15 @@ def get_student_dashboard_analysis(student_code: str):
             ws = sheet.worksheet("Tier2_대시보드")
         except gspread.WorksheetNotFound:
             return {"error": "Dashboard sheet not found"}
-            
+
         # Fetch all values
         # Headers are in Row 5, Data starts Row 6
         all_values = safe_get_all_values(ws)
         if not all_values:
             return {"error": "Empty dashboard sheet"}
-        
+
         rows = all_values
-        
+
         # Find Student Row
         # Column D (index 3) is Student Code
         student_row = None
@@ -2388,18 +2420,18 @@ def get_student_dashboard_analysis(student_code: str):
             if len(r) > 3 and str(r[3]).strip() == str(student_code).strip():
                 student_row = r
                 break
-        
+
         if not student_row:
             return {"error": "Student not found in dashboard"}
-            
+
         # Extract Monthly Data (Columns J to S -> Indices 9 to 18)
         months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
         history = []
-        
+
         for i, month_name in enumerate(months):
             col_idx = 9 + i
             val = student_row[col_idx] if col_idx < len(student_row) else ""
-            
+
             # Format value
             # It might be empty, "-", or a number (0.8 or "80%")
             if not val or val == "":
@@ -2415,16 +2447,16 @@ def get_student_dashboard_analysis(student_code: str):
                          formatted_rate = f"{int(f_val)}%"
                 except ValueError:
                     pass
-            
+
             history.append({
                 "month": month_name,
                 "rate": formatted_rate
             })
-            
+
         # Extract Text Data
         # Team Talk: Column U (Index 20)
         team_talk = student_row[20] if 20 < len(student_row) else ""
-        
+
         return {
             "history": history,
             "team_talk": team_talk
@@ -2443,11 +2475,11 @@ def get_cico_report_data(month: int):
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         month_name = f"{month}월"
-        
+
         # Get current month data
         try:
             ws = get_worksheet_fuzzy(sheet, month_name)
@@ -2455,13 +2487,13 @@ def get_cico_report_data(month: int):
                 return {"error": f"'{month_name}' 시트가 없습니다."}
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
-        
+
         all_values = safe_get_all_values(ws)
         if not all_values or len(all_values) < 2:
             return {"students": [], "summary": {}}
-        
+
         headers = all_values[0]
-        
+
         # Column indices
         # Column indices with synonyms
         col_idx = {}
@@ -2480,22 +2512,22 @@ def get_cico_report_data(month: int):
             "목표 달성 여부": ["목표달성여부", "달성여부", "Achieved"],
             "팀 협의 내용": ["팀협의내용", "협의내용"]
         }
-        
+
         for key, candidates in synonyms.items():
             idx = find_col_fuzzy(headers, candidates)
             if idx != -1:
                 col_idx[key] = idx
-        
+
         # Ensure essentials
         if "수행/발생률" not in col_idx:  # Critical for report
              # Try simple search default
              try: col_idx["수행/발생률"] = headers.index("수행/발생률")
              except: pass
-        
+
         # Get multi-month trends (last 3 months including current)
         months_list = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
         month_idx = months_list.index(month_name) if month_name in months_list else -1
-        
+
         # Collect rates from previous months
         prev_rates = {}  # {code: [rate_list]}
         if month_idx >= 0:
@@ -2511,7 +2543,7 @@ def get_cico_report_data(month: int):
                     m_tier_idx = m_headers.index("Tier2") if "Tier2" in m_headers else -1
                     m_code_idx = m_headers.index("학생코드") if "학생코드" in m_headers else -1
                     m_rate_idx = m_headers.index("수행/발생률") if "수행/발생률" in m_headers else -1
-                    
+
                     if m_tier_idx >= 0 and m_code_idx >= 0 and m_rate_idx >= 0:
                         for row in m_rows[1:]:
                             if len(row) > max(m_tier_idx, m_code_idx, m_rate_idx):
@@ -2523,7 +2555,7 @@ def get_cico_report_data(month: int):
                                     prev_rates[code].append({"month": m_name, "rate": rate})
                 except gspread.WorksheetNotFound:
                     continue
-        
+
         # Build student report data
         tier2_idx = col_idx.get("Tier2", -1)
         students = []
@@ -2790,9 +2822,9 @@ def get_cico_report_data(month: int):
                 "team_talk": team_talk,
             })
 
-        
+
         avg_rate = round(total_rate_sum / total_rate_count, 1) if total_rate_count > 0 else 0
-        
+
         # Calculate global weekly trend for CICO (Tier 2) report
         # We can aggregate from the student trends
         weekly_trend_map = {} # {week: {sum: X, count: Y}}
@@ -2811,12 +2843,12 @@ def get_cico_report_data(month: int):
                     weekly_trend_map[w]["count"] += 1
                 except:
                     pass
-        
+
         overall_weekly_trend = []
         for w in months_list:
             if w in weekly_trend_map:
                 overall_weekly_trend.append({
-                    "week": w, 
+                    "week": w,
                     "rate": round(weekly_trend_map[w]["sum"] / weekly_trend_map[w]["count"], 1)
                 })
 
@@ -2840,7 +2872,7 @@ def get_cico_report_data(month: int):
                 "weekly_trend": overall_weekly_trend,
             }
         }
-    
+
     except Exception as e:
         print(f"Error getting CICO report data: {e}")
         return {"error": str(e)}
@@ -2855,18 +2887,18 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     records = fetch_student_status()
     if not records:
          return {"error": "TierStatus sheet not accessible or empty"}
-    
+
     tier3_students = []
     seen_codes = set()  # Prevent duplicate entries
     for r in records:
         student_code = str(r.get("학생코드", "")).strip()
         if not student_code or student_code in seen_codes:
             continue
-        
+
         # Check Tier3+ FIRST (more specific), then Tier3
         is_t3p = str(r.get("Tier3+", "")).strip() == "O"
         is_t3 = str(r.get("Tier3", "")).strip() == "O"
-        
+
         # Fallback: check legacy "Tier" or "지원단계" column
         if not is_t3 and not is_t3p:
             tier_val = str(r.get("Tier", r.get("지원단계", ""))).strip()
@@ -2874,7 +2906,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 is_t3p = True
             elif "3" in tier_val:
                 is_t3 = True
-        
+
         if is_t3 or is_t3p:
             seen_codes.add(student_code)
             tier3_students.append({
@@ -2885,17 +2917,25 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 "beable_code": str(r.get("BeAble코드", "")).strip(),
                 "memo": str(r.get("메모", "")).strip(),
             })
-    
+
     # Filter by class_id if specified (class managers see only their class)
     if class_id:
-        tier3_students = [s for s in tier3_students if str(s["code"]).startswith(str(class_id))]
-    
+        try:
+            from app.api.deps import normalize_class_identifier
+            target_canonical = normalize_class_identifier(class_id)
+            tier3_students = [
+                s for s in tier3_students
+                if str(s["code"]).startswith(str(class_id)) or normalize_class_identifier(s.get("class")) == target_canonical
+            ]
+        except Exception:
+            tier3_students = [s for s in tier3_students if str(s["code"]).startswith(str(class_id))]
+
     if not tier3_students:
         return {
             "students": [],
             "summary": {"total_students": 0, "total_incidents": 0, "avg_intensity": 0},
         }
-    
+
     # 2. Get behavior data from main sheet
     raw_data = fetch_all_records()
     if not raw_data:
@@ -2908,9 +2948,9 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             "students": tier3_students,
             "summary": {"total_students": len(set(s["code"] for s in tier3_students)), "total_incidents": 0, "avg_intensity": 0},
         }
-    
+
     df = pd.DataFrame(raw_data)
-    
+
     def robust_parse_dates(date_series):
         import pandas as pd
         cleaned = date_series.astype(str).replace(r'[^\d]+', '-', regex=True).str.strip('-')
@@ -2923,7 +2963,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
         if end_date:
             df = df[df['date_obj'] <= pd.to_datetime(end_date)]
-    
+
     if '강도' in df.columns:
         def _extract_intensity(v):
             if pd.isna(v) or v == '': return 0
@@ -2934,7 +2974,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             except Exception:
                 return 0
         df['강도'] = df['강도'].apply(_extract_intensity).fillna(0).astype(int)
-    
+
     # Map BeAble codes to student codes
     beable_mapping = get_beable_code_mapping()
     # Build reverse map: student_code -> set of all codes (student_code + beable codes)
@@ -2946,26 +2986,26 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 code_to_all_codes[sc] = {sc}
             if beable_key and beable_key != sc:
                 code_to_all_codes[sc].add(str(beable_key).strip())
-    
+
     # Normalize string columns for matching
     if '학생코드' in df.columns:
         df['학생코드'] = df['학생코드'].astype(str).str.strip()
     if '코드번호' in df.columns:
         df['코드번호'] = df['코드번호'].astype(str).str.strip()
-    
+
     total_incidents = 0
     total_intensity_sum_all = 0
-    
+
     for student in tier3_students:
         code = student["code"]
         beable_code = student.get("beable_code", "")
-        
+
         # Build set of all codes this student might appear under
         all_codes = code_to_all_codes.get(code, {code})
         if beable_code:
             all_codes.add(beable_code)
         all_codes.add(code)  # Always include the primary code
-        
+
         # Filter behavior data matching ANY of the student's codes
         mask = pd.Series(False, index=df.index)
         if '학생코드' in df.columns:
@@ -2973,18 +3013,18 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         if '코드번호' in df.columns:
             mask = mask | df['코드번호'].isin(all_codes)
         s_df = df[mask]
-        
+
         # 보고빈도 = row count (number of form submissions for this student)
         incidents = len(s_df)
         max_intensity = int(s_df['강도'].max()) if not s_df.empty and '강도' in s_df.columns and not pd.isna(s_df['강도'].max()) else 0
         avg_intensity = round(float(s_df['강도'].mean()), 1) if not s_df.empty and '강도' in s_df.columns and not pd.isna(s_df['강도'].mean()) else 0
-        
+
         # Behavior type breakdown
         behavior_types = []
         if not s_df.empty and '행동유형' in s_df.columns:
             bt_counts = s_df['행동유형'].value_counts()
             behavior_types = [{"name": str(k), "value": int(v)} for k, v in bt_counts.items() if str(k).strip()]
-        
+
         # 발생빈도 (weekly: sum of actual occurrences for the one dedicated chart)
         weekly_trend_freq = []
         # 보고빈도 weekly (row count per week, for the summary)
@@ -3056,15 +3096,15 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             if all(c == 0 for c in last4_report) and all(c == 0 for c in last4_occur):
                 zero_week_alert = True
                 zero_weeks_count = 4
-        
+
         total_incidents += incidents  # sum of row counts across Tier3 students
         if not s_df.empty and '강도' in s_df.columns:
             total_intensity_sum_all += float(s_df['강도'].sum())
-        
+
         # Decision logic
         decision = "Tier3 유지"
         decision_color = "#ef4444"
-        
+
         if incidents == 0:
             decision = "Tier2(CICO) 하향 검토"
             decision_color = "#10b981"
@@ -3081,12 +3121,12 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         elif incidents <= 4:
             decision = "Tier3 유지 (관찰)"
             decision_color = "#f59e0b"
-        
+
         # 최근 4주 모두 0이면 → 행동 통계 기반 의사결정을 override하여 Tier2 하향 검토로 통일
         if zero_week_alert:
             decision = "Tier2(CICO) 하향 검토"
             decision_color = "#10b981"
-        
+
         student.update({
             "incidents": incidents,  # 보고빈도 (row count)
             "max_intensity": max_intensity,
@@ -3099,7 +3139,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             "zero_week_alert": zero_week_alert,
             "zero_weeks_count": zero_weeks_count,
         })
-    
+
     # Calculate overall weekly trend for T3
     overall_weekly_trend = []
     if not df.empty and 'date_obj' in df.columns:
@@ -3111,11 +3151,11 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             beable_match = next((s.get("beable_code", "") for s in tier3_students if s["code"] == sc), "")
             if beable_match:
                 all_t3_codes.add(beable_match)
-        
+
         mask_t3 = pd.Series(False, index=df.index)
         if '학생코드' in df.columns: mask_t3 = mask_t3 | df['학생코드'].isin(all_t3_codes)
         if '코드번호' in df.columns: mask_t3 = mask_t3 | df['코드번호'].isin(all_t3_codes)
-        
+
         t3_df_all = df[mask_t3].copy()
         if not t3_df_all.empty:
             t3_df_all['week_key'] = t3_df_all['date_obj'].dt.isocalendar().year.astype(str) + "-W" + t3_df_all['date_obj'].dt.isocalendar().week.astype(str).str.zfill(2)
@@ -3124,7 +3164,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             overall_weekly_trend.sort(key=lambda x: x["week"])
 
     overall_avg = round(total_intensity_sum_all / total_incidents, 1) if total_incidents > 0 else 0
-    
+
     return {
         "students": tier3_students,
         "summary": {
@@ -3144,47 +3184,47 @@ def initialize_dashboard_if_missing():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        
+
         try:
             ws = sheet.worksheet("Tier2_대시보드")
             # If exists, assume it's fine for now.
             return {"message": "Dashboard exists"}
         except gspread.WorksheetNotFound:
             pass # Create it
-            
+
         print("Creating Tier2_대시보드...")
         # Add worksheet
         ws = sheet.add_worksheet(title="Tier2_대시보드", rows=1000, cols=26)
-        
+
         # 1. Setup Headers & Formatting
         months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-        
+
         # Row 2: Month Config
         ws.update_acell("B2", "월 선택:")
         ws.update_acell("C2", "3월") # Default
-        
+
         # Row 4: Title
         ws.update_acell("B4", "📋 Tier2 CICO 학생 통합 대시보드")
-        
+
         # Row 5: Headers
         headers = ["번호", "학급", "학생코드", "목표행동", "목표행동 유형", "척도", "입력 기준", "현재 상태"]
         headers.extend(months)
         headers.extend(["연간 추세(Trend)", "팀 협의 내용", "비고"])
-        
+
         # Update range B5:V5
         # 1-based index: B is col 2.
         # Starting Cell: (5, 2)
         # Ending Cell: (5, 2 + len(headers) - 1)
-        
+
         end_col = 2 + len(headers) - 1
         ws.update(range_name=f"B5", values=[headers])
-        
+
         # 2. Load Data from Monthly Sheets
         refresh_dashboard_data(sheet, ws)
-        
+
         return {"message": "Dashboard created and populated"}
 
     except Exception as e:
@@ -3198,52 +3238,52 @@ def refresh_dashboard_data(sheet, dashboard_ws):
         target_month_str = dashboard_ws.acell("C2").value or "3월"
     except:
         target_month_str = "3월"
-    
+
     # 2. Get Student History (Monthly Rates)
     months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
     student_history = {} # {code: [rate, rate, ...]}
-    
+
     for i, m_name in enumerate(months):
         try:
             m_ws = sheet.worksheet(m_name)
             m_rows = safe_get_all_values(m_ws)
             if len(m_rows) < 2: continue
-            
+
             headers = m_rows[0]
             try: tier_idx = headers.index("Tier2")
             except: tier_idx = -1
             try: code_idx = headers.index("학생코드")
             except: code_idx = -1
-            
+
             rate_idx = -1
             if "수행/발생률" in headers: rate_idx = headers.index("수행/발생률")
             elif "성취율" in headers: rate_idx = headers.index("성취율")
-            
+
             if tier_idx != -1 and code_idx != -1 and rate_idx != -1:
                 for row in m_rows[1:]:
                     if len(row) > max(tier_idx, code_idx, rate_idx):
                         code = str(row[code_idx]).strip()
                         is_tier2 = row[tier_idx]
                         rate = row[rate_idx]
-                        
+
                         if is_tier2 == "O":
                             if code not in student_history:
                                 student_history[code] = [""] * 10
                             student_history[code][i] = rate
         except gspread.WorksheetNotFound:
             continue
-            
+
     # 3. Get Current Month Data & Merge
     try:
         t_ws = sheet.worksheet(target_month_str)
         t_rows = safe_get_all_values(t_ws)
-        
+
         output_rows = []
         if len(t_rows) > 1:
             t_headers = t_rows[0]
             try: team_idx = t_headers.index("팀 협의 내용")
             except: team_idx = -1
-            
+
             for row in t_rows[1:]:
                 # Check Tier2 column (Index 3 usually)
                 if len(row) > 3 and row[3] == "O":
@@ -3252,29 +3292,29 @@ def refresh_dashboard_data(sheet, dashboard_ws):
                     # New indices based on fixed_headers:
                     # 5: 목표행동, 6: 목표행동 유형, 7: 척도, 8: 입력 기준
                     basic_info = [
-                        row[0], row[1], row[2], 
-                        row[5] if len(row)>5 else "", 
-                        row[6] if len(row)>6 else "", 
-                        row[7] if len(row)>7 else "", 
-                        row[8] if len(row)>8 else "", 
+                        row[0], row[1], row[2],
+                        row[5] if len(row)>5 else "",
+                        row[6] if len(row)>6 else "",
+                        row[7] if len(row)>7 else "",
+                        row[8] if len(row)>8 else "",
                         "CICO" # Status
                     ]
-                    
+
                     # History
                     history = student_history.get(code, [""] * 10)
-                    
+
                     # Team Talk
                     team_talk = row[team_idx] if team_idx != -1 and len(row) > team_idx else ""
-                    
+
                     # Full Row
                     full_row = basic_info + history + ["", team_talk, ""]
                     output_rows.append(full_row)
-        
+
         # 4. Write to Dashboard (starting Row 6)
         if output_rows:
             dashboard_ws.update(range_name="B6", values=output_rows)
             print(f"Updated Dashboard with {len(output_rows)} rows.")
-            
+
     except gspread.WorksheetNotFound:
         print(f"Target month sheet {target_month_str} not found.")
 
@@ -3286,14 +3326,14 @@ def initialize_monthly_sheets():
     if not client: return {"error": "Sheet not accessible"}
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
-        
+
         # 1. Get Roster from TierStatus
         try:
             status_ws = sheet.worksheet("TierStatus")
             status_rows = safe_get_all_values(status_ws)
         except gspread.WorksheetNotFound:
             return {"error": "TierStatus sheet not found"}
-            
+
         # Parse Roster: [No, Class, Code, ..., Tier2(CICO), ...]
         students = []
         if len(status_rows) > 1:
@@ -3306,39 +3346,39 @@ def initialize_monthly_sheets():
                     # Tier2(CICO) is index 6
                     if len(r) > 6 and r[6] == "O":
                         is_cico = "O"
-                    
+
                     students.append({
                         "no": no, "class": cls, "code": code, "cico": is_cico
                     })
-        
+
         if not students:
             return {"error": "No students found in TierStatus"}
-            
+
         print(f"Found {len(students)} students in TierStatus.")
 
         # 2. Create/Update Monthly Sheets
         months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-        
+
         for m_name in months: # Using strings directly
             ws = get_worksheet_fuzzy(sheet, m_name)
             if ws:
                 continue
 
             ws = sheet.add_worksheet(title=m_name, rows=1000, cols=45)
-            
+
             # Setup Headers
             days = [str(d) for d in range(1, 32)]
             headers = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준"]
             headers.extend(days)
             headers.extend(["수행/발생률", "성취도(추세)", "교사메모", "입력자", "목표 달성 여부", "팀 협의 내용", "차월 대상여부"])
-            
+
             ws.update(range_name="A1", values=[headers])
-            
+
             # Write Students
             rows_to_write = []
             for s in students:
                 row = [
-                    s['no'], s['class'], s['code'], s['cico'], 
+                    s['no'], s['class'], s['code'], s['cico'],
                     "", "증가 목표행동", "O/X(발생)", "", "80% 이상" # Defaults
                 ]
                 # Pad for days (31)
@@ -3346,10 +3386,10 @@ def initialize_monthly_sheets():
                 # Pad for stats
                 row.extend(["-", "", "", "", "-", "", ""])
                 rows_to_write.append(row)
-                
+
             if rows_to_write:
                 ws.update(range_name="A2", values=rows_to_write)
-            
+
             print(f"Initialized {m_name}")
 
         clear_cache() # Invalidate all caches after refresh
@@ -3367,7 +3407,7 @@ def get_board_worksheet():
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return None
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
@@ -3384,14 +3424,14 @@ def get_board_worksheet():
 def fetch_board_posts():
     global _cache
     now = time.time()
-    
+
     if _cache["board"]["data"] and (now - _cache["board"]["timestamp"] < CACHE_TTL):
         return _cache["board"]["data"]
 
     ws = get_board_worksheet()
     if not ws:
         return []
-    
+
     try:
         records = safe_get_all_records(ws)
         valid_records = []
@@ -3407,9 +3447,9 @@ def fetch_board_posts():
                 views = int(r.get("Views", 0))
             except:
                 views = 0
-            
+
             if not pid: continue # Skip empty IDs
-            
+
             valid_records.append({
                 "id": pid,
                 "title": title,
@@ -3418,7 +3458,7 @@ def fetch_board_posts():
                 "created_at": created_at,
                 "views": views
             })
-            
+
         # Robust sort: handle missing or malformed dates
         def parse_date(x):
             val = x.get("created_at", "")
@@ -3434,24 +3474,31 @@ def fetch_board_posts():
 def add_board_post(title: str, content: str, author: str):
     ws = get_board_worksheet()
     if not ws:
-        print("DEBUG: Board sheet not accessible")
+        if settings.ENVIRONMENT.lower() != "production":
+            print("DEBUG: Board sheet not accessible")
         return {"error": "Sheet not accessible"}
-    
+
     try:
         from datetime import datetime
         import uuid
-        
+
         post_id = str(uuid.uuid4())[:8]
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         row = [post_id, title, content, author, created_at, 0]
-        print(f"DEBUG: Appending board post: {row}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"DEBUG: Appending board post: {row}")
+            print(f"DEBUG: Board post added {post_id}")
+        else:
+            print(f"Board post added {post_id}")
         ws.append_row(row)
         clear_cache("board") # Invalidate cache
-        print(f"DEBUG: Board post added {post_id}")
         return {"message": "Post added", "post_id": post_id}
     except Exception as e:
-        print(f"Error adding board post: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error adding board post: {e}")
+        else:
+            print("Error adding board post")
         return {"error": str(e)}
 
 def update_board_post(post_id: str, title: str, content: str):
@@ -3459,26 +3506,29 @@ def update_board_post(post_id: str, title: str, content: str):
     ws = get_board_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         cell = ws.find(post_id, in_column=1)
         if not cell:
             return {"error": "Post not found"}
-        
+
         # Title (Col 2), Content (Col 3)
         ws.update_cell(cell.row, 2, title)
         ws.update_cell(cell.row, 3, content)
         clear_cache("board")
         return {"message": "Post updated"}
     except Exception as e:
-        print(f"Error updating board post: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error updating board post: {e}")
+        else:
+            print("Error updating board post")
         return {"error": str(e)}
 
 def delete_board_post(post_id: str):
     ws = get_board_worksheet()
     if not ws:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         cell = ws.find(post_id)
         if cell:
@@ -3487,7 +3537,10 @@ def delete_board_post(post_id: str):
             return {"message": "Post deleted"}
         return {"error": "Post not found"}
     except Exception as e:
-        print(f"Error deleting board post: {e}")
+        if settings.ENVIRONMENT.lower() != "production":
+            print(f"Error deleting board post: {e}")
+        else:
+            print("Error deleting board post")
         return {"error": str(e)}
 
 # =============================
@@ -3520,7 +3573,7 @@ def get_bip(student_code: str):
     """Get BIP for a student."""
     ws = ensure_bip_sheet()
     if not ws: return None
-    
+
     try:
         records = safe_get_all_records(ws)
         for r in records:
@@ -3538,17 +3591,17 @@ def save_bip(bip_data: dict):
     """
     ws = ensure_bip_sheet()
     if not ws: return {"error": "Sheet access failed"}
-    
+
     student_code = bip_data.get("StudentCode")
     if not student_code: return {"error": "StudentCode required"}
-    
+
     try:
         cell = ws.find(student_code, in_column=1)
         headers = ws.row_values(1)
         row = []
         for h in headers:
             row.append(bip_data.get(h, ""))
-            
+
         if cell:
             # Delete and re-insert to update
             ws.delete_rows(cell.row)
@@ -3556,7 +3609,7 @@ def save_bip(bip_data: dict):
         else:
             # Append
             ws.append_row(row)
-            
+
         clear_cache()
         return {"message": "BIP saved successfully"}
     except Exception as e:
@@ -3568,7 +3621,7 @@ def add_holiday(date_str, name):
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
@@ -3577,12 +3630,12 @@ def add_holiday(date_str, name):
             # Try creating it if missing
             config_ws = sheet.add_worksheet(title="날짜 관리", rows=100, cols=3)
             config_ws.append_row(["공휴일 날짜 (YYYY-MM-DD)", "공휴일 이름", "비고"])
-            
+
         # Check if already exists
         existing = config_ws.col_values(1)
         if date_str in existing:
              return {"error": "Holiday already exists on this date"}
-             
+
         # Append
         config_ws.append_row([date_str, name, "수동 추가됨"])
         clear_cache() # Clear cache to refresh holidays
@@ -3596,18 +3649,18 @@ def delete_holiday(date_str):
     client = get_sheets_client()
     if not client or not settings.SHEET_URL:
         return {"error": "Sheet not accessible"}
-    
+
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         config_ws = sheet.worksheet("날짜 관리")
-        
+
         dates = config_ws.col_values(1)
         for i, d in enumerate(dates):
             if d == date_str:
                 config_ws.delete_rows(i + 1)  # 1-indexed
                 clear_cache()
                 return {"message": f"Holiday {date_str} deleted"}
-        
+
         return {"error": "Holiday not found"}
     except Exception as e:
         print(f"Error deleting holiday: {e}")

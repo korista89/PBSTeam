@@ -7,30 +7,61 @@ _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
 
-# CORS setup — specific allowlist + regex for preview deployments
-cors_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-]
-frontend_env = os.environ.get("FRONTEND_URL")
-if frontend_env:
-    cors_origins.append(frontend_env)
+def get_allowed_origins() -> list:
+    """Exact allowlist of trusted origins (no wildcard or preview regex in production)."""
+    origins = ["https://pbs-team.vercel.app"]
+    frontend_env = os.environ.get("FRONTEND_URL") or getattr(settings, "FRONTEND_URL", None)
+    if frontend_env and frontend_env not in origins:
+        origins.append(frontend_env)
+
+    if settings.ENVIRONMENT.lower() != "production":
+        for dev_origin in [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000"
+        ]:
+            if dev_origin not in origins:
+                origins.append(dev_origin)
+    return origins
+
+ALLOWED_ORIGINS = get_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def verify_origin_header(request: Request, call_next):
+    # Origin verification for state-changing requests (CSRF defense)
+    if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
+        origin = request.headers.get("origin")
+        if not origin:
+            # In production browser-centric app, mutation requests require a trusted Origin header
+            if settings.ENVIRONMENT.lower() == "production":
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Forbidden: Origin header required for mutation requests in production."}
+                )
+        else:
+            allowed = get_allowed_origins()
+            if origin not in allowed:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": f"Forbidden: Untrusted Origin '{origin}'"}
+                )
+    return await call_next(request)
 
 from app.api.endpoints import analytics
 from app.api.endpoints import student

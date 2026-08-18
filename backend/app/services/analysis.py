@@ -156,13 +156,20 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         
         if start_date:
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
-        if end_date:
-            df = df[df['date_obj'] <= pd.to_datetime(end_date)]
-            
     # --- Class Filtering ---
     if class_id and not df.empty:
-        # Filter by student_code starting with class_id
-        df = df[df['student_code'].str.startswith(str(class_id), na=False)]
+        try:
+            from app.api.deps import normalize_class_identifier, get_student_class_code
+            target_canonical = normalize_class_identifier(class_id)
+            def _matches_class(sc):
+                sc_str = str(sc).strip()
+                if sc_str.startswith(str(class_id)):
+                    return True
+                resolved = get_student_class_code(sc_str)
+                return resolved == target_canonical
+            df = df[df['student_code'].apply(_matches_class)]
+        except Exception:
+            df = df[df['student_code'].str.startswith(str(class_id), na=False)]
     
     # --- Tier 1: Big 5 Analysis ---
     if not df.empty:
