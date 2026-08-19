@@ -24,94 +24,6 @@ const TIER_COLORS: Record<string, string> = {
   "Tier 3+ (위기)": "#8b5cf6",
 };
 
-// ====== AI Comprehensive Analysis Component (기존 버튼: 파란색 외곽선) ======
-function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; endDate: string }) {
-  const [analysis, setAnalysis] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  const requestAnalysis = async () => {
-    setLoading(true);
-    setVisible(true);
-    try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-comprehensive-analysis`, {
-        start_date: startDate,
-        end_date: endDate
-      }, { timeout: 180000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch (e: any) {
-      setAnalysis("⚠️ 학교 전체 PBS 종합 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="no-print" style={{ marginBottom: '32px' }}>
-      {!visible ? (
-        <button onClick={requestAnalysis} style={{
-          width: '100%', padding: '24px',
-          background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-          color: 'white',
-          border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
-          borderRadius: '20px', cursor: 'pointer',
-          fontSize: '1.2rem', fontWeight: '800',
-          boxShadow: '0 10px 25px rgba(37, 99, 235, 0.35)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
-          transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-          letterSpacing: '-0.02em'
-        }}
-        onMouseOver={e => {
-            e.currentTarget.style.transform = 'scale(1.02) translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 15px 35px rgba(37, 99, 235, 0.5)';
-        }}
-        onMouseOut={e => {
-            e.currentTarget.style.transform = 'scale(1) translateY(0)';
-            e.currentTarget.style.boxShadow = '0 10px 25px rgba(37, 99, 235, 0.35)';
-        }}>
-          <span style={{ fontSize: '1.6rem' }}>🧙‍♂️</span> BCBA AI 학교 전체 PBS 운영 정밀 분석 리포트 생성
-        </button>
-      ) : (
-        <div style={{
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(10px)',
-            padding: '32px', borderRadius: '24px',
-            border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼 모달) */
-            boxShadow: '0 20px 50px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '1.3rem', fontWeight: 900 }}>🤖 AI Specialist Analysis</h3>
-            <div style={{ display: 'flex', gap: '12px' }}>
-               <button onClick={requestAnalysis} style={{ padding: '6px 14px', borderRadius: '10px', background: '#eff6ff', border: '1.5px solid #3b82f6', cursor: 'pointer', fontSize: '0.85rem', color: '#1d4ed8', fontWeight: 700, transition: 'background 0.2s' }}>🔄 Refresh</button>
-               <button onClick={() => setVisible(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#94a3b8' }}>✕</button>
-            </div>
-          </div>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '60px', color: '#2563eb' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '20px', animation: 'pulse 2s infinite' }}>🧠</div>
-              <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>AI Expert is synthesizing all school-wide data...</p>
-              <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '8px' }}>Tier 1-3, CICO, Behavior Logs, Meeting Notes integrated.</p>
-            </div>
-          ) : (
-            <div style={{
-              whiteSpace: 'pre-wrap',
-              fontSize: '1rem',
-              lineHeight: '1.9',
-              color: '#334155',
-              maxHeight: '650px',
-              overflowY: 'auto',
-              paddingRight: '15px',
-              textAlign: 'justify'
-            }} className="custom-scrollbar">
-              {analysis}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Custom tooltip for charts
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -137,13 +49,17 @@ function SectionAIButton({
   title,
   dataContext,
   startDate,
-  endDate
+  endDate,
+  buttonLabel = "📊 차트 해석",
+  modalLabel
 }: {
   sectionName: string;
   title: string;
   dataContext: any;
   startDate: string;
   endDate: string;
+  buttonLabel?: string;
+  modalLabel?: string;
 }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
@@ -200,7 +116,7 @@ function SectionAIButton({
           e.currentTarget.style.background = '#fff';
         }}
       >
-        <span>🤖</span> {title} AI 정밀 분석
+        <span>🤖</span> {buttonLabel}
       </button>
 
       {open && (
@@ -226,7 +142,7 @@ function SectionAIButton({
               background: 'linear-gradient(135deg, #fff5f5, #ffffff)'
             }}>
               <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🤖 BCBA AI {title} 정밀 분석
+                🤖 {modalLabel || `${title} 차트 해석`}
               </h3>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={handleRequest} style={{ padding: '6px 14px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>🔄 새로고침</button>
@@ -250,122 +166,30 @@ function SectionAIButton({
   );
 }
 
-// ====== 학급 또래 행동 전염 분석 버튼 컴포넌트 (신규 추가: 빨간색 외곽선) ======
-function PeerContagionAIButton({
-  riskList,
-  startDate,
-  endDate
-}: {
-  riskList: any[];
-  startDate: string;
-  endDate: string;
-}) {
-  const [analysis, setAnalysis] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
+// Truncated axis/legend label with full text on hover (native SVG <title>)
+function truncateLabel(str: string, max = 9) {
+  const s = String(str || "");
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
 
-  const handleRequest = async () => {
-    setLoading(true);
-    setOpen(true);
-    try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
-        section_name: "function",
-        data_context: {
-          analysis_type: "peer_contagion",
-          risk_students: (riskList || []).slice(0, 5),
-          notes: "학급 내 청각 자극 매개 및 또래 행동 상호작용 분석"
-        },
-        start_date: startDate || null,
-        end_date: endDate || null
-      }, { timeout: 180000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch (e: any) {
-      setAnalysis("⚠️ 학급 또래 행동 전염 AI 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+function TruncatedYAxisTick({ x, y, payload }: any) {
+  const full = String(payload?.value ?? "");
   return (
-    <>
-      <button
-        onClick={handleRequest}
-        style={{
-          padding: '8px 16px',
-          background: '#fff',
-          color: '#dc2626',
-          border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
-          borderRadius: '12px',
-          fontSize: '0.82rem',
-          fontWeight: 800,
-          cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          transition: 'all 0.2s'
-        }}
-        onMouseOver={e => {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.background = '#fef2f2';
-        }}
-        onMouseOut={e => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.background = '#fff';
-        }}
-      >
-        <span>👥</span> 🤖 학급 또래 행동 전염 AI 심층 분석
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, padding: '20px'
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: '24px',
-            maxWidth: '850px', width: '100%', maxHeight: '85vh',
-            display: 'flex', flexDirection: 'column',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            border: '2.5px solid #ef4444', /* 빨간색 외곽선 */
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              padding: '20px 28px',
-              borderBottom: '1px solid #f1f5f9',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              background: 'linear-gradient(135deg, #fff5f5, #ffffff)'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                👥 🤖 BCBA AI 학급 또래 행동 전염 및 환경 중재 분석
-              </h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={handleRequest} style={{ padding: '6px 14px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>🔄 새로고침</button>
-                <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
-              </div>
-            </div>
-            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.95rem', color: '#334155' }}>
-              {loading ? (
-                <div style={{ textAlign: 'center', padding: '60px 0', color: '#ef4444' }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>🧠</div>
-                  <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>학급 내 촉발원-반응자 상호작용 및 청각 자극 매개 패턴을 분석 중입니다...</p>
-                </div>
-              ) : (
-                analysis
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    <g transform={`translate(${x},${y})`}>
+      <title>{full}</title>
+      <text x={-4} y={0} dy={4} textAnchor="end" fontSize={10} fontWeight={700} fill="#334155">
+        {truncateLabel(full, 9)}
+      </text>
+    </g>
   );
 }
 
+function truncatedLegendFormatter(value: string) {
+  return <span title={value}>{truncateLabel(value, 12)}</span>;
+}
+
 // Chart wrapper
-function ChartBox({ title, children, height = 340, action }: { title: string; children: React.ReactNode; height?: number; action?: React.ReactNode }) {
+function ChartBox({ title, description, children, height = 340, action }: { title: string; description?: string; children: React.ReactNode; height?: number; action?: React.ReactNode }) {
   return (
     <div style={{
         background: 'rgba(255, 255, 255, 0.8)',
@@ -379,7 +203,7 @@ function ChartBox({ title, children, height = 340, action }: { title: string; ch
     onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
     onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
       <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div title={description} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: description ? 'help' : undefined }}>
             <div style={{ width: '4px', height: '18px', background: '#6366f1', borderRadius: '2px' }} />
             {title}
           </div>
@@ -394,17 +218,30 @@ function ChartBox({ title, children, height = 340, action }: { title: string; ch
   );
 }
 
-// ====== T3 상향 검토 대상자 명단 컴포넌트 ======
+// ====== Tier 상향 검토 대상자 명단 컴포넌트 (T2/T3 공용) ======
 const PIE_COLORS_FUNC = ['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
 const PIE_COLORS_TYPE = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316'];
 
-function T3UpgradeList({ riskList, startDate, endDate }: { riskList: any[]; startDate: string; endDate: string }) {
+function TierUpgradeList({
+  riskList,
+  startDate,
+  endDate,
+  targetTier,
+  label,
+  accent
+}: {
+  riskList: any[];
+  startDate: string;
+  endDate: string;
+  targetTier: 'Tier 2' | 'Tier 3';
+  label: string;
+  accent: string;
+}) {
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [chartData, setChartData] = useState<Record<string, any>>({});
   const [loadingCode, setLoadingCode] = useState<string | null>(null);
 
-  // T3/T3+ 행동기반 대상 제외 → T2만 표시
-  const t2List = riskList.filter((s: any) => s.tier === 'Tier 2');
+  const t2List = riskList.filter((s: any) => s.tier === targetTier);
 
   const toggleChart = async (s: any) => {
     const code = s.student_code || s.name;
@@ -429,18 +266,40 @@ function T3UpgradeList({ riskList, startDate, endDate }: { riskList: any[]; star
 
   const getIntensityColor = (v: number) => v >= 5 ? '#ef4444' : v >= 3 ? '#f59e0b' : '#22c55e';
 
+  const maxCount = Math.max(...t2List.map((s: any) => s.count), 1);
+
+  const listHeader = (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', padding: '20px 24px', borderBottom: t2List.length ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
+      <div style={{ fontWeight: 900, fontSize: '1rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ width: '4px', height: '18px', background: accent, borderRadius: '2px', display: 'inline-block' }} />
+        {label} <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8' }}>({t2List.length}명)</span>
+      </div>
+      {t2List.length > 0 && (
+        <SectionAIButton
+          sectionName="tier_upgrade_candidates"
+          title={label}
+          dataContext={{ target_tier: targetTier, candidates: t2List.slice(0, 20) }}
+          startDate={startDate}
+          endDate={endDate}
+          buttonLabel="🤖 선정 근거 요약"
+          modalLabel={`${label} 선정 근거 및 행동데이터 요약`}
+        />
+      )}
+    </div>
+  );
+
   if (t2List.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', color: '#64748b', border: '1px solid rgba(0,0,0,0.05)' }}>
-        T3 상향 검토 대상자가 없습니다.
+      <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)' }}>
+        {listHeader}
+        <div style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>{label} 대상자가 없습니다.</div>
       </div>
     );
   }
 
-  const maxCount = Math.max(...t2List.map((s: any) => s.count), 1);
-
   return (
     <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+      {listHeader}
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
         <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
           <tr>
@@ -458,20 +317,20 @@ function T3UpgradeList({ riskList, startDate, endDate }: { riskList: any[]; star
               <React.Fragment key={idx}>
                 <tr style={{ borderBottom: isExpanded ? 'none' : '1px solid rgba(0,0,0,0.03)', background: isExpanded ? '#f0f9ff' : idx % 2 === 0 ? '#fff' : '#fafafa' }}>
                   <td style={{ padding: '16px 24px' }}>
-                    <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, background: '#fff7ed', color: '#f59e0b' }}>Tier 2</span>
+                    <span style={{ padding: '4px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 900, background: `${accent}18`, color: accent }}>{targetTier}</span>
                   </td>
                   <td style={{ padding: '16px 24px', fontWeight: 800, color: '#1e293b' }}>{maskName(s.name)}</td>
                   <td style={{ padding: '16px 24px', color: '#64748b', fontWeight: 500 }}>{s.class}</td>
                   <td style={{ padding: '16px 24px', fontWeight: 900, color: '#1e293b' }}>{s.count} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>회</span></td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ width: '100px', height: '6px', background: '#e2e8f0', borderRadius: '10px' }}>
-                      <div style={{ width: `${Math.min(100, (s.count / maxCount) * 100)}%`, height: '100%', background: '#f59e0b', borderRadius: '10px' }} />
+                      <div style={{ width: `${Math.min(100, (s.count / maxCount) * 100)}%`, height: '100%', background: accent, borderRadius: '10px' }} />
                     </div>
                   </td>
                   <td style={{ padding: '16px 24px' }}>
                     <button
                       onClick={() => toggleChart(s)}
-                      style={{ padding: '6px 14px', borderRadius: '10px', background: isExpanded ? '#f59e0b' : '#f1f5f9', color: isExpanded ? '#fff' : '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', transition: 'all 0.2s' }}
+                      style={{ padding: '6px 14px', borderRadius: '10px', background: isExpanded ? accent : '#f1f5f9', color: isExpanded ? '#fff' : '#475569', border: '1px solid #e2e8f0', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', transition: 'all 0.2s' }}
                     >
                       {loadingCode === code ? '⏳' : isExpanded ? '▲ 접기' : '📈 차트'}
                     </button>
@@ -562,9 +421,9 @@ function T3UpgradeList({ riskList, startDate, endDate }: { riskList: any[]; star
                                     </div>
                                   </div>
                                 ))}
-                                <div style={{ marginTop: '6px', padding: '8px 10px', background: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                  <span style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 700 }}>⚠️ T3 상향 기준 검토 필요</span>
-                                  <div style={{ fontSize: '0.7rem', color: '#9a3412', marginTop: '2px' }}>누적 빈도 {s.count}회 · 최대 강도 {s.max_intensity || '-'}</div>
+                                <div style={{ marginTop: '6px', padding: '8px 10px', background: `${accent}12`, borderRadius: '8px', border: `1px solid ${accent}40` }}>
+                                  <span style={{ fontSize: '0.75rem', color: accent, fontWeight: 700 }}>⚠️ {label} 기준 검토 필요</span>
+                                  <div style={{ fontSize: '0.7rem', color: '#78350f', marginTop: '2px' }}>누적 빈도 {s.count}회 · 최대 강도 {s.max_intensity || '-'}</div>
                                 </div>
                               </div>
                             </div>
@@ -670,9 +529,9 @@ export default function Home() {
               @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
               @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
               .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
-              .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
-              @media (max-width: 1024px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
-              @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+              .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+              @media (max-width: 1400px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
+              @media (max-width: 768px) { .grid-2, .grid-4 { grid-template-columns: 1fr; } }
               .section-heading { font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin: 24px 0 12px 0; display: flex; align-items: center; gap: 8px; }
               .section-heading::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
             `}</style>
@@ -722,18 +581,18 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Section 1 */}
-            <div className="section-heading"><span>01</span> 지원 단계별 분포 및 주간 추이</div>
-            <div className="grid-responsive">
-              <ChartBox title="🎯 지원 단계별 분포">
+            {/* 8종 핵심 차트 (4열 2행) */}
+            <div className="section-heading"><span>01</span> 행동 데이터 종합 분석</div>
+            <div className="grid-4">
+              <ChartBox title="🎯 지원 단계별 분포" description="전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다.">
                 <PieChart>
-                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={100} innerRadius={65} paddingAngle={4} dataKey="value" stroke="none">
+                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={4} dataKey="value" stroke="none">
                     {tierDist.map((entry: any, index: number) => (
                       <Cell key={index} fill={TIER_COLORS[entry.name] || '#cbd5e1'} />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend iconType="circle" />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={truncatedLegendFormatter} />
                 </PieChart>
               </ChartBox>
 
@@ -743,20 +602,17 @@ export default function Home() {
                 color="#6366f1"
                 yLabel="건수"
               />
-            </div>
 
-            {/* Section 2 */}
-            <div className="section-heading"><span>02</span> Big 5 패턴 분석</div>
-            <div className="grid-3">
               <ChartBox
                 title="⏰ 시간대별 분석"
+                description="어느 시간대(교시)에 행동이 가장 많이 발생하는지 보여줍니다."
                 action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} />}
               >
                 <BarChart data={[...(big5.times || [])].slice(0, 8)} layout="vertical" margin={{ right: 40 }}>
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                  <YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={<TruncatedYAxisTick />} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#8b5cf6" barSize={16}>
+                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#8b5cf6" barSize={14}>
                       <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#8b5cf6' }} formatter={(v:any)=>`${v}건`} />
                   </Bar>
                 </BarChart>
@@ -764,13 +620,14 @@ export default function Home() {
 
               <ChartBox
                 title="📍 장소별 분석"
+                description="어느 장소에서 행동이 가장 많이 발생하는지 보여줍니다."
                 action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} />}
               >
                 <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 40 }}>
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                  <YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={<TruncatedYAxisTick />} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#6366f1" barSize={16}>
+                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#6366f1" barSize={14}>
                       <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#6366f1' }} formatter={(v:any)=>`${v}건`} />
                   </Bar>
                 </BarChart>
@@ -778,38 +635,35 @@ export default function Home() {
 
               <ChartBox
                 title="🎭 행동 유형별 프로필"
+                description="공격/자해/방해 등 행동 유형별 발생 비중을 보여줍니다."
                 action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} />}
               >
                 <PieChart>
-                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={85} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
+                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={70} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
                     {(big5.behaviors || []).map((_, i) => <Cell key={i} fill={['#6366f1','#8b5cf6','#d946ef','#f43f5e','#f97316','#f59e0b'][i%6]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={truncatedLegendFormatter} />
                 </PieChart>
               </ChartBox>
-            </div>
 
-            {/* Section 3 */}
-            <div className="section-heading"><span>03</span> ABC 기능 평가</div>
-            <div className="grid-3">
               <ChartBox
                 title="❓ 행동의 기능 분석"
-                height={280}
+                description="행동이 관심추구/회피/감각 등 어떤 기능(이유) 때문에 나타나는지 보여줍니다."
                 action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} />}
               >
                 <PieChart>
-                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={80} innerRadius={50} dataKey="value">
+                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={70} innerRadius={45} dataKey="value">
                       {((data as any).functions || []).map((_: unknown, i: number) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} formatter={truncatedLegendFormatter} />
                 </PieChart>
               </ChartBox>
 
               <ChartBox
                 title="⚡ 행동 강도 분포"
-                height={280}
+                description="강도 1~5 단계별로 행동이 몇 건씩 발생했는지 보여줍니다."
                 action={<SectionAIButton sectionName="intensity" title="강도/위기" dataContext={(data as any).intensity_distribution || []} startDate={startDate} endDate={endDate} />}
               >
                 <BarChart data={(data as any).intensity_distribution || []}>
@@ -823,7 +677,7 @@ export default function Home() {
                 </BarChart>
               </ChartBox>
 
-              <ChartBox title="⏰ 심각도 시계열 분석" height={280}>
+              <ChartBox title="⏰ 심각도 시계열 분석" description="시간이 지나면서 평균 행동 강도가 개선되는지 악화되는지 추이를 보여줍니다.">
                 <LineChart data={(data as any).intensity_trend || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
@@ -834,48 +688,122 @@ export default function Home() {
               </ChartBox>
             </div>
 
-            {/* Section 4 */}
-            <div className="section-heading" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-              <div>
-                <span>04</span> T3 상향 검토 대상자 명단 <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#94a3b8', marginLeft: '8px' }}>(현재 T3/T3+ 제외 — 행동빈도 기반 T2 선별)</span>
-              </div>
-              <PeerContagionAIButton riskList={riskList} startDate={startDate} endDate={endDate} />
-            </div>
-            <T3UpgradeList
-              riskList={riskList}
-              startDate={startDate}
-              endDate={endDate}
-            />
-
-            {/* Section 5 */}
-            <div className="section-heading"><span>05</span> 실행 계획 및 운영 협의록</div>
-            <AIComprehensiveAnalysis startDate={startDate} endDate={endDate} />
+            {/* Tier 상향 검토 대상자 명단 (2열 1행) */}
+            <div className="section-heading"><span>02</span> Tier 상향 검토 대상자 명단</div>
             <div className="grid-2">
-                <MeetingNotesContainer title="전체 교직원 협의록" type="tier1" />
-                <MeetingNotesContainer title="Tier 2/3 운영위원회" type="tier2" />
+              <TierUpgradeList riskList={riskList} startDate={startDate} endDate={endDate} targetTier="Tier 2" label="T2 상향 검토 대상자" accent="#f59e0b" />
+              <TierUpgradeList riskList={riskList} startDate={startDate} endDate={endDate} targetTier="Tier 3" label="T3 상향 검토 대상자" accent="#ef4444" />
             </div>
-            <div style={{ marginTop:32, padding:"22px 26px", background:"linear-gradient(135deg,#f0fdf4,#dcfce7)", borderRadius:20, border:"1px solid #86efac" }}>
-              <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#14532d" }}>📖 대시보드 차트 해석 가이드</h3>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
-                {[
-                  {t:"01 Tier 현황",b:"전체 학생을 Tier1·2·3·3+로 구분. 초록=정상, 노랑=집중관찰, 빨강=집중지원. Tier3 비율이 높으면 보편적 지원 점검 필요."},
-                  {t:"02 이번 달 위기 경보",b:"행동 보고 빈도·강도가 급변한 학생을 자동 감지. 즉시 담임·지원팀과 소통하세요."},
-                  {t:"03 T3 상향 검토 대상",b:"현재 Tier2이지만 T3 지원이 필요할 수 있는 학생 목록. 차트 버튼으로 상세 분석 확인."},
-                  {t:"수행률 색상 기준",b:"초록(80%+)=달성, 노랑(50~79%)=부분달성, 빨강(50% 미만)=미달. 모든 차트에 동일 기준 적용."},
-                  {t:"데이터 업데이트",b:"CICO 입력 탭 저장 시 즉시 반영. T3 행동 기록은 T3 리포트 탭 입력 후 반영."},
-                  {t:"주의사항",b:"이 대시보드는 의사결정 지원 도구입니다. 최종 결정은 반드시 지원팀 협의를 통해 하세요."},
-                ].map((item: {t:string;b:string}, i: number) => (
-                  <div key={i} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #bbf7d0" }}>
-                    <div style={{ fontWeight:800, color:"#15803d", marginBottom:3 }}>{item.t}</div>
-                    <div style={{ color:"#334155" }}>{item.b}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+
+            {/* 협의 내용 기록 (1열 1행) */}
+            <div className="section-heading"><span>03</span> 협의 내용 기록</div>
+            <MeetingNotesContainer title="협의 내용 기록" type="tier1" />
+
+            {/* AI 협의록 자동 생성 (1열 1행) */}
+            <div className="section-heading"><span>04</span> 학교행동중재지원팀 협의록 자동 생성</div>
+            <TeamMeetingMinutesCard startDate={startDate} endDate={endDate} />
           </div>
         )}
       </AppShell>
     </AuthCheck>
+  );
+}
+
+// ====== 학교행동중재지원팀 협의록 AI 자동 생성 카드 (협의일/대상기간 선택 → 생성 → 즉시 수기 편집) ======
+function TeamMeetingMinutesCard({ startDate, endDate }: { startDate: string; endDate: string }) {
+  const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [periodStart, setPeriodStart] = useState(startDate);
+  const [periodEnd, setPeriodEnd] = useState(endDate);
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!periodStart || !periodEnd) {
+      alert("대상 기간을 선택해주세요.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-meeting-minutes`, {
+        start_date: periodStart,
+        end_date: periodEnd,
+        context_start_date: `${new Date().getFullYear()}-01-01`,
+        context_end_date: periodEnd
+      }, { timeout: 180000 });
+      setResult(res.data.analysis || "");
+    } catch (e: any) {
+      alert("협의록 생성 실패: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!result.trim()) return;
+    setSaving(true);
+    try {
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+        meeting_type: "tier1",
+        date: meetingDate,
+        content: result,
+        author: "PBS Coordinator",
+        period_start: periodStart,
+        period_end: periodEnd
+      });
+      alert("협의록이 저장되었습니다.");
+    } catch (e: any) {
+      alert("저장 실패: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ padding: '24px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', marginBottom: '18px' }}>
+        <div>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>📅 협의일</div>
+          <input type="date" value={meetingDate} onChange={e => setMeetingDate(e.target.value)} className="form-input" />
+        </div>
+        <div>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>📊 대상 기간</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} className="form-input" />
+            <span style={{ color: 'var(--text-muted)' }}>~</span>
+            <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} className="form-input" />
+          </div>
+        </div>
+        <button onClick={handleGenerate} disabled={loading} className="btn btn-ai" style={{ padding: '10px 22px', fontSize: '0.88rem' }}>
+          {loading ? "협의록 생성 중..." : "🤖 AI 협의록 자동 생성"}
+        </button>
+        {result && (
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ padding: '10px 22px', fontSize: '0.88rem' }}>
+            {saving ? "저장 중..." : "💾 시트에 저장"}
+          </button>
+        )}
+      </div>
+
+      {result ? (
+        <textarea
+          value={result}
+          onChange={e => setResult(e.target.value)}
+          style={{
+            width: '100%', minHeight: '360px', padding: '18px',
+            borderRadius: '12px', border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-subtle)', color: 'var(--text-primary)',
+            fontSize: '0.9rem', lineHeight: 1.8, fontFamily: 'inherit',
+            whiteSpace: 'pre-wrap', boxSizing: 'border-box'
+          }}
+        />
+      ) : (
+        <div className="empty-state">
+          <div className="empty-state-icon">🤝</div>
+          <div className="empty-state-title">협의일과 대상 기간을 선택하고 AI 협의록을 생성해보세요</div>
+          <div className="empty-state-text">생성 후에는 이 칸에서 바로 수기로 수정한 뒤 저장할 수 있습니다.</div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -482,10 +482,50 @@ def generate_bcba_section_analysis(
 3. unknown 비율이 높은 학생에 대한 ABC 직접관찰 계획을 수립하라.
 4. 향후 구글 설문지 폼 개선안(라디오버튼 강제, 귀가요구 선택지 추가 등)을 제안하라."""
 
+    elif section_type == "tier_upgrade_candidates":
+        target_tier = raw_summary.get("target_tier", "") if isinstance(raw_summary, dict) else ""
+        candidates = raw_summary.get("candidates", []) if isinstance(raw_summary, dict) else []
+        codes = {str(c.get("student_code", "")).strip() for c in candidates if c.get("student_code")}
+
+        full_logs: list = []
+        if codes:
+            from app.services.sheets import fetch_all_records, fetch_student_status
+            from app.services.normalize import normalize_behavior_log
+
+            status_records = fetch_student_status()
+            tier_info_map = {}
+            for s in status_records:
+                code = str(s.get("학생코드", "")).strip()
+                if code:
+                    tier_info_map[code] = {"class": s.get("학급", ""), "tier": s.get("Tier", 1)}
+            for r in fetch_all_records():
+                rc = str(r.get("학생코드", r.get("코드번호", ""))).strip()
+                if rc in codes:
+                    full_logs.append(normalize_behavior_log(r, tier_info_map))
+        logs_str = json.dumps(full_logs[-150:], ensure_ascii=False, indent=2)
+
+        prompt = f"""[분석 영역: {target_tier} 상향 검토 대상자 선정 근거 분석]
+[검토 대상자 요약]
+{data_str}
+
+[대상자 전체 행동 기록 원자료 (누적, 최근 150건)]
+{logs_str}
+
+[필수 반영 지침]
+1. 각 대상자가 왜 검토 대상으로 선정되었는지(누적 빈도·최대 강도 기준) 근거를 밝혀라.
+2. 원자료에 나타난 반복 패턴(시간대·장소·기능)이 선정 타당성을 뒷받침하는지 판단하라.
+3. 학교행동중재지원팀이 이 명단으로 바로 실행할 수 있는 다음 조치를 제시하라."""
+
     else:
         prompt = f"[분석 데이터]\n{data_str}\n\n공통 시스템 프롬프트에 따라 BCBA 분석을 작성하라."
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+    prompt += """
+
+[출력 형식 - 필수]
+위 지침의 내용을 반영하되, 번호·불릿·소제목 없이 자연스럽게 이어지는 정확히 5개의 문장으로만 작성하라.
+학교행동중재지원팀(PBST)이 이 결과를 보고 바로 의사결정에 활용할 수 있도록 핵심 시사점과 실행 가능한 제안을 담아라."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2048)
 
 
 # ==============================================================================
