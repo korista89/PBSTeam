@@ -61,12 +61,8 @@ export default function LoginPage() {
             const userData = response.data.user;
             login(userData);
 
-            // Redirect based on role
-            if (userData.role === 'admin') {
-                router.push('/');
-            } else {
-                router.push('/cico');
-            }
+            // Dashboard is the landing page for both admins (school-wide) and teachers (class-scoped)
+            router.push('/');
 
         } catch (err: any) {
             setError(err.response?.data?.detail || "로그인에 실패했습니다.");

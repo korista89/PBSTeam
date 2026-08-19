@@ -526,6 +526,18 @@ def generate_bcba_section_analysis(
 2. 원자료에 나타난 반복 패턴(시간대·장소·기능)이 선정 타당성을 뒷받침하는지 판단하라.
 3. 학교행동중재지원팀이 이 명단으로 바로 실행할 수 있는 다음 조치를 제시하라."""
 
+    elif section_type == "teacher_pbst_request":
+        class_name = raw_summary.get("class_name", "") if isinstance(raw_summary, dict) else ""
+        prompt = f"""[분석 영역: 담임교사 → 학교행동중재지원팀(PBST) 제출 의견 자동 생성]
+[학급: {class_name}]
+[우리 반 최근 행동/Tier 데이터]
+{data_str}
+
+[필수 반영 지침]
+1. 이 학급 데이터에서 담임교사가 학교행동중재지원팀에 실제로 요청할 만한 사항(예: 특정 학생 Tier 재검토, 협의회 소집, 추가 인력·자원 지원, BIP 재수립 등)을 데이터 근거와 함께 도출하라.
+2. 추측성 조언이 아니라 이 학급의 수치(빈도, 강도, Tier 분포, 최근 추이)에 직접 근거한 요청만 제시하라.
+3. 학교행동중재지원팀이 받자마자 무엇을 검토해야 하는지 바로 알 수 있도록 구체적으로 작성하라."""
+
     else:
         prompt = f"[분석 데이터]\n{data_str}\n\n공통 시스템 프롬프트에 따라 BCBA 분석을 작성하라."
 

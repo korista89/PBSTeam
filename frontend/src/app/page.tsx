@@ -221,6 +221,33 @@ function truncatedLegendFormatter(value: string) {
   return <span title={value}>{truncateLabel(value, 12)}</span>;
 }
 
+// 구간별 대략적 시각 범위 (초/중고 교시 배치가 달라 5·6구간은 두 과정 모두 표기, "약" = 학교/학년별로 다를 수 있음)
+const TIME_SLOT_RANGES: Record<string, string> = {
+  "1구간": "등교 및 아침활동 · 약 08:30~09:00",
+  "2구간": "1교시 · 약 09:00~09:40",
+  "3구간": "2교시 · 약 09:50~10:30",
+  "4구간": "3교시 · 약 10:40~11:20",
+  "5구간": "초등 점심시간 약 12:10~13:00 / 중·고 4교시 약 11:30~12:10",
+  "6구간": "초등 4교시 약 11:30~12:10 / 중·고 점심시간 약 12:10~13:00",
+  "7구간": "5교시 · 약 13:10~13:50",
+  "8구간": "6교시 · 약 14:00~14:40",
+  "9구간": "7교시/방과후 · 약 14:50~15:30",
+  "10구간": "하교 및 종례 · 약 15:30~16:00",
+};
+
+function TimeSlotXAxisTick({ x, y, payload }: any) {
+  const full = String(payload?.value ?? "");
+  const range = TIME_SLOT_RANGES[full];
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{range ? `${full} (${range})` : full}</title>
+      <text x={0} y={0} dy={12} textAnchor="middle" fontSize={10} fontWeight={700} fill="#334155">
+        {full}
+      </text>
+    </g>
+  );
+}
+
 // Chart wrapper
 function ChartBox({ title, description, children, height = 340, action }: { title: string; description?: string; children: React.ReactNode; height?: number; action?: React.ReactNode }) {
   return (
@@ -703,7 +730,7 @@ export default function Home() {
                 action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <BarChart data={aggregateTimeSlots(big5.times || [])} margin={{ top: 20 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<TimeSlotXAxisTick />} interval={0} />
                   <YAxis hide />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="value" name="건수" radius={[8, 8, 0, 0]} fill="#8b5cf6" barSize={22}>
@@ -744,7 +771,7 @@ export default function Home() {
               <ChartBox
                 title="❓ 행동의 기능 분석"
                 description="행동이 관심추구/회피/감각 등 어떤 기능(이유) 때문에 나타나는지 보여줍니다."
-                action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} />}
+                action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <PieChart>
                   <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={95} innerRadius={60} dataKey="value" label={(e: any) => e.value} labelLine={false}>
@@ -764,13 +791,31 @@ export default function Home() {
               <TierUpgradeList riskList={riskList} startDate={startDate} endDate={endDate} targetTier="Tier 3" label="T3 상향 검토 대상자" accent="#ef4444" />
             </div>
 
-            {/* 협의 내용 기록 (1열 1행) */}
-            <div className="section-heading"><span>03</span> 협의 내용 기록</div>
-            <MeetingNotesContainer title="협의 내용 기록" type="tier1" />
+            {isAdmin() ? (
+              <>
+                {/* 협의 내용 기록 (1열 1행) */}
+                <div className="section-heading"><span>03</span> 협의 내용 기록</div>
+                <MeetingNotesContainer title="협의 내용 기록" type="tier1" />
 
-            {/* AI 협의록 자동 생성 (1열 1행) */}
-            <div className="section-heading"><span>04</span> 학교행동중재지원팀 협의록 자동 생성</div>
-            <TeamMeetingMinutesCard startDate={startDate} endDate={endDate} />
+                {/* AI 협의록 자동 생성 (1열 1행) */}
+                <div className="section-heading"><span>04</span> 학교행동중재지원팀 협의록 자동 생성</div>
+                <TeamMeetingMinutesCard startDate={startDate} endDate={endDate} />
+              </>
+            ) : (
+              <>
+                {/* 담임교사 전용: 학교행동중재지원팀 제출 의견 자동 생성 (1열 1행) */}
+                <div className="section-heading"><span>03</span> 학교행동중재지원팀 제출 의견 자동 생성</div>
+                <TeamRequestSuggestionCard
+                  teacherClassName={user?.class_name || user?.class_id || ""}
+                  summary={summary}
+                  big5={big5}
+                  riskList={riskList}
+                  weeklyTrends={weeklyTrends}
+                  startDate={startDate}
+                  endDate={endDate}
+                />
+              </>
+            )}
           </div>
         )}
       </AppShell>
@@ -870,6 +915,102 @@ function TeamMeetingMinutesCard({ startDate, endDate }: { startDate: string; end
           <div className="empty-state-icon">🤝</div>
           <div className="empty-state-title">협의일과 대상 기간을 선택하고 AI 협의록을 생성해보세요</div>
           <div className="empty-state-text">생성 후에는 이 칸에서 바로 수기로 수정한 뒤 저장할 수 있습니다.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====== 담임교사 전용: 학교행동중재지원팀 제출 의견 AI 자동 생성 카드 ======
+function TeamRequestSuggestionCard({
+  teacherClassName,
+  summary,
+  big5,
+  riskList,
+  weeklyTrends,
+  startDate,
+  endDate
+}: {
+  teacherClassName: string;
+  summary: any;
+  big5: any;
+  riskList: any[];
+  weeklyTrends: any[];
+  startDate: string;
+  endDate: string;
+}) {
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
+        section_name: "teacher_pbst_request",
+        data_context: {
+          class_name: teacherClassName,
+          summary,
+          big5,
+          risk_list: riskList.slice(0, 20),
+          weekly_trends: weeklyTrends
+        },
+        start_date: startDate || null,
+        end_date: endDate || null
+      }, { timeout: 180000 });
+      setResult(res.data.analysis || "");
+    } catch (e: any) {
+      alert("의견 생성 실패: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!result.trim()) return;
+    try {
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+        meeting_type: "teacher_request",
+        date: new Date().toISOString().split('T')[0],
+        content: result,
+        author: user?.id || "Teacher"
+      });
+      alert("학교행동중재지원팀에 제출할 의견이 저장되었습니다.");
+    } catch (e: any) {
+      alert("저장 실패: " + (e.response?.data?.detail || e.message));
+    }
+  };
+
+  return (
+    <div className="card" style={{ padding: '24px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', marginBottom: '18px' }}>
+        <button onClick={handleGenerate} disabled={loading} className="btn btn-ai" style={{ padding: '10px 22px', fontSize: '0.88rem' }}>
+          {loading ? "의견 생성 중..." : "🤖 학교행동중재지원팀 제출 의견 자동 생성"}
+        </button>
+        {result && (
+          <button onClick={handleSave} className="btn btn-primary" style={{ padding: '10px 22px', fontSize: '0.88rem' }}>
+            📤 제출 의견으로 저장
+          </button>
+        )}
+      </div>
+
+      {result ? (
+        <textarea
+          value={result}
+          onChange={e => setResult(e.target.value)}
+          style={{
+            width: '100%', minHeight: '260px', padding: '18px',
+            borderRadius: '12px', border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-subtle)', color: 'var(--text-primary)',
+            fontSize: '0.9rem', lineHeight: 1.8, fontFamily: 'inherit',
+            whiteSpace: 'pre-wrap', boxSizing: 'border-box'
+          }}
+        />
+      ) : (
+        <div className="empty-state">
+          <div className="empty-state-icon">📮</div>
+          <div className="empty-state-title">우리 반 데이터를 기반으로 학교행동중재지원팀에 요청할 사항을 AI가 정리해드립니다</div>
+          <div className="empty-state-text">생성 후 바로 수기로 수정한 뒤 저장할 수 있습니다.</div>
         </div>
       )}
     </div>
