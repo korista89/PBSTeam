@@ -179,6 +179,20 @@ function truncateLabel(str: string, max = 9) {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
+// big5.times entries share an "N구간: 설명" name per sub-category (e.g. "1구간: 등교시간",
+// "1구간: 하교시간"); group by the "N구간" prefix and sum, then sort by slot number (1~10).
+function aggregateTimeSlots(items: any[]) {
+  const totals = new Map<string, number>();
+  for (const t of items || []) {
+    const key = String(t.name || "").split(':')[0].trim();
+    if (!key) continue;
+    totals.set(key, (totals.get(key) || 0) + (t.value || 0));
+  }
+  return Array.from(totals.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => (parseInt(a.name, 10) || 0) - (parseInt(b.name, 10) || 0));
+}
+
 function TruncatedYAxisTick({ x, y, payload }: any) {
   const full = String(payload?.value ?? "");
   return (
@@ -186,6 +200,18 @@ function TruncatedYAxisTick({ x, y, payload }: any) {
       <title>{full}</title>
       <text x={-4} y={0} dy={4} textAnchor="end" fontSize={10} fontWeight={700} fill="#334155">
         {truncateLabel(full, 9)}
+      </text>
+    </g>
+  );
+}
+
+function TruncatedXAxisTick({ x, y, payload }: any) {
+  const full = String(payload?.value ?? "");
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{full}</title>
+      <text x={0} y={0} dy={12} textAnchor="middle" fontSize={10} fontWeight={700} fill="#334155">
+        {truncateLabel(full, 6)}
       </text>
     </g>
   );
@@ -500,12 +526,12 @@ export default function Home() {
   const riskList = data?.risk_list || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
-  const findTierCount = (name: string) => tierDist.find((t: any) => t.name === name)?.value || 0;
-  const tier1Count = findTierCount('Tier 1 (보편)');
-  const tier2CicoCount = findTierCount('Tier 2-CICO (선별)');
-  const tier2SstCount = findTierCount('Tier 2-SST (집중)');
-  const tier3Count = findTierCount('Tier 3 (개별집중)');
-  const tier3PlusCount = findTierCount('Tier 3+ (위기)');
+  // Tier현황 페이지와 동일한 raw 배정 카운트 사용 (donut용 tierDist는 세그먼트 중복 배제된 값이라 다름)
+  const tier1Count = summary.tier1_count ?? 0;
+  const tier2CicoCount = summary.tier2_cico_count ?? 0;
+  const tier2SstCount = summary.tier2_sst_count ?? 0;
+  const tier3Count = summary.tier3_count ?? 0;
+  const tier3PlusCount = summary.tier3_plus_count ?? 0;
 
   return (
     <AuthCheck>
@@ -632,7 +658,7 @@ export default function Home() {
             <div className="grid-4">
               <ChartBox title="🎯 지원 단계별 분포" description={isAdmin() ? "전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다." : "우리 반 학생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다."}>
                 <PieChart>
-                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={110} innerRadius={70} paddingAngle={4} dataKey="value" stroke="none">
+                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={110} innerRadius={70} paddingAngle={4} dataKey="value" stroke="none" label={(e: any) => e.value} labelLine={false}>
                     {tierDist.map((entry: any, index: number) => (
                       <Cell key={index} fill={TIER_COLORS[entry.name] || '#cbd5e1'} />
                     ))}
@@ -676,12 +702,12 @@ export default function Home() {
                 description="어느 시간대(교시)에 행동이 가장 많이 발생하는지 보여줍니다."
                 action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
-                <BarChart data={[...(big5.times || [])].slice(0, 8)} layout="vertical" margin={{ right: 40 }}>
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={<TruncatedYAxisTick />} />
+                <BarChart data={aggregateTimeSlots(big5.times || [])} margin={{ top: 20 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
+                  <YAxis hide />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#8b5cf6" barSize={14}>
-                      <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#8b5cf6' }} formatter={(v:any)=>`${v}건`} />
+                  <Bar dataKey="value" name="건수" radius={[8, 8, 0, 0]} fill="#8b5cf6" barSize={22}>
+                      <LabelList dataKey="value" position="top" style={{ fontSize: 10, fontWeight: 800, fill: '#8b5cf6' }} formatter={(v:any)=>`${v}건`} />
                   </Bar>
                 </BarChart>
               </ChartBox>
@@ -691,12 +717,12 @@ export default function Home() {
                 description="어느 장소에서 행동이 가장 많이 발생하는지 보여줍니다."
                 action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
-                <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 40 }}>
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={<TruncatedYAxisTick />} />
+                <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} margin={{ top: 20 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<TruncatedXAxisTick />} interval={0} />
+                  <YAxis hide />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="건수" radius={[0, 8, 8, 0]} fill="#6366f1" barSize={14}>
-                      <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 800, fill: '#6366f1' }} formatter={(v:any)=>`${v}건`} />
+                  <Bar dataKey="value" name="건수" radius={[8, 8, 0, 0]} fill="#6366f1" barSize={30}>
+                      <LabelList dataKey="value" position="top" style={{ fontSize: 10, fontWeight: 800, fill: '#6366f1' }} formatter={(v:any)=>`${v}건`} />
                   </Bar>
                 </BarChart>
               </ChartBox>
@@ -707,7 +733,7 @@ export default function Home() {
                 action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <PieChart>
-                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={105} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
+                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={105} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3} label={(e: any) => e.value}>
                     {(big5.behaviors || []).map((_, i) => <Cell key={i} fill={['#6366f1','#8b5cf6','#d946ef','#f43f5e','#f97316','#f59e0b'][i%6]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
@@ -721,7 +747,7 @@ export default function Home() {
                 action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} />}
               >
                 <PieChart>
-                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={95} innerRadius={60} dataKey="value">
+                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={95} innerRadius={60} dataKey="value" label={(e: any) => e.value} labelLine={false}>
                       {((data as any).functions || []).map((_: unknown, i: number) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />

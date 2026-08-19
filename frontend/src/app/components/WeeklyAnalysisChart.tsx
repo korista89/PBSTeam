@@ -3,7 +3,7 @@
 import React from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend
+  ResponsiveContainer, BarChart, Bar, Legend, LabelList
 } from "recharts";
 import { formatWeek } from "../utils";
 
@@ -109,7 +109,9 @@ export default function WeeklyAnalysisChart({
                 dot={{ r: 6, fill: color, strokeWidth: 2, stroke: "#fff" }}
                 activeDot={{ r: 8, strokeWidth: 0 }}
                 animationDuration={1500}
-              />
+              >
+                <LabelList dataKey={dataKey} position="top" style={{ fontSize: 10, fontWeight: 800, fill: color }} />
+              </Line>
             </LineChart>
           ) : (
             <BarChart data={data}>
@@ -142,7 +144,9 @@ export default function WeeklyAnalysisChart({
                 fill={color}
                 radius={[6, 6, 0, 0]}
                 animationDuration={1500}
-              />
+              >
+                <LabelList dataKey={dataKey} position="top" style={{ fontSize: 10, fontWeight: 800, fill: color }} />
+              </Bar>
             </BarChart>
           )}
         </ResponsiveContainer>

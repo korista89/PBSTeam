@@ -44,6 +44,11 @@ export interface DashboardData {
         risk_student_count: number;
         enrolled_count?: number;
         individual_support_count?: number;
+        tier1_count?: number;
+        tier2_cico_count?: number;
+        tier2_sst_count?: number;
+        tier3_count?: number;
+        tier3_plus_count?: number;
     };
     trends: TrendData[];
     weekly_trends?: WeeklyTrendData[];

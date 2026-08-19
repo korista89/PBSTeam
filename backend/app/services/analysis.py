@@ -447,6 +447,12 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             "risk_student_count": risk_student_count,
             "enrolled_count": tier_stats["enrolled"] if tier_stats else 0,
             "individual_support_count": individual_support_count,
+            # 실배정 원본 카운트 (Tier현황 페이지와 동일 기준 - Tier간 중복 배제하지 않은 raw O 카운트)
+            "tier1_count": tier_stats["tier1"]["count"] if tier_stats else 0,
+            "tier2_cico_count": tier_stats["tier2_cico"]["count"] if tier_stats else 0,
+            "tier2_sst_count": tier_stats["tier2_sst"]["count"] if tier_stats else 0,
+            "tier3_count": tier_stats["tier3"]["count"] if tier_stats else 0,
+            "tier3_plus_count": tier_stats["tier3_plus"]["count"] if tier_stats else 0,
         },
         "trends": [{"date": k, "count": v} for k, v in date_counts.items()],
         "weekly_trends": [{"week": k, "count": v} for k, v in weekly_counts.items()],
