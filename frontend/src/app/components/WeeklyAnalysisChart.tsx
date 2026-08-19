@@ -21,6 +21,7 @@ interface Props {
   title: string;
   color?: string;
   yLabel?: string;
+  action?: React.ReactNode;
 }
 
 export default function WeeklyAnalysisChart({
@@ -29,7 +30,8 @@ export default function WeeklyAnalysisChart({
   dataKey = "count",
   title,
   color = "#6366f1",
-  yLabel = "건수"
+  yLabel = "건수",
+  action
 }: Props) {
   if (!data || data.length === 0) {
     return (
@@ -62,9 +64,14 @@ export default function WeeklyAnalysisChart({
         color: "#1e293b",
         display: "flex",
         alignItems: "center",
-        gap: "8px"
+        justifyContent: "space-between",
+        gap: "8px",
+        flexWrap: "wrap"
       }}>
-        <span style={{ fontSize: "1.2rem" }}>📈</span> {title}
+        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "1.2rem" }}>📈</span> {title}
+        </span>
+        {action}
       </h3>
 
       <div style={{ flex: 1, minHeight: "250px" }}>

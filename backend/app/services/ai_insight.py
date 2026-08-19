@@ -482,6 +482,16 @@ def generate_bcba_section_analysis(
 3. unknown 비율이 높은 학생에 대한 ABC 직접관찰 계획을 수립하라.
 4. 향후 구글 설문지 폼 개선안(라디오버튼 강제, 귀가요구 선택지 추가 등)을 제안하라."""
 
+    elif section_type == "weekly_trend":
+        prompt = f"""[분석 영역: 주별 행동 발생 추이(Weekly Trend) 분석]
+[주차별 건수 데이터 (시간 순)]
+{data_str}
+
+[필수 반영 지침]
+1. 최근 구간이 이전 대비 증가·감소·정체 중 무엇인지 방향성을 먼저 판단하라.
+2. 특정 주차에 급증/급감이 있다면 그 시점을 짚고 학사일정(시험, 행사, 계절 변화 등)과의 연관 가능성을 제시하라.
+3. 이 추이가 현재 학교 전체 PBS 운영이 효과가 있는지 없는지에 대해 시사하는 바를 제시하라."""
+
     elif section_type == "tier_upgrade_candidates":
         target_tier = raw_summary.get("target_tier", "") if isinstance(raw_summary, dict) else ""
         candidates = raw_summary.get("candidates", []) if isinstance(raw_summary, dict) else []

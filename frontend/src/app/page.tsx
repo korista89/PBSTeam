@@ -51,7 +51,8 @@ function SectionAIButton({
   startDate,
   endDate,
   buttonLabel = "📊 차트 해석",
-  modalLabel
+  modalLabel,
+  onResult
 }: {
   sectionName: string;
   title: string;
@@ -60,6 +61,7 @@ function SectionAIButton({
   endDate: string;
   buttonLabel?: string;
   modalLabel?: string;
+  onResult?: (state: { title: string; loading: boolean; text: string }) => void;
 }) {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,7 +69,8 @@ function SectionAIButton({
 
   const handleRequest = async () => {
     setLoading(true);
-    setOpen(true);
+    if (onResult) onResult({ title, loading: true, text: "" });
+    else setOpen(true);
     try {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-section-analysis`, {
         section_name: sectionName,
@@ -75,14 +78,18 @@ function SectionAIButton({
         start_date: startDate || null,
         end_date: endDate || null
       }, { timeout: 180000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+      const text = res.data.analysis || "분석 결과가 없습니다.";
+      setAnalysis(text);
+      if (onResult) onResult({ title, loading: false, text });
     } catch (e: any) {
       const errDetail = typeof e?.response?.data?.detail === "string"
         ? e.response.data.detail
         : Array.isArray(e?.response?.data?.detail)
           ? e.response.data.detail.map((d: any) => d.msg).join(", ")
           : e?.message || "요청 실패";
-      setAnalysis(`⚠️ AI 영역별 정밀 분석 요청 실패. (${errDetail})`);
+      const errText = `⚠️ AI 영역별 정밀 분석 요청 실패. (${errDetail})`;
+      setAnalysis(errText);
+      if (onResult) onResult({ title, loading: false, text: errText });
     } finally {
       setLoading(false);
     }
@@ -116,10 +123,10 @@ function SectionAIButton({
           e.currentTarget.style.background = '#fff';
         }}
       >
-        <span>🤖</span> {buttonLabel}
+        <span>🤖</span> {loading ? "분석 중..." : buttonLabel}
       </button>
 
-      {open && (
+      {!onResult && open && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(15, 23, 42, 0.65)',
@@ -447,6 +454,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [interpretation, setInterpretation] = useState<{ title: string; loading: boolean; text: string } | null>(null);
   const { user, isAdmin } = useAuth();
   const { startDate, endDate } = useDateRange();
   const lastParamsRef = React.useRef("");
@@ -493,9 +501,12 @@ export default function Home() {
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
   const safetyAlerts: any[] = (data as any)?.safety_alerts || [];
-  const tier1Count = tierDist.find((t: any) => String(t.name).includes('Tier 1'))?.value || 0;
-  const t2CandidateCount = riskList.filter((s: any) => s.tier === 'Tier 2').length;
-  const t3CandidateCount = riskList.filter((s: any) => s.tier === 'Tier 3').length;
+  const sumTierDist = (matcher: (name: string) => boolean) =>
+    tierDist.filter((t: any) => matcher(String(t.name))).reduce((sum: number, t: any) => sum + (t.value || 0), 0);
+  const tier1Count = sumTierDist(n => n.includes('Tier 1'));
+  const tier2Count = sumTierDist(n => n.includes('Tier 2'));
+  const tier3PlusCount = sumTierDist(n => n.includes('Tier 3'));
+  const upgradeReviewCount = riskList.filter((s: any) => s.tier === 'Tier 2' || s.tier === 'Tier 3').length;
 
   return (
     <AuthCheck>
@@ -564,51 +575,49 @@ export default function Home() {
 
               <div className="kpi-card">
                 <div className="kpi-label">
-                  <span>Tier 2/3 중점 지원군</span>
-                  <span>🚨</span>
-                </div>
-                <div className="kpi-value" style={{ color: "var(--tier3)" }}>
-                  {isAdmin() ? summary.risk_student_count : riskList.length}명
-                </div>
-                <div className="kpi-subtext">집중 중재 및 모니터링 대상</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
                   <span>등록 재학생 수</span>
                   <span>🏫</span>
                 </div>
                 <div className="kpi-value" style={{ color: "var(--text-primary)" }}>
                   {summary.enrolled_count || 35}명
                 </div>
-                <div className="kpi-subtext">전교 긍정적 행동지원 대상</div>
+                <div className="kpi-subtext">전교 긍정적 행동지원 모수</div>
               </div>
 
               <div className="kpi-card">
                 <div className="kpi-label">
-                  <span>Tier 1 (보편) 학생</span>
+                  <span>Tier 1 (보편)</span>
                   <span>🟢</span>
                 </div>
                 <div className="kpi-value" style={{ color: "var(--tier1)" }}>{tier1Count}명</div>
-                <div className="kpi-subtext">보편적 지원 단계</div>
+                <div className="kpi-subtext">보편적 지원 단계 재학생</div>
               </div>
 
               <div className="kpi-card">
                 <div className="kpi-label">
-                  <span>T2 상향 검토</span>
+                  <span>Tier 2 (선별/집중)</span>
                   <span>🟠</span>
                 </div>
-                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{t2CandidateCount}명</div>
-                <div className="kpi-subtext">Tier1→2 상향 검토 대상</div>
+                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{tier2Count}명</div>
+                <div className="kpi-subtext">CICO·SST 배정 재학생</div>
               </div>
 
               <div className="kpi-card">
                 <div className="kpi-label">
-                  <span>T3 상향 검토</span>
+                  <span>Tier 3/3+ (집중/위기)</span>
                   <span>🔴</span>
                 </div>
-                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{t3CandidateCount}명</div>
-                <div className="kpi-subtext">Tier2→3 상향 검토 대상</div>
+                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{tier3PlusCount}명</div>
+                <div className="kpi-subtext">개별 집중지원 배정 재학생</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>상향 검토 대상</span>
+                  <span>🔎</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{upgradeReviewCount}명</div>
+                <div className="kpi-subtext">아직 미배정, 행동데이터 기준 검토 필요</div>
               </div>
 
               <div className="kpi-card">
@@ -636,19 +645,39 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <div style={{ gridColumn: 'span 3' }}>
+              <div style={{ gridColumn: 'span 2' }}>
                 <WeeklyAnalysisChart
                   data={weeklyTrends}
                   title="주별 행동 발생 추이"
                   color="#6366f1"
                   yLabel="건수"
+                  action={<SectionAIButton sectionName="weekly_trend" title="주별 추이" dataContext={weeklyTrends} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
                 />
+              </div>
+
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '24px',
+                padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
+                display: 'flex', flexDirection: 'column', height: '100%'
+              }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '4px', height: '18px', background: '#ef4444', borderRadius: '2px' }} />
+                  🔎 {interpretation ? `${interpretation.title} 차트 해석` : '차트 해석 보기'}
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.8rem', lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-wrap' }}>
+                  {!interpretation && (
+                    <span style={{ color: '#94a3b8' }}>아래 2행 차트의 &quot;📊 차트 해석&quot; 버튼을 누르면 여기에 결과가 뜹니다. 차트를 보면서 함께 읽을 수 있습니다.</span>
+                  )}
+                  {interpretation?.loading && <span style={{ color: '#ef4444' }}>🧠 분석 중입니다...</span>}
+                  {interpretation && !interpretation.loading && interpretation.text}
+                </div>
               </div>
 
               <ChartBox
                 title="⏰ 시간대별 분석"
                 description="어느 시간대(교시)에 행동이 가장 많이 발생하는지 보여줍니다."
-                action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} />}
+                action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <BarChart data={[...(big5.times || [])].slice(0, 8)} layout="vertical" margin={{ right: 40 }}>
                   <XAxis type="number" hide />
@@ -663,7 +692,7 @@ export default function Home() {
               <ChartBox
                 title="📍 장소별 분석"
                 description="어느 장소에서 행동이 가장 많이 발생하는지 보여줍니다."
-                action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} />}
+                action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 40 }}>
                   <XAxis type="number" hide />
@@ -678,7 +707,7 @@ export default function Home() {
               <ChartBox
                 title="🎭 행동 유형별 프로필"
                 description="공격/자해/방해 등 행동 유형별 발생 비중을 보여줍니다."
-                action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} />}
+                action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <PieChart>
                   <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={105} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
