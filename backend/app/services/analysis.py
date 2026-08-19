@@ -119,12 +119,22 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         if sn: name_map[sn] = info
 
     tier_status_cache = {}
+    assigned_tier_cache = {}
     for s in all_status:
         sc = str(s.get('학생코드') or s.get('Code') or s.get('학번') or '').strip()
         sn = str(s.get('학생이름') or s.get('학생명') or s.get('Name') or '').strip()
         class_val = s.get('학급', s.get('Class', '-'))
         if sc:
             tier_status_cache[sc] = class_val
+            # 이미 배정된 최고 지원단계 (상향 검토 대상자 명단에서 이미 배정된 학생을 제외하기 위함)
+            if str(s.get('Tier3+', '')).strip() == 'O':
+                assigned_tier_cache[sc] = 'Tier 3+'
+            elif str(s.get('Tier3', '')).strip() == 'O':
+                assigned_tier_cache[sc] = 'Tier 3'
+            elif str(s.get('Tier2(CICO)', '')).strip() == 'O' or str(s.get('Tier2(SST)', '')).strip() == 'O':
+                assigned_tier_cache[sc] = 'Tier 2'
+            else:
+                assigned_tier_cache[sc] = 'Tier 1'
             if sc not in code_map:
                 code_map[sc] = {'student_code': sc, 'student_name': sn or sc}
         if sn and sn not in name_map:
@@ -241,7 +251,13 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             elif freq_count >= 3:
                 tier = "Tier 2"
             
-            if tier != "Tier 1":
+            # 이미 해당 단계 이상으로 배정된 학생은 "상향 검토 대상자"에서 제외한다
+            # (Tier2 후보는 Tier2 이상 배정자 제외, Tier3 후보는 Tier3 이상 배정자 제외)
+            assigned_tier = assigned_tier_cache.get(str(student_code), 'Tier 1')
+            tier_rank = {"Tier 1": 0, "Tier 2": 1, "Tier 3": 2, "Tier 3+": 3}
+            already_assigned = tier_rank.get(assigned_tier, 0) >= tier_rank.get(tier, 0)
+
+            if tier != "Tier 1" and not already_assigned:
                 student_name_label = group['student_name_labeled'].iloc[0] if 'student_name_labeled' in group.columns else str(student_code)
                 at_risk_list.append({
                     "name": student_name_label,

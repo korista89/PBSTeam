@@ -621,7 +621,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 8종 핵심 차트 (4열 2행) */}
+            {/* 6종 핵심 차트 (4열 2행: 1행=지원단계별분포 1칸+주별추이 3칸, 2행=시간대/장소/유형/기능) */}
             <div className="section-heading"><span>01</span> 행동 데이터 종합 분석</div>
             <div className="grid-4">
               <ChartBox title="🎯 지원 단계별 분포" description="전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다.">
@@ -636,12 +636,14 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <WeeklyAnalysisChart
-                data={weeklyTrends}
-                title="주별 행동 발생 추이"
-                color="#6366f1"
-                yLabel="건수"
-              />
+              <div style={{ gridColumn: 'span 3' }}>
+                <WeeklyAnalysisChart
+                  data={weeklyTrends}
+                  title="주별 행동 발생 추이"
+                  color="#6366f1"
+                  yLabel="건수"
+                />
+              </div>
 
               <ChartBox
                 title="⏰ 시간대별 분석"
@@ -701,31 +703,6 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <ChartBox
-                title="⚡ 행동 강도 분포"
-                description="강도 1~5 단계별로 행동이 몇 건씩 발생했는지 보여줍니다."
-                action={<SectionAIButton sectionName="intensity" title="강도/위기" dataContext={(data as any).intensity_distribution || []} startDate={startDate} endDate={endDate} />}
-              >
-                <BarChart data={(data as any).intensity_distribution || []}>
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                   <Bar dataKey="value" radius={[8,8,8,8]}>
-                       {((data as any).intensity_distribution || []).map((e:any, i:number) => {
-                           const colors = ['#10b981', '#fbbf24', '#f59e0b', '#ef4444', '#7f1d1d'];
-                           return <Cell key={i} fill={colors[parseInt(e.name)-1] || '#ccc'} />;
-                       })}
-                   </Bar>
-                </BarChart>
-              </ChartBox>
-
-              <ChartBox title="⏰ 심각도 시계열 분석" description="시간이 지나면서 평균 행동 강도가 개선되는지 악화되는지 추이를 보여줍니다.">
-                <LineChart data={(data as any).intensity_trend || []}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                  <YAxis domain={[0, 5]} hide />
-                  <Line type="monotone" dataKey="value" stroke="#ef4444" strokeWidth={4} dot={{ r: 6, fill: '#fa3f5e', stroke: '#fff', strokeWidth: 3 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                </LineChart>
-              </ChartBox>
             </div>
 
             {/* Tier 상향 검토 대상자 명단 (2열 1행) */}
