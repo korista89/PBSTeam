@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { AuthCheck } from "../components/AuthProvider";
-import GlobalNav from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
 import type { DecisionSignal } from "../../types/domain";
 
 export default function TodayDecisionCenterPage() {
@@ -57,42 +57,19 @@ export default function TodayDecisionCenterPage() {
 
     return (
         <AuthCheck>
-            <div style={{ background: "#f8fafc", minHeight: "100vh" }}>
-                <GlobalNav currentPage="today" />
-
-                <main style={{ maxWidth: "1280px", margin: "0 auto", padding: "32px 24px" }}>
-                    {/* Header */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px", flexWrap: "wrap", gap: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <span style={{ fontSize: "2.2rem" }}>🧭</span>
-                            <div>
-                                <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>
-                                    Today 행동지원 의사결정 센터
-                                </h1>
-                                <p style={{ fontSize: "0.95rem", color: "#64748b", margin: "4px 0 0 0" }}>
-                                    긴급 위기 안전 후속 조치, 중재 점검 신호, 팀 협의 과제를 실시간으로 확인하고 결정합니다.
-                                </p>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={fetchTodayData}
-                            style={{
-                                padding: "8px 16px",
-                                background: "white",
-                                border: "1px solid #cbd5e1",
-                                borderRadius: "10px",
-                                fontWeight: 700,
-                                color: "#334155",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px"
-                            }}
-                        >
-                            🔄 새로고침
-                        </button>
-                    </div>
+            <AppShell
+                currentPage="today"
+                title="🧭 Today 행동지원 의사결정 센터"
+                subtitle="긴급 위기 안전 후속 조치, 중재 점검 신호, 팀 협의 과제를 실시간으로 확인하고 결정합니다."
+                headerActions={
+                    <button
+                        onClick={fetchTodayData}
+                        className="btn btn-secondary"
+                    >
+                        🔄 새로고침
+                    </button>
+                }
+            >
 
                     {loading ? (
                         <div style={{ textAlign: "center", padding: "100px", color: "#64748b" }}>
@@ -412,8 +389,7 @@ export default function TodayDecisionCenterPage() {
                             </div>
                         </div>
                     )}
-                </main>
-            </div>
+            </AppShell>
         </AuthCheck>
     );
 }

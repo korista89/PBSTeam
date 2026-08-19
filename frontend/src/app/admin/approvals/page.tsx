@@ -3,9 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../constants';
-import GlobalNav from '../../components/GlobalNav';
-import UserHeader from '../../components/UserHeader';
-import { useAuth } from '../../components/AuthProvider';
+import AppShell from '../../components/AppShell';
+import { AuthCheck, useAuth } from '../../components/AuthProvider';
 
 export default function AdminApprovalsPage() {
   const { user } = useAuth();
@@ -74,33 +73,48 @@ export default function AdminApprovalsPage() {
   };
 
   return (
-    <div>
-      <GlobalNav />
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px' }}>
-        <UserHeader title="관리자 결재 대시보드 (위기행동 승인)" />
-
-        {loading ? (
-          <div>불러오는 중...</div>
-        ) : error ? (
-          <div style={{ color: 'red' }}>{error}</div>
-        ) : logs.length === 0 ? (
-          <div style={{ padding: '20px', backgroundColor: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
-            결재 대기 중인 항목이 없습니다.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <AuthCheck>
+      <AppShell
+        currentPage="admin-approvals"
+        title="✅ 관리자 결재함 (위기행동 승인)"
+        subtitle={`대기 중인 위기행동 보고서: ${logs.length}건`}
+        hideDateFilter={true}
+        headerActions={
+          <button onClick={fetchPendingLogs} className="btn btn-secondary">
+            🔄 새로고침
+          </button>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {loading ? (
+            <div className="card" style={{ padding: "60px", textAlign: "center", color: "var(--text-secondary)" }}>
+              <div style={{ fontSize: "2rem", marginBottom: "12px", animation: "spin 2s linear infinite" }}>⏳</div>
+              <p style={{ fontWeight: 700 }}>결재 대기 목록을 불러오고 있습니다...</p>
+            </div>
+          ) : error ? (
+            <div className="card" style={{ padding: "20px", background: "#fef2f2", color: "#dc2626", textAlign: "center" }}>
+              ⚠️ {error}
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">✅</div>
+              <div className="empty-state-title">결재 대기 중인 위기행동 보고서가 없습니다</div>
+              <div className="empty-state-text">모든 위기행동 및 특별 지원 보고서가 정상 결재되었습니다.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {logs.map(log => (
               <div key={log.Log_ID} style={{ border: '2px solid #b91c1c', borderRadius: '8px', padding: '20px', backgroundColor: '#fef2f2' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #fca5a5', paddingBottom: '10px', marginBottom: '10px' }}>
                   <h3 style={{ margin: 0, color: '#b91c1c' }}>🚨 위기행동 지원 보고서 결재</h3>
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button 
+                    <button
                       onClick={() => handleRevise(log.Log_ID)}
                       style={{ backgroundColor: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                     >
                       재작성 요청 (Revise)
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleApprove(log.Log_ID)}
                       style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                     >
@@ -108,7 +122,7 @@ export default function AdminApprovalsPage() {
                     </button>
                   </div>
                 </div>
-                
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                   <div>
                     <p><strong>학생:</strong> {log['학생명']} ({log['학생코드']})</p>
@@ -129,9 +143,9 @@ export default function AdminApprovalsPage() {
                 {log.crisis_details && (
                   <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '4px', border: '1px solid #ccc' }}>
                     <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #ccc', paddingBottom: '5px' }}>보고서 상세 내용</h4>
-                    
+
                     <p><strong>발생 시 지도교사:</strong> {log.crisis_details['발생 시 지도교사']}</p>
-                    
+
                     <h5 style={{ margin: '15px 0 5px 0' }}>행동 분석</h5>
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       <li><strong>선행사건:</strong> {log.crisis_details['A_배경_선행사건']}</li>
@@ -178,9 +192,10 @@ export default function AdminApprovalsPage() {
                 )}
               </div>
             ))}
-          </div>
-        )}
-      </div>
-    </div>
+            </div>
+          )}
+        </div>
+      </AppShell>
+    </AuthCheck>
   );
 }

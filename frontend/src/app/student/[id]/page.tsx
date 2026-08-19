@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
-import GlobalNav, { useDateRange } from "../../components/GlobalNav";
+import AppShell from "../../components/AppShell";
+import { useDateRange } from "../../components/GlobalNav";
 import { TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import { maskName } from "../../utils";
@@ -53,85 +54,70 @@ export default function StudentDetail() {
 
   if (loading) return (
     <AuthCheck>
-      <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-        <GlobalNav currentPage="student" />
-        <div style={{ padding: '100px', textAlign: 'center', color: '#64748b' }}>
-           <div style={{ fontSize: '3rem', animation: 'spin 2s linear infinite', marginBottom: '20px' }}>💿</div>
-           <p style={{ fontWeight: 800, fontSize: '1.2rem' }}>{maskName(studentName)} 학생의 데이터를 심층 분석하고 있습니다...</p>
+      <AppShell currentPage="roster" title="👤 학생 행동 프로파일 분석">
+        <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+           <div style={{ fontSize: '2.5rem', animation: 'spin 2s linear infinite', marginBottom: '12px' }}>💿</div>
+           <p style={{ fontWeight: 800 }}>{maskName(studentName)} 학생의 행동 데이터를 심층 분석하고 있습니다...</p>
         </div>
-      </div>
+      </AppShell>
     </AuthCheck>
   );
 
   if (error || !data) return (
     <AuthCheck>
-      <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-        <GlobalNav currentPage="student" />
-        <div style={{ padding: '100px', textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⚠️</div>
-          <p style={{ fontWeight: 800, color: '#ef4444' }}>{error || "데이터가 없습니다."}</p>
-          <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700 }}>대시보드로 돌아가기</button>
+      <AppShell currentPage="roster" title="👤 학생 행동 프로파일 분석">
+        <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⚠️</div>
+          <p style={{ fontWeight: 800, color: 'var(--tier3)' }}>{error || "데이터가 없습니다."}</p>
+          <button onClick={() => router.push('/')} className="btn btn-primary" style={{ marginTop: '16px' }}>대시보드로 돌아가기</button>
         </div>
-      </div>
+      </AppShell>
     </AuthCheck>
   );
 
-  if (!data) return null; // Should be handled by error check above but being safe
+  if (!data) return null;
 
   const profile = data.profile || { name: studentName, student_code: "-", class: "-", tier: "Tier 1", total_incidents: 0, avg_intensity: 0 };
   const abc_data = data.abc_data || [];
   const functions = data.functions || [];
   const cico_trend = data.cico_trend || [];
-  
+
   const isUnauthorized = !isAdmin() && user?.class_id && profile?.student_code && !profile.student_code.startsWith(user.class_id);
 
   if (isUnauthorized) return (
     <AuthCheck>
-      <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-        <GlobalNav currentPage="student" />
-        <div style={{ padding: '100px', textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⛔</div>
+      <AppShell currentPage="roster" title="👤 학생 행동 프로파일 분석">
+        <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⛔</div>
           <p style={{ fontWeight: 800 }}>이 학생의 데이터에 접근할 권한이 없습니다.</p>
-          <p style={{ color: '#64748b', marginTop: '8px' }}>본인 학급 학생의 데이터만 열람 가능합니다.</p>
-          <button onClick={() => router.push('/')} style={{ marginTop: '20px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700 }}>홈으로 이동</button>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>본인 배정 학급 학생의 데이터만 열람 가능합니다.</p>
+          <button onClick={() => router.push('/')} className="btn btn-primary" style={{ marginTop: '16px' }}>홈으로 이동</button>
         </div>
-      </div>
+      </AppShell>
     </AuthCheck>
   );
 
   return (
     <AuthCheck>
-      <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '80px' }}>
-        <GlobalNav currentPage="student" />
-        
-        <div style={{ padding: '32px', maxWidth: '1400px', margin: '0 auto' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 950, color: '#1e293b', letterSpacing: '-0.04em' }}>{maskName(profile.name)}</h1>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {(profile.tier || "Tier 1").split(", ").map((t, idx) => (
-                    <span key={idx} style={{ padding: '4px 14px', background: TIER_COLORS[t] || TIER_COLORS[t.split('(')[0]] || '#64748b', color: '#fff', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 900 }}>{t}</span>
-                  ))}
-                </div>
-              </div>
-              <p style={{ margin: '8px 0 0 0', color: '#64748b', fontWeight: 600 }}>{profile.class} | 행동 지원 프로파일</p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
-                onClick={() => router.push(`/student/${encodeURIComponent(studentName)}/bip`)}
-                style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '14px', cursor: 'pointer', fontWeight: 800, boxShadow: '0 4px 12px rgba(124, 58, 237, 0.2)', transition: 'transform 0.2s' }}
-                onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'}
-                onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}
-              >
-                📝 개별화행동지원계획 (BIP)
-              </button>
-              <button onClick={() => router.back()} style={{ padding: '12px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}>뒤로가기</button>
-            </div>
+      <AppShell
+        currentPage="roster"
+        title={`👤 ${maskName(profile.name)} 학생 행동 프로파일`}
+        subtitle={`${profile.class} (${profile.student_code}) · ${profile.tier || "Tier 1"} 중재 대상자`}
+        headerActions={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => router.push(`/student/${encodeURIComponent(studentName)}/bip`)}
+              className="btn btn-ai"
+            >
+              📝 개별화행동지원계획 (BIP)
+            </button>
+            <button onClick={() => router.back()} className="btn btn-secondary">
+              ← 뒤로가기
+            </button>
           </div>
-
-          <main style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             {/* KPI Cards */}
             <div className="grid-responsive" style={{ marginBottom: '24px' }}>
                {[
@@ -194,10 +180,10 @@ export default function StudentDetail() {
             </div>
 
             <div className="grid-responsive">
-              <WeeklyAnalysisChart 
-                data={data.weekly_trend || []} 
-                title={`${maskName(profile.name)} 학생 주별 행동 발생 추이`} 
-                color="#6366f1" 
+              <WeeklyAnalysisChart
+                data={data.weekly_trend || []}
+                title={`${maskName(profile.name)} 학생 주별 행동 발생 추이`}
+                color="#6366f1"
               />
               <ChartSection title="📉 행동 발생 일별 추이 (전체 기간)" height={400}>
                  <ResponsiveContainer>
@@ -233,19 +219,13 @@ export default function StudentDetail() {
             </div>
 
             {/* Be-Able 39 EBP Matched Recommendations */}
-            <EBPRecommendationSection 
-                studentCode={profile.student_code} 
-                topFunction={(data.functions || [])?.[0]?.name || "도피/회피"} 
-                apiUrl={apiUrl} 
+            <EBPRecommendationSection
+                studentCode={profile.student_code}
+                topFunction={(data.functions || [])?.[0]?.name || "도피/회피"}
+                apiUrl={apiUrl}
             />
-          </main>
         </div>
-      </div>
-      <style jsx global>{`
-          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-          .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
+      </AppShell>
     </AuthCheck>
   );
 }
@@ -281,15 +261,15 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
 
   const handleUpdate = async (id: string) => {
     try {
-      await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { 
+      await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, {
         content: editContent,
         user_id: user?.id || "Teacher",
         role: isAdmin() ? "admin" : "teacher"
       });
       setEditingId(null); fetchNotes();
-    } catch (e: any) { 
+    } catch (e: any) {
       const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
-      alert("수정 실패: " + errorMsg); 
+      alert("수정 실패: " + errorMsg);
     }
   };
 
@@ -303,9 +283,9 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
         }
       });
       fetchNotes();
-    } catch (e: any) { 
+    } catch (e: any) {
       const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
-      alert("삭제 실패: " + errorMsg); 
+      alert("삭제 실패: " + errorMsg);
     }
   };
 
@@ -318,9 +298,9 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
         content, author: user?.id || "Admin", student_code: studentCode
       });
       setContent(""); fetchNotes();
-    } catch (e: any) { 
+    } catch (e: any) {
       const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
-      alert("저장 실패: " + errorMsg); 
+      alert("저장 실패: " + errorMsg);
     } finally { setLoading(false); }
   };
 

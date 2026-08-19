@@ -6,7 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LabelList, PieChart, Pie, Cell, Legend, LineChart, Line,
 } from "recharts";
-import GlobalNav, { useDateRange } from "../../components/GlobalNav";
+import AppShell from "../../components/AppShell";
+import { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import { maskName, formatWeek } from "../../utils";
@@ -25,10 +26,10 @@ interface Tier3Student {
 
 interface Tier3ReportData {
   students: Tier3Student[];
-  summary: { 
-    total_students: number; 
-    total_incidents: number; 
-    avg_intensity: number; 
+  summary: {
+    total_students: number;
+    total_incidents: number;
+    avg_intensity: number;
     weekly_trend?: WeeklyTrend[];
   };
 }
@@ -114,31 +115,28 @@ export default function Tier3Report() {
 
   return (
     <AuthCheck>
-      <div style={{ minHeight: "100vh", background: "#f8fafc", color: "#1e293b" }}>
-        <GlobalNav />
-        <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px 20px" }}>
-
-          {/* Header */}
-          <div style={{ marginBottom: "24px" }}>
-            <h1 style={{ color: "#0f172a", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-              🔴 T3 리포트 — 위기행동 집중 관리
-            </h1>
-            <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "4px 0 0" }}>
-              Tier 3 대상 학생 위기행동 현황 및 의사결정 지원 {startDate && endDate ? `(${startDate} ~ ${endDate})` : ""}
-            </p>
-          </div>
-
+      <AppShell
+        currentPage="report-tier3"
+        title="🔴 Tier 3 위기행동 집중 관리 리포트"
+        subtitle={`Tier 3 대상 학생 위기행동 분석 및 개별 의사결정 지원 ${startDate && endDate ? `(${startDate} ~ ${endDate})` : ""}`}
+        headerActions={
+          <button onClick={fetchData} className="btn btn-secondary">
+            🔄 새로고침
+          </button>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           {loading && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#64748b" }}>
-              <div style={{ fontSize: "2rem", marginBottom: "12px" }}>⏳</div>
-              <p>데이터 로딩 중... (최대 30초 소요될 수 있습니다)</p>
+            <div className="card" style={{ textAlign: "center", padding: "60px 0", color: "var(--text-secondary)" }}>
+              <div style={{ fontSize: "2rem", marginBottom: "12px", animation: "spin 2s linear infinite" }}>⏳</div>
+              <p style={{ fontWeight: 700 }}>위기행동 분석 데이터를 불러오고 있습니다...</p>
             </div>
           )}
 
           {error && (
-            <div style={{ padding: "20px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "12px", color: "#dc2626", textAlign: "center", marginBottom: "16px" }}>
+            <div className="card" style={{ padding: "20px", background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", textAlign: "center" }}>
               ⚠️ {error}
-              <button onClick={fetchData} style={{ marginLeft: '12px', padding: '4px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>다시 시도</button>
+              <button onClick={fetchData} className="btn btn-primary" style={{ marginLeft: "12px" }}>다시 시도</button>
             </div>
           )}
 
@@ -146,14 +144,14 @@ export default function Tier3Report() {
             <>
               {/* Summary Cards with Trend Chart */}
               <div style={{ marginBottom: "24px" }} className="grid-responsive">
-                <WeeklyAnalysisChart 
-                  data={data.summary.weekly_trend || []} 
-                  title="T3 위기행동 주별 트렌드 (통합)" 
-                  color="#ef4444" 
+                <WeeklyAnalysisChart
+                  data={data.summary.weekly_trend || []}
+                  title="T3 위기행동 주별 트렌드 (통합)"
+                  color="#ef4444"
                   dataKey="count"
                   yLabel="보고 건수"
                 />
-                
+
                 <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
                     <div style={{ textAlign: "center" }}>
@@ -407,9 +405,9 @@ export default function Tier3Report() {
               </div>
             ))}
           </div>
+          </div>
         </div>
-        </main>
-      </div>
+      </AppShell>
     </AuthCheck>
   );
 }
@@ -433,7 +431,7 @@ function Tier3AIAnalysis({ apiUrl, startDate, endDate }: { apiUrl: string; start
       {!visible ? (
         <button onClick={requestAnalysis} style={{
           padding: "10px 22px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-          color: "white", 
+          color: "white",
           border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼) */
           borderRadius: "10px", cursor: "pointer",
           fontSize: "0.9rem", fontWeight: 700, boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
@@ -446,7 +444,7 @@ function Tier3AIAnalysis({ apiUrl, startDate, endDate }: { apiUrl: string; start
         </button>
       ) : (
         <div style={{
-          background: "#fff", 
+          background: "#fff",
           border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼 모달) */
           borderRadius: "14px", padding: "24px", marginTop: "12px",
           boxShadow: "0 10px 30px rgba(37,99,235,0.15)"

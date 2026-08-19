@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
-import GlobalNav from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
 
 interface Post {
     id: string;
@@ -83,36 +83,21 @@ export default function BoardPage() {
 
     return (
         <AuthCheck>
-             <div style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '80px' }}>
-                <GlobalNav currentPage="board" />
-                
-                <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 24px' }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px' }}>
-                        <div>
-                            <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 950, color: '#1e293b', letterSpacing: '-0.04em' }}>
-                                Hub Community
-                            </h1>
-                            <p style={{ margin: '8px 0 0 0', color: '#64748b', fontWeight: 600 }}>학교 소식 및 지원 전략 공유 게시판</p>
-                        </div>
-                        <button 
-                            onClick={() => setIsWriting(!isWriting)}
-                            style={{ 
-                                padding: '12px 28px', 
-                                background: isWriting ? '#fff' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                                color: isWriting ? '#ef4444' : '#fff',
-                                border: isWriting ? '1px solid #fee2e2' : 'none',
-                                borderRadius: '16px', fontWeight: 800, cursor: 'pointer',
-                                boxShadow: isWriting ? 'none' : '0 10px 15px rgba(99, 102, 241, 0.2)',
-                                transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                            }}
-                            onMouseOver={e=>!isWriting && (e.currentTarget.style.transform='translateY(-3px)')}
-                            onMouseOut={e=>!isWriting && (e.currentTarget.style.transform='translateY(0)')}
-                        >
-                            {isWriting ? "Cancel" : "✏️ New Post"}
-                        </button>
-                    </div>
-
+            <AppShell
+                currentPage="board"
+                title="💬 행동지원 게시판 & 전략 나눔"
+                subtitle="교내 PBS 지원 전략, 공지사항 및 우수 중재 사례 공유 공간"
+                hideDateFilter={true}
+                headerActions={
+                    <button
+                        onClick={() => setIsWriting(!isWriting)}
+                        className="btn btn-primary"
+                    >
+                        {isWriting ? "작성 취소" : "✏️ 새 글 작성"}
+                    </button>
+                }
+            >
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     {/* Write Section */}
                     {isWriting && (
                         <div style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 20px 40px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)', marginBottom: '40px' }}>
@@ -131,8 +116,8 @@ export default function BoardPage() {
                         ) : posts.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '80px', background: '#fff', borderRadius: '32px', color: '#94a3b8', border: '1px dashed #e2e8f0' }}>No posts yet.</div>
                         ) : posts.map(post => (
-                            <div key={post.id} style={{ 
-                                background: '#fff', borderRadius: '28px', border: '1px solid rgba(0,0,0,0.02)', 
+                            <div key={post.id} style={{
+                                background: '#fff', borderRadius: '28px', border: '1px solid rgba(0,0,0,0.02)',
                                 boxShadow: expandedId === post.id ? '0 20px 40px rgba(0,0,0,0.04)' : '0 4px 12px rgba(0,0,0,0.01)',
                                 transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                                 overflow: 'hidden'
@@ -178,11 +163,7 @@ export default function BoardPage() {
                         ))}
                     </div>
                 </div>
-             </div>
-             <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-             `}</style>
+            </AppShell>
         </AuthCheck>
     );
 }

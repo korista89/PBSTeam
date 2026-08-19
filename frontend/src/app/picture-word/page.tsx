@@ -3,7 +3,7 @@ import { maskName } from "../utils";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
-import GlobalNav from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { DOMAINS, VBS } from "./constants";
 
@@ -277,28 +277,28 @@ export default function PictureWordPage() {
         return updated;
       }),
     );
-    
+
     // 배치 큐에 저장
     updateQueueRef.current.push({ vocabId, field, value });
-    
+
     if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-    
+
     updateTimeoutRef.current = setTimeout(async () => {
       const queue = [...updateQueueRef.current];
       updateQueueRef.current = [];
       if (queue.length === 0) return;
-      
+
       const merged: Record<number, Record<string, any>> = {};
       for (const item of queue) {
         if (!merged[item.vocabId]) merged[item.vocabId] = {};
         merged[item.vocabId][item.field] = item.value;
       }
-      
+
       const payload = Object.entries(merged).map(([vid, updates]) => ({
         vocab_id: parseInt(vid),
         updates
       }));
-      
+
       try {
         await axios.patch(
           `${API}/vocab/batch/${selectedStudent.학급ID}/${encodeURIComponent(selectedStudent.학생이름)}`,
@@ -356,7 +356,7 @@ export default function PictureWordPage() {
       await axios.patch(`${API}/minutes`, {
         source_type: sourceType,
         row_index: rowIndex,
-        updates: { 
+        updates: {
           [field]: value,
           lesson_num: lessonNum // Robust Update를 위해 추가
         }
@@ -1853,7 +1853,7 @@ export default function PictureWordPage() {
                   }}
                 >
                   <td style={{ padding: 0 }}>
-                    <input 
+                    <input
                        type="date"
                        defaultValue={m.날짜}
                        onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "날짜", e.target.value, m.lesson_num)}
@@ -1902,7 +1902,7 @@ export default function PictureWordPage() {
                       padding: 0,
                     }}
                   >
-                    <textarea 
+                    <textarea
                        defaultValue={m.내용}
                        onBlur={(e) => handleMinuteUpdate(m.source_type, m.row_index, "내용", e.target.value, m.lesson_num)}
                        rows={1}
@@ -1963,63 +1963,28 @@ export default function PictureWordPage() {
 
   return (
     <AuthCheck>
-      <div style={{ background: "#f8fafc", minHeight: "100vh" }}>
-        <GlobalNav currentPage="picture-word" />
-        <main
-          style={{ maxWidth: "1600px", margin: "0 auto", padding: "24px 20px" }}
-        >
-          {/* 페이지 헤더 */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "24px",
+      <AppShell
+        currentPage="picture-word"
+        title="🎨 경은그림말"
+        subtitle="의사소통 중심 어휘 교육 · VB-MAPP 기반 학습 관리 및 인증 시스템"
+        hideDateFilter={true}
+        headerActions={
+          <button
+            onClick={() => {
+              if (
+                confirm("시스템을 초기화하고 기본 시트를 생성하시겠습니까?")
+              ) {
+                axios.post(`${API}/init`).then(() => alert("초기화 완료"));
+              }
             }}
+            className="btn btn-secondary"
+            style={{ fontSize: "0.78rem" }}
           >
-            <div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: "1.6rem",
-                  fontWeight: 800,
-                  color: "#1e3a8a",
-                }}
-              >
-                🎨 경은그림말
-              </h1>
-              <div
-                style={{
-                  fontSize: "0.9rem",
-                  color: "#64748b",
-                  marginTop: "4px",
-                }}
-              >
-                의사소통 중심 어휘 교육 · VB-MAPP 기반 학습 관리 시스템
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                if (
-                  confirm("시스템을 초기화하고 기본 시트를 생성하시겠습니까?")
-                ) {
-                  axios.post(`${API}/init`).then(() => alert("초기화 완료"));
-                }
-              }}
-              style={{
-                padding: "10px 18px",
-                background: "#dc2626",
-                color: "white",
-                border: "none",
-                borderRadius: "10px",
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: "0.85rem",
-              }}
-            >
-              ⚙️ 시트 초기화
-            </button>
-          </div>
+            ⚙️ 시트 초기화
+          </button>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
           {/* 탭 내비게이션 */}
           <div
@@ -2093,8 +2058,8 @@ export default function PictureWordPage() {
           {tab === "overview" && renderOverview()}
           {tab === "lessons" && renderLessons()}
           {tab === "minutes" && renderMinutes()}
-        </main>
-      </div>
+        </div>
+      </AppShell>
     </AuthCheck>
   );
 }

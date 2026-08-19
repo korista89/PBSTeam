@@ -29,7 +29,7 @@ export default function UserHeader({ title }: UserHeaderProps = {}) {
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ 
+                    <span style={{
                         fontSize: '1.5rem'
                     }}>
                         {isAdmin() ? '👑' : '👤'}

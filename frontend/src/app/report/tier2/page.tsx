@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import GlobalNav from "../../components/GlobalNav";
+import AppShell from "../../components/AppShell";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import { maskName } from "../../utils";
 import {
@@ -199,53 +199,37 @@ export default function CICOReport() {
 
   return (
     <AuthCheck>
-      <div style={{ minHeight: "100vh", background: "#f8fafc", color: "#1e293b" }}>
-        <GlobalNav />
-        <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px 20px" }}>
-          {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-            <div>
-              <h1 style={{ color: "#0f172a", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-                📋 T2 CICO 리포트
-              </h1>
-              <p style={{ color: "#64748b", fontSize: "0.85rem", margin: "4px 0 0" }}>
-                학교 행동중재 지원팀 의사결정 지원
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <select
-                value={month}
-                onChange={e => setMonth(Number(e.target.value))}
-                style={{
-                  background: "#fff",
-                  color: "#1e293b",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "8px",
-                  padding: "8px 12px",
-                  fontSize: "0.9rem",
-                }}
-              >
-                {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                  <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
-                ))}
-              </select>
-              <button
-                onClick={fetchData}
-                style={{
-                  background: "linear-gradient(135deg, #3b82f6, #2563eb)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  padding: "8px 16px",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                }}
-              >
-                조회
-              </button>
-            </div>
+      <AppShell
+        currentPage="report-tier2"
+        title="📈 Tier 2 CICO 성과 분석 리포트"
+        subtitle="CICO 참여 학생 목표 수행률 분석 및 의사결정(유지 / 수정 / 하향 / Tier 3 상향) 지원"
+        headerActions={
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <select
+              value={month}
+              onChange={e => setMonth(Number(e.target.value))}
+              style={{
+                background: "#fff",
+                color: "#1e293b",
+                border: "1.5px solid var(--primary-blue)",
+                borderRadius: "8px",
+                padding: "6px 10px",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                outline: "none"
+              }}
+            >
+              {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
+              ))}
+            </select>
+            <button onClick={fetchData} className="btn btn-primary">
+              🔄 새로고침
+            </button>
           </div>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
           {loading && (
             <div style={{ textAlign: "center", padding: "60px 0", color: "#64748b" }}>
@@ -290,7 +274,7 @@ export default function CICOReport() {
               {/* ── 상단 종합 요약 대시보드 ─────────────────── */}
               <CICOSummaryPanel data={data} month={month} getRateColor={getRateColor} />
 
-              
+
               {/* Decision Legend */}
               <div style={{
                 display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "16px",
@@ -403,8 +387,8 @@ export default function CICOReport() {
               <CICOReportGuide />
             </>
           )}
-        </main>
-      </div>
+        </div>
+      </AppShell>
     </AuthCheck>
   );
 }
@@ -443,7 +427,7 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
       {!visible ? (
         <button onClick={requestAnalysis} style={{
           padding: "10px 22px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-          color: "white", 
+          color: "white",
           border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼) */
           borderRadius: "10px", cursor: "pointer",
           fontSize: "0.9rem", fontWeight: 700, boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
@@ -456,7 +440,7 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
         </button>
       ) : (
         <div style={{
-          background: "#fff", 
+          background: "#fff",
           border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼 모달) */
           borderRadius: "14px", padding: "24px", marginTop: "12px",
           boxShadow: "0 10px 30px rgba(37,99,235,0.15)"

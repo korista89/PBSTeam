@@ -48,8 +48,8 @@ export default function StudentTimeline({ studentId, refreshTrigger }: { student
 
           return (
             <div key={log.Log_ID || index} style={{
-              padding: '15px', 
-              border: `1px solid ${isPending ? '#f5c6cb' : '#c3e6cb'}`, 
+              padding: '15px',
+              border: `1px solid ${isPending ? '#f5c6cb' : '#c3e6cb'}`,
               borderRadius: '8px',
               backgroundColor: isPending ? '#f8d7da' : '#d4edda',
               color: isPending ? '#721c24' : '#155724'
@@ -64,7 +64,7 @@ export default function StudentTimeline({ studentId, refreshTrigger }: { student
               <p><strong>강도:</strong> {log['강도'] || '-'} (빈도: {log['발생횟수'] || '-'})</p>
               <p><strong>설명:</strong> {log['특기사항'] || '-'}</p>
               <p><strong>입력교사:</strong> {log['입력교사명'] || '-'}</p>
-              
+
               {isCrisis && log.crisis_details && (
                 <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(0,0,0,0.2)', fontSize: '0.9em' }}>
                   <strong>위기행동 지원 보고서 요약</strong>

@@ -6,8 +6,8 @@ import { API_BASE_URL } from '../constants';
 import { useAuth } from './AuthProvider';
 
 const TIME_SLOTS = [
-  "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시", 
-  "5구간: 초등점심/중등4교시", "6구간: 초등4교시/중등점심", "7구간: 5교시", 
+  "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
+  "5구간: 초등점심/중등4교시", "6구간: 초등4교시/중등점심", "7구간: 5교시",
   "8구간: 6교시", "9구간: 7교시", "10구간: 하교시간"
 ];
 const PLACES = ["교실", "화장실", "급식실", "복도/계단", "운동장", "통학버스", "기타"];
@@ -140,7 +140,7 @@ function DropdownTextarea({ name, value, onChange, examples, placeholder, requir
 export default function BehaviorForm({ studentId, studentName, onLogSubmitted }: { studentId: string, studentName: string, onLogSubmitted: () => void }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     행동발생날짜: new Date().toISOString().split('T')[0],
     시간대: [] as string[],
@@ -191,7 +191,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
     e.preventDefault();
     setLoading(true);
     setMessage('');
-    
+
     try {
       const 장소값 = formData.장소 === '기타' ? formData.장소기타 : formData.장소;
       const 기능값 = formData.기능 === '기타' ? formData.기능기타 : formData.기능;
@@ -242,7 +242,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
       }
 
       const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log`, payload);
-      
+
       if (res.data.success) {
         setMessage(res.data.status === 'Pending' ? '✅ 행동기록 및 보고서가 제출되었습니다 (관리자 승인 대기중).' : '✅ 행동이 기록되었습니다.');
         setFormData({
@@ -277,7 +277,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
     <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fcfcfc' }}>
       <h3 style={{ borderBottom: '2px solid #0070f3', paddingBottom: '10px' }}>새 행동 데이터 입력: {studentName}</h3>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '20px' }}>
-        
+
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>행동발생날짜 *</label>
           <input type="date" name="행동발생날짜" value={formData.행동발생날짜} onChange={handleChange} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />

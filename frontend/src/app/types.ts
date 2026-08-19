@@ -42,6 +42,7 @@ export interface DashboardData {
         total_incidents: number;
         avg_intensity: number;
         risk_student_count: number;
+        enrolled_count?: number;
     };
     trends: TrendData[];
     weekly_trends?: WeeklyTrendData[];
@@ -130,4 +131,3 @@ export interface User {
     class_name?: string;
     name?: string;
 }
-

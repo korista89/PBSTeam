@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { AuthCheck } from "../components/AuthProvider";
-import GlobalNav from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
 import { EBPStrategy, EBPCategory, FunctionCode } from "../../types/domain";
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: string; color: string }> = {
@@ -72,27 +72,15 @@ export default function EBPLibraryPage() {
 
     return (
         <AuthCheck>
-            <div style={{ background: "#f8fafc", minHeight: "100vh" }}>
-                <GlobalNav currentPage="ebp" />
-
-                <main style={{ maxWidth: "1280px", margin: "0 auto", padding: "32px 24px" }}>
-                    {/* Header */}
-                    <div style={{ marginBottom: "28px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
-                            <span style={{ fontSize: "2rem" }}>📚</span>
-                            <div>
-                                <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "#0f172a", margin: 0 }}>
-                                    경기 Be-Able 39 Core EBP 지식 허브
-                                </h1>
-                                <p style={{ fontSize: "0.95rem", color: "#64748b", margin: "4px 0 0 0" }}>
-                                    특수학교 학생을 위한 39개 근거기반실제(EBP) 정의, 3단계 실행 가이드, Guardrail 및 추천 조합
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
+            <AppShell
+                currentPage="ebp"
+                title="📚 경기 Be-Able 39 Core EBP 지식 허브"
+                subtitle="특수학교 학생을 위한 39개 근거기반실제(EBP) 정의, 3단계 실행 가이드, Guardrail 및 추천 조합"
+                hideDateFilter={true}
+            >
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     {/* Filter & Search Bar */}
-                    <div style={{ background: "white", padding: "20px", borderRadius: "16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", marginBottom: "28px" }}>
+                    <div className="card" style={{ padding: "16px" }}>
                         {/* Category Buttons */}
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
                             {Object.entries(CATEGORY_LABELS).map(([catKey, catMeta]) => {
@@ -427,8 +415,8 @@ export default function EBPLibraryPage() {
                             </div>
                         </div>
                     )}
-                </main>
-            </div>
+                </div>
+            </AppShell>
         </AuthCheck>
     );
 }

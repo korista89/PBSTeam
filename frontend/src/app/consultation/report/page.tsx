@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { AuthCheck } from "../../components/AuthProvider";
-import GlobalNav from "../../components/GlobalNav";
+import AppShell from "../../components/AppShell";
 import { maskName } from "../../utils";
 
 export default function ConsultationReportPage() {
@@ -12,7 +12,6 @@ export default function ConsultationReportPage() {
     const [reportData, setReportData] = useState<any>(null);
 
     useEffect(() => {
-        // Default to current month
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -23,13 +22,8 @@ export default function ConsultationReportPage() {
         setLoading(true);
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-            // Check if backend supports this aggregation. 
-            // For now, let's fetch meeting notes and aggregate them on frontend or use existing dashboard API
-            // The user wants a specific "Meeting Minutes" report.
-            // Let's reuse dashboard data but formatted specifically for Meeting Minutes.
-
             const dashboardRes = await axios.get(`${apiUrl}/api/v1/analytics/dashboard?start_date=${dateRange.start}&end_date=${dateRange.end}`);
-            const notesRes = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=tier1`); // Fetch all or filter by date
+            const notesRes = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=tier1`);
 
             setReportData({
                 dashboard: dashboardRes.data,
@@ -46,18 +40,24 @@ export default function ConsultationReportPage() {
     if (!reportData && !loading) {
         return (
             <AuthCheck>
-                <GlobalNav currentPage="consultation" />
-                <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-                    <h1>📑 학교행동중재지원팀 협의록 생성</h1>
-                    <div style={{ margin: '20px 0', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <input type="date" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} />
-                        ~
-                        <input type="date" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
-                        <button onClick={fetchReport} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px' }}>
-                            보고서 생성
+                <AppShell
+                    currentPage="meeting"
+                    title="📑 학교행동중재지원팀 공식 협의록 출력"
+                    subtitle="학교장 결재 및 보관용 A4 표준 인쇄 양식"
+                    hideDateFilter={true}
+                >
+                    <div className="card" style={{ padding: '24px', maxWidth: '600px', margin: '0 auto' }}>
+                        <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '14px' }}>📅 출력 대상 기간 선택</div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
+                            <input type="date" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }} />
+                            <span>~</span>
+                            <input type="date" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }} />
+                        </div>
+                        <button onClick={fetchReport} className="btn btn-primary" style={{ width: '100%' }}>
+                            공식 보고서 생성 ➔
                         </button>
                     </div>
-                </div>
+                </AppShell>
             </AuthCheck>
         );
     }

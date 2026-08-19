@@ -102,14 +102,14 @@ export default function LoginPage() {
                     display: 'flex',
                 }}>
                     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                        <img 
-                            src="/hero-bg.png" 
-                            alt="특수교육 교구 자료" 
-                            style={{ 
-                                width: '100%', 
-                                height: '100%', 
+                        <img
+                            src="/hero-bg.png"
+                            alt="특수교육 교구 자료"
+                            style={{
+                                width: '100%',
+                                height: '100%',
                                 objectFit: 'contain'
-                            }} 
+                            }}
                         />
                         {/* Overlay to blend with brand */}
                         <div style={{
@@ -173,7 +173,7 @@ export default function LoginPage() {
                         <button
                             onClick={() => { setLoginType("teacher"); setPassword(""); setError(""); }}
                             style={{
-                                flex: 1, padding: '12px', border: 'none', 
+                                flex: 1, padding: '12px', border: 'none',
                                 background: loginType === "teacher" ? 'white' : 'transparent',
                                 borderRadius: '8px',
                                 boxShadow: loginType === "teacher" ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
@@ -187,7 +187,7 @@ export default function LoginPage() {
                         <button
                             onClick={() => { setLoginType("admin"); setPassword(""); setError(""); }}
                             style={{
-                                flex: 1, padding: '12px', border: 'none', 
+                                flex: 1, padding: '12px', border: 'none',
                                 background: loginType === "admin" ? 'white' : 'transparent',
                                 borderRadius: '8px',
                                 boxShadow: loginType === "admin" ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
@@ -272,7 +272,7 @@ export default function LoginPage() {
                     </div>
                 </div>
             </div>
-            
+
             <style jsx>{`
                 @media (max-width: 900px) {
                     div[style*="flex: 1.2"] {

@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import styles from './page.module.css';
 import axios from 'axios';
 import { AuthCheck } from "../components/AuthProvider";
-import GlobalNav, { useDateRange } from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
+import { useDateRange } from "../components/GlobalNav";
 
 
 export default function MeetingPage() {
@@ -76,136 +77,129 @@ export default function MeetingPage() {
 
     return (
         <AuthCheck>
-            <div className={styles.container}>
-                <GlobalNav currentPage="meeting" />
-                <main className={styles.main}>
-                    <div className={styles.card} style={{ borderLeft: '5px solid #8b5cf6', minHeight: '80vh' }}>
-                        <header style={{ marginBottom: '2rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
-                            <h1 style={{ fontSize: '1.8rem', color: '#111', marginBottom: '0.5rem' }}>
-                                🤖 학교행동중재지원팀 정기 협의회 에이전트
-                            </h1>
-                            <p style={{ color: '#666' }}>
-                                설정된 기간의 학교 전체 데이터(행동발생, CICO, Tier3)를 분석하여 학교장 보고용 협의록을 자동 생성합니다.
-                            </p>
-
-                            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-                                    <div style={{ flex: 1, minWidth: '300px' }}>
-                                        <div style={{ marginBottom: '5px', fontWeight: 'bold', color: '#4b5563' }}>🎯 집중 분석 기간 (Global Nav)</div>
-                                        <div style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '1.1rem' }}>
-                                            {startDate && endDate ? `${startDate} ~ ${endDate}` : '상단에서 선택해주세요'}
-                                        </div>
-                                    </div>
-
-                                    <div style={{ flex: 1, minWidth: '300px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                                            <div style={{ fontWeight: 'bold', color: '#4b5563' }}>📊 비교/전체 분석 기간 (Context)</div>
-                                            <button
-                                                onClick={() => setShowContextSettings(!showContextSettings)}
-                                                style={{ border: 'none', background: 'none', color: '#666', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
-                                            >
-                                                {showContextSettings ? "숨기기" : "변경"}
-                                            </button>
-                                        </div>
-                                        {showContextSettings ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <input
-                                                    type="date"
-                                                    value={contextStartDate}
-                                                    onChange={e => setContextStartDate(e.target.value)}
-                                                    style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
-                                                />
-                                                <span>~</span>
-                                                <input
-                                                    type="date"
-                                                    value={contextEndDate}
-                                                    onChange={e => setContextEndDate(e.target.value)}
-                                                    style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <div style={{ color: '#6b7280' }}>
-                                                {contextStartDate} ~ {contextEndDate}
-                                            </div>
-                                        )}
-                                    </div>
+            <AppShell
+                currentPage="meeting"
+                title="🤝 행동중재지원팀 정기 협의회 에이전트"
+                subtitle="학교 전체 행동 데이터(Log_Main, CICO, Tier 3)를 다차원 분석하여 학교장 보고용 표준 협의록을 자동 생성"
+            >
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                    {/* Top Configuration Card */}
+                    <div className="card" style={{ padding: "20px", borderLeft: "4px solid #8b5cf6" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+                            <div>
+                                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                                    🎯 분석 기간 설정 및 AI 협의록 생성
                                 </div>
-
-                                <div style={{ textAlign: 'right', marginTop: '10px' }}>
-                                    <button
-                                        onClick={handleGenerate}
-                                        disabled={loading || !startDate || !endDate}
-                                        style={{
-                                            padding: '12px 30px',
-                                            backgroundColor: loading ? '#9ca3af' : '#8b5cf6',
-                                            color: 'white',
-                                            border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
-                                            borderRadius: '8px',
-                                            fontSize: '1rem',
-                                            fontWeight: 'bold',
-                                            cursor: loading ? 'not-allowed' : 'pointer',
-                                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
-                                            transition: 'all 0.2s',
-                                            display: 'inline-flex', alignItems: 'center', gap: '8px'
-                                        }}
-                                    >
-                                        {loading ? "데이터 분석 및 생성 중..." : "✨ AI 협의록 생성하기"}
-                                    </button>
+                                <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    집중 분석 기간과 비교 기간의 변화율을 대조하여 개선율, 악화 영역, 차기 지원 대책을 도출합니다.
                                 </div>
                             </div>
-                        </header>
 
-                        {result ? (
-                            <section>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '1rem' }}>
+                            <button
+                                onClick={handleGenerate}
+                                disabled={loading || !startDate || !endDate}
+                                className="btn btn-ai"
+                                style={{ padding: "10px 24px", fontSize: "0.88rem" }}
+                            >
+                                {loading ? "데이터 종합 분석 중..." : "✨ AI 정기 협의록 자동 생성"}
+                            </button>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", background: "var(--bg-subtle)", padding: "14px 16px", borderRadius: "10px", border: "1px solid var(--border-subtle)" }}>
+                            <div>
+                                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-secondary)", marginBottom: "4px" }}>
+                                    📅 집중 분석 기간 (TopBar 기준)
+                                </div>
+                                <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--primary-blue)" }}>
+                                    {startDate && endDate ? `${startDate} ~ ${endDate}` : "상단 탑바에서 날짜를 선택하세요"}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                    <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-secondary)" }}>
+                                        📊 비교/배경 기간 (Context)
+                                    </div>
+                                    <button
+                                        onClick={() => setShowContextSettings(!showContextSettings)}
+                                        style={{ border: "none", background: "none", color: "var(--primary-blue)", fontSize: "0.75rem", cursor: "pointer", fontWeight: 700 }}
+                                    >
+                                        {showContextSettings ? "접기" : "기간 변경"}
+                                    </button>
+                                </div>
+                                {showContextSettings ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <input
+                                            type="date"
+                                            value={contextStartDate}
+                                            onChange={e => setContextStartDate(e.target.value)}
+                                            style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", fontSize: "0.78rem", background: "white" }}
+                                        />
+                                        <span style={{ color: "var(--text-muted)" }}>~</span>
+                                        <input
+                                            type="date"
+                                            value={contextEndDate}
+                                            onChange={e => setContextEndDate(e.target.value)}
+                                            style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", fontSize: "0.78rem", background: "white" }}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                                        {contextStartDate} ~ {contextEndDate}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Result Content */}
+                    {result ? (
+                        <div className="card" style={{ padding: "24px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid var(--border-subtle)" }}>
+                                <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span>📋</span> 생성된 정기 협의록 전문
+                                </div>
+                                <div style={{ display: "flex", gap: "8px" }}>
                                     <button
                                         onClick={handleSaveToSheet}
                                         disabled={saving}
-                                        style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', background: '#10b981', color: 'white', fontWeight: 700, cursor: 'pointer' }}
+                                        className="btn btn-primary"
                                     >
                                         {saving ? "저장 중..." : "💾 시트에 저장"}
                                     </button>
-                                    <button
-                                        onClick={handleCopy}
-                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}
-                                    >
+                                    <button onClick={handleCopy} className="btn btn-secondary">
                                         📋 복사하기
                                     </button>
-                                    <button
-                                        onClick={handlePrint}
-                                        style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: '6px', background: 'white', fontWeight: 600, cursor: 'pointer' }}
-                                    >
-                                        🖨️ 인쇄하기
+                                    <button onClick={handlePrint} className="btn btn-secondary">
+                                        🖨️ 인쇄
                                     </button>
                                 </div>
-                                <div
-                                    style={{
-                                        whiteSpace: 'pre-wrap',
-                                        lineHeight: '1.8',
-                                        color: '#374151',
-                                        backgroundColor: '#fff',
-                                        padding: '2rem',
-                                        borderRadius: '8px',
-                                        border: '1px solid #e5e7eb',
-                                        fontFamily: 'sans-serif',
-                                        fontSize: '1.05rem'
-                                    }}
-                                >
-                                    {result}
-                                </div>
-                            </section>
-                        ) : (
-                            <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
-                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
-                                <p>기간을 설정하고 [AI 협의록 생성하기] 버튼을 눌러주세요.</p>
-                                <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                                    Google Sheets의 모든 데이터를 기반으로 즉시 분석합니다.
-                                </p>
                             </div>
-                        )}
-                    </div>
-                </main>
-            </div>
+
+                            <div
+                                style={{
+                                    whiteSpace: "pre-wrap",
+                                    lineHeight: 1.8,
+                                    color: "var(--text-primary)",
+                                    background: "var(--bg-subtle)",
+                                    padding: "20px",
+                                    borderRadius: "10px",
+                                    border: "1px solid var(--border-subtle)",
+                                    fontSize: "0.92rem"
+                                }}
+                            >
+                                {result}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="empty-state">
+                            <div className="empty-state-icon">🤝</div>
+                            <div className="empty-state-title">협의회 안건을 생성할 준비가 되었습니다</div>
+                            <div className="empty-state-text">상단 [AI 정기 협의록 자동 생성] 버튼을 누르면 전교 데이터를 기반으로 공문서 규격의 협의록이 도출됩니다.</div>
+                        </div>
+                    )}
+                </div>
+            </AppShell>
         </AuthCheck>
     );
 }

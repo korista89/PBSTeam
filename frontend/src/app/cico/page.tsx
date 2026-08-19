@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
-import GlobalNav from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
 import { useRouter } from "next/navigation";
 
 interface DayValue {
@@ -18,11 +18,11 @@ interface CICOStudent {
   학생코드: string;
   학생명: string;
   Tier2: string;
-  Tier3: string; 
+  Tier3: string;
   목표행동: string;
   "목표행동 유형": string;
   척도: string;
-  "입력 기준": string; 
+  "입력 기준": string;
   "목표 달성 기준": string;
   수행_발생률: string;
   목표_달성_여부: string;
@@ -32,7 +32,7 @@ interface CICOStudent {
 interface DayColumn {
   index: number;
   label: string;
-  display?: string; 
+  display?: string;
 }
 
 interface MonthlyData {
@@ -215,7 +215,7 @@ export default function CICOGridPage() {
 
   const getCellColor = (value: string, type: string, scale: string): string => {
     if (!value || value === "." || value === "-") return "transparent";
-    
+
     const isIncrease = type.includes("증가");
     const num = parseFloat(value);
     const hasNum = !isNaN(num);
@@ -261,41 +261,60 @@ export default function CICOGridPage() {
 
   return (
     <AuthCheck>
-      <div className={styles.container}>
-        <GlobalNav currentPage="cico" />
-        <main className={styles.main} style={{ marginTop: "10px", maxWidth: "100%", padding: "0 10px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>✍️ CICO 일일 기록 입력</h2>
-              <p style={{ color: "#666", margin: "3px 0 0", fontSize: "0.85rem" }}>Tier2 학생들의 일일 행동 데이터를 기록합니다.</p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              <CICOAIModal month={month} students={filteredData?.students || []} apiUrl={apiUrl} />
-              <button 
-                onClick={() => router.push('/report/tier2')}
-                style={{ 
-                  padding: "8px 16px", 
-                  borderRadius: "8px", 
-                  border: "1px solid #6366f1", 
-                  backgroundColor: "white", 
-                  color: "#6366f1", 
-                  fontWeight: "bold", 
-                  cursor: "pointer" 
-                }}
-              >
-                📊 CICO 리포트 보기
-              </button>
-              <select value={month} onChange={e => setMonth(Number(e.target.value))} style={{ padding: "8px 12px", borderRadius: "8px", border: "2px solid #6366f1", fontWeight: "bold" }}>
-                {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                  <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
-                ))}
-              </select>
-              <button onClick={fetchData} style={{ padding: "8px 16px", borderRadius: "8px", border: "none", backgroundColor: "#6366f1", color: "white", fontWeight: "bold", cursor: "pointer" }}>🔄 새로고침</button>
-            </div>
+      <AppShell
+        currentPage="cico"
+        title="📝 CICO 일일 기록 및 설정"
+        subtitle="Tier 2 학생들의 일일 행동 목표 점수 입력 (O/X 및 척도 점수 실시간 자동저장)"
+        headerActions={
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {saveStatus && (
+              <span className={`badge ${saveStatus.includes("실패") ? "badge-tier3" : "badge-tier1"}`} style={{ fontSize: "0.78rem" }}>
+                {saveStatus}
+              </span>
+            )}
+            <CICOAIModal month={month} students={filteredData?.students || []} apiUrl={apiUrl} />
+            <button
+              onClick={() => router.push('/report/tier2')}
+              className="btn btn-secondary"
+            >
+              📈 리포트
+            </button>
+            <select
+              value={month}
+              onChange={e => setMonth(Number(e.target.value))}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "8px",
+                border: "1.5px solid var(--primary-blue)",
+                fontWeight: 700,
+                fontSize: "0.82rem",
+                outline: "none",
+                background: "white"
+              }}
+            >
+              {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
+              ))}
+            </select>
+            <button onClick={fetchData} className="btn btn-primary">
+              🔄 새로고침
+            </button>
           </div>
-
-          {loading && <div style={{ textAlign: "center", padding: "50px" }}>📊 데이터 로딩 중...</div>}
-          {error && <div style={{ textAlign: "center", padding: "50px", color: "#dc2626" }}>⚠ {error}</div>}
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {loading && (
+            <div className="card" style={{ padding: "50px", textAlign: "center", color: "var(--text-secondary)" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: "12px", animation: "spin 2s linear infinite" }}>📝</div>
+              <p style={{ fontWeight: 700 }}>CICO 데이터를 불러오고 있습니다...</p>
+            </div>
+          )}
+          {error && (
+            <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--tier3)" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>⚠️</div>
+              <p style={{ fontWeight: 800 }}>{error}</p>
+            </div>
+          )}
 
           {!loading && !error && filteredData && (
             <>
@@ -337,19 +356,19 @@ export default function CICOGridPage() {
                             <td style={{ ...tdStyle, fontWeight: "600" }}>{student.학생명}</td>
                             <td style={{ ...tdStyle, cursor: "pointer", position: "relative" }} onClick={() => setEditingSettings({ row: student.row, field: "목표행동" })}>
                               {editingSettings?.row === student.row && editingSettings?.field === "목표행동" ? (
-                                <div 
+                                <div
                                   style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'absolute', top: 0, left: 0, zIndex: 100, background: 'white', padding: '8px', border: '1px solid #6366f1', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '250px' }}
-                                  onMouseDown={(e) => e.stopPropagation()} 
+                                  onMouseDown={(e) => e.stopPropagation()}
                                 >
                                   <div style={{ fontSize: '0.7rem', color: '#666', marginBottom: '2px' }}>행동 예시 선택:</div>
-                                  <select 
+                                  <select
                                     style={{ padding: '6px', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #e2e8f0', marginBottom: '4px' }}
                                     onChange={(e) => {
                                       const preset = BEHAVIOR_PRESETS.find(p => p.label === e.target.value);
                                       if (preset && preset.value !== "manual") {
-                                        handleSettingsChange(student, { 
-                                          "목표행동": preset.behavior!, 
-                                          "목표행동 유형": preset.type!, 
+                                        handleSettingsChange(student, {
+                                          "목표행동": preset.behavior!,
+                                          "목표행동 유형": preset.type!,
                                           "척도": preset.scale!,
                                           "목표 달성 기준": preset.criteria!
                                         });
@@ -368,18 +387,18 @@ export default function CICOGridPage() {
                                       id={`edit-behavior-${student.row}`}
                                       placeholder="행동명 입력..."
                                       defaultValue={student.목표행동}
-                                      onKeyDown={e => { 
+                                      onKeyDown={e => {
                                         if (e.key === "Enter") {
                                           handleSettingsChange(student, { "목표행동": e.currentTarget.value });
                                         }
                                       }}
                                       style={{ flex: 1, padding: "6px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "0.8rem" }}
                                     />
-                                    <button 
+                                    <button
                                       onClick={() => {
                                         const input = document.getElementById(`edit-behavior-${student.row}`) as HTMLInputElement;
                                         handleSettingsChange(student, { "목표행동": input.value });
-                                      }} 
+                                      }}
                                       style={{ padding: '4px 10px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
                                     >
                                       저장
@@ -446,9 +465,9 @@ export default function CICOGridPage() {
                               const isEditing = editingCell?.row === student.row && editingCell?.day === day.label;
                               const options = getInputOptions(student.척도);
                               return (
-                                <td 
-                                  key={day.label} 
-                                  style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"], student.척도), cursor: "pointer", minWidth: "40px" }} 
+                                <td
+                                  key={day.label}
+                                  style={{ ...tdStyle, backgroundColor: getCellColor(val, student["목표행동 유형"], student.척도), cursor: "pointer", minWidth: "40px" }}
                                   onClick={() => {
                                     if (options.length > 0 && !isEditing) {
                                       // Specific cycling for O/X: O -> X -> empty
@@ -481,13 +500,13 @@ export default function CICOGridPage() {
                                         {options.map(o => <option key={o} value={o}>{o}</option>)}
                                       </select>
                                     ) : (
-                                      <input 
-                                        autoFocus 
-                                        type="number" 
-                                        defaultValue={val} 
-                                        onBlur={e => handleCellChange(student, day.label, e.target.value)} 
+                                      <input
+                                        autoFocus
+                                        type="number"
+                                        defaultValue={val}
+                                        onBlur={e => handleCellChange(student, day.label, e.target.value)}
                                         onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
-                                        style={{ width: "35px", textAlign: "center", fontSize: "0.75rem" }} 
+                                        style={{ width: "35px", textAlign: "center", fontSize: "0.75rem" }}
                                       />
                                     )
                                   ) : (
@@ -529,9 +548,8 @@ export default function CICOGridPage() {
               ))}
             </div>
           </div>
-        </main>
-
-      </div>
+        </div>
+      </AppShell>
     </AuthCheck>
   );
 }

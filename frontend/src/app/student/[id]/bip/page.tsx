@@ -5,7 +5,8 @@ import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import styles from "../../../page.module.css";
 import { AuthCheck } from "../../../components/AuthProvider";
-import GlobalNav, { useDateRange } from "../../../components/GlobalNav";
+import AppShell from "../../../components/AppShell";
+import { useDateRange } from "../../../components/GlobalNav";
 import * as XLSX from "xlsx";
 
 
@@ -226,7 +227,7 @@ export default function BIPEditor() {
 
     const handleInsertEBP = (strategy: any) => {
         const textToInsert = `\n\n[${strategy.name} (${strategy.code})]\n• 요약: ${strategy.summary}\n• 실행 절차:\n${strategy.implementation_steps.map((s: string, i: number) => `  ${i+1}) ${s}`).join('\n')}\n• 주의사항: ${strategy.guardrails?.join(', ') || '최소 침습적 원칙 준수'}`;
-        
+
         setBip(prev => {
             const current = (prev[targetFieldForEBP] || "").trim();
             return {
@@ -377,61 +378,39 @@ export default function BIPEditor() {
 
     if (loading) return (
         <AuthCheck>
-            <div className={styles.container}>
-                <GlobalNav currentPage="student" />
-                <div style={{ padding: '50px', textAlign: 'center' }}>BIP 데이터 로딩 중...</div>
-            </div>
+            <AppShell currentPage="roster" title="📋 행동중재계획 (BIP)">
+                <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: '2rem', animation: 'spin 2s linear infinite', marginBottom: '12px' }}>⏳</div>
+                    <p style={{ fontWeight: 700 }}>BIP 데이터를 불러오고 있습니다...</p>
+                </div>
+            </AppShell>
         </AuthCheck>
     );
 
     return (
         <AuthCheck>
-            <div className={styles.container}>
-                <GlobalNav currentPage="student" />
-
-                <div style={{ padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
-                    {/* Header */}
-                    <div style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        marginBottom: '24px', flexWrap: 'wrap', gap: '10px'
-                    }}>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>📋 행동중재계획 (BIP)</h2>
-                            <p style={{ color: '#666', margin: '4px 0 0 0', fontSize: '0.9rem' }}>
-                                {studentName} ({studentCode})
-                            </p>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            <button onClick={() => openEBPModalForField("PreventionStrategies")} style={{
-                                padding: '10px 18px', backgroundColor: '#3b82f6', color: 'white',
-                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
-                                fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px'
-                            }}>
-                                📚 Be-Able 39 EBP 전략 삽입
-                            </button>
-                            <button onClick={handleExcelDownload} style={{
-                                padding: '10px 20px', backgroundColor: '#047857', color: 'white',
-                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
-                                fontSize: '0.9rem'
-                            }}>
-                                📥 엑셀 다운로드
-                            </button>
-                            <button onClick={handleSave} disabled={saving} style={{
-                                padding: '10px 20px', backgroundColor: '#10b981', color: 'white',
-                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
-                                fontSize: '0.9rem'
-                            }}>
-                                {saving ? "저장 중..." : "💾 저장하기"}
-                            </button>
-                            <button onClick={() => router.push(`/student/${encodeURIComponent(studentName)}`)} style={{
-                                padding: '10px 20px', backgroundColor: '#64748b', color: 'white',
-                                border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem'
-                            }}>
-                                ← 학생 상세
-                            </button>
-                        </div>
+            <AppShell
+                currentPage="roster"
+                title={`📋 행동중재계획 (BIP) — ${studentName}`}
+                subtitle={`학번/코드: ${studentCode} · 작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`}
+                headerActions={
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={() => openEBPModalForField("PreventionStrategies")} className="btn btn-ai">
+                            📚 EBP 전략 삽입
+                        </button>
+                        <button onClick={handleExcelDownload} className="btn btn-secondary">
+                            📥 엑셀 다운로드
+                        </button>
+                        <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+                            {saving ? "저장 중..." : "💾 저장하기"}
+                        </button>
+                        <button onClick={() => router.push(`/student/${encodeURIComponent(studentName)}`)} className="btn btn-secondary">
+                            ← 학생 상세
+                        </button>
                     </div>
-
+                }
+            >
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     {/* BIP Fields 1-11 */}
                     {BIP_FIELDS.map((field) => (
                         <div key={field.key} style={{
@@ -567,7 +546,7 @@ export default function BIPEditor() {
                                     style={{
                                         padding: '8px 20px',
                                         background: aiLoading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                                        color: 'white', 
+                                        color: 'white',
                                         border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
                                         borderRadius: '8px',
                                         cursor: aiLoading ? 'wait' : 'pointer',
@@ -737,7 +716,7 @@ export default function BIPEditor() {
                         </div>
                     )}
                 </div>
-            </div>
+            </AppShell>
         </AuthCheck>
     );
 }

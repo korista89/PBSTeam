@@ -9,7 +9,8 @@ import {
 } from "recharts";
 import { DashboardData } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
-import GlobalNav, { useDateRange } from "./components/GlobalNav";
+import { useDateRange } from "./components/GlobalNav";
+import AppShell from "./components/AppShell";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
 import { maskName, formatWeek } from "./utils";
 
@@ -49,9 +50,9 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
     <div className="no-print" style={{ marginBottom: '32px' }}>
       {!visible ? (
         <button onClick={requestAnalysis} style={{
-          width: '100%', padding: '24px', 
-          background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', 
-          color: 'white', 
+          width: '100%', padding: '24px',
+          background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+          color: 'white',
           border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
           borderRadius: '20px', cursor: 'pointer',
           fontSize: '1.2rem', fontWeight: '800',
@@ -71,12 +72,12 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
           <span style={{ fontSize: '1.6rem' }}>🧙‍♂️</span> BCBA AI 학교 전체 PBS 운영 정밀 분석 리포트 생성
         </button>
       ) : (
-        <div style={{ 
-            background: 'rgba(255, 255, 255, 0.95)', 
+        <div style={{
+            background: 'rgba(255, 255, 255, 0.95)',
             backdropFilter: 'blur(10px)',
-            padding: '32px', borderRadius: '24px', 
+            padding: '32px', borderRadius: '24px',
             border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼 모달) */
-            boxShadow: '0 20px 50px rgba(0,0,0,0.1)' 
+            boxShadow: '0 20px 50px rgba(0,0,0,0.1)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: 0, background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '1.3rem', fontWeight: 900 }}>🤖 AI Specialist Analysis</h3>
@@ -92,10 +93,10 @@ function AIComprehensiveAnalysis({ startDate, endDate }: { startDate: string; en
               <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '8px' }}>Tier 1-3, CICO, Behavior Logs, Meeting Notes integrated.</p>
             </div>
           ) : (
-            <div style={{ 
-              whiteSpace: 'pre-wrap', 
-              fontSize: '1rem', 
-              lineHeight: '1.9', 
+            <div style={{
+              whiteSpace: 'pre-wrap',
+              fontSize: '1rem',
+              lineHeight: '1.9',
               color: '#334155',
               maxHeight: '650px',
               overflowY: 'auto',
@@ -160,8 +161,8 @@ function SectionAIButton({
       }, { timeout: 180000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch (e: any) {
-      const errDetail = typeof e?.response?.data?.detail === "string" 
-        ? e.response.data.detail 
+      const errDetail = typeof e?.response?.data?.detail === "string"
+        ? e.response.data.detail
         : Array.isArray(e?.response?.data?.detail)
           ? e.response.data.detail.map((d: any) => d.msg).join(", ")
           : e?.message || "요청 실패";
@@ -366,12 +367,12 @@ function PeerContagionAIButton({
 // Chart wrapper
 function ChartBox({ title, children, height = 340, action }: { title: string; children: React.ReactNode; height?: number; action?: React.ReactNode }) {
   return (
-    <div style={{ 
-        background: 'rgba(255, 255, 255, 0.8)', 
+    <div style={{
+        background: 'rgba(255, 255, 255, 0.8)',
         backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(226, 232, 240, 0.8)', 
-        borderRadius: '24px', 
-        padding: '28px', 
+        border: '1px solid rgba(226, 232, 240, 0.8)',
+        borderRadius: '24px',
+        padding: '28px',
         boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
         transition: 'transform 0.3s'
     }}
@@ -635,88 +636,98 @@ export default function Home() {
 
   return (
     <AuthCheck>
-      <div className="container" style={{ background: '#f8fafc', minHeight: '100vh', paddingBottom: '60px' }}>
-        <GlobalNav currentPage="dashboard" />
-
-        {/* Dynamic Background decorations */}
-        <div style={{ position: 'fixed', top: -100, right: -100, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'fixed', bottom: -100, left: -100, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,85,247,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
-
+      <AppShell
+        currentPage="dashboard"
+        title={isAdmin() ? "📊 전교 PBST 종합 통계 대시보드" : "📊 학급 PBST 지원 대시보드"}
+        subtitle={`${user?.class_name || user?.class_id || (isAdmin() ? "전교 통합" : "담임")} · ${startDate} ~ ${endDate} 기준`}
+        headerActions={
+          <button
+            onClick={() => window.print()}
+            className="btn btn-secondary no-print"
+          >
+            📄 PDF 내보내기
+          </button>
+        }
+      >
         {loading && !data && (
-          <div style={{ padding: '100px', textAlign: 'center', color: '#64748b' }}>
-            <div className="loading-spinner" style={{ fontSize: '3rem', marginBottom: '20px', animation: 'spin 2s linear infinite' }}>📀</div>
-            <p style={{ fontWeight: 700, fontSize: '1.2rem' }}>심층 분석 데이터를 구성하고 있습니다...</p>
+          <div className="card" style={{ padding: "60px", textAlign: "center", color: "var(--text-secondary)" }}>
+            <div style={{ fontSize: "2.5rem", marginBottom: "12px", animation: "spin 2s linear infinite" }}>📀</div>
+            <p style={{ fontWeight: 700, fontSize: "1.05rem" }}>심층 분석 데이터를 구성하고 있습니다...</p>
           </div>
         )}
 
         {fetchError && (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#ef4444' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
+          <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--tier3)" }}>
+            <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>⚠️</div>
             <p style={{ fontWeight: 800 }}>{fetchError}</p>
-            <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}>다시 시도</button>
+            <button onClick={() => window.location.reload()} className="btn btn-primary" style={{ marginTop: "16px" }}>다시 시도</button>
           </div>
         )}
 
         {data && (
-          <div style={{ padding: '24px', maxWidth: '1500px', margin: '0 auto', position: 'relative' }}>
+          <div style={{ position: "relative" }}>
             <style jsx global>{`
               @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
               @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-              @media print { body { background: white; } .no-print { display: none; } .container { background: white !important; } }
-              .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
-              .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
+              .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
+              .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
               @media (max-width: 1024px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
               @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
-              .section-heading { font-size: 1.3rem; font-weight: 900; color: #0f172a; margin: 48px 0 24px 0; display: flex; align-items: center; gap: 12px; }
-              .section-heading::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, #e2e8f0, transparent); }
-              .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-              .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-              .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+              .section-heading { font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin: 24px 0 12px 0; display: flex; align-items: center; gap: 8px; }
+              .section-heading::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
             `}</style>
 
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 950, color: '#0f172a', letterSpacing: '-0.03em' }}>
-                    {isAdmin() ? "경은PBST 종합 통계 분석" : "Hub 지원 리포트"}
-                </h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                    <span style={{ padding: '3px 10px', background: '#e0f2fe', color: '#0369a1', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800 }}>{user?.class_name || 'Admin'}</span>
-                    <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 500 }}>{startDate} ~ {endDate} 기준</span>
+            {/* ===== Compact KPI Cards Strip ===== */}
+            <div className="kpi-grid">
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>총 행동기록 건수</span>
+                  <span>📊</span>
                 </div>
+                <div className="kpi-value" style={{ color: "var(--primary-blue)" }}>{summary.total_incidents}건</div>
+                <div className="kpi-subtext">분석 기간 내 누적 기록</div>
               </div>
-              <div className="no-print" style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => window.print()} style={{ padding: '12px 24px', background: '#fff', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '14px', cursor: 'pointer', fontWeight: '700', fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.2rem' }}>📄</span> Export PDF
-                </button>
-              </div>
-            </div>
 
-            {/* ===== KPI Cards ===== */}
-            <div className="grid-3">
-              {[
-                { label: "총 보고 빈도", value: `${summary.total_incidents}건`, sub: "입력된 전체 로그", color: "#6366f1", icon: "📊", grad: "linear-gradient(135deg, #e0e7ff 0%, #ffffff 100%)" },
-                { label: "평균 행동 강도", value: `${(summary.avg_intensity || 0).toFixed(1)}/5`, sub: "전체 행동 강도 평균", color: summary.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b", icon: "⚡", grad: "linear-gradient(135deg, #fff7ed 0%, #ffffff 100%)" },
-                { label: "심층 지원 대상", value: `${isAdmin() ? summary.risk_student_count : riskList.length}명`, sub: "Tier 2/3 위기군", color: "#ef4444", icon: "🚨", grad: "linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)" },
-              ].map((card, i) => (
-                <div key={i} style={{ 
-                    background: card.grad, border: '1px solid rgba(0,0,0,0.05)', borderRadius: '28px', 
-                    padding: '28px', boxShadow: '0 10px 20px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' 
-                }}>
-                  <div style={{ position: 'absolute', top: '24px', right: '28px', fontSize: '2rem', opacity: 0.15 }}>{card.icon}</div>
-                  <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>{card.label}</div>
-                  <div style={{ color: card.color, fontSize: '2.5rem', fontWeight: 950, letterSpacing: '-0.02em' }}>{card.value}</div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 500, marginTop: '4px' }}>{card.sub}</div>
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>평균 행동 강도</span>
+                  <span>⚡</span>
                 </div>
-              ))}
+                <div className="kpi-value" style={{ color: (summary.avg_intensity || 0) >= 3.5 ? "var(--tier3)" : "var(--tier2)" }}>
+                  {(summary.avg_intensity || 0).toFixed(1)} <span style={{ fontSize: "0.9rem", color: "var(--text-muted)", fontWeight: 500 }}>/ 5</span>
+                </div>
+                <div className="kpi-subtext">강도 4~5 위기행동 주의</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 2/3 중점 지원군</span>
+                  <span>🚨</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier3)" }}>
+                  {isAdmin() ? summary.risk_student_count : riskList.length}명
+                </div>
+                <div className="kpi-subtext">집중 중재 및 모니터링 대상</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>등록 재학생 수</span>
+                  <span>🏫</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--text-primary)" }}>
+                  {summary.enrolled_count || 35}명
+                </div>
+                <div className="kpi-subtext">전교 긍정적 행동지원 대상</div>
+              </div>
             </div>
 
             {/* Section 1 */}
-            <div className="section-heading"><span>01</span> 단계별 구조 및 추이</div>
+            <div className="section-heading"><span>01</span> 지원 단계별 분포 및 주간 추이</div>
             <div className="grid-responsive">
               <ChartBox title="🎯 지원 단계별 분포">
                 <PieChart>
-                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={120} innerRadius={80} paddingAngle={4} dataKey="value" stroke="none">
+                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={100} innerRadius={65} paddingAngle={4} dataKey="value" stroke="none">
                     {tierDist.map((entry: any, index: number) => (
                       <Cell key={index} fill={TIER_COLORS[entry.name] || '#cbd5e1'} />
                     ))}
@@ -726,10 +737,10 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <WeeklyAnalysisChart 
-                data={weeklyTrends} 
-                title="주별 행동 발생 추이" 
-                color="#6366f1" 
+              <WeeklyAnalysisChart
+                data={weeklyTrends}
+                title="주별 행동 발생 추이"
+                color="#6366f1"
                 yLabel="건수"
               />
             </div>
@@ -737,8 +748,8 @@ export default function Home() {
             {/* Section 2 */}
             <div className="section-heading"><span>02</span> Big 5 패턴 분석</div>
             <div className="grid-3">
-              <ChartBox 
-                title="⏰ 시간대별 분석" 
+              <ChartBox
+                title="⏰ 시간대별 분석"
                 action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} />}
               >
                 <BarChart data={[...(big5.times || [])].slice(0, 8)} layout="vertical" margin={{ right: 40 }}>
@@ -751,8 +762,8 @@ export default function Home() {
                 </BarChart>
               </ChartBox>
 
-              <ChartBox 
-                title="📍 장소별 분석" 
+              <ChartBox
+                title="📍 장소별 분석"
                 action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} />}
               >
                 <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} layout="vertical" margin={{ right: 40 }}>
@@ -765,8 +776,8 @@ export default function Home() {
                 </BarChart>
               </ChartBox>
 
-              <ChartBox 
-                title="🎭 행동 유형별 프로필" 
+              <ChartBox
+                title="🎭 행동 유형별 프로필"
                 action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} />}
               >
                 <PieChart>
@@ -782,8 +793,8 @@ export default function Home() {
             {/* Section 3 */}
             <div className="section-heading"><span>03</span> ABC 기능 평가</div>
             <div className="grid-3">
-              <ChartBox 
-                title="❓ 행동의 기능 분석" 
+              <ChartBox
+                title="❓ 행동의 기능 분석"
                 height={280}
                 action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} />}
               >
@@ -796,8 +807,8 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <ChartBox 
-                title="⚡ 행동 강도 분포" 
+              <ChartBox
+                title="⚡ 행동 강도 분포"
                 height={280}
                 action={<SectionAIButton sectionName="intensity" title="강도/위기" dataContext={(data as any).intensity_distribution || []} startDate={startDate} endDate={endDate} />}
               >
@@ -863,7 +874,7 @@ export default function Home() {
             </div>
           </div>
         )}
-      </div>
+      </AppShell>
     </AuthCheck>
   );
 }
@@ -898,24 +909,24 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
             });
             setContent("");
             fetchNotes();
-        } catch (e: any) { 
+        } catch (e: any) {
             const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
-            alert("저장 실패: " + errorMsg); 
+            alert("저장 실패: " + errorMsg);
         } finally { setLoading(false); }
     };
 
     const handleUpdate = async (id: string) => {
         try {
-             await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, { 
+             await axios.patch(`${apiUrl}/api/v1/meeting-notes/${id}`, {
                  content: editContent,
                  user_id: user?.id || "Teacher",
                  role: isAdmin() ? "admin" : "teacher"
              });
              setEditingId(null);
              fetchNotes();
-        } catch (e: any) { 
+        } catch (e: any) {
             const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
-            alert("수정 실패: " + errorMsg); 
+            alert("수정 실패: " + errorMsg);
         }
     };
 
@@ -929,9 +940,9 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
                  }
              });
              fetchNotes();
-        } catch (e: any) { 
+        } catch (e: any) {
             const errorMsg = e.response?.data?.detail || e.message || "알 수 없는 오류";
-            alert("삭제 실패: " + errorMsg); 
+            alert("삭제 실패: " + errorMsg);
         }
     };
 
@@ -940,7 +951,7 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
             <h3 style={{ margin: '0 0 20px 0', fontSize: '1.1rem', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '1.4rem' }}>📒</span> {title}
             </h3>
-            
+
             <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="회의 결과를 기록하십시오..." style={{ width: '100%', minHeight: '100px', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.9rem', outline: 'none', transition: 'all 0.2s', boxSizing: 'border-box' }} onFocus={e=>e.currentTarget.style.borderColor='#6366f1'} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
                 <button onClick={handleSave} disabled={loading || !content.trim()} style={{ padding: '10px 24px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', transition: 'transform 0.2s' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>저장</button>

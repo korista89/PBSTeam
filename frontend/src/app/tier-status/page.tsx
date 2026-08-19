@@ -5,7 +5,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
-import GlobalNav from "../components/GlobalNav";
+import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
 
 interface StudentStatus {
@@ -157,7 +157,7 @@ export default function TierStatusPage() {
                  return false;
             }
         }
-        
+
         // Inclusive filtering logic
         if (filter !== "all") {
             if (filter === "Tier1") {
@@ -199,77 +199,74 @@ export default function TierStatusPage() {
     if (loading) {
         return (
             <AuthCheck>
-                <div className={styles.container}>
-                    <GlobalNav currentPage="tier-status" />
-                    <div style={{ padding: '50px', textAlign: 'center' }}>데이터 로딩 중...</div>
-                </div>
+                <AppShell currentPage="tier-status" title="📋 전교생 Tier 지원 단계 현황">
+                    <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        <div style={{ fontSize: '2.5rem', marginBottom: '12px', animation: 'spin 2s linear infinite' }}>⏳</div>
+                        <p style={{ fontWeight: 700 }}>학생 지원 단계 데이터를 불러오고 있습니다...</p>
+                    </div>
+                </AppShell>
             </AuthCheck>
         );
     }
 
     return (
         <AuthCheck>
-            <div className={styles.container}>
-                <GlobalNav currentPage="tier-status" />
-
-                <div style={{ padding: '20px' }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <div>
-                            <h2 style={{ margin: 0 }}>📊 Tier별 현황</h2>
-                            <p style={{ color: '#666', margin: '5px 0 0 0' }}>
-                                전교생 <strong>{enrolledCount}</strong>명 (재학생 기준) | 전체 {students.length}명
-                            </p>
+            <AppShell
+                currentPage="tier-status"
+                title="📋 전교생 Tier 지원 단계 현황"
+                subtitle={`전교생 ${enrolledCount}명 (재학생 기준) · 전체 ${students.length}명`}
+                headerActions={
+                    <button onClick={fetchStatus} className="btn btn-secondary">
+                        🔄 새로고침
+                    </button>
+                }
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {!isAdmin() && (
+                        <div style={{ padding: '10px 14px', backgroundColor: 'var(--tier2-bg)', borderRadius: '8px', border: '1px solid #fde68a', color: 'var(--tier2-text)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>🔒</span> 담임교사는 배정 학급 학생의 데이터 조회가 가능하며, Tier 수정은 관리자 권한으로 수행됩니다.
                         </div>
-                        {!isAdmin() && (
-                            <div style={{ padding: '8px 16px', backgroundColor: '#fef3c7', borderRadius: '8px', color: '#b45309', fontSize: '0.9rem' }}>
-                                🔒 조회 전용 (관리자만 편집 가능)
-                            </div>
-                        )}
-                    </div>
+                    )}
 
                     {/* Summary Cards - 5 Tier Types with % */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
-                        <div style={{ padding: '14px', backgroundColor: '#e8f5e9', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
-                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#2e7d32' }}>{tierCounts.tier1}</div>
-                            <div style={{ color: '#2e7d32', fontSize: '0.85rem', fontWeight: '600' }}>Tier 1</div>
-                            <div style={{ color: '#4caf50', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier1)}%</div>
+                    <div className="kpi-grid kpi-grid-5">
+                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier1)', background: 'var(--tier1-bg)' }}>
+                            <div className="kpi-label" style={{ color: 'var(--tier1-text)' }}>Tier 1</div>
+                            <div className="kpi-value" style={{ color: 'var(--tier1-text)' }}>{tierCounts.tier1}</div>
+                            <div className="kpi-subtext">{pct(tierCounts.tier1)}%</div>
                         </div>
-                        <div style={{ padding: '14px', backgroundColor: '#fff3e0', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
-                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#f57c00' }}>{tierCounts.tier2_cico}</div>
-                            <div style={{ color: '#f57c00', fontSize: '0.85rem', fontWeight: '600' }}>Tier2(CICO)</div>
-                            <div style={{ color: '#fb8c00', fontSize: '0.75rem', marginTop: '2px' }}>
-                                {pct(tierCounts.tier2_cico)}%
-                                <span style={{ color: '#999', fontSize: '0.7rem' }}> (순수 {tier2CicoPure}명)</span>
-                            </div>
+                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier2)', background: 'var(--tier2-bg)' }}>
+                            <div className="kpi-label" style={{ color: 'var(--tier2-text)' }}>Tier2(CICO)</div>
+                            <div className="kpi-value" style={{ color: 'var(--tier2-text)' }}>{tierCounts.tier2_cico}</div>
+                            <div className="kpi-subtext">{pct(tierCounts.tier2_cico)}% (순수 {tier2CicoPure}명)</div>
                         </div>
-                        <div style={{ padding: '14px', backgroundColor: '#e3f2fd', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
-                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#1976d2' }}>{tierCounts.tier2_sst}</div>
-                            <div style={{ color: '#1976d2', fontSize: '0.85rem', fontWeight: '600' }}>Tier2(SST)</div>
-                            <div style={{ color: '#42a5f5', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier2_sst)}%</div>
+                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--primary-blue)', background: 'var(--primary-light)' }}>
+                            <div className="kpi-label" style={{ color: 'var(--primary-blue)' }}>Tier2(SST)</div>
+                            <div className="kpi-value" style={{ color: 'var(--primary-blue)' }}>{tierCounts.tier2_sst}</div>
+                            <div className="kpi-subtext">{pct(tierCounts.tier2_sst)}%</div>
                         </div>
-                        <div style={{ padding: '14px', backgroundColor: '#ffebee', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
-                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#d32f2f' }}>{tierCounts.tier3}</div>
-                            <div style={{ color: '#d32f2f', fontSize: '0.85rem', fontWeight: '600' }}>Tier 3</div>
-                            <div style={{ color: '#ef5350', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier3)}%</div>
+                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier3)', background: 'var(--tier3-bg)' }}>
+                            <div className="kpi-label" style={{ color: 'var(--tier3-text)' }}>Tier 3</div>
+                            <div className="kpi-value" style={{ color: 'var(--tier3-text)' }}>{tierCounts.tier3}</div>
+                            <div className="kpi-subtext">{pct(tierCounts.tier3)}%</div>
                         </div>
-                        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #4a148c, #7b1fa2)', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
-                            <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'white' }}>{tierCounts.tier3_plus}</div>
-                            <div style={{ color: '#e1bee7', fontSize: '0.85rem', fontWeight: '600' }}>Tier 3+</div>
-                            <div style={{ color: '#ce93d8', fontSize: '0.75rem', marginTop: '2px' }}>{pct(tierCounts.tier3_plus)}%</div>
+                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier3-plus)', background: 'var(--tier3-plus-bg)' }}>
+                            <div className="kpi-label" style={{ color: 'var(--tier3-plus-text)' }}>Tier 3+</div>
+                            <div className="kpi-value" style={{ color: 'var(--tier3-plus-text)' }}>{tierCounts.tier3_plus}</div>
+                            <div className="kpi-subtext">{pct(tierCounts.tier3_plus)}%</div>
                         </div>
                     </div>
 
                     {errorMsg && (
-                        <div style={{ padding: '16px 20px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '10px', color: '#991b1b', fontWeight: 600, marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="card" style={{ padding: '16px 20px', background: 'var(--tier3-bg)', borderColor: '#fca5a5', color: 'var(--tier3-text)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>⚠️ {errorMsg}</span>
-                            <button onClick={fetchStatus} style={{ padding: '6px 12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 700 }}>다시 시도</button>
+                            <button onClick={fetchStatus} className="btn btn-danger">다시 시도</button>
                         </div>
                     )}
 
                     {/* Filters */}
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-                        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="form-select">
                             <option value="all">전체 Tier</option>
                             <option value="Tier1">Tier 1</option>
                             <option value="Tier2(CICO)">Tier2(CICO)</option>
@@ -277,7 +274,7 @@ export default function TierStatusPage() {
                             <option value="Tier3">Tier 3</option>
                             <option value="Tier3+">Tier 3+</option>
                         </select>
-                        <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '4px', border: '1px solid #ddd' }}>
+                        <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)} className="form-select">
                             <option value="all">전체 과정</option>
                             <option value="유치원">유치원</option>
                             <option value="초등">초등</option>
@@ -285,31 +282,31 @@ export default function TierStatusPage() {
                             <option value="고등">고등</option>
                             <option value="전공과">전공과</option>
                         </select>
-                        <span style={{ color: '#666', alignSelf: 'center' }}>표시: {filteredStudents.length}명</span>
+                        <span className="badge badge-neutral">표시: {filteredStudents.length}명</span>
                     </div>
 
                     {/* Table */}
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <div className="table-container">
+                        <table className="dense-table">
                             <thead>
-                                <tr style={{ backgroundColor: '#f5f5f5' }}>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '40px' }}>번호</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '100px' }}>학급</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '70px' }}>학생코드</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>학생이름</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>재학</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>BeAble</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>그림말인증</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#e8f5e9' }}>Tier1</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px', backgroundColor: '#fff3e0' }}>Tier2(CICO)</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px', backgroundColor: '#e3f2fd' }}>Tier2(SST)</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#ffebee' }}>Tier3</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px', backgroundColor: '#4a148c', color: 'white' }}>Tier3+</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '80px' }}>변경일</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '120px' }}>메모</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>상세분석</th>
-                                    <th style={{ padding: '8px', border: '1px solid #ddd', width: '50px' }}>BIP</th>
-                                    {isAdmin() && <th style={{ padding: '8px', border: '1px solid #ddd', width: '60px' }}>관리</th>}
+                                <tr>
+                                    <th style={{ width: '40px', textAlign: 'center' }}>번호</th>
+                                    <th style={{ width: '100px' }}>학급</th>
+                                    <th style={{ width: '70px', textAlign: 'center' }}>학생코드</th>
+                                    <th style={{ width: '90px', textAlign: 'center' }}>학생이름</th>
+                                    <th style={{ width: '50px', textAlign: 'center' }}>재학</th>
+                                    <th style={{ width: '80px', textAlign: 'center' }}>BeAble</th>
+                                    <th style={{ width: '70px', textAlign: 'center' }}>그림말인증</th>
+                                    <th style={{ width: '55px', textAlign: 'center', background: 'var(--tier1-bg)', color: 'var(--tier1-text)' }}>Tier1</th>
+                                    <th style={{ width: '85px', textAlign: 'center', background: 'var(--tier2-bg)', color: 'var(--tier2-text)' }}>Tier2(CICO)</th>
+                                    <th style={{ width: '85px', textAlign: 'center', background: 'var(--primary-light)', color: 'var(--primary-blue)' }}>Tier2(SST)</th>
+                                    <th style={{ width: '55px', textAlign: 'center', background: 'var(--tier3-bg)', color: 'var(--tier3-text)' }}>Tier3</th>
+                                    <th style={{ width: '55px', textAlign: 'center', background: 'var(--tier3-plus-bg)', color: 'var(--tier3-plus-text)' }}>Tier3+</th>
+                                    <th style={{ width: '80px', textAlign: 'center' }}>변경일</th>
+                                    <th style={{ width: '140px' }}>메모</th>
+                                    <th style={{ width: '60px', textAlign: 'center' }}>상세분석</th>
+                                    <th style={{ width: '50px', textAlign: 'center' }}>BIP</th>
+                                    {isAdmin() && <th style={{ width: '80px', textAlign: 'center' }}>관리</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -318,115 +315,115 @@ export default function TierStatusPage() {
                                     const isInactive = s.재학여부 === "X";
 
                                     return (
-                                        <tr key={s.학생코드} style={{ backgroundColor: isInactive ? '#f9f9f9' : 'white', opacity: isInactive ? 0.5 : 1 }}>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>{s.번호}</td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', fontSize: '0.8rem' }}>{s.학급}</td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        <tr key={s.학생코드} style={{ opacity: isInactive ? 0.5 : 1 }}>
+                                            <td style={{ textAlign: 'center' }}>{s.번호}</td>
+                                            <td>{s.학급}</td>
+                                            <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
+                                            <td style={{ textAlign: 'center' }}>
                                                 {isEditing ? (
-                                                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="이름" />
+                                                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="form-input" style={{ width: '70px', padding: '3px 6px' }} placeholder="이름" />
                                                 ) : (
-                                                    <span style={{ fontWeight: 'bold', color: '#333' }}>{maskName(s.학생이름) || s.학생코드}</span>
+                                                    <span style={{ fontWeight: 700 }}>{maskName(s.학생이름) || s.학생코드}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                            <td style={{ textAlign: 'center' }}>
                                                 {isEditing ? (
-                                                    <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} style={{ padding: '2px', width: '40px' }}>
+                                                    <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
                                                     </select>
                                                 ) : (
-                                                    <span style={{ color: s.재학여부 === "O" ? '#2e7d32' : '#999', fontWeight: 'bold' }}>{s.재학여부}</span>
+                                                    <span className={`badge ${s.재학여부 === "O" ? "badge-tier1" : "badge-neutral"}`}>{s.재학여부}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                            <td style={{ textAlign: 'center' }}>
                                                 {isEditing ? (
-                                                    <input type="text" value={editBeAble} onChange={(e) => setEditBeAble(e.target.value)} style={{ width: '60px', padding: '2px' }} placeholder="코드" />
+                                                    <input type="text" value={editBeAble} onChange={(e) => setEditBeAble(e.target.value)} className="form-input" style={{ width: '70px', padding: '3px 6px' }} placeholder="코드" />
                                                 ) : (
                                                     s['BeAble코드'] || '-'
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold', color: '#1e3a8a' }}>
+                                            <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--primary-navy)' }}>
                                                 {s['그림말인증'] !== undefined ? s['그림말인증'] : 0} / 13
                                             </td>
                                             {/* 5 Tier columns with O/X */}
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#f1f8e9' }}>
+                                            <td style={{ textAlign: 'center', background: 'var(--tier1-bg)' }}>
                                                 {isEditing ? (
-                                                    <select value={editTiers.tier1} onChange={(e) => setEditTiers({ ...editTiers, tier1: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                    <select value={editTiers.tier1} onChange={(e) => setEditTiers({ ...editTiers, tier1: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
                                                     </select>
                                                 ) : (
-                                                    <span style={{ color: s['Tier1'] === "O" ? '#2e7d32' : '#ccc', fontWeight: 'bold' }}>{s['Tier1']}</span>
+                                                    <span className={`badge ${s['Tier1'] === "O" ? "badge-tier1" : "badge-neutral"}`}>{s['Tier1']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#fff8e1' }}>
+                                            <td style={{ textAlign: 'center', background: 'var(--tier2-bg)' }}>
                                                 {isEditing ? (
-                                                    <select value={editTiers.tier2_cico} onChange={(e) => setEditTiers({ ...editTiers, tier2_cico: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                    <select value={editTiers.tier2_cico} onChange={(e) => setEditTiers({ ...editTiers, tier2_cico: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
                                                     </select>
                                                 ) : (
-                                                    <span style={{ color: s['Tier2(CICO)'] === "O" ? '#f57c00' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(CICO)']}</span>
+                                                    <span className={`badge ${s['Tier2(CICO)'] === "O" ? "badge-tier2" : "badge-neutral"}`}>{s['Tier2(CICO)']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#e3f2fd' }}>
+                                            <td style={{ textAlign: 'center', background: 'var(--primary-light)' }}>
                                                 {isEditing ? (
-                                                    <select value={editTiers.tier2_sst} onChange={(e) => setEditTiers({ ...editTiers, tier2_sst: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                    <select value={editTiers.tier2_sst} onChange={(e) => setEditTiers({ ...editTiers, tier2_sst: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
                                                     </select>
                                                 ) : (
-                                                    <span style={{ color: s['Tier2(SST)'] === "O" ? '#1976d2' : '#ccc', fontWeight: 'bold' }}>{s['Tier2(SST)']}</span>
+                                                    <span className={`badge ${s['Tier2(SST)'] === "O" ? "badge-info" : "badge-neutral"}`}>{s['Tier2(SST)']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#ffebee' }}>
+                                            <td style={{ textAlign: 'center', background: 'var(--tier3-bg)' }}>
                                                 {isEditing ? (
-                                                    <select value={editTiers.tier3} onChange={(e) => setEditTiers({ ...editTiers, tier3: e.target.value })} style={{ padding: '2px', width: '40px' }}>
+                                                    <select value={editTiers.tier3} onChange={(e) => setEditTiers({ ...editTiers, tier3: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
                                                     </select>
                                                 ) : (
-                                                    <span style={{ color: s['Tier3'] === "O" ? '#d32f2f' : '#ccc', fontWeight: 'bold' }}>{s['Tier3']}</span>
+                                                    <span className={`badge ${s['Tier3'] === "O" ? "badge-tier3" : "badge-neutral"}`}>{s['Tier3']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', backgroundColor: '#4a148c' }}>
+                                            <td style={{ textAlign: 'center', background: 'var(--tier3-plus-bg)' }}>
                                                 {isEditing ? (
-                                                    <select value={editTiers.tier3_plus} onChange={(e) => setEditTiers({ ...editTiers, tier3_plus: e.target.value })} style={{ padding: '2px', width: '40px', backgroundColor: '#4a148c', color: 'white' }}>
+                                                    <select value={editTiers.tier3_plus} onChange={(e) => setEditTiers({ ...editTiers, tier3_plus: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
                                                         <option value="O">O</option>
                                                         <option value="X">X</option>
                                                     </select>
                                                 ) : (
-                                                    <span style={{ color: s['Tier3+'] === "O" ? '#fff' : '#888', fontWeight: 'bold' }}>{s['Tier3+']}</span>
+                                                    <span className={`badge ${s['Tier3+'] === "O" ? "badge-tier3-plus" : "badge-neutral"}`}>{s['Tier3+']}</span>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center', fontSize: '0.75rem', color: '#666' }}>{s.변경일 || '-'}</td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'left', fontSize: '0.8rem', color: '#333', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            <td style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{s.변경일 || '-'}</td>
+                                            <td style={{ fontSize: '0.8rem', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {isEditing ? (
-                                                    <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} style={{ width: '100%', padding: '2px' }} placeholder="메모" />
+                                                    <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className="form-input" style={{ width: '100%', padding: '3px 6px' }} placeholder="메모" />
                                                 ) : (
                                                     s.메모 || '-'
                                                 )}
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} style={{ padding: '4px 10px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>📊</button>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>📊</button>
                                             </td>
-                                            <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}/bip`)} style={{ padding: '4px 10px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>📋</button>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}/bip`)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>📋</button>
                                             </td>
                                             {isAdmin() && (
-                                                <td style={{ padding: '6px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                <td style={{ textAlign: 'center' }}>
                                                     {isEditing ? (
-                                                        <div style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
-                                                            <button onClick={handleSave} disabled={saving} style={{ padding: '2px 6px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                                            <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ padding: '3px 8px', fontSize: '0.72rem' }}>
                                                                 {saving ? '...' : '저장'}
                                                             </button>
-                                                            <button onClick={handleCancel} style={{ padding: '2px 6px', backgroundColor: '#9e9e9e', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                                            <button onClick={handleCancel} className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '0.72rem' }}>
                                                                 취소
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <button onClick={() => handleEdit(s)} style={{ padding: '2px 8px', backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                                        <button onClick={() => handleEdit(s)} className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: '0.72rem' }}>
                                                             편집
                                                         </button>
                                                     )}
@@ -439,7 +436,7 @@ export default function TierStatusPage() {
                         </table>
                     </div>
                 </div>
-            </div>
+            </AppShell>
         </AuthCheck>
     );
 }

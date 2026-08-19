@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import styles from "../page.module.css";
+import AppShell from "../components/AppShell";
 import { useAuth } from "../components/AuthProvider";
 
 // 34 Classes Definition
@@ -109,12 +110,11 @@ export default function AdminPage() {
     };
 
     const handleDeleteUser = async (userId: string) => {
-        if (!confirm(`정말로 사용자 ${userId}를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
-
+        if (!confirm(`사용자 '${userId}'를 삭제하시겠습니까?`)) return;
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.delete(`${apiUrl}/api/v1/auth/users/${userId}`);
-            setMessage(`사용자 ${userId}가 삭제되었습니다.`);
+            setMessage("사용자가 삭제되었습니다.");
             fetchUsers();
             if (selectedUser === userId) setSelectedUser("");
         } catch (err) {
@@ -123,48 +123,43 @@ export default function AdminPage() {
         }
     };
 
-    if (loading) return <div className={styles.loading}>로딩 중...</div>;
+    if (loading) {
+        return (
+            <AppShell currentPage="admin" title="⚙️ 시스템 및 사용자 관리" hideDateFilter={true}>
+                <div className="card" style={{ padding: "60px", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <div style={{ fontSize: "2rem", marginBottom: "12px", animation: "spin 2s linear infinite" }}>⏳</div>
+                    <p style={{ fontWeight: 700 }}>관리자 설정을 불러오고 있습니다...</p>
+                </div>
+            </AppShell>
+        );
+    }
 
     return (
-        <div className={styles.container}>
-            <header className={styles.header}>
-                <div>
-                    <h1 className={styles.title}>⚙️ 관리자 설정</h1>
-                    <p className={styles.subtitle}>사용자 계정 및 비밀번호 관리</p>
-                </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button
-                        onClick={async () => {
-                            if (!confirm("모든 월별 시트를 초기화/갱신하시겠습니까? 시간이 걸릴 수 있습니다.")) return;
-                            try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-                                await axios.post(`${apiUrl}/api/v1/analytics/dashboard/refresh`);
-                                alert("데이터 갱신 완료!");
-                            } catch (e) {
-                                console.error(e);
-                                alert("갱신 실패");
-                            }
-                        }}
-                        style={{ padding: '8px 16px', cursor: 'pointer', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px' }}
-                    >
-                        🔄 데이터 갱신
-                    </button>
-                    <button
-                        onClick={() => window.location.href = '/'}
-                        style={{ padding: '8px 16px', cursor: 'pointer', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px' }}
-                    >
-                        🏠 대시보드로
-                    </button>
-                    <button
-                        onClick={logout}
-                        style={{ padding: '8px 16px', cursor: 'pointer', background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px' }}
-                    >
-                        🚪 로그아웃
-                    </button>
-                </div>
-            </header>
-
-            <main className={styles.main}>
+        <AppShell
+            currentPage="admin"
+            title="⚙️ 시스템 및 사용자 관리"
+            subtitle="교직원 계정 생성, 권한 부여, 학사일정 및 휴일 데이터베이스 관리"
+            hideDateFilter={true}
+            headerActions={
+                <button
+                    onClick={async () => {
+                        if (!confirm("모든 월별 시트를 초기화/갱신하시겠습니까? 시간이 걸릴 수 있습니다.")) return;
+                        try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+                            await axios.post(`${apiUrl}/api/v1/analytics/dashboard/refresh`);
+                            alert("데이터 갱신 완료!");
+                        } catch (e) {
+                            console.error(e);
+                            alert("갱신 실패");
+                        }
+                    }}
+                    className="btn btn-secondary"
+                >
+                    🔄 데이터 갱신
+                </button>
+            }
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                 {message && (
                     <div style={{
                         padding: '10px',
@@ -313,8 +308,8 @@ export default function AdminPage() {
                         ))}
                     </div>
                 </div>
-            </main>
-        </div>
+            </div>
+        </AppShell>
     );
 }
 

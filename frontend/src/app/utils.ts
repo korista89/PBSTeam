@@ -45,5 +45,3 @@ export function formatWeek(weekStr: string): string {
 
   return `${yy}년${m}월${weekOfMonth}주차`;
 }
-
-
