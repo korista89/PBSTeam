@@ -127,13 +127,15 @@ a {
 }
 
 .app-topbar {
-  height: var(--topbar-height);
+  min-height: var(--topbar-height);
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-6);
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding: 10px var(--space-6);
   position: sticky;
   top: 0;
   z-index: 90;

@@ -237,10 +237,10 @@ export default function AppShell({
                     </div>
 
                     {/* Date Picker & Utility Right */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", rowGap: "8px" }}>
                         {!hideDateFilter && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--bg-subtle)", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-                                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-secondary)" }}>📅 분석기간</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--bg-subtle)", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--border-subtle)", flexShrink: 0, whiteSpace: "nowrap" }}>
+                                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>📅 분석기간</span>
                                 <input
                                     type="date"
                                     value={startDate}
@@ -265,12 +265,12 @@ export default function AppShell({
                         )}
 
                         {headerActions && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
                                 {headerActions}
                             </div>
                         )}
 
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", paddingLeft: "8px", borderLeft: "1px solid var(--border-subtle)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", paddingLeft: "8px", borderLeft: "1px solid var(--border-subtle)", flexShrink: 0, whiteSpace: "nowrap" }}>
                             <span className={`badge ${isAdmin() ? "badge-tier2" : "badge-neutral"}`} style={{ fontSize: "0.72rem" }}>
                                 {isAdmin() ? "🛡️ 관리자" : `👨‍🏫 ${user.class_id || user.id}`}
                             </span>

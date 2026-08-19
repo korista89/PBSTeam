@@ -319,7 +319,12 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     
     # Summary Stats — use ROW COUNT (= number of form submissions, not frequency sum)
     total_incidents = len(df)
-    
+
+    # 개별학생교육지원 건수 (구 명칭: 분리지도) - 물리적 제지/개별학생교육지원이 발생한 기록 수
+    individual_support_count = 0
+    if '물리적제지여부' in df.columns:
+        individual_support_count = int(df['물리적제지여부'].astype(str).str.startswith('O', na=False).sum())
+
     # Calculate daily average
     daily_avg = 0.0
     if start_date and end_date:
@@ -370,7 +375,19 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # Generate AI Insight with enriched tier data
     try:
         all_status = fetch_student_status()
-        enrolled_count = get_enrolled_student_count()
+        # 담임교사는 본인 학급만 봐야 하므로, 전교 TierStatus를 class_id 기준으로 스코프 좁힘
+        if class_id:
+            try:
+                from app.api.deps import normalize_class_identifier
+                target_canonical = normalize_class_identifier(class_id)
+                all_status = [
+                    s for s in all_status
+                    if str(s.get('학생코드', '')).strip().startswith(str(class_id))
+                    or normalize_class_identifier(s.get('학급', '')) == target_canonical
+                ]
+            except Exception:
+                all_status = [s for s in all_status if str(s.get('학생코드', '')).strip().startswith(str(class_id))]
+        enrolled_count = len([s for s in all_status if s.get('재학여부') == 'O']) if class_id else get_enrolled_student_count()
         enrolled_students = [s for s in all_status if s.get('재학여부') == 'O']
         
         t1_count = len([s for s in enrolled_students if s.get('Tier1') == 'O' and s.get('Tier2(CICO)') != 'O' and s.get('Tier2(SST)') != 'O' and s.get('Tier3') != 'O' and s.get('Tier3+') != 'O'])
@@ -429,6 +446,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             "avg_intensity": avg_intensity,
             "risk_student_count": risk_student_count,
             "enrolled_count": tier_stats["enrolled"] if tier_stats else 0,
+            "individual_support_count": individual_support_count,
         },
         "trends": [{"date": k, "count": v} for k, v in date_counts.items()],
         "weekly_trends": [{"week": k, "count": v} for k, v in weekly_counts.items()],

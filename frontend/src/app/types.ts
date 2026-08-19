@@ -43,6 +43,7 @@ export interface DashboardData {
         avg_intensity: number;
         risk_student_count: number;
         enrolled_count?: number;
+        individual_support_count?: number;
     };
     trends: TrendData[];
     weekly_trends?: WeeklyTrendData[];

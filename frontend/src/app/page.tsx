@@ -500,13 +500,12 @@ export default function Home() {
   const riskList = data?.risk_list || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
-  const safetyAlerts: any[] = (data as any)?.safety_alerts || [];
-  const sumTierDist = (matcher: (name: string) => boolean) =>
-    tierDist.filter((t: any) => matcher(String(t.name))).reduce((sum: number, t: any) => sum + (t.value || 0), 0);
-  const tier1Count = sumTierDist(n => n.includes('Tier 1'));
-  const tier2Count = sumTierDist(n => n.includes('Tier 2'));
-  const tier3PlusCount = sumTierDist(n => n.includes('Tier 3'));
-  const upgradeReviewCount = riskList.filter((s: any) => s.tier === 'Tier 2' || s.tier === 'Tier 3').length;
+  const findTierCount = (name: string) => tierDist.find((t: any) => t.name === name)?.value || 0;
+  const tier1Count = findTierCount('Tier 1 (보편)');
+  const tier2CicoCount = findTierCount('Tier 2-CICO (선별)');
+  const tier2SstCount = findTierCount('Tier 2-SST (집중)');
+  const tier3Count = findTierCount('Tier 3 (개별집중)');
+  const tier3PlusCount = findTierCount('Tier 3+ (위기)');
 
   return (
     <AuthCheck>
@@ -555,6 +554,62 @@ export default function Home() {
             <div className="kpi-grid kpi-grid-8">
               <div className="kpi-card">
                 <div className="kpi-label">
+                  <span>등록 재학생 수</span>
+                  <span>🏫</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--text-primary)" }}>
+                  {summary.enrolled_count || 0}명
+                </div>
+                <div className="kpi-subtext">{isAdmin() ? "전교 긍정적 행동지원 모수" : "우리 반 긍정적 행동지원 모수"}</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 1</span>
+                  <span>🟢</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier1)" }}>{tier1Count}명</div>
+                <div className="kpi-subtext">보편적 지원</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 2 CICO</span>
+                  <span>🟠</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{tier2CicoCount}명</div>
+                <div className="kpi-subtext">CICO 선별 배정</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 2 SST</span>
+                  <span>🟠</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{tier2SstCount}명</div>
+                <div className="kpi-subtext">SST 소집단 배정</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 3</span>
+                  <span>🔴</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{tier3Count}명</div>
+                <div className="kpi-subtext">개별 집중지원</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 3+</span>
+                  <span>🟣</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier3-plus)" }}>{tier3PlusCount}명</div>
+                <div className="kpi-subtext">위기 지원단 연계</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
                   <span>총 행동기록 건수</span>
                   <span>📊</span>
                 </div>
@@ -564,76 +619,18 @@ export default function Home() {
 
               <div className="kpi-card">
                 <div className="kpi-label">
-                  <span>평균 행동 강도</span>
-                  <span>⚡</span>
-                </div>
-                <div className="kpi-value" style={{ color: (summary.avg_intensity || 0) >= 3.5 ? "var(--tier3)" : "var(--tier2)" }}>
-                  {(summary.avg_intensity || 0).toFixed(1)} <span style={{ fontSize: "0.9rem", color: "var(--text-muted)", fontWeight: 500 }}>/ 5</span>
-                </div>
-                <div className="kpi-subtext">강도 4~5 위기행동 주의</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
-                  <span>등록 재학생 수</span>
-                  <span>🏫</span>
-                </div>
-                <div className="kpi-value" style={{ color: "var(--text-primary)" }}>
-                  {summary.enrolled_count || 35}명
-                </div>
-                <div className="kpi-subtext">전교 긍정적 행동지원 모수</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
-                  <span>Tier 1 (보편)</span>
-                  <span>🟢</span>
-                </div>
-                <div className="kpi-value" style={{ color: "var(--tier1)" }}>{tier1Count}명</div>
-                <div className="kpi-subtext">보편적 지원 단계 재학생</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
-                  <span>Tier 2 (선별/집중)</span>
-                  <span>🟠</span>
-                </div>
-                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{tier2Count}명</div>
-                <div className="kpi-subtext">CICO·SST 배정 재학생</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
-                  <span>Tier 3/3+ (집중/위기)</span>
-                  <span>🔴</span>
-                </div>
-                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{tier3PlusCount}명</div>
-                <div className="kpi-subtext">개별 집중지원 배정 재학생</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
-                  <span>상향 검토 대상</span>
-                  <span>🔎</span>
-                </div>
-                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{upgradeReviewCount}명</div>
-                <div className="kpi-subtext">아직 미배정, 행동데이터 기준 검토 필요</div>
-              </div>
-
-              <div className="kpi-card">
-                <div className="kpi-label">
-                  <span>안전 경보 건수</span>
+                  <span>개별학생교육지원 건수</span>
                   <span>🚨</span>
                 </div>
-                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{safetyAlerts.length}건</div>
-                <div className="kpi-subtext">물리적 제지/상해 관련 기록</div>
+                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{summary.individual_support_count || 0}건</div>
+                <div className="kpi-subtext">물리적 제지 등 개별학생교육지원 기록</div>
               </div>
             </div>
 
             {/* 6종 핵심 차트 (4열 2행: 1행=지원단계별분포 1칸+주별추이 3칸, 2행=시간대/장소/유형/기능) */}
             <div className="section-heading"><span>01</span> 행동 데이터 종합 분석</div>
             <div className="grid-4">
-              <ChartBox title="🎯 지원 단계별 분포" description="전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다.">
+              <ChartBox title="🎯 지원 단계별 분포" description={isAdmin() ? "전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다." : "우리 반 학생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다."}>
                 <PieChart>
                   <Pie data={tierDist} cx="50%" cy="50%" outerRadius={110} innerRadius={70} paddingAngle={4} dataKey="value" stroke="none">
                     {tierDist.map((entry: any, index: number) => (
