@@ -492,6 +492,10 @@ export default function Home() {
   const riskList = data?.risk_list || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
+  const safetyAlerts: any[] = (data as any)?.safety_alerts || [];
+  const tier1Count = tierDist.find((t: any) => String(t.name).includes('Tier 1'))?.value || 0;
+  const t2CandidateCount = riskList.filter((s: any) => s.tier === 'Tier 2').length;
+  const t3CandidateCount = riskList.filter((s: any) => s.tier === 'Tier 3').length;
 
   return (
     <AuthCheck>
@@ -537,7 +541,7 @@ export default function Home() {
             `}</style>
 
             {/* ===== Compact KPI Cards Strip ===== */}
-            <div className="kpi-grid">
+            <div className="kpi-grid kpi-grid-8">
               <div className="kpi-card">
                 <div className="kpi-label">
                   <span>총 행동기록 건수</span>
@@ -579,6 +583,42 @@ export default function Home() {
                 </div>
                 <div className="kpi-subtext">전교 긍정적 행동지원 대상</div>
               </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>Tier 1 (보편) 학생</span>
+                  <span>🟢</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier1)" }}>{tier1Count}명</div>
+                <div className="kpi-subtext">보편적 지원 단계</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>T2 상향 검토</span>
+                  <span>🟠</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier2)" }}>{t2CandidateCount}명</div>
+                <div className="kpi-subtext">Tier1→2 상향 검토 대상</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>T3 상향 검토</span>
+                  <span>🔴</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{t3CandidateCount}명</div>
+                <div className="kpi-subtext">Tier2→3 상향 검토 대상</div>
+              </div>
+
+              <div className="kpi-card">
+                <div className="kpi-label">
+                  <span>안전 경보 건수</span>
+                  <span>🚨</span>
+                </div>
+                <div className="kpi-value" style={{ color: "var(--tier3)" }}>{safetyAlerts.length}건</div>
+                <div className="kpi-subtext">물리적 제지/상해 관련 기록</div>
+              </div>
             </div>
 
             {/* 8종 핵심 차트 (4열 2행) */}
@@ -586,7 +626,7 @@ export default function Home() {
             <div className="grid-4">
               <ChartBox title="🎯 지원 단계별 분포" description="전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다.">
                 <PieChart>
-                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={4} dataKey="value" stroke="none">
+                  <Pie data={tierDist} cx="50%" cy="50%" outerRadius={110} innerRadius={70} paddingAngle={4} dataKey="value" stroke="none">
                     {tierDist.map((entry: any, index: number) => (
                       <Cell key={index} fill={TIER_COLORS[entry.name] || '#cbd5e1'} />
                     ))}
@@ -639,7 +679,7 @@ export default function Home() {
                 action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} />}
               >
                 <PieChart>
-                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={70} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
+                  <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={105} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3}>
                     {(big5.behaviors || []).map((_, i) => <Cell key={i} fill={['#6366f1','#8b5cf6','#d946ef','#f43f5e','#f97316','#f59e0b'][i%6]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
@@ -653,7 +693,7 @@ export default function Home() {
                 action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} />}
               >
                 <PieChart>
-                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={70} innerRadius={45} dataKey="value">
+                  <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={95} innerRadius={60} dataKey="value">
                       {((data as any).functions || []).map((_: unknown, i: number) => <Cell key={i} fill={['#10b981','#3b82f6','#f59e0b','#ef4444'][i%4]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
