@@ -102,6 +102,7 @@ export default function LoginPage() {
                     display: 'flex',
                     flexDirection: 'column',
                 }}>
+                    <div style={{ width: '100%', height: '65px', background: 'white', flexShrink: 0 }} />
                     <img
                         src="/login-banner.png"
                         alt="바르고 건강하게 자립의 꿈을 실현하는 경은학교"
