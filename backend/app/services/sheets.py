@@ -3176,8 +3176,9 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         return pd.to_datetime(cleaned, errors='coerce')
 
     # Always create date_obj for date filtering and trend computation
-    if '행동발생 날짜' in df.columns:
-        df['date_obj'] = robust_parse_dates(df['행동발생 날짜'])
+    date_col = '행동발생날짜' if '행동발생날짜' in df.columns else ('행동발생 날짜' if '행동발생 날짜' in df.columns else None)
+    if date_col:
+        df['date_obj'] = robust_parse_dates(df[date_col])
         if start_date:
             df = df[df['date_obj'] >= pd.to_datetime(start_date)]
         if end_date:

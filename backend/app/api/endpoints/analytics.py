@@ -414,12 +414,14 @@ async def ai_student_analysis(
 @router.get("/debug-sheets")
 async def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
     """Debug endpoint to inspect sheets connectivity (Admin only)."""
+    from app.core.config import settings
     from app.services.sheets import get_sheets_client, safe_get_all_records
-    sheet = get_sheets_client()
-    if not sheet:
+    client = get_sheets_client()
+    if not client:
         return {"error": "Failed to connect to Google Spreadsheet"}
+    spreadsheet = client.open_by_url(settings.SHEET_URL)
     worksheets_info = []
-    for ws in sheet.worksheets():
+    for ws in spreadsheet.worksheets():
         try:
             records = safe_get_all_records(ws)
             sample_keys = list(records[0].keys()) if records else []
