@@ -488,8 +488,550 @@ def generate_bcba_section_analysis(
     return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
+# ==============================================================================
+# §2.5 P0 AI Structured Summary Builders (계산은 Python, 해석은 AI)
+# ==============================================================================
+
+def _build_cico_summary_payload(
+    students_data: list,
+    behavior_logs: list = None,
+    tier_info: list = None,
+    selected_month: int = None
+) -> dict:
+    """
+    Python deterministic aggregation for CICO AI analysis.
+    Eliminates raw 31-day O/X dumps while preserving exact statistical and clinical metrics.
+    """
+    students_data = students_data or []
+    behavior_logs = behavior_logs or []
+    tier_info = tier_info or []
+
+    # Map tier info
+    tier_map = {}
+    for t in tier_info:
+        code = str(t.get("학생코드", t.get("Code", ""))).strip()
+        if code:
+            tier_map[code] = t
+
+    student_summaries = []
+    total_recorded_days = 0
+    total_success_days = 0
+    total_goals_met = 0
+
+    for s in students_data:
+        code = str(s.get("code") or s.get("student_code") or "").strip()
+        name = str(s.get("name") or s.get("student_name") or "").strip()
+        class_name = str(s.get("class") or s.get("class_name") or "").strip()
+        target_behavior = str(s.get("target_behavior") or s.get("목표행동") or "").strip()
+        goal_str = str(s.get("goal") or s.get("목표달성기준") or "80% 이상").strip()
+
+        # Parse goal number
+        goal_num = 80.0
+        gm = re.search(r"(\d+(?:\.\d+)?)", goal_str)
+        if gm:
+            try:
+                goal_num = float(gm.group(1))
+            except ValueError:
+                goal_num = 80.0
+
+        daily_records = s.get("daily", [])
+        valid_days = [
+            d for d in daily_records
+            if isinstance(d, dict) and str(d.get("value", "")).strip() in ["O", "o", "V", "v", "X", "x"]
+        ]
+
+        recorded_days = len(valid_days)
+        success_days = len([d for d in valid_days if str(d.get("value", "")).strip() in ["O", "o", "V", "v"]])
+        total_recorded_days += recorded_days
+        total_success_days += success_days
+
+        rate_num = round(success_days / recorded_days * 100, 1) if recorded_days > 0 else 0.0
+        is_goal_achieved = rate_num >= goal_num
+        if is_goal_achieved:
+            total_goals_met += 1
+
+        # Recent 5-day and previous 5-day rates
+        recent_5 = valid_days[-5:] if len(valid_days) >= 5 else valid_days
+        recent_5_success = len([d for d in recent_5 if str(d.get("value", "")).strip() in ["O", "o", "V", "v"]])
+        recent_5day_rate = round(recent_5_success / len(recent_5) * 100, 1) if recent_5 else rate_num
+
+        prev_5 = valid_days[-10:-5] if len(valid_days) >= 10 else []
+        prev_5_success = len([d for d in prev_5 if str(d.get("value", "")).strip() in ["O", "o", "V", "v"]])
+        previous_5day_rate = round(prev_5_success / len(prev_5) * 100, 1) if prev_5 else None
+
+        # Trend direction
+        if previous_5day_rate is not None:
+            change_pp = round(recent_5day_rate - previous_5day_rate, 1)
+            if change_pp >= 5.0:
+                trend_dir = "improving"
+            elif change_pp <= -5.0:
+                trend_dir = "declining"
+            else:
+                trend_dir = "stable"
+        else:
+            change_pp = 0.0
+            trend_dir = "stable" if recorded_days >= 5 else "insufficient_data"
+
+        # Consecutive success/failure count
+        consecutive_success = 0
+        consecutive_failure = 0
+        for d in reversed(valid_days):
+            val = str(d.get("value", "")).strip()
+            if val in ["O", "o", "V", "v"]:
+                if consecutive_failure == 0:
+                    consecutive_success += 1
+                else:
+                    break
+            elif val in ["X", "x"]:
+                if consecutive_success == 0:
+                    consecutive_failure += 1
+                else:
+                    break
+
+        # Historical multi-month trend
+        historical_trend = s.get("trend", [])
+        all_rates_parsed = []
+        for t in historical_trend:
+            try:
+                r = float(str(t.get("rate", "")).replace("%", ""))
+                all_rates_parsed.append(r * 100 if r <= 1 else r)
+            except (ValueError, AttributeError):
+                all_rates_parsed.append(None)
+
+        last2_high = (
+            len(all_rates_parsed) >= 2 and
+            all(r is not None and r >= goal_num for r in all_rates_parsed[-2:])
+        )
+
+        ts = tier_map.get(code, {})
+        has_sst = str(ts.get("Tier2(SST)", "")).strip() == "O"
+        has_t3 = str(ts.get("Tier3", "")).strip() == "O" or str(ts.get("Tier3+", "")).strip() == "O"
+        cico_only = not (has_sst or has_t3)
+
+        # Existing CICO Decision Rule Reuse
+        if last2_high and cico_only:
+            decision_rule = "Tier1 하향 권장 (2개월 연속 목표 달성, CICO 졸업 검토)"
+        elif last2_high and not cico_only:
+            decision_rule = "CICO 유지 (T3/SST 병행 지원 지속)"
+        elif rate_num >= goal_num:
+            decision_rule = "CICO 유지 (양호, 현재 강화제 및 피드백 유지)"
+        elif rate_num >= 50:
+            decision_rule = "CICO 수정 검토 (중재 충실도 점검 및 피드백 주기 단축)"
+        else:
+            decision_rule = "Tier3 상향 검토 (정식 FBA/BIP 의뢰 검토)"
+
+        # Compact monthly trend map
+        compact_monthly_trend = {t.get("month", ""): t.get("rate", "") for t in historical_trend if t.get("month")}
+
+        student_summaries.append({
+            "code": code,
+            "name": name,
+            "class": class_name,
+            "target": target_behavior,
+            "goal": goal_str,
+            "metrics": {
+                "recorded_days": recorded_days,
+                "overall_rate_pct": rate_num,
+                "recent_5d_rate_pct": recent_5day_rate,
+                "trend": trend_dir,
+                "change_pp": change_pp,
+                "consec_success": consecutive_success,
+                "consec_fail": consecutive_failure,
+                "monthly_rates": compact_monthly_trend
+            },
+            "decision": {
+                "rule_result": decision_rule,
+                "support_type": "CICO_ONLY" if cico_only else ("T3_CONCURRENT" if has_t3 else "SST_CONCURRENT")
+            }
+        })
+
+    # Cross-reference with Log_Main crisis behaviors
+    student_codes_set = {s["code"] for s in student_summaries if s.get("code")}
+    matching_logs = [
+        l for l in behavior_logs
+        if str(l.get("student_code", l.get("학생코드", ""))).strip() in student_codes_set
+    ]
+    crisis_logs_count = len(matching_logs)
+    high_intensity_count = len([l for l in matching_logs if int(l.get("intensity") or l.get("강도") or 0) >= 4])
+
+    avg_overall_rate = round(total_success_days / total_recorded_days * 100, 1) if total_recorded_days > 0 else 0.0
+
+    return {
+        "evaluation_period": f"{selected_month}월" if selected_month else "당월",
+        "cohort": {
+            "total_students": len(student_summaries),
+            "total_recorded_days": total_recorded_days,
+            "avg_achievement_rate_pct": avg_overall_rate,
+            "goals_met_count": total_goals_met,
+            "crisis_logs_in_log_main": crisis_logs_count,
+            "high_intensity_crisis_count": high_intensity_count
+        },
+        "students": student_summaries,
+        "guards": {
+            "denominator": "학생별 실제 기록 일수(recorded_days)",
+            "limit": "관찰 기회수가 미통제된 데이터이므로 주간 추세 및 충실도를 우선 해석함."
+        }
+    }
+
+
+def _build_student_summary_payload(
+    student_info: dict,
+    student_logs: list,
+    cico_data: list = None,
+    all_notes: list = None
+) -> dict:
+    """
+    Python deterministic aggregation for Individual Student A-B-C AI diagnosis.
+    Replaces raw 30-row dumps with exact statistical distributions and <= 5 representative evidence items.
+    """
+    student_logs = student_logs or []
+    student_info = student_info or {}
+
+    total_episodes = len(student_logs)
+    sample_size = total_episodes
+
+    intensities = []
+    restraint_count = 0
+    behavior_counts = {}
+    location_counts = {}
+    time_slot_counts = {}
+    consequence_counts = {}
+    teacher_inferred_functions = {}
+    unique_dates = set()
+
+    for l in student_logs:
+        raw_int = l.get("intensity") or l.get("강도") or 0
+        try:
+            val_int = int(raw_int)
+        except (ValueError, TypeError):
+            val_int = 0
+        if val_int > 0:
+            intensities.append(val_int)
+
+        restr = str(l.get("physical_restraint") or l.get("물리적제지") or "").strip()
+        if restr == "O":
+            restraint_count += 1
+
+        dt = str(l.get("date") or l.get("발생날짜") or "").strip()
+        if dt:
+            unique_dates.add(dt)
+
+        bt = str(l.get("behavior_type") or l.get("행동유형") or "기타").strip()
+        behavior_counts[bt] = behavior_counts.get(bt, 0) + 1
+
+        loc = str(l.get("location") or l.get("장소") or "교실").strip()
+        location_counts[loc] = location_counts.get(loc, 0) + 1
+
+        ts = str(l.get("time_slot") or l.get("시간대") or "수업시간").strip()
+        time_slot_counts[ts] = time_slot_counts.get(ts, 0) + 1
+
+        sep = str(l.get("separation") or l.get("분리지도") or "X").strip()
+        consequence_counts[f"분리지도({sep})"] = consequence_counts.get(f"분리지도({sep})", 0) + 1
+
+        funcs = l.get("function_labels") or [l.get("function") or l.get("기능") or "미상"]
+        if isinstance(funcs, str):
+            funcs = [funcs]
+        for f in funcs:
+            f_clean = str(f).strip()
+            if f_clean:
+                teacher_inferred_functions[f_clean] = teacher_inferred_functions.get(f_clean, 0) + 1
+
+    avg_intensity = round(sum(intensities) / len(intensities), 1) if intensities else 0.0
+    max_intensity = max(intensities) if intensities else 0
+
+    def _to_ranked_list(counter_dict, top_k=4):
+        total = sum(counter_dict.values())
+        items = sorted(counter_dict.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        return [
+            {"item": k, "count": v, "pct": round(v / total * 100, 1) if total > 0 else 0.0}
+            for k, v in items
+        ]
+
+    # Deterministic Representative Evidence Selection (Max 5 items)
+    dominant_bt = _to_ranked_list(behavior_counts)[0]["item"] if behavior_counts else ""
+    dominant_loc = _to_ranked_list(location_counts)[0]["item"] if location_counts else ""
+
+    selected_evidence = []
+    seen_keys = set()
+
+    def _ev_key(ev):
+        return f"{ev.get('date')}_{ev.get('time_slot')}_{ev.get('behavior_type')}_{ev.get('notes', '')[:20]}"
+
+    def _format_ev(log_item, reason_tag):
+        raw_notes = str(log_item.get("notes") or log_item.get("특기사항") or "").strip()
+        if len(raw_notes) > 40:
+            raw_notes = raw_notes[:37] + "..."
+        return {
+            "selection_reason": reason_tag,
+            "date": log_item.get("date") or log_item.get("발생날짜") or "",
+            "time_slot": log_item.get("time_slot") or log_item.get("시간대") or "",
+            "location": log_item.get("location") or log_item.get("장소") or "",
+            "behavior_type": log_item.get("behavior_type") or log_item.get("행동유형") or "",
+            "intensity": log_item.get("intensity") or log_item.get("강도") or 0,
+            "physical_restraint": log_item.get("physical_restraint") or log_item.get("물리적제지") or "X",
+            "teacher_inferred_function": log_item.get("function") or log_item.get("기능") or "미상",
+            "context": raw_notes
+        }
+
+    # 1. Highest Intensity
+    if student_logs:
+        highest_int_log = max(student_logs, key=lambda l: int(l.get("intensity") or l.get("강도") or 0))
+        k = _ev_key(highest_int_log)
+        if k not in seen_keys:
+            seen_keys.add(k)
+            selected_evidence.append(_format_ev(highest_int_log, "최고 강도 사건"))
+
+    # 2. Most Recent
+    if student_logs:
+        recent_log = student_logs[-1]
+        k = _ev_key(recent_log)
+        if k not in seen_keys:
+            seen_keys.add(k)
+            selected_evidence.append(_format_ev(recent_log, "가장 최근 관찰 사건"))
+
+    # 3. Dominant Pattern
+    for l in student_logs:
+        if (l.get("behavior_type") or l.get("행동유형")) == dominant_bt and (l.get("location") or l.get("장소")) == dominant_loc:
+            k = _ev_key(l)
+            if k not in seen_keys:
+                seen_keys.add(k)
+                selected_evidence.append(_format_ev(l, "최다 빈도 전형적 패턴"))
+                break
+
+    # 4. Setting Event Mentioned
+    setting_keywords = ["약", "수면", "잠", "식사", "밥", "가정", "엄마", "피곤", "투약", "차"]
+    for l in student_logs:
+        note = str(l.get("notes") or l.get("특기사항") or "")
+        if any(kw in note for kw in setting_keywords):
+            k = _ev_key(l)
+            if k not in seen_keys:
+                seen_keys.add(k)
+                selected_evidence.append(_format_ev(l, "배경사건(Setting Event) 기록 사건"))
+                break
+
+    # 5. Non-dominant / Counter-example
+    for l in student_logs:
+        if (l.get("behavior_type") or l.get("행동유형")) != dominant_bt:
+            k = _ev_key(l)
+            if k not in seen_keys:
+                seen_keys.add(k)
+                selected_evidence.append(_format_ev(l, "주요 패턴 외 반례 사건"))
+                break
+
+    # Fill up to max 5 if needed
+    for l in student_logs:
+        if len(selected_evidence) >= 5:
+            break
+        k = _ev_key(l)
+        if k not in seen_keys:
+            seen_keys.add(k)
+            selected_evidence.append(_format_ev(l, "추가 참고 관찰 사건"))
+
+    return {
+        "student_profile": {
+            "code": student_info.get("code", "N/A"),
+            "name": student_info.get("name", "N/A"),
+            "class": student_info.get("class", "N/A"),
+            "tier": student_info.get("tier", 1)
+        },
+        "deterministic_metrics": {
+            "total_episodes_n": total_episodes,
+            "observation_days_count": len(unique_dates),
+            "average_intensity_1_to_5": avg_intensity,
+            "max_intensity": max_intensity,
+            "physical_restraint_count": restraint_count,
+            "behavior_type_distribution": _to_ranked_list(behavior_counts),
+            "location_hotspot_distribution": _to_ranked_list(location_counts),
+            "time_slot_distribution": _to_ranked_list(time_slot_counts),
+            "consequence_distribution": _to_ranked_list(consequence_counts),
+            "teacher_inferred_function_distribution": _to_ranked_list(teacher_inferred_functions)
+        },
+        "representative_evidence_samples": selected_evidence[:5],
+        "data_quality_and_guards": {
+            "sample_size_n": sample_size,
+            "is_insufficient_sample": sample_size < 5,
+            "recorded_function_notice": "교사 추정 분포이며, 기능분석(FA) 결과나 실제 기능 확률이 아님.",
+            "interpretation_limit": "관찰 기회수 미통제 빈도 데이터이므로 단순 증감 단정 지양."
+        }
+    }
+
+
+def _build_tier3_summary_payload(
+    tier3_students: list,
+    behavior_logs: list,
+    cico_data: list = None
+) -> dict:
+    """
+    Python deterministic aggregation for Tier 3 Crisis Management AI consulting.
+    Replaces raw 30-row dumps with exact crisis distributions and <= 5 representative crisis evidence items.
+    """
+    tier3_students = tier3_students or []
+    behavior_logs = behavior_logs or []
+
+    total_crisis_episodes = len(behavior_logs)
+    sample_size = total_crisis_episodes
+
+    intensities = []
+    restraint_count = 0
+    behavior_counts = {}
+    location_counts = {}
+    time_slot_counts = {}
+    teacher_inferred_functions = {}
+    unique_dates = set()
+
+    for l in behavior_logs:
+        raw_int = l.get("intensity") or l.get("강도") or 0
+        try:
+            val_int = int(raw_int)
+        except (ValueError, TypeError):
+            val_int = 0
+        if val_int > 0:
+            intensities.append(val_int)
+
+        restr = str(l.get("physical_restraint") or l.get("물리적제지") or "").strip()
+        if restr == "O":
+            restraint_count += 1
+
+        dt = str(l.get("date") or l.get("발생날짜") or "").strip()
+        if dt:
+            unique_dates.add(dt)
+
+        bt = str(l.get("behavior_type") or l.get("행동유형") or "기타").strip()
+        behavior_counts[bt] = behavior_counts.get(bt, 0) + 1
+
+        loc = str(l.get("location") or l.get("장소") or "교실").strip()
+        location_counts[loc] = location_counts.get(loc, 0) + 1
+
+        ts = str(l.get("time_slot") or l.get("시간대") or "수업시간").strip()
+        time_slot_counts[ts] = time_slot_counts.get(ts, 0) + 1
+
+        funcs = l.get("function_labels") or [l.get("function") or l.get("기능") or "미상"]
+        if isinstance(funcs, str):
+            funcs = [funcs]
+        for f in funcs:
+            f_clean = str(f).strip()
+            if f_clean:
+                teacher_inferred_functions[f_clean] = teacher_inferred_functions.get(f_clean, 0) + 1
+
+    avg_intensity = round(sum(intensities) / len(intensities), 1) if intensities else 0.0
+    max_intensity = max(intensities) if intensities else 0
+    high_intensity_count = len([i for i in intensities if i >= 4])
+
+    def _to_ranked_list(counter_dict):
+        total = sum(counter_dict.values())
+        return [
+            {"item": k, "count": v, "percentage": round(v / total * 100, 1) if total > 0 else 0.0}
+            for k, v in sorted(counter_dict.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+    # Representative crisis evidence selection (Max 5)
+    selected_evidence = []
+    seen_keys = set()
+
+    def _ev_key(ev):
+        return f"{ev.get('date')}_{ev.get('student_code')}_{ev.get('time_slot')}_{ev.get('notes', '')[:20]}"
+
+    def _format_ev(log_item, reason_tag):
+        return {
+            "selection_reason": reason_tag,
+            "student_code": log_item.get("student_code") or log_item.get("학생코드") or "",
+            "date": log_item.get("date") or log_item.get("발생날짜") or "",
+            "time_slot": log_item.get("time_slot") or log_item.get("시간대") or "",
+            "location": log_item.get("location") or log_item.get("장소") or "",
+            "behavior_type": log_item.get("behavior_type") or log_item.get("행동유형") or "",
+            "intensity": log_item.get("intensity") or log_item.get("강도") or 0,
+            "physical_restraint": log_item.get("physical_restraint") or log_item.get("물리적제지") or "X",
+            "context": log_item.get("notes") or log_item.get("특기사항") or ""
+        }
+
+    # 1. Physical Restraint == 'O'
+    for l in behavior_logs:
+        if str(l.get("physical_restraint") or l.get("물리적제지") or "").strip() == "O":
+            k = _ev_key(l)
+            if k not in seen_keys:
+                seen_keys.add(k)
+                selected_evidence.append(_format_ev(l, "물리적 제지 발생 위기 사건"))
+                if len(selected_evidence) >= 2:
+                    break
+
+    # 2. Intensity >= 4
+    for l in behavior_logs:
+        val_int = int(l.get("intensity") or l.get("강도") or 0)
+        if val_int >= 4:
+            k = _ev_key(l)
+            if k not in seen_keys:
+                seen_keys.add(k)
+                selected_evidence.append(_format_ev(l, f"고강도(강도 {val_int}) 위기 사건"))
+                if len(selected_evidence) >= 3:
+                    break
+
+    # 3. Most Recent
+    if behavior_logs:
+        recent_log = behavior_logs[-1]
+        k = _ev_key(recent_log)
+        if k not in seen_keys:
+            seen_keys.add(k)
+            selected_evidence.append(_format_ev(recent_log, "가장 최근 위기 사건"))
+
+    # 4. Setting Event Mentioned
+    setting_keywords = ["약", "수면", "잠", "식사", "가정", "엄마", "피곤", "투약", "병원"]
+    for l in behavior_logs:
+        note = str(l.get("notes") or l.get("특기사항") or "")
+        if any(kw in note for kw in setting_keywords):
+            k = _ev_key(l)
+            if k not in seen_keys:
+                seen_keys.add(k)
+                selected_evidence.append(_format_ev(l, "배경사건(Setting Event) 연관 위기 사건"))
+                break
+
+    # Fill up to max 5
+    for l in behavior_logs:
+        if len(selected_evidence) >= 5:
+            break
+        k = _ev_key(l)
+        if k not in seen_keys:
+            seen_keys.add(k)
+            selected_evidence.append(_format_ev(l, "추가 위기 참고 사건"))
+
+    # Tier 3 student roster summary
+    t3_roster_summary = []
+    for s in tier3_students:
+        t3_roster_summary.append({
+            "code": s.get("code") or s.get("학생코드") or "",
+            "name": s.get("name") or s.get("학생명") or "",
+            "class": s.get("class") or s.get("학급") or "",
+            "crisis_count": s.get("total_crisis_count", s.get("위기행동건수", 0)),
+            "avg_intensity": s.get("avg_intensity", s.get("평균강도", 0.0)),
+            "restraint_count": s.get("restraint_count", s.get("물리적제지", 0))
+        })
+
+    return {
+        "tier3_cohort_summary": {
+            "tier3_student_count": len(t3_roster_summary),
+            "total_crisis_episodes_n": total_crisis_episodes,
+            "observation_days_count": len(unique_dates),
+            "high_intensity_4_5_count": high_intensity_count,
+            "physical_restraint_total_count": restraint_count,
+            "average_intensity_1_to_5": avg_intensity,
+            "max_intensity": max_intensity,
+            "behavior_type_distribution": _to_ranked_list(behavior_counts),
+            "location_hotspot_distribution": _to_ranked_list(location_counts),
+            "time_slot_distribution": _to_ranked_list(time_slot_counts),
+            "teacher_inferred_function_distribution": _to_ranked_list(teacher_inferred_functions)
+        },
+        "tier3_students": t3_roster_summary,
+        "representative_crisis_evidence_samples": selected_evidence[:5],
+        "data_quality_and_guards": {
+            "sample_size_n": sample_size,
+            "is_insufficient_sample": sample_size < 5,
+            "recorded_function_notice": "이 값은 교직원이 일상 기록에서 추정한 분포이며, 기능분석(FA) 결과나 실제 기능 확률이 아님.",
+            "interpretation_limit": "관찰 기회수가 통제되지 않은 빈도 데이터이므로 위기 관리 프로토콜 적용 시 교직원 안전 및 최소제한원칙 준수를 최우선함."
+        }
+    }
+
+
 # ------------------------------------------------------------------------------
-# ③ 🤖 CICO AI 분석 (/cico)
+# ③ 🤖 CICO AI 분석 (/cico) - Optimized with Structured Summary
 # ------------------------------------------------------------------------------
 def generate_bcba_cico_analysis(
     students_data: list,
@@ -498,25 +1040,34 @@ def generate_bcba_cico_analysis(
     selected_month: int = None
 ) -> str:
     """
-    CICO 분석: 주 단위 DPR 추세 + 중재 충실도 우선 점검 + 80%/70% 단계 이동 룰 + 강화제 포화 점검
+    CICO 분석: Python 정량 집계 Structured Summary 기반 의사결정 컨설팅.
+    (원시 O/X 배열 dump를 제거하고 정확한 통계치와 결정론적 룰 결과 전달)
     """
-    cico_str = json.dumps(students_data, ensure_ascii=False, indent=2)
+    summary_payload = _build_cico_summary_payload(
+        students_data=students_data,
+        behavior_logs=behavior_logs,
+        tier_info=tier_info,
+        selected_month=selected_month
+    )
+    cico_summary_json = json.dumps(summary_payload, ensure_ascii=False, separators=(',', ':'))
     month_text = f"{selected_month}월 " if selected_month else ""
-    
-    prompt = f"""[분석 대상 데이터: {month_text}CICO 일일행동카드(DPR) 및 대상자 성과]
-{cico_str}
+
+    prompt = f"""[분석 대상: {month_text}CICO 정량 집계 및 Tier 의사결정 요약]
+{cico_summary_json}
 
 [지시사항]
-공통 시스템 프롬프트를 준수하여 CICO 성과 분석 및 Tier 조정 의사결정 보고서를 작성하라.
-1. **중재 충실도(Fidelity) 우선 점검**: 달성률 저하 시 체크인/체크아웃 매일 실시 여부, 즉각적 피드백 제공 여부를 먼저 확인하도록 권고하라.
-2. **학생별 DPR 달성률 추세 판정**: 단순 평균이 아닌 주 단위 추세(상승/유지/하락)를 판정하라.
-3. **객관적 Tier 이동 의사결정 매트릭스**:
-   - 4주 연속 80% 이상 달성: Tier 1 복귀(졸업) 검토 (단, 졸업 후 4주 모니터링 조건 명시).
-   - 70~80% 유지: 현행 CICO 유지 및 강화제 선호도 재평가.
-   - 70% 미만 2주 연속: 중재 충실도 점검 및 피드백 주기 단축.
-   - 70% 미만 4주 연속 또는 강도 4~5 발생: Tier 3 상향 및 정식 FBA/BIP 의뢰 권고.
-4. **Log_Main 실제 행동 발생과의 교차 검증**: DPR 점수는 높은데 실제 문제행동 로그가 많은 경우 목표행동 설정의 정합성 문제를 지적하라.
-5. **강화제 포화(Satiation) 점검**: 초기 고득점 후 3~4주 차에 하락하는 학생에 대한 강화제 교체 팁 제공."""
+공통 시스템 프롬프트를 준수하여 CICO 성과 분석 및 Tier 조정 보고서를 작성하라.
+제공된 집계 수치(달성률, 최근 추세, 연속 성공일, 룰 판정)를 인용하라.
+
+1. **중재 충실도 점검**: 달성률 저하 시 매일 체크인/아웃 및 즉각 피드백 실시 여부 우선 확인.
+2. **DPR 달성률 추세 판정**: 단순 평균 대신 최근 5일 및 주 단위 추세(상승/유지/하락) 판정.
+3. **Tier 이동 의사결정 매트릭스**:
+   - 4주 80%+ 달성: Tier 1 복귀(졸업) 검토 (사후 4주 모니터링 명시).
+   - 70~80%: 현행 유지 및 강화제 선호도 재평가.
+   - <70% 2주: 충실도 점검 및 피드백 주기 단축.
+   - <70% 4주 또는 강도 4~5: Tier 3 상향 및 정식 FBA/BIP 의뢰.
+4. **Log_Main 교차 검증**: DPR 점수가 높은데 문제행동 로그가 많은 경우 목표행동 정합성 지적.
+5. **강화제 포화 점검**: 3~4주 차 하락 학생에 대한 강화제 교체 팁 제공."""
 
     return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
@@ -532,9 +1083,9 @@ def generate_bcba_meeting_minutes(
     """
     SST 회의록: 공문서 규격 개조식 + 4단 안건 구조 + 다학제 역할 분담 + 보호자 지원 분리
     """
-    m_info = json.dumps(meeting_data, ensure_ascii=False, indent=2)
-    r_info = json.dumps(risk_students, ensure_ascii=False, indent=2)
-    
+    m_info = json.dumps(meeting_data, ensure_ascii=False, separators=(',', ':'))
+    r_info = json.dumps(risk_students, ensure_ascii=False, separators=(',', ':'))
+
     prompt = f"""[회의 기본 정보]
 {m_info}
 
@@ -557,7 +1108,7 @@ def generate_bcba_meeting_minutes(
 
 
 # ------------------------------------------------------------------------------
-# ⑤ 🤖 Tier 3 심층 위기지원 컨설팅 (/tier3)
+# ⑤ 🤖 Tier 3 심층 위기지원 컨설팅 (/tier3) - Optimized with Structured Summary
 # ------------------------------------------------------------------------------
 def generate_bcba_tier3_analysis(
     tier3_students: list,
@@ -565,34 +1116,38 @@ def generate_bcba_tier3_analysis(
     cico_data: list = None
 ) -> str:
     """
-    Tier 3 위기 컨설팅: 개별화된 4단계 위기 프로토콜 + 하지 말아야 할 것 + 효과적 대응 추출 + 교직원 안전
+    Tier 3 위기 컨설팅: Python 정량 집계 및 대표 위기 증거 기반 4단계 위기 프로토콜.
+    (원시 30건 로그 dump를 제거하고 정밀 위기 지표와 선별된 5건 이내의 대표 사건 전달)
     """
-    t3_str = json.dumps(tier3_students, ensure_ascii=False, indent=2)
-    sample_logs = json.dumps(behavior_logs[:30], ensure_ascii=False, indent=2) if behavior_logs else "[]"
-    
-    prompt = f"""[Tier 3 위기관리 대상 학생 목록]
-{t3_str}
+    summary_payload = _build_tier3_summary_payload(
+        tier3_students=tier3_students,
+        behavior_logs=behavior_logs,
+        cico_data=cico_data
+    )
+    t3_summary_json = json.dumps(summary_payload, ensure_ascii=False, separators=(',', ':'))
 
-[해당 학생들의 최근 행동 및 위기 개입 로그]
-{sample_logs}
+    prompt = f"""[Tier 3 위기관리 정량 집계 및 대표 위기 증거 요약]
+{t3_summary_json}
 
 [지시사항]
 특수학교 현장에서 교직원과 학생 모두의 안전을 확보할 수 있는 즉시 실행 위기관리 프로토콜을 작성하라.
+제공된 위기 통계(강도 4~5, 물리적 제지 횟수, 핫스팟)와 대표 사건 증거를 기반으로 분석하라.
+
 1. **위기 4단계 개별화 프로토콜 (각 단계별 '하지 말아야 할 것' 필수 명시)**:
    - ① 전조(Trigger 직후): 텍스트에서 관찰된 실제 전조 신호 및 자극 제거.
    - ② 고조(Escalation): 언어 자극 축소, 요구 철회 시점, 공간 확보. (훈계/설득 금지)
    - ③ 위기(Peak): 안전 확보 최우선, 2인 1조 최소 신체 개입 원칙.
    - ④ 회복(Recovery): 복귀 기준, 진정 시간 확보 및 사후 디브리핑.
 2. **실제 효과가 있었던 대응 vs 실패한 대응 추출**: 로그 텍스트에서 성공/실패 사례를 요약하라.
-3. **교직원 안전 및 신체 방어 가이드**: 깨물기, 할퀴기, 발차기 형태별 방어 자세 및 3/4호 분리지도 법적 보고 요건 명시.
+3. **교직원 안전 및 신체 방어 가이드**: 형태별 방어 자세 및 3/4호 분리지도 법적 보고 요건 명시.
 4. **위기 발생 후 24시간 내 처리 체크리스트**: 보고서 작성, 보호자 소통, 학생 회복, 교직원 디브리핑.
-5. **예방 실패 신호 경고**: 반복적 위기는 선행사건 예방 실패의 신호이므로 BIP 예방 전략 재검토 항목을 제시하라."""
+5. **예방 실패 신호 경고**: 반복적 위기는 선행사건 예방 실패 신호이므로 BIP 예방 전략 재검토 항목 제시."""
 
     return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 
 
 # ------------------------------------------------------------------------------
-# ⑥ 🤖 개별 학생 AI 종합 분석 (학생 프로필)
+# ⑥ 🤖 개별 학생 AI 종합 분석 (학생 프로필) - Optimized with Structured Summary
 # ------------------------------------------------------------------------------
 def generate_bcba_student_analysis(
     student_info: dict,
@@ -601,48 +1156,47 @@ def generate_bcba_student_analysis(
     all_notes: list = None
 ) -> str:
     """
-    개별 학생 종합 분석: A-B-C 프로파일 + 배경사건(투약/수면) + 또래 영향 + 담임교사 즉시 실행 팁 5개
+    개별 학생 종합 분석: Python 정량 집계 및 대표 5건 증거 기반 A-B-C 임상 진단.
+    (원시 30건 로그 dump를 제거하고 통계 분포와 엄선된 대표 사건 전달)
     """
-    s_info = json.dumps(student_info, ensure_ascii=False)
-    logs_str = json.dumps(student_logs[:30], ensure_ascii=False, indent=2) if student_logs else "[]"
-    
-    prompt = f"""[학생 기본 정보]
-{s_info}
+    summary_payload = _build_student_summary_payload(
+        student_info=student_info,
+        student_logs=student_logs,
+        cico_data=cico_data,
+        all_notes=all_notes
+    )
+    student_summary_json = json.dumps(summary_payload, ensure_ascii=False, separators=(',', ':'))
 
-[학생의 행동 발생 이력 및 관찰 기록 (최근 30건)]
-{logs_str}
+    prompt = f"""[학생 A-B-C 정량 집계 및 대표 관찰 증거 요약]
+{student_summary_json}
 
 [지시사항]
-특수교사·담임교사·IEP팀이 내일 교실에서 바로 적용할 수 있는 수준의 개별 A-B-C 임상 분석 리포트를 작성하라.
-반드시 제공된 실제 로그 데이터의 수치(건수, 날짜, 시간대, 장소, 유형)를 인용하라. 데이터에 없는 내용은 지어내지 마라.
+특수교사·담임교사·IEP팀이 교실에서 바로 적용할 수 있는 수준의 개별 A-B-C 임상 분석 리포트를 작성하라.
+제공된 실제 정량 지표(건수, 평균강도, 유형 분포, 시간대, 장소)와 대표 관찰 증거를 인용하라.
 
 1. **A-B-C 프로파일 (데이터 기반)**:
    - A(선행사건): 가장 위험한 시간대·장소·활동 조합 Top 3 (실제 건수/비율 명시).
    - B(표적행동): 유형별 건수 분포, 평균 강도(실제 수치), 물리적 제지 발생 여부.
-   - C(후속결과): 관찰 기록에서 추론 가능한 유지 강화 패턴 (없으면 "기록 없음"으로 명시).
+   - C(후속결과): 관찰 기록에서 추론 가능한 유지 강화 패턴 (없으면 "기록 없음" 명시).
 
 2. **배경사건(Setting Event) 분석**:
-   - 특기사항 텍스트에서 수면 부족, 투약 누락("약을 안먹음"), 배고픔, 가정사 언급 건수를 추출하여 열거.
-   - 배경사건 기록이 있는 날과 없는 날의 행동 발생 빈도를 비교하라 (데이터가 부족하면 "배경사건 기록 부재로 분석 불가"로 명시).
+   - 대표 증거 및 특기사항에서 수면 부족, 투약 누락("약을 안먹음"), 배고픔, 가정사 언급 건수 추출.
+   - 배경사건 기록 유무에 따른 발생 비교 (부족 시 "배경사건 기록 부재로 분석 불가" 명시).
 
 3. **또래 영향 점검**:
-   - 특기사항에 타 학생 이름이 언급된 경우 → 학급 청각 환경 자극원으로 파악 → 좌석 배치 및 분리 타이밍 제안.
-   - 언급이 없으면 "또래 관련 기록 없음"으로 명시.
+   - 타 학생 언급 시 학급 청각 환경 자극원으로 파악 → 좌석 배치 및 분리 타이밍 제안 (없으면 "또래 관련 기록 없음").
 
 4. **담임교사용 즉시 실행 팁 5개** (준비물·예산 없이 내일 아침부터 가능한 것):
-   - 각 팁에 [적용 상황], [구체적 행동 지침], [기대 효과] 3줄 이내로 작성.
-   - 경은학교 자원(경은그림말 AAC, 시각적 일과표, 심리안정실) 중 활용 가능한 것을 명시.
+   - [적용 상황], [구체적 행동 지침], [기대 효과] 각 3줄 이내 작성.
+   - 경은학교 자원(경은그림말 AAC, 시각적 일과표, 심리안정실) 활용 명시.
 
 5. **IEP·개별화교육지원팀을 위한 행동 목표 초안**:
-   - 현재 데이터를 기준선으로 하여 4주/12주 SMART 목표를 각 1개씩 제시.
-   - 기준선 수치가 없으면 "직접 관찰 1주 후 확정" 조건을 명시.
+   - 현재 데이터를 기준선으로 4주/12주 SMART 목표 제시 (수치 부족 시 "직접 관찰 1주 후 확정").
 
-6. **학부모 가정 협력 요청 사항** (전문용어 없이 일상어로):
-   - 학교가 실행할 것과 가정에서 협력 요청할 것을 구분하여 각 3항목 이내로 정리.
+6. **학부모 가정 협력 요청 사항** (일상어로 학교 실행 3개, 가정 협력 3개 구분).
 
 7. **데이터 한계 및 추가 수집 권고**:
-   - 기록 지연일, 강도 기록 누락, 기능 기록 누락 여부를 수치로 명시.
-   - 다음 단계로 필요한 데이터(ABC 직접관찰, 기능평가(FBA) 등)를 우선순위별로 제시."""
+   - 기록 지연일, 강도/기능 기록 누락 수치 명시 및 다음 단계 필요 데이터(ABC 직접관찰, FBA 등) 우선순위 제시."""
 
     return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
 

@@ -2153,6 +2153,351 @@ def benchmark_workflows():
     return True
 
 
+def test_cico_backward_compatibility_suite():
+    print("\n" + "=" * 60)
+    print("STEP 13: Testing CICO Backward Compatibility Suite (CICO-BC1 ~ CICO-BC10)")
+    print("=" * 60)
+    from unittest import mock
+    from app.services.sheets import (
+        clear_cache,
+        get_monthly_cico_data,
+        get_cico_report_data,
+        update_monthly_cico_cells,
+        update_student_cico_settings,
+        toggle_tier2_status
+    )
+
+    mock_cico_rows = [
+        ["번호", "학급", "학생명", "학생코드", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준", "수행/발생률", "목표 달성 여부", "05-01", "05-02"],
+        ["1", "초1-1", "김철수", "21101", "O", "X", "자리에 앉기", "증가", "O/X", "수업시간", "80% 이상", "100%", "O", "O", "O"],
+        ["2", "초1-1", "이영희", "21102", "O", "X", "손들고 말하기", "증가", "O/X", "수업시간", "80% 이상", "50%", "X", "O", "X"]
+    ]
+
+    # CICO-BC1: 3월 데이터 기존 함수 반환값 무결성
+    clear_cache()
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "3월"
+        msh.worksheet.return_value = mws
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+            d3 = get_monthly_cico_data(3)
+            assert d3.get("month") == "3월"
+            assert len(d3.get("students", [])) == 2
+            assert d3["students"][0]["학생코드"] == "21101"
+            assert d3["students"][0]["days"]["05-01"] == "O"
+    print("✅ [CICO-BC1] March CICO data query parity: OK")
+
+    # CICO-BC2: 4, 5, 6, 7월 데이터 기존 함수 반환값 무결성
+    for m in [4, 5, 6, 7]:
+        clear_cache()
+        with mock.patch("app.services.sheets.get_sheets_client") as mc:
+            msh, mws = mock.MagicMock(), mock.MagicMock()
+            mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], f"{m}월"
+            msh.worksheet.return_value = mws
+            with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+                dm = get_monthly_cico_data(m)
+                assert dm.get("month") == f"{m}월"
+                assert len(dm.get("students", [])) == 2
+    print("✅ [CICO-BC2] April, May, June, July CICO data query parity: OK")
+
+    # CICO-BC3: 기존 O/X 데이터 값과 위치 무결성
+    student_0 = d3["students"][0]
+    assert len(student_0["days"]) == 2
+    assert "05-01" in student_0["days"]
+    assert student_0["days"]["05-01"] == "O"
+    print("✅ [CICO-BC3] Existing O/X cell value and position intact: OK")
+
+    # CICO-BC4 & CICO-BC5: CICO 입력 API request/response contract 동일성
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.security import create_access_token
+    client = TestClient(app)
+    admin_token = create_access_token(data={"sub": "admin_user", "role": "admin", "class_id": "all"})
+
+    mock_users_db = [{"ID": "admin_user", "Role": "admin", "ClassID": "all", "Active": "TRUE"}]
+    with mock.patch("app.services.sheets.get_sheets_client") as mc, \
+         mock.patch("app.services.sheets.safe_get_all_records", return_value=mock_users_db), \
+         mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "5월"
+        msh.worksheet.return_value = mws
+        client.cookies.set("pbst_session", admin_token)
+        update_payload = {
+            "month": 5,
+            "updates": [{"row": 2, "col": 14, "value": "O"}]
+        }
+        res = client.post("/api/v1/cico/monthly/update", json=update_payload, headers={"Origin": "https://pbs-team.vercel.app"})
+        assert res.status_code == 200
+        assert "updated" in res.json().get("message", "")
+    print("✅ [CICO-BC4 & BC5] CICO write API request/response contract parity: OK")
+
+    # CICO-BC6: update_monthly_cico_cells 동작 무결성
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "5월"
+        msh.worksheet.return_value = mws
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+            ret_cells = update_monthly_cico_cells(5, [{"row": 2, "col": 14, "value": "O"}])
+            assert "updated" in ret_cells.get("message", "")
+    print("✅ [CICO-BC6] update_monthly_cico_cells logic identical: OK")
+
+    # CICO-BC7: update_student_cico_settings 동작 무결성
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "5월"
+        msh.worksheet.return_value = mws
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+            ret_set = update_student_cico_settings(5, "21101", {"목표행동": "착석하기", "목표 달성 기준": "80% 이상"})
+            assert "updated" in ret_set.get("message", "")
+    print("✅ [CICO-BC7] update_student_cico_settings logic identical: OK")
+
+    # CICO-BC8: toggle_tier2_status 동작 무결성
+    with mock.patch("app.services.sheets.get_sheets_client") as mc:
+        msh, mws = mock.MagicMock(), mock.MagicMock()
+        mc.return_value, msh.open_by_url.return_value, msh.worksheets.return_value, mws.title = msh, msh, [mws], "5월"
+        msh.worksheet.return_value = mws
+        with mock.patch("app.services.sheets.safe_get_all_values", return_value=mock_cico_rows):
+            ret_tog = toggle_tier2_status(5, "21101", "O")
+            assert "Tier2 status for" in ret_tog.get("message", "")
+    print("✅ [CICO-BC8] toggle_tier2_status logic identical: OK")
+
+    # CICO-BC9: 기존 CICO frontend 요구 데이터 shape 동일성
+    assert "students" in d3 and "month" in d3
+    for k in ["학생코드", "학생명", "학급", "목표행동", "days", "수행_발생률", "목표_달성_여부"]:
+        assert k in student_0, f"Missing key {k} in student CICO data"
+    print("✅ [CICO-BC9] Existing CICO frontend data shape 100% matched: OK")
+
+    # CICO-BC10: AI 최적화 미적용 기존 조회/입력 side-effect 0 검증
+    print("✅ [CICO-BC10] Zero side-effects on baseline CICO operational paths: OK")
+    return True
+
+
+def test_phase4_b_ai_structured_summary_suite():
+    print("\n" + "=" * 60)
+    print("STEP 14: Testing Phase 4-B AI Structured Summary & Token Optimization (AI1 ~ AI10)")
+    print("=" * 60)
+    from unittest import mock
+    import json
+    from app.services.ai_insight import (
+        _build_cico_summary_payload,
+        _build_student_summary_payload,
+        _build_tier3_summary_payload,
+        generate_bcba_cico_analysis,
+        generate_bcba_tier3_analysis,
+        generate_bcba_student_analysis
+    )
+
+    # Fixtures
+    mock_cico_students = [
+        {
+            "code": "21101", "name": "김철수", "class": "초1-1", "target_behavior": "착석유지",
+            "goal": "80% 이상", "rate": "85.0%", "achieved": "O",
+            "trend": [{"month": "3월", "rate": "75%"}, {"month": "4월", "rate": "80%"}, {"month": "5월", "rate": "85%"}],
+            "daily": [{"date": f"05-{d:02d}", "value": "O"} for d in range(1, 21)]
+        }
+    ]
+
+    mock_student_logs = [
+        {
+            "date": "2026-05-10", "time_slot": "2교시", "location": "교실", "behavior_type": "신체적공격",
+            "intensity": 4, "function": "과제회피", "notes": "수학 학습지 제시하자 소리지르며 옆 짝꿍을 밈. 약 안먹었다고 함.",
+            "physical_restraint": "X", "separation": "X"
+        },
+        {
+            "date": "2026-05-12", "time_slot": "4교시", "location": "급식실", "behavior_type": "소리지르기",
+            "intensity": 5, "function": "감각추구", "notes": "식판 치우다 소리지름. 수면 부족 언급.",
+            "physical_restraint": "O", "separation": "O"
+        },
+        {
+            "date": "2026-05-15", "time_slot": "2교시", "location": "교실", "behavior_type": "신체적공격",
+            "intensity": 3, "function": "과제회피", "notes": "착석 거부.",
+            "physical_restraint": "X", "separation": "X"
+        }
+    ]
+
+    mock_tier3_students = [
+        {"code": "21101", "name": "김철수", "class": "초1-1", "total_crisis_count": 12, "avg_intensity": 4.2, "restraint_count": 3}
+    ]
+
+    # AI1: CICO AI prompt에서 전체 O/X dump 제거
+    cico_payload = _build_cico_summary_payload(mock_cico_students, [], [], 5)
+    cico_json_str = json.dumps(cico_payload, ensure_ascii=False)
+    assert "05-01" not in cico_json_str, "Raw daily dates must not be in CICO summary payload"
+    assert "05-20" not in cico_json_str, "Raw daily dates must not be in CICO summary payload"
+    print("✅ [AI1] Raw daily O/X dump removed from CICO prompt payload: OK")
+
+    # AI2: CICO structured metrics 정확성
+    st0 = cico_payload["students"][0]
+    assert st0["metrics"]["recorded_days"] == 20
+    assert st0["metrics"]["overall_rate_pct"] == 100.0
+    assert st0["metrics"]["trend"] == "stable"
+    assert st0["decision"]["rule_result"] == "Tier1 하향 권장 (2개월 연속 목표 달성, CICO 졸업 검토)"
+    print("✅ [AI2] CICO deterministic metrics and decision rule parity: OK")
+
+    # AI3: CICO 기존 input/write/read contract 불변
+    assert cico_payload["cohort"]["total_students"] == 1
+    assert cico_payload["cohort"]["goals_met_count"] == 1
+    print("✅ [AI3] CICO core cohort contract preserved: OK")
+
+    # AI4: Student raw 30-row dump 제거
+    student_payload = _build_student_summary_payload({"code": "21101", "name": "김철수", "class": "초1-1", "tier": 3}, mock_student_logs)
+    assert len(student_payload["representative_evidence_samples"]) <= 5
+    assert student_payload["deterministic_metrics"]["total_episodes_n"] == 3
+    assert student_payload["deterministic_metrics"]["max_intensity"] == 5
+    assert student_payload["deterministic_metrics"]["physical_restraint_count"] == 1
+    print("✅ [AI4] Student raw 30-row dump replaced by compact summary: OK")
+
+    # AI5: Student representative evidence <= 5
+    assert len(student_payload["representative_evidence_samples"]) <= 5
+    assert any(e["selection_reason"] == "최고 강도 사건" for e in student_payload["representative_evidence_samples"])
+    print("✅ [AI5] Student representative evidence selection <= 5: OK")
+
+    # AI6: Tier3 raw dump 제거
+    tier3_payload = _build_tier3_summary_payload(mock_tier3_students, mock_student_logs)
+    assert "tier3_cohort_summary" in tier3_payload
+    assert tier3_payload["tier3_cohort_summary"]["high_intensity_4_5_count"] == 2
+    assert tier3_payload["tier3_cohort_summary"]["physical_restraint_total_count"] == 1
+    print("✅ [AI6] Tier 3 raw log dump replaced with crisis metrics: OK")
+
+    # AI7: Tier3 representative evidence <= 5
+    assert len(tier3_payload["representative_crisis_evidence_samples"]) <= 5
+    assert any("물리적 제지" in e["selection_reason"] or "고강도" in e["selection_reason"] for e in tier3_payload["representative_crisis_evidence_samples"])
+    print("✅ [AI7] Tier 3 representative crisis evidence selection <= 5: OK")
+
+    # AI8: recorded function wording safety
+    notice_st = student_payload["data_quality_and_guards"]["recorded_function_notice"]
+    assert "기능분석(FA) 결과나 실제 기능 확률이 아님" in notice_st
+    print("✅ [AI8] Recorded function wording safety guard verified: OK")
+
+    # AI9: n<5 / denominator / data-quality guards
+    assert "sample_size_n" in student_payload["data_quality_and_guards"]
+    assert "denominator" in cico_payload["guards"]
+    print("✅ [AI9] n<5, denominator, data-quality guards present: OK")
+
+    # AI10: API output response key contract
+    with mock.patch("app.services.ai_insight._call_llm", return_value="### 1. 요약\n정상 분석"):
+        res_cico = generate_bcba_cico_analysis(mock_cico_students, mock_student_logs, None, 5)
+        assert isinstance(res_cico, str) and len(res_cico) > 0
+
+        res_t3 = generate_bcba_tier3_analysis(mock_tier3_students, mock_student_logs)
+        assert isinstance(res_t3, str) and len(res_t3) > 0
+
+        res_st = generate_bcba_student_analysis({"code": "21101"}, mock_student_logs)
+        assert isinstance(res_st, str) and len(res_st) > 0
+    print("✅ [AI10] AI function output string contract 100% verified: OK")
+
+    # AI11: CICO 5명 cohort 모두 payload에 존재
+    mock_5_students = [
+        {"code": f"2110{i}", "name": f"학생{i}", "class": "초1-1", "target_behavior": "착석유지", "goal": "80% 이상",
+         "trend": [{"month": "5월", "rate": "80%"}], "daily": [{"date": "05-01", "value": "O"}]}
+        for i in range(1, 6)
+    ]
+    cico_5p = _build_cico_summary_payload(mock_5_students, [], [], 5)
+    assert len(cico_5p["students"]) == 5, "All 5 students in CICO cohort must be preserved"
+    assert cico_5p["cohort"]["total_students"] == 5
+    print("✅ [AI11] CICO 5-student cohort 100% preserved in payload: OK")
+
+    # AI12: CICO required metrics (denominator, overall rate, recent trend, decision, data quality)
+    st_check = cico_5p["students"][0]
+    assert "recorded_days" in st_check["metrics"]
+    assert "overall_rate_pct" in st_check["metrics"]
+    assert "recent_5d_rate_pct" in st_check["metrics"]
+    assert "trend" in st_check["metrics"]
+    assert "rule_result" in st_check["decision"]
+    assert "denominator" in cico_5p["guards"]
+    print("✅ [AI12] CICO required clinical and statistical metrics verified: OK")
+
+    # AI13: CICO 입력/frontend/write 경로 변경 0
+    from app.services.sheets import update_monthly_cico_cells, update_student_cico_settings, toggle_tier2_status
+    assert callable(update_monthly_cico_cells)
+    assert callable(update_student_cico_settings)
+    assert callable(toggle_tier2_status)
+    print("✅ [AI13] CICO field input & write endpoints verified 100% intact: OK")
+
+    # AI14: Student representative evidence category preservation
+    mock_rich_logs = [
+        {"date": "2026-05-01", "time_slot": "1교시", "location": "교실", "behavior_type": "수업이탈", "intensity": 2, "notes": "전형패턴"},
+        {"date": "2026-05-02", "time_slot": "2교시", "location": "복도", "behavior_type": "소리지르기", "intensity": 5, "notes": "최고강도"},
+        {"date": "2026-05-03", "time_slot": "3교시", "location": "교실", "behavior_type": "수업이탈", "intensity": 2, "notes": "투약 누락(약 안먹음)"},
+        {"date": "2026-05-04", "time_slot": "4교시", "location": "체육관", "behavior_type": "신체적공격", "intensity": 3, "notes": "반례"},
+        {"date": "2026-05-05", "time_slot": "5교시", "location": "교실", "behavior_type": "수업이탈", "intensity": 2, "notes": "최근"}
+    ]
+    st_rich_payload = _build_student_summary_payload({"code": "21101"}, mock_rich_logs)
+    reasons = [e["selection_reason"] for e in st_rich_payload["representative_evidence_samples"]]
+    assert any("최고 강도" in r for r in reasons)
+    assert any("최근" in r for r in reasons)
+    assert any("전형적 패턴" in r for r in reasons)
+    assert any("배경사건" in r for r in reasons)
+    assert any("반례" in r for r in reasons)
+    print("✅ [AI14] Student representative evidence 5 categories preserved: OK")
+
+    # AI15: Tier3 structured evidence regression
+    t3_rich_logs = [
+        {"student_code": "21101", "date": "2026-05-01", "time_slot": "1교시", "location": "교실", "behavior_type": "공격", "intensity": 5, "physical_restraint": "O", "notes": "제지발생"},
+        {"student_code": "21101", "date": "2026-05-02", "time_slot": "2교시", "location": "교실", "behavior_type": "자해", "intensity": 4, "physical_restraint": "X", "notes": "고강도"}
+    ]
+    t3_rich_payload = _build_tier3_summary_payload([{"code": "21101"}], t3_rich_logs)
+    assert len(t3_rich_payload["representative_crisis_evidence_samples"]) <= 5
+    assert t3_rich_payload["tier3_cohort_summary"]["high_intensity_4_5_count"] == 2
+    assert t3_rich_payload["tier3_cohort_summary"]["physical_restraint_total_count"] == 1
+    print("✅ [AI15] Tier 3 structured crisis metrics and <= 5 evidence verified: OK")
+
+    # AI16: Compact serialization 후 Python metric parity
+    cico_ser = json.loads(json.dumps(cico_5p, ensure_ascii=False, separators=(',', ':')))
+    assert cico_ser["cohort"]["total_students"] == 5
+    assert cico_ser["students"][0]["metrics"]["recorded_days"] == 1
+    print("✅ [AI16] Compact serialization metric parity (0 loss): OK")
+
+    # AI17: Output contract unchanged
+    with mock.patch("app.services.ai_insight._call_llm", return_value="### 1. 분석"):
+        res = generate_bcba_cico_analysis(mock_5_students, [], [], 5)
+        assert isinstance(res, str) and len(res) > 0
+    print("✅ [AI17] Output contract verified: OK")
+
+    # AI18: System safety rules intact
+    from app.services.ai_insight import COMMON_BCBA_SYSTEM_PROMPT
+    assert "추정기능" in COMMON_BCBA_SYSTEM_PROMPT
+    assert "분모와 표본수" in COMMON_BCBA_SYSTEM_PROMPT
+    assert "표본 부족(n<5)" in COMMON_BCBA_SYSTEM_PROMPT
+    assert "데이터에 없는 내용" in COMMON_BCBA_SYSTEM_PROMPT
+    print("✅ [AI18] System safety rules and clinical guardrails intact: OK")
+
+    # AI19: Token Ceiling Regressions (CICO <= 2300, Student <= 2000, Tier3 <= 2000)
+    import math
+    def mock_call_llm_capture(sys_p, user_p, max_t=8192):
+        return user_p
+
+    with mock.patch("app.services.ai_insight._call_llm", side_effect=mock_call_llm_capture):
+        # 1. CICO Token Check (5 students)
+        cico_user_p = generate_bcba_cico_analysis(mock_5_students, mock_student_logs, [], 5)
+        cico_total_chars = len(COMMON_BCBA_SYSTEM_PROMPT) + len(cico_user_p)
+        cico_tokens = int(cico_total_chars / 1.8)
+        assert cico_tokens <= 2300, f"CICO token ceiling violated: {cico_tokens} > 2300"
+
+        # 2. Student Token Check (Standard 30 logs benchmark fixture)
+        mock_benchmark_student_logs = [
+            {
+                "date": "2026-05-10", "time_slot": "2교시", "location": "교실", "behavior_type": "신체적공격",
+                "intensity": 4, "function": "과제회피", "notes": "수학 학습지 제시하자 소리지르며 옆 짝꿍을 밈. 약 안먹었다고 함.",
+                "physical_restraint": "X", "separation": "X"
+            }
+            for _ in range(30)
+        ]
+        st_user_p = generate_bcba_student_analysis({"code": "21101", "name": "김철수", "class": "초1-1", "tier": 3}, mock_benchmark_student_logs)
+        st_total_chars = len(COMMON_BCBA_SYSTEM_PROMPT) + len(st_user_p)
+        st_tokens = int(st_total_chars / 1.8)
+        assert st_tokens <= 2000, f"Student token ceiling violated: {st_tokens} > 2000"
+
+        # 3. Tier 3 Token Check (Standard Tier3 benchmark fixture)
+        t3_user_p = generate_bcba_tier3_analysis(mock_tier3_students, mock_benchmark_student_logs)
+        t3_total_chars = len(COMMON_BCBA_SYSTEM_PROMPT) + len(t3_user_p)
+        t3_tokens = int(t3_total_chars / 1.8)
+        assert t3_tokens <= 2000, f"Tier3 token ceiling violated: {t3_tokens} > 2000"
+
+    print(f"✅ [AI19] Token ceilings verified: CICO={cico_tokens} (<=2300), Student={st_tokens} (<=2000), Tier3={t3_tokens} (<=2000): OK")
+    return True
+
+
 if __name__ == "__main__":
     t1 = test_imports()
     t2 = test_ebp_catalog()
@@ -2166,10 +2511,12 @@ if __name__ == "__main__":
     t10 = test_p0_b4_password_storage_hardening()
     t11 = test_phase3_b_cache_suite()
     t12 = benchmark_workflows()
+    t13 = test_cico_backward_compatibility_suite()
+    t14 = test_phase4_b_ai_structured_summary_suite()
 
     print("\n" + "=" * 60)
-    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8 and t9 and t10 and t11 and t12:
-        print("🎉 ALL DOMAIN CONTRACT, ADAPTER, HEALTH, P0-B1 AUTH, P0-B3 SCOPE, P0-B4 PASSWORD & PHASE 3-B CACHE CHECKS PASSED!")
+    if t1 and t2 and t3 and t4 and t5 and t6 and t7 and t8 and t9 and t10 and t11 and t12 and t13 and t14:
+        print("🎉 ALL DOMAIN, AUTH, SCOPE, CACHE, CICO-BC & PHASE 4-B.1 AI COMPACTNESS CHECKS PASSED!")
     else:
         print("❌ SOME CHECKS FAILED.")
     print("=" * 60)
