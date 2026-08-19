@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "./AuthProvider";
 
 interface GlobalNavProps {
@@ -207,10 +208,10 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
             <nav className="gnav">
                 {/* Top Row: Logo + Hamburger + User (mobile) */}
                 <div className="gnav-top-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <a href="/" className="gnav-logo" style={{ display: 'flex', alignItems: 'center' }}>
+                    <Link href="/" className="gnav-logo" style={{ display: 'flex', alignItems: 'center' }}>
                         <img src="/logo/school-logo.png" alt="경은학교 로고" style={{ height: '36px', marginRight: '10px', borderRadius: '50%', backgroundColor: 'white' }} />
                         경은PBST
-                    </a>
+                    </Link>
                     <button
                         className="gnav-hamburger"
                         onClick={() => setMenuOpen(!menuOpen)}
@@ -223,7 +224,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
                 {/* Navigation Links */}
                 <div className={`gnav-links ${menuOpen ? 'open' : ''}`}>
                     {navItems.map(item => (
-                        <a
+                        <Link
                             key={item.key}
                             href={item.href}
                             className="gnav-link"
@@ -234,7 +235,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
                             onClick={() => setMenuOpen(false)}
                         >
                             {item.label}
-                        </a>
+                        </Link>
                     ))}
                 </div>
 
