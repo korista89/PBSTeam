@@ -105,7 +105,7 @@ export default function LoginPage() {
                     <img
                         src="/login-banner.png"
                         alt="바르고 건강하게 자립의 꿈을 실현하는 경은학교"
-                        style={{ width: '100%', display: 'block', flexShrink: 0 }}
+                        style={{ width: '100%', height: '130px', objectFit: 'cover', objectPosition: 'left center', display: 'block', flexShrink: 0 }}
                     />
                     <div style={{ position: 'relative', width: '100%', flex: 1, minHeight: 0 }}>
                         <img
