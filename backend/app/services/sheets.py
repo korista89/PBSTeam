@@ -1846,14 +1846,13 @@ def create_monthly_cico_sheet(year: int, month: int):
         # 1: 번호, 2: 학급, 3: 학생명(코드), 4: Tier2, 5: Tier3, 6: 목표행동, 7: 목표행동 유형, 8: 척도, 9: 입력 기준, 10: 목표 달성 기준
         fixed_headers = ["번호", "학급", "학생명(코드)", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준(베이스라인)", "목표 달성 기준"]
 
-        # 11~35: 25 session columns, headed with the real school-day date (MM-DD) so
-        # nobody has to manually figure out which "N회차" maps to which calendar day.
-        # Dates come from '날짜 관리' sheet holidays via get_business_days (weekdays
-        # minus holidays). Any slots beyond the month's real business-day count keep
-        # the old "N회차" placeholder (short months rarely use all 25 slots).
+        # One session column per real school day (MM-DD), sized exactly to the month's
+        # business days — no padding/filler columns. Dates come from '날짜 관리' sheet
+        # holidays via get_business_days (weekdays minus holidays), so a vacation
+        # period entered there is excluded automatically.
         holidays = get_holidays_from_config()
         business_days = get_business_days(year, month, holidays)
-        session_headers = [business_days[i] if i < len(business_days) else f"{i + 1}회차" for i in range(25)]
+        session_headers = list(business_days) if business_days else [f"{i}회차" for i in range(1, 21)]
 
         # 36~41: Stats and others
         tail_headers = ["수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
@@ -1876,8 +1875,7 @@ def create_monthly_cico_sheet(year: int, month: int):
                 "", # 입력 기준 (Baseline)
                 "80% 이상", # 목표 달성 기준
             ]
-            # 25 session columns
-            row += [""] * 25
+            row += [""] * len(session_headers)
 
             # stats + others
             row += ["-", "-", "", "", "", ""]
@@ -1889,10 +1887,15 @@ def create_monthly_cico_sheet(year: int, month: int):
 
         # 4. Add Dropdowns (Data Validation) matching v3 indices
         try:
-            from gspread.utils import ValidationConditionType
+            from gspread.utils import ValidationConditionType, rowcol_to_a1
+            import re as _re
 
             start_row = 2
             end_row = len(rows)
+            # 차월대상 is the last tail header; its column shifts with the (now variable)
+            # session-column count, so its letter must be computed, not hardcoded.
+            last_col_num = len(headers)
+            last_col_letter = _re.match(r"[A-Z]+", rowcol_to_a1(1, last_col_num)).group()
 
             # Column D: Tier2 (O/X)
             ws.add_validation(f'D{start_row}:D{end_row}', ValidationConditionType.one_of_list, ['O', 'X'], showCustomUi=True)
@@ -1906,9 +1909,8 @@ def create_monthly_cico_sheet(year: int, month: int):
             ws.add_validation(f'J{start_row}:J{end_row}', ValidationConditionType.one_of_list,
                              ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
                               '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'], showCustomUi=True)
-            # Column AO (41): 차월대상
-            # AO is 41st column. A1 notation: AO
-            ws.add_validation(f'AO{start_row}:AO{end_row}', ValidationConditionType.one_of_list, ['유지', '종료', '상향', '하향'], showCustomUi=True)
+            # 차월대상 (last column)
+            ws.add_validation(f'{last_col_letter}{start_row}:{last_col_letter}{end_row}', ValidationConditionType.one_of_list, ['유지', '종료', '상향', '하향'], showCustomUi=True)
 
         except Exception as e:
             print(f"Warning: Failed to set data validation: {e}")
@@ -3889,6 +3891,7 @@ def add_holiday(date_str, name):
         # Append
         config_ws.append_row([date_str, name, "수동 추가됨"])
         clear_cache("holidays") # Clear holidays cache only
+        invalidate_cache("config:holidays")  # get_holidays_from_config's actual cache key
         return {"message": f"Holiday {name} ({date_str}) added"}
     except Exception as e:
         print(f"Error adding holiday: {e}")
@@ -3909,6 +3912,7 @@ def delete_holiday(date_str):
             if d == date_str:
                 config_ws.delete_rows(i + 1)  # 1-indexed
                 clear_cache("holidays") # Clear holidays cache only
+                invalidate_cache("config:holidays")  # get_holidays_from_config's actual cache key
                 return {"message": f"Holiday {date_str} deleted"}
 
         return {"error": "Holiday not found"}
