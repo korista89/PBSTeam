@@ -508,7 +508,15 @@ a {
   .responsive-grid-2,
   .responsive-grid-3,
   .responsive-grid-4,
-  .grid-responsive {
+  .grid-responsive,
+  .cico-report-chart-grid {
     grid-template-columns: 1fr !important;
+  }
+  /* Explicit grid-column/grid-row placements (5-col chart+AI-panel layout) also
+     need resetting per-child, or children stay pinned to now-nonexistent columns. */
+  .cico-report-chart-grid .cico-chart-cell,
+  .cico-report-chart-grid .cico-analysis-panel {
+    grid-column: 1 !important;
+    grid-row: auto !important;
   }
 }

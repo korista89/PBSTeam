@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import AppShell from "../../components/AppShell";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
+import SectionAIButton from "../../components/SectionAIButton";
 import { maskName } from "../../utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -471,6 +472,7 @@ function CICOAIAnalysis({ month, students, apiUrl }: { month: number; students: 
 
 // ====== 상단 종합 요약 패널 ======
 function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: number; getRateColor: (r: number|null)=>string }) {
+  const [interpretation, setInterpretation] = useState<{ title: string; loading: boolean; text: string } | null>(null);
   const students = data.students;
   const s = data.summary;
   const roster = s.total_roster || 0;
@@ -554,11 +556,14 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
         </div>
       )}
 
-      {/* 차트 4개 2x2 */}
-      <div className="responsive-grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+      {/* 차트 4개 + AI 해석 패널 = 5열 2행 */}
+      <div className="cico-report-chart-grid" style={{ display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gridTemplateRows:"repeat(2, auto)", gap:12 }}>
         {/* 1. 학생별 수행률 vs 목표 (grouped) */}
-        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
-          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>👤 학생별 수행률 vs 목표 ({month}월)</div>
+        <div className="cico-chart-cell" style={{ gridColumn:"1 / 3", gridRow:"1", background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
+            <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a" }}>👤 학생별 수행률 vs 목표 ({month}월)</div>
+            <SectionAIButton sectionName="cico_performance" title="학생별 수행률 vs 목표" dataContext={barData} startDate="" endDate="" onResult={setInterpretation} />
+          </div>
           <ResponsiveContainer width="100%" height={Math.max(160, barData.length*22)}>
             <BarChart data={barData} layout="vertical" margin={{ left:-8, right:36 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
@@ -574,8 +579,11 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
         </div>
 
         {/* 2. 월별 평균 수행률 추이 */}
-        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
-          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>📈 월별 평균 수행률 추이 (3월~)</div>
+        <div className="cico-chart-cell" style={{ gridColumn:"3 / 5", gridRow:"1", background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
+            <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a" }}>📈 월별 평균 수행률 추이 (3월~)</div>
+            <SectionAIButton sectionName="cico_monthly_trend" title="월별 평균 수행률 추이" dataContext={trendLine} startDate="" endDate="" onResult={setInterpretation} />
+          </div>
           <ResponsiveContainer width="100%" height={180}>
             <ComposedChart data={trendLine}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -589,9 +597,31 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
           {concurrent > 0 && <div style={{ marginTop:6, fontSize:"0.68rem", color:"#64748b", padding:"4px 8px", background:"#f8fafc", borderRadius:6, borderLeft:"3px solid #3b82f6" }}>ℹ️ {concurrent}명 SST/T3 병행 — 목표 달성 시에도 CICO 유지</div>}
         </div>
 
+        {/* 5. AI 차트 해석 결과 패널 (가장 오른쪽 칸, 2행 전체 높이) */}
+        <div className="cico-analysis-panel" style={{
+          gridColumn:"5 / 6", gridRow:"1 / 3",
+          background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14,
+          display:"flex", flexDirection:"column"
+        }}>
+          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ width:4, height:16, background:"#ef4444", borderRadius:2, display:"inline-block" }} />
+            🔎 {interpretation ? `${interpretation.title} 차트 해석` : "차트 해석 보기"}
+          </div>
+          <div style={{ flex:1, overflowY:"auto", fontSize:"0.78rem", lineHeight:1.7, color:"#334155", whiteSpace:"pre-wrap" }}>
+            {!interpretation && (
+              <span style={{ color:"#94a3b8" }}>왼쪽 4개 차트의 &quot;🤖 차트 해석&quot; 버튼을 누르면 여기에 결과가 뜹니다.</span>
+            )}
+            {interpretation?.loading && <span style={{ color:"#ef4444" }}>🧠 분석 중입니다...</span>}
+            {interpretation && !interpretation.loading && interpretation.text}
+          </div>
+        </div>
+
         {/* 3. 의사결정 분포 Pie */}
-        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
-          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>🗂️ 의사결정 분포 ({month}월)</div>
+        <div className="cico-chart-cell" style={{ gridColumn:"1 / 3", gridRow:"2", background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
+            <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a" }}>🗂️ 의사결정 분포 ({month}월)</div>
+            <SectionAIButton sectionName="cico_decision_distribution" title="의사결정 분포" dataContext={decPie} startDate="" endDate="" onResult={setInterpretation} />
+          </div>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie data={decPie} cx="50%" cy="50%" outerRadius={70} innerRadius={35} paddingAngle={3} dataKey="value" label={({percent}: any) => `${(percent*100).toFixed(0)}%`} labelLine={false} style={{ fontSize:"9px" }}>
@@ -604,8 +634,11 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
         </div>
 
         {/* 4. 달성/미달 월별 추이 stacked bar */}
-        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
-          <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>📊 월별 달성·미달 추이</div>
+        <div className="cico-chart-cell" style={{ gridColumn:"3 / 5", gridRow:"2", background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:6 }}>
+            <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a" }}>📊 월별 달성·미달 추이</div>
+            <SectionAIButton sectionName="cico_achievement_trend" title="월별 달성·미달 추이" dataContext={achLine} startDate="" endDate="" onResult={setInterpretation} />
+          </div>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={achLine}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
