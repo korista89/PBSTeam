@@ -607,7 +607,7 @@ def _build_cico_summary_payload(
     total_goals_met = 0
 
     for s in students_data:
-        code = str(s.get("code") or s.get("student_code") or "").strip()
+        code = str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()
         name = str(s.get("name") or s.get("student_name") or "").strip()
         class_name = str(s.get("class") or s.get("class_name") or "").strip()
         target_behavior = str(s.get("target_behavior") or s.get("목표행동") or "").strip()

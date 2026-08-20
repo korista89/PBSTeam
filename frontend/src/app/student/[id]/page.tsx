@@ -19,7 +19,6 @@ import { maskName } from "../../utils";
 export default function StudentDetail() {
   const params = useParams();
   const router = useRouter();
-  const { user, isAdmin } = useAuth();
   const studentName = decodeURIComponent(params.id as string);
   const { startDate, endDate } = useDateRange();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -42,7 +41,9 @@ export default function StudentDetail() {
       setData(response.data);
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.status === 404 ? "학생을 찾을 수 없습니다." : "데이터 로딩 실패");
+      if (err.response?.status === 404) setError("학생을 찾을 수 없습니다.");
+      else if (err.response?.status === 403) setError("이 학생의 데이터에 접근할 권한이 없습니다. 본인 배정 학급 학생의 데이터만 열람 가능합니다.");
+      else setError("데이터 로딩 실패");
     } finally {
       setLoading(false);
     }
@@ -81,21 +82,6 @@ export default function StudentDetail() {
   const abc_data = data.abc_data || [];
   const functions = data.functions || [];
   const cico_trend = data.cico_trend || [];
-
-  const isUnauthorized = !isAdmin() && user?.class_id && profile?.student_code && !profile.student_code.startsWith(user.class_id);
-
-  if (isUnauthorized) return (
-    <AuthCheck>
-      <AppShell currentPage="roster" title="👤 학생 행동 프로파일 분석">
-        <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⛔</div>
-          <p style={{ fontWeight: 800 }}>이 학생의 데이터에 접근할 권한이 없습니다.</p>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>본인 배정 학급 학생의 데이터만 열람 가능합니다.</p>
-          <button onClick={() => router.push('/')} className="btn btn-primary" style={{ marginTop: '16px' }}>홈으로 이동</button>
-        </div>
-      </AppShell>
-    </AuthCheck>
-  );
 
   return (
     <AuthCheck>
@@ -138,7 +124,7 @@ export default function StudentDetail() {
                <h3 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontSize: '1.5rem' }}>🧠</span> 행동 가설 요약 (FBA Summary)
                </h3>
-               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+               <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                   {[
                     { title: "Antecedent (배경)", value: `${(data.location_stats || [])?.[0]?.name || '-'} / ${(data.time_stats || [])?.[0]?.name || '-'}`, bg: '#eff6ff', color: '#1d4ed8' },
                     { title: "Behavior (행동)", value: (data.behavior_types || [])?.[0]?.name || '-', bg: '#fff1f2', color: '#be123c' },
@@ -153,7 +139,7 @@ export default function StudentDetail() {
             </section>
 
             {/* Charts Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                 <ChartSection title="📍 ABC 패턴 맵 (장소 x 시간 x 강도)">
                   <ResponsiveContainer>
                     <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
@@ -200,7 +186,7 @@ export default function StudentDetail() {
             </div>
 
             {/* AI Insights and Logs */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
+            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
                <ConsultationLog studentCode={profile.student_code} />
                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />

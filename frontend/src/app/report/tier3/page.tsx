@@ -105,10 +105,11 @@ export default function Tier3Report() {
   };
 
   // Filter students for class managers
-  const students = data ? data.students.filter(s => {
-    if (isAdmin()) return true;
-    return s.code && String(s.code).startsWith(String(user?.class_id || ""));
-  }) : [];
+  // Backend /api/v1/analytics/tier3-report already scopes `data.students` to the
+  // caller's own class for non-admins (server derives+overrides class_id from the
+  // session). A redundant client-side filter here used to compare the numeric
+  // student code against user.class_id via .startsWith(), which can never match.
+  const students = data ? data.students : [];
 
   // Max incidents for comparison chart
   const maxIncidents = students.length > 0 ? Math.max(...students.map(s => s.incidents), 1) : 1;
@@ -297,7 +298,7 @@ export default function Tier3Report() {
                                   </div>
                                 )}
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
 
                                   {/* Weekly Trend (Report Frequency) */}
                                   <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>

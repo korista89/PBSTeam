@@ -253,7 +253,7 @@ async def ai_cico_analysis(
         from app.api.deps import get_student_class_code
         students = [
             s for s in students
-            if get_student_class_code(str(s.get("code") or s.get("student_code") or "").strip()) == user_class
+            if get_student_class_code(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()) == user_class
         ]
 
     normalized_logs = _get_normalized_records()

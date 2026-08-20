@@ -62,10 +62,24 @@ async def get_cico_report(
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"] and isinstance(data, dict) and "students" in data:
         user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        data["students"] = [
+        scoped_students = [
             s for s in data.get("students", [])
-            if get_student_class_code(str(s.get("code") or s.get("student_code") or "").strip()) == user_class
+            if get_student_class_code(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()) == user_class
         ]
+        data["students"] = scoped_students
+
+        # The summary counts baked in by get_cico_report_data are school-wide; a teacher
+        # should only see their own class's totals, not "16명 중" school-wide figures.
+        if isinstance(data.get("summary"), dict):
+            rates = [float(s.get("rate_num", 0) or 0) for s in scoped_students]
+            achieved = sum(1 for s in scoped_students if s.get("목표_달성_여부", "") == "O")
+            data["summary"] = {
+                **data["summary"],
+                "total_students": len(set(s.get("code") for s in scoped_students if s.get("code"))),
+                "avg_rate": round(sum(rates) / len(rates), 1) if rates else 0,
+                "achieved_count": achieved,
+                "not_achieved_count": len(scoped_students) - achieved,
+            }
 
     return data
 
@@ -89,7 +103,7 @@ async def get_cico_monthly(
         user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
         scoped_students = []
         for s in data.get("students", []):
-            st_code = str(s.get("code") or s.get("student_code") or "").strip()
+            st_code = str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()
             if get_student_class_code(st_code) == user_class:
                 scoped_students.append(s)
         data["students"] = scoped_students

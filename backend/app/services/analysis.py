@@ -839,9 +839,11 @@ def analyze_meeting_data(target_date: str = None):
             # 5. CICO Data (Placeholder - could fetch if needed)
             cico_avg = 0 
             
+            student_code_val = group['코드번호'].iloc[0] if '코드번호' in group.columns else "-"
             student_analysis.append({
                 "name": name,
-                "class": group['코드번호'].iloc[0] if '코드번호' in group.columns else "-",
+                "class": student_code_val,
+                "student_code": student_code_val,
                 "total_incidents": len(group),
                 "weekly_avg": round(len(group) / 4, 1),
                 "is_emergency": is_emergency,

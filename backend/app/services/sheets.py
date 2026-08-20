@@ -2873,7 +2873,13 @@ def get_cico_report_data(month: int):
             if str(row[tier2_idx]).strip() != "O":
                 continue
 
-            code = str(row[col_idx.get("학생코드", 2)]).strip() if col_idx.get("학생코드", 2) < len(row) else ""
+            code_cell = str(row[col_idx.get("학생코드", 2)]).strip() if col_idx.get("학생코드", 2) < len(row) else ""
+            # This column sometimes holds "이름(코드)" instead of a bare code (e.g. some
+            # monthly CICO sheets are generated with a combined label) - extract the
+            # numeric code so downstream class-matching (exact string equality against
+            # the roster's 학생코드) still works instead of silently matching nothing.
+            code_paren_match = re.search(r"\((\d+)\)\s*$", code_cell)
+            code = code_paren_match.group(1) if code_paren_match else code_cell
             name = row[col_idx.get("학생명", 3)] if col_idx.get("학생명", 3) < len(row) and row[col_idx.get("학생명", 3)] not in ["O", "X", ""] else code_to_name.get(code, "")
             rate_str = row[col_idx["수행/발생률"]] if "수행/발생률" in col_idx and col_idx["수행/발생률"] < len(row) else ""
             achieved = row[col_idx["목표 달성 여부"]] if "목표 달성 여부" in col_idx and col_idx["목표 달성 여부"] < len(row) else ""

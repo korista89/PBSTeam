@@ -20,15 +20,13 @@ export default function BehaviorPage() {
     axios
       .get(`${API_BASE_URL}/api/v1/tier/status`)
       .then((res) => {
+        // Backend /api/v1/tier/status already scopes `students` to the caller's
+        // own class for non-admins (get_student_class_code / normalize_class_identifier).
+        // A redundant filter here used to compare the numeric 학생코드 against
+        // class_id via .startsWith(), which can never match - it emptied the
+        // already-correctly-scoped list, leaving teachers with no students to pick.
         let data = res.data.students || res.data || [];
         if (!Array.isArray(data)) data = [];
-
-        // Filter by teacher's class_id if not admin
-        if (!isAdmin() && user?.class_id) {
-          data = data.filter((s: any) =>
-            String(s.학생코드 || "").startsWith(String(user.class_id))
-          );
-        }
 
         // Unique students
         const unique = data.filter(
@@ -60,7 +58,7 @@ export default function BehaviorPage() {
         title="✍️ 스마트 행동 기록 및 타임라인"
         subtitle="30초 이내 신속한 ABC 행동기록 입력 및 학생별 누적 타임라인 확인"
       >
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "20px", alignItems: "start" }}>
+        <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "20px", alignItems: "start" }}>
           {/* Left Column: Student Selector List */}
           <div className="card" style={{ padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -171,7 +169,7 @@ export default function BehaviorPage() {
                 </div>
 
                 {/* Form & Timeline Split */}
-                <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: "20px", alignItems: "start" }}>
+                <div className="behavior-split-grid" style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: "20px", alignItems: "start" }}>
                   <div className="card" style={{ padding: "20px" }}>
                     <BehaviorForm
                       studentId={selectedStudent.학생코드}

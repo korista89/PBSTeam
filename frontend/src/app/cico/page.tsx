@@ -84,6 +84,7 @@ export default function CICOGridPage() {
   const [editingSettings, setEditingSettings] = useState<{ row: number; field: string } | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveStatus, setSaveStatus] = useState<string>("");
+  const [generating, setGenerating] = useState(false);
 
   const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
 
@@ -154,6 +155,24 @@ export default function CICOGridPage() {
   }, [month, apiUrl]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleGenerateSheet = async () => {
+    setGenerating(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/cico/generate`, { year: new Date().getFullYear(), month });
+      if (res.data?.exists) {
+        alert(`${month}월 CICO 시트가 이미 존재합니다.`);
+      } else {
+        alert(`${month}월 CICO 시트를 생성했습니다.`);
+      }
+      setIs404(false);
+      await fetchData();
+    } catch (err: any) {
+      alert("시트 생성 실패: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   useEffect(() => {
     if (pendingUpdates.length === 0) return;
@@ -252,12 +271,12 @@ export default function CICOGridPage() {
     return num <= 1 ? `${Math.round(num * 100)}%` : `${Math.round(num)}%`;
   };
 
-  const filteredData = React.useMemo(() => {
-    if (!data) return null;
-    if (isAdmin()) return data;
-    if (!user?.class_id) return data;
-    return { ...data, students: data.students.filter(s => s.학생코드.startsWith(user.class_id!)) };
-  }, [data, user, isAdmin]);
+  // Backend /api/v1/cico/monthly already scopes students to the caller's own
+  // class for non-admins (via get_student_class_code/normalize_class_identifier).
+  // A redundant client-side filter here used to compare the numeric 학생코드
+  // against user.class_id (e.g. "6211".startsWith("초6-2")) with .startsWith(),
+  // which can never match - it silently emptied an already-correctly-scoped list.
+  const filteredData = data;
 
   return (
     <AuthCheck>
@@ -279,6 +298,16 @@ export default function CICOGridPage() {
             >
               📈 리포트
             </button>
+            {isAdmin() && (
+              <button
+                onClick={handleGenerateSheet}
+                disabled={generating}
+                className="btn btn-secondary"
+                title="현재 TierStatus에서 Tier2(CICO) 대상 학생 명단을 파악해 선택된 월의 CICO 입력 시트를 새로 생성합니다"
+              >
+                {generating ? "생성 중..." : "🗓️ 월 시트 생성"}
+              </button>
+            )}
             <select
               value={month}
               onChange={e => setMonth(Number(e.target.value))}
@@ -313,6 +342,11 @@ export default function CICOGridPage() {
             <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--tier3)" }}>
               <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>⚠️</div>
               <p style={{ fontWeight: 800 }}>{error}</p>
+              {is404 && isAdmin() && (
+                <button onClick={handleGenerateSheet} disabled={generating} className="btn btn-primary" style={{ marginTop: "16px" }}>
+                  {generating ? "생성 중..." : `🗓️ ${month}월 CICO 시트 지금 생성하기`}
+                </button>
+              )}
             </div>
           )}
 

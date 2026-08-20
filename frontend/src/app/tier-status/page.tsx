@@ -27,7 +27,7 @@ interface StudentStatus {
 }
 
 export default function TierStatusPage() {
-    const { user, isAdmin } = useAuth();
+    const { isAdmin } = useAuth();
     const router = useRouter();
     const [students, setStudents] = useState<StudentStatus[]>([]);
     const [enrolledCount, setEnrolledCount] = useState(0);
@@ -149,15 +149,12 @@ export default function TierStatusPage() {
 
 
     // Filter students
+    // Note: /api/v1/tier/status already scopes `students` to the caller's own class
+    // for non-admins server-side (get_student_class_code / normalize_class_identifier),
+    // so no client-side class filter is needed here. A previous version compared the
+    // numeric 학생코드 against class_id via .startsWith(), which could never match -
+    // it emptied an already-correctly-scoped list for every teacher.
     const filteredStudents = students.filter(s => {
-        // Teacher class-filtering
-        if (!isAdmin()) {
-            const userClassId = user?.class_id || "";
-            if (userClassId && !String(s.학생코드).startsWith(String(userClassId))) {
-                 return false;
-            }
-        }
-
         // Inclusive filtering logic
         if (filter !== "all") {
             if (filter === "Tier1") {

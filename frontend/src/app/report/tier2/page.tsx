@@ -295,11 +295,13 @@ export default function CICOReport() {
 
               {/* Student Decision Table */}
               {(() => {
-                const students = data.students.filter(s => {
-                  if (isAdmin()) return true;
-                  const userClassId = user?.class_id || "";
-                  return s.code && String(s.code).startsWith(String(userClassId));
-                });
+                // Backend /api/v1/cico/report already scopes data.students to the
+                // caller's own class for non-admins (get_student_class_code /
+                // normalize_class_identifier). A redundant client-side filter here
+                // used to compare the numeric student code against class_id via
+                // .startsWith(), which can never match - it emptied an already-
+                // correctly-scoped list.
+                const students = data.students;
 
                 if (students.length === 0) {
                   return (
@@ -527,7 +529,7 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
   return (
     <div style={{ marginBottom: 24 }}>
       {/* KPI 카드 */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:12, marginBottom:14 }}>
+      <div className="kpi-grid" style={{ marginBottom:14 }}>
         {[
           { label:"CICO 대상", val: s.total_students, unit:"명", sub: roster>0?`전체 ${roster}명 중 ${pct}%`:"", color:"#3b82f6" },
           { label:"평균 수행률", val: s.avg_rate, unit:"%", color: getRateColor(s.avg_rate) },
@@ -553,7 +555,7 @@ function CICOSummaryPanel({ data, month, getRateColor }: { data: any; month: num
       )}
 
       {/* 차트 4개 2x2 */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+      <div className="responsive-grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         {/* 1. 학생별 수행률 vs 목표 (grouped) */}
         <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:14 }}>
           <div style={{ fontWeight:700, fontSize:"0.83rem", color:"#0f172a", marginBottom:8 }}>👤 학생별 수행률 vs 목표 ({month}월)</div>
@@ -686,7 +688,7 @@ function CICOStudentCharts({ s }: { s: CICOStudent }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+      <div className="responsive-grid-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
 
         {/* 1. 전월 일별 데이터 차트 */}
         <div style={{ background: "#fff", borderRadius: 12, padding: 14, border: "1px solid #e2e8f0" }}>
@@ -774,7 +776,7 @@ function CICOReportGuide() {
   return (
     <div style={{ marginTop:32, padding:"24px 28px", background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)", borderRadius:20, border:"1px solid #bae6fd" }}>
       <h3 style={{ margin:"0 0 16px 0", fontSize:"1rem", fontWeight:800, color:"#0c4a6e" }}>📖 CICO 리포트 해석 가이드</h3>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, fontSize:"0.78rem", color:"#0f172a", lineHeight:1.7 }}>
+      <div className="responsive-grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, fontSize:"0.78rem", color:"#0f172a", lineHeight:1.7 }}>
         {[
           { title:"📊 상단 KPI 카드", body:"CICO 대상 학생 수와 전체 재학생 대비 비율, 이달 평균 수행률, 목표 달성자 수, Tier1 하향 후보와 Tier3 위험군 수를 보여줍니다." },
           { title:"👤 학생별 수행률 vs 목표", body:"회색 막대가 개인 목표, 색상 막대가 실제 수행률입니다. 초록=목표달성, 노랑=부분달성, 빨강=미달. 두 막대의 차이가 클수록 집중 지원이 필요합니다." },
