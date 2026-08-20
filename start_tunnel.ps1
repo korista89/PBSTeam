@@ -77,18 +77,21 @@ if ($VERCEL_TOKEN -eq "YOUR_VERCEL_TOKEN_HERE") {
         $existing = Invoke-RestMethod -Uri $envListUrl -Method Get -Headers $headers -ErrorAction Stop
         $existingVar = $existing.envs | Where-Object { $_.key -eq "LOCAL_LLM_URL" } | Select-Object -First 1
 
-        $body = @{
-            key    = "LOCAL_LLM_URL"
-            value  = "$tunnelUrl/v1"
-            type   = "plain"
-            target = @("production", "preview", "development")
-        } | ConvertTo-Json
-
         if ($existingVar) {
+            # LOCAL_LLM_URL is a "Sensitive" var on this project - Vercel rejects a PATCH that
+            # tries to change key/type on a sensitive var (400 BAD_REQUEST), even when the
+            # values sent are identical to the current ones. Only "value" may be sent.
+            $updateBody = @{ value = "$tunnelUrl/v1" } | ConvertTo-Json
             $updateUrl = "$envBaseUrl/$($existingVar.id)$teamQuery"
-            Invoke-RestMethod -Uri $updateUrl -Method Patch -Headers $headers -Body $body -ErrorAction Stop | Out-Null
+            Invoke-RestMethod -Uri $updateUrl -Method Patch -Headers $headers -Body $updateBody -ErrorAction Stop | Out-Null
         } else {
-            Invoke-RestMethod -Uri "$envBaseUrl$teamQuery" -Method Post -Headers $headers -Body $body -ErrorAction Stop | Out-Null
+            $createBody = @{
+                key    = "LOCAL_LLM_URL"
+                value  = "$tunnelUrl/v1"
+                type   = "plain"
+                target = @("production", "preview", "development")
+            } | ConvertTo-Json
+            Invoke-RestMethod -Uri "$envBaseUrl$teamQuery" -Method Post -Headers $headers -Body $createBody -ErrorAction Stop | Out-Null
         }
         Write-Host "  ✅ Vercel 환경변수 업데이트 완료!" -ForegroundColor Green
 
