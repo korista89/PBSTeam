@@ -3,9 +3,9 @@
 # 실행: PowerShell에서 .\start_tunnel.ps1
 # =============================================================
 
-$VERCEL_TOKEN = "YOUR_VERCEL_TOKEN_HERE"   # vercel.com → Account → Tokens에서 발급
-$VERCEL_PROJECT_ID = "YOUR_PROJECT_ID"     # Settings → General → Project ID
-$VERCEL_TEAM_ID = ""                       # 개인 계정이면 빈칸
+$VERCEL_TOKEN = "YOUR_VERCEL_TOKEN_HERE"   # vercel.com → Account Settings → Tokens 에서 발급 후 여기에 붙여넣기
+$VERCEL_PROJECT_ID = "prj_XKReCjAFJ3bzYFV3m5cAruaIdJHu"   # pbs-team 프로젝트 ID (확인 완료)
+$VERCEL_TEAM_ID = "team_MdTGyz07UGIlSIeDpTpNxy57"         # korista89's projects 팀 ID (확인 완료)
 
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host "  경은PBST 로컬 AI 터널 시작" -ForegroundColor Cyan
