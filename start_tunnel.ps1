@@ -99,7 +99,7 @@ if ($VERCEL_TOKEN -eq "YOUR_VERCEL_TOKEN_HERE") {
         # 시점에 굽는다). 최신 production 배포를 그대로 다시 배포시켜 새 값을 반영시킨다.
         try {
             $projectInfo = Invoke-RestMethod -Uri "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID$teamQuery" -Method Get -Headers $headers -ErrorAction Stop
-            $latestDeploymentId = $projectInfo.latestDeployment.id
+            $latestDeploymentId = $projectInfo.targets.production.id
             if ($latestDeploymentId) {
                 $redeployBody = @{
                     name         = "pbs-team"
