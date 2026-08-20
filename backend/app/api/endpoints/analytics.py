@@ -559,17 +559,17 @@ async def debug_ai_keys(current_admin: Dict[str, Any] = Depends(require_admin)):
             r2 = req.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": "안녕?"}], "max_tokens": 10},
+                json={"model": "openai/gpt-oss-120b", "messages": [{"role": "user", "content": "안녕?"}], "max_tokens": 10},
                 timeout=15
             )
             if r2.status_code == 200:
                 txt2 = r2.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                results["groq_70b"] = {"status": "✅ 정상", "http": 200, "response": txt2.strip()[:50]}
+                results["groq_gpt_oss_120b"] = {"status": "✅ 정상", "http": 200, "response": txt2.strip()[:50]}
             else:
-                results["groq_70b"] = {"status": "❌ 실패", "http": r2.status_code, "body": r2.text[:200]}
+                results["groq_gpt_oss_120b"] = {"status": "❌ 실패", "http": r2.status_code, "body": r2.text[:200]}
         except Exception as e:
-            results["groq_70b"] = {"status": "❌ 예외 발생", "error": str(e)[:150]}
+            results["groq_gpt_oss_120b"] = {"status": "❌ 예외 발생", "error": str(e)[:150]}
     else:
-        results["groq_70b"] = {"status": "⚠️ 키 없음"}
+        results["groq_gpt_oss_120b"] = {"status": "⚠️ 키 없음"}
 
     return results

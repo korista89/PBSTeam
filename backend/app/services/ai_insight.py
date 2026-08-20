@@ -263,7 +263,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
         groq_system = system_prompt[:3000] if len(system_prompt) > 3000 else system_prompt
         groq_user = user_prompt[:GROQ_MAX_CHARS] if len(user_prompt) > GROQ_MAX_CHARS else user_prompt
 
-        for g_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+        for g_model in ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
             try:
                 resp = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
