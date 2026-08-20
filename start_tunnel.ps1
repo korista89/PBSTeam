@@ -67,23 +67,52 @@ if ($VERCEL_TOKEN -eq "YOUR_VERCEL_TOKEN_HERE") {
         "Authorization" = "Bearer $VERCEL_TOKEN"
         "Content-Type"  = "application/json"
     }
-    $body = @{
-        key    = "LOCAL_LLM_URL"
-        value  = "$tunnelUrl/v1"
-        type   = "plain"
-        target = @("production", "preview", "development")
-    } | ConvertTo-Json
-
-    $apiUrl = if ($VERCEL_TEAM_ID) {
-        "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_TEAM_ID"
-    } else {
-        "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/env"
-    }
+    $teamQuery = if ($VERCEL_TEAM_ID) { "?teamId=$VERCEL_TEAM_ID" } else { "" }
+    $envListUrl = "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID/env$teamQuery"
+    $envBaseUrl = "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID/env"
 
     try {
-        Invoke-RestMethod -Uri $apiUrl -Method Post -Headers $headers -Body $body -ErrorAction Stop
+        # LOCAL_LLM_URL은 이전에 (수동으로든 이 스크립트로든) 이미 한 번 등록되어 있어 그냥
+        # POST(생성)하면 Vercel이 400을 반환한다. 기존 항목을 찾아서 있으면 PATCH(갱신)한다.
+        $existing = Invoke-RestMethod -Uri $envListUrl -Method Get -Headers $headers -ErrorAction Stop
+        $existingVar = $existing.envs | Where-Object { $_.key -eq "LOCAL_LLM_URL" } | Select-Object -First 1
+
+        $body = @{
+            key    = "LOCAL_LLM_URL"
+            value  = "$tunnelUrl/v1"
+            type   = "plain"
+            target = @("production", "preview", "development")
+        } | ConvertTo-Json
+
+        if ($existingVar) {
+            $updateUrl = "$envBaseUrl/$($existingVar.id)$teamQuery"
+            Invoke-RestMethod -Uri $updateUrl -Method Patch -Headers $headers -Body $body -ErrorAction Stop | Out-Null
+        } else {
+            Invoke-RestMethod -Uri "$envBaseUrl$teamQuery" -Method Post -Headers $headers -Body $body -ErrorAction Stop | Out-Null
+        }
         Write-Host "  ✅ Vercel 환경변수 업데이트 완료!" -ForegroundColor Green
-        Write-Host "  → Vercel이 자동으로 재배포됩니다 (약 1~2분)" -ForegroundColor Gray
+
+        # 환경변수만 바꿔서는 이미 배포된 서버리스 함수에 반영되지 않는다 (Vercel은 env를 배포
+        # 시점에 굽는다). 최신 production 배포를 그대로 다시 배포시켜 새 값을 반영시킨다.
+        try {
+            $projectInfo = Invoke-RestMethod -Uri "https://api.vercel.com/v9/projects/$VERCEL_PROJECT_ID$teamQuery" -Method Get -Headers $headers -ErrorAction Stop
+            $latestDeploymentId = $projectInfo.latestDeployment.id
+            if ($latestDeploymentId) {
+                $redeployBody = @{
+                    name         = "pbs-team"
+                    project      = $VERCEL_PROJECT_ID
+                    target       = "production"
+                    deploymentId = $latestDeploymentId
+                } | ConvertTo-Json
+                Invoke-RestMethod -Uri "https://api.vercel.com/v13/deployments$teamQuery" -Method Post -Headers $headers -Body $redeployBody -ErrorAction Stop | Out-Null
+                Write-Host "  → 새 재배포를 트리거했습니다 (약 1~2분 후 반영)" -ForegroundColor Gray
+            } else {
+                Write-Host "  ⚠️  최신 배포를 찾지 못해 자동 재배포를 못 걸었습니다. Vercel 대시보드에서 수동으로 Redeploy 해주세요." -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  ⚠️  재배포 트리거 실패: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  → Vercel 대시보드에서 수동으로 Redeploy 해주세요." -ForegroundColor White
+        }
     } catch {
         Write-Host "  ⚠️  Vercel API 오류: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "  → 수동 등록: LOCAL_LLM_URL = $tunnelUrl/v1" -ForegroundColor White
