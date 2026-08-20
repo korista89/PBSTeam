@@ -423,6 +423,23 @@ def generate_bcba_section_analysis(
     quality_report = quality_report or {}
     data_str = json.dumps(chart_data, ensure_ascii=False, indent=2)
 
+    # 차트 자체에 표시할 데이터가 없는 상태(빈 배열 또는 전부 0건)에서는 LLM에 일반론적인
+    # 조언을 지어내게 하지 말고, 데이터가 없다는 사실만 명확히 안내한다.
+    if isinstance(chart_data, list):
+        total = 0.0
+        saw_number = False
+        for item in chart_data:
+            if isinstance(item, dict):
+                v = item.get("value", item.get("count"))
+                if v is not None:
+                    try:
+                        total += float(v)
+                        saw_number = True
+                    except (TypeError, ValueError):
+                        pass
+        if not chart_data or (saw_number and total <= 0):
+            return "📭 표시할 데이터가 없습니다. 해당 기간에 입력된 행동기록이 없어 분석할 수 없습니다. 행동기록을 입력한 뒤 다시 시도해 주세요."
+
     if section_type == "time":
         prompt = f"""[분석 영역: 시간대별(Time Slot) 정밀 분석]
 [차트 데이터]
