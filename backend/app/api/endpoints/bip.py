@@ -5,7 +5,8 @@ from app.services.normalize import normalize_behavior_log
 from app.services.ai_insight import (
     generate_bip_hypothesis,
     generate_bip_strategies,
-    generate_full_bip
+    generate_full_bip,
+    generate_data_based_decision_recommendation
 )
 from app.api.deps import require_authenticated_user, check_student_scope
 
@@ -27,6 +28,10 @@ class BIPData(BaseModel):
     MedicationStatus: Optional[str] = ""
     ReinforcerInfo: Optional[str] = ""
     OtherConsiderations: Optional[str] = ""
+    PreventionEBP: Optional[str] = ""
+    TeachingEBP: Optional[str] = ""
+    ConsequenceEBP: Optional[str] = ""
+    CrisisEBP: Optional[str] = ""
 
 def _resolve_beable_code(student_code: str) -> str:
     from app.services.sheets import get_beable_code_mapping
@@ -230,5 +235,71 @@ async def ai_bip_full(
         school_crisis_protocol="경은학교 위기관리 4단계 프로토콜 (전조-고조-위기-회복 및 최소제한원칙 준수)",
         behavior_logs=norm_logs
     )
-    
+
+    return {"analysis": result}
+
+
+class AIDecisionRecommendationRequest(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+@router.post("/students/{student_code}/ai-decision-recommendation")
+async def ai_decision_recommendation(
+    student_code: str,
+    req: AIDecisionRecommendationRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """⑩ 🤖 데이터기반 의사결정(DBDM) 제안 — 기간 데이터 + 현재 BIP + EBP 실행충실도 + 팀 협의 기록 종합"""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import fetch_all_records, fetch_student_status, fetch_meeting_notes, get_bip, normalize_date_string
+
+    beable_code = _resolve_beable_code(student_code)
+    records = fetch_all_records()
+    raw_logs = _filter_student_logs(records, student_code, beable_code)
+
+    if req.start_date and req.end_date:
+        sd = normalize_date_string(req.start_date)
+        ed = normalize_date_string(req.end_date)
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("발생날짜", r.get("date", ""))) <= ed]
+
+    status_records = fetch_student_status()
+    student_info = {"code": student_code}
+    for s in status_records:
+        if str(s.get("학생코드", "")).strip() == student_code:
+            student_info = {
+                "code": student_code,
+                "name": s.get("학생명", student_code),
+                "class": s.get("학급", ""),
+                "tier": s.get("Tier", 1)
+            }
+            break
+
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+    tb_list = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
+    avg_int = round(sum(l['intensity'] for l in norm_logs)/len(norm_logs), 1) if norm_logs else 0
+    period_data = (
+        f"기간: {req.start_date or '전체'} ~ {req.end_date or '전체'}, 누적 {len(norm_logs)}건, "
+        f"평균 강도 {avg_int}/5, 주요 행동유형: {', '.join(tb_list) or '없음'}"
+    )
+
+    bip = get_bip(student_code) or {}
+    current_bip_str = "\n".join(
+        f"- {k}: {v}" for k, v in bip.items()
+        if k not in ("StudentCode", "UpdatedAt", "Author") and v
+    )
+    ebp_str = "\n".join(
+        f"- {k}: {bip.get(k)}" for k in ("PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP")
+        if bip.get(k)
+    )
+
+    notes = fetch_meeting_notes("fba_bip_team", student_code)
+    team_notes_str = "\n".join(f"[{n.get('date','')}] {n.get('content','')}" for n in notes)
+
+    result = generate_data_based_decision_recommendation(
+        student_info=student_info,
+        period_data=period_data,
+        current_bip=current_bip_str,
+        ebp_selections=ebp_str,
+        team_notes=team_notes_str
+    )
     return {"analysis": result}

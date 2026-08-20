@@ -7,6 +7,7 @@ import styles from "../../../page.module.css";
 import { AuthCheck } from "../../../components/AuthProvider";
 import AppShell from "../../../components/AppShell";
 import { useDateRange } from "../../../components/GlobalNav";
+import { parseBIPAIResult } from "../../../utils";
 import * as XLSX from "xlsx";
 
 
@@ -74,28 +75,6 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
         placeholder: "예:\n• 가정환경: 한부모 가정, 조부모와 동거\n• 감각 민감성: 큰 소리에 과도한 반응\n• 의사소통: 2~3어절 수준, AAC 기기 사용 중\n• 선호 활동: 블록 놀이, 음악 감상\n• 유의사항: 왼쪽 귀 청력 저하, 시각 자료 활용 필수"
     },
 ];
-
-// Parse AI result into 8 fields
-function parseAIResult(text: string): Record<string, string> {
-    const sections: Record<string, string> = {};
-    const patterns = [
-        { key: "TargetBehavior", pattern: /\*?\*?\[?1\.\s*표적행동\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?2\.|$)/i },
-        { key: "Hypothesis", pattern: /\*?\*?\[?2\.\s*가설[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?3\.|$)/i },
-        { key: "Goals", pattern: /\*?\*?\[?3\.\s*목표\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?4\.|$)/i },
-        { key: "PreventionStrategies", pattern: /\*?\*?\[?4\.\s*예방[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?5\.|$)/i },
-        { key: "TeachingStrategies", pattern: /\*?\*?\[?5\.\s*교수[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?6\.|$)/i },
-        { key: "ReinforcementStrategies", pattern: /\*?\*?\[?6\.\s*강화[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?7\.|$)/i },
-        { key: "CrisisPlan", pattern: /\*?\*?\[?7\.\s*위기[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?8\.|$)/i },
-        { key: "EvaluationPlan", pattern: /\*?\*?\[?8\.\s*평가[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)$/i },
-    ];
-    for (const { key, pattern } of patterns) {
-        const match = text.match(pattern);
-        if (match) {
-            sections[key] = match[1].trim();
-        }
-    }
-    return sections;
-}
 
 // Auto-growing textarea component
 function AutoTextarea({ value, onChange, placeholder }: {
@@ -205,8 +184,6 @@ export default function BIPEditor() {
         }
     };
 
-    const [hypLoading, setHypLoading] = useState(false);
-    const [stratLoading, setStratLoading] = useState(false);
     const [showEBPModal, setShowEBPModal] = useState(false);
     const [targetFieldForEBP, setTargetFieldForEBP] = useState<keyof BIPData>("PreventionStrategies");
     const [ebpCatalog, setEbpCatalog] = useState<any[]>([]);
@@ -238,45 +215,8 @@ export default function BIPEditor() {
         setShowEBPModal(false);
     };
 
-    // AI Functional Hypothesis (BIP Step 4 - 신규 추가)
-    const handleAIHypothesis = async () => {
-        if (!studentCode) return;
-        setHypLoading(true);
-        try {
-            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-hypothesis`, {}, { timeout: 180000 });
-            if (res.data.hypothesis) {
-                handleChange("Hypothesis", res.data.hypothesis);
-                alert("기능적 가설이 2번 [가설(기능)] 필드에 자동으로 생성되었습니다.");
-            }
-        } catch {
-            alert("AI 가설 생성에 실패했습니다.");
-        } finally {
-            setHypLoading(false);
-        }
-    };
-
-    // AI 3-Stage Intervention Strategies (BIP Step 6 - 신규 추가)
-    const handleAIStrategies = async () => {
-        if (!studentCode) return;
-        setStratLoading(true);
-        try {
-            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-strategies`, {
-                target_behavior: bip.TargetBehavior,
-                hypothesis: bip.Hypothesis,
-                goals: bip.Goals
-            }, { timeout: 180000 });
-            if (res.data.strategies) {
-                handleChange("PreventionStrategies", res.data.strategies);
-                alert("AI 3단계 중재 전략이 제안되었습니다. (4번 예방/교수/강화 필드에 입력됨)");
-            }
-        } catch {
-            alert("AI 중재 전략 생성에 실패했습니다.");
-        } finally {
-            setStratLoading(false);
-        }
-    };
-
-    // AI BIP Full — comprehensive analysis (기존 버튼)
+    // AI BIP Full — comprehensive analysis. 개별 가설/전략 AI 버튼은 FBA/BIP관리(report/tier3) 페이지의
+    // "최초 FBA기반BIP작성 제안" 흐름으로 통합되어 이 페이지에서는 제거됨 (같은 생성을 두 곳에서 반복하지 않도록).
     const handleAIBIPFull = async () => {
         if (!studentCode) return;
         setAiLoading(true);
@@ -300,7 +240,7 @@ export default function BIPEditor() {
     // Append AI result to existing fields
     const handleAppendAIContent = () => {
         if (!aiResult) return;
-        const parsed = parseAIResult(aiResult);
+        const parsed = parseBIPAIResult(aiResult);
         if (Object.keys(parsed).length === 0) {
             alert("AI 결과를 파싱할 수 없습니다. 수동으로 복사해 주세요.");
             return;
@@ -395,6 +335,9 @@ export default function BIPEditor() {
                 subtitle={`학번/코드: ${studentCode} · 작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`}
                 headerActions={
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button onClick={() => router.push('/report/tier3')} className="btn btn-ai" title="FBA 데이터 기반 최초 AI 초안 생성은 FBA/BIP관리에서 진행됩니다">
+                            🧩 FBA/BIP관리에서 AI 초안 생성
+                        </button>
                         <button onClick={() => openEBPModalForField("PreventionStrategies")} className="btn btn-ai">
                             📚 EBP 전략 삽입
                         </button>
@@ -455,53 +398,6 @@ export default function BIPEditor() {
                                     </button>
                                 )}
 
-                                {field.key === "Hypothesis" && (
-                                    <button
-                                        onClick={handleAIHypothesis}
-                                        disabled={hypLoading}
-                                        style={{
-                                            marginLeft: 'auto',
-                                            padding: '4px 12px',
-                                            backgroundColor: '#fff',
-                                            color: '#dc2626',
-                                            border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
-                                            borderRadius: '6px',
-                                            fontSize: '0.78rem',
-                                            fontWeight: 700,
-                                            cursor: hypLoading ? 'wait' : 'pointer',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.2)'
-                                        }}
-                                    >
-                                        {hypLoading ? "⏳ 가설 분석 중..." : "🤖 AI 기능 가설 생성"}
-                                    </button>
-                                )}
-
-                                {field.key === "PreventionStrategies" && (
-                                    <button
-                                        onClick={handleAIStrategies}
-                                        disabled={stratLoading}
-                                        style={{
-                                            marginLeft: 'auto',
-                                            padding: '4px 12px',
-                                            backgroundColor: '#fff',
-                                            color: '#dc2626',
-                                            border: '2.5px solid #ef4444', /* 빨간색 외곽선 (신규 추가 버튼) */
-                                            borderRadius: '6px',
-                                            fontSize: '0.78rem',
-                                            fontWeight: 700,
-                                            cursor: stratLoading ? 'wait' : 'pointer',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.2)'
-                                        }}
-                                    >
-                                        {stratLoading ? "⏳ 전략 도출 중..." : "🤖 AI 3단계 중재 전략 제안"}
-                                    </button>
-                                )}
                             </div>
                             <div style={{ padding: '12px 16px' }}>
                                 <AutoTextarea

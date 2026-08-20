@@ -56,10 +56,9 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         { href: "/ebp", label: "📚 Be-Able EBP", key: "ebp" },
         { href: "/behavior", label: "✍️ 행동기록", key: "behavior" },
         { href: "/tier-status", label: "📋 Tier현황", key: "tier-status" },
-        { href: "/cico", label: "📝 CICO입력", key: "cico" },
-        { href: "/report/tier2", label: "📈 CICO리포트", key: "report-tier2" },
-        { href: "/report/tier3", label: "🔴 T3리포트", key: "report-tier3" },
-        { href: "/meeting", label: "🤝 협의회", key: "meeting" },
+        { href: "/cico", label: "📝 CICO 관리", key: "cico" },
+        { href: "/class-rules", label: "🪙 학급규칙/토큰", key: "class-rules" },
+        { href: "/report/tier3", label: "🧩 FBA/BIP관리", key: "report-tier3" },
         { href: "/protocol", label: "📜 프로토콜", key: "protocol" },
         { href: "/picture-word", label: "🎨 경은그림말", key: "picture-word" },
     ];

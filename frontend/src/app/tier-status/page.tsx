@@ -175,24 +175,6 @@ export default function TierStatusPage() {
         return true;
     });
 
-    // Count by tier (enrolled only)
-    const enrolledStudents = students.filter(s => s.재학여부 === "O");
-    const tierCounts = {
-        tier1: enrolledStudents.filter(s => s['Tier1'] === "O" && s['Tier2(CICO)'] === "X" && s['Tier2(SST)'] === "X" && s['Tier3'] === "X" && s['Tier3+'] === "X").length,
-        tier2_cico: enrolledStudents.filter(s => s['Tier2(CICO)'] === "O").length,
-        tier2_sst: enrolledStudents.filter(s => s['Tier2(SST)'] === "O").length,
-        tier3: enrolledStudents.filter(s => s['Tier3'] === "O").length,
-        tier3_plus: enrolledStudents.filter(s => s['Tier3+'] === "O").length,
-    };
-
-    // Tier2 CICO "pure" count (excluding Tier3/3+)
-    const tier2CicoPure = enrolledStudents.filter(s =>
-        s['Tier2(CICO)'] === "O" && s['Tier3'] === "X" && s['Tier3+'] === "X"
-    ).length;
-
-    // Percentage helper
-    const pct = (count: number) => enrolledCount > 0 ? ((count / enrolledCount) * 100).toFixed(1) : "0";
-
     if (loading) {
         return (
             <AuthCheck>
@@ -224,35 +206,6 @@ export default function TierStatusPage() {
                             <span>🔒</span> 담임교사는 배정 학급 학생의 데이터 조회가 가능하며, Tier 수정은 관리자 권한으로 수행됩니다.
                         </div>
                     )}
-
-                    {/* Summary Cards - 5 Tier Types with % */}
-                    <div className="kpi-grid kpi-grid-5">
-                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier1)', background: 'var(--tier1-bg)' }}>
-                            <div className="kpi-label" style={{ color: 'var(--tier1-text)' }}>Tier 1</div>
-                            <div className="kpi-value" style={{ color: 'var(--tier1-text)' }}>{tierCounts.tier1}</div>
-                            <div className="kpi-subtext">{pct(tierCounts.tier1)}%</div>
-                        </div>
-                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier2)', background: 'var(--tier2-bg)' }}>
-                            <div className="kpi-label" style={{ color: 'var(--tier2-text)' }}>Tier2(CICO)</div>
-                            <div className="kpi-value" style={{ color: 'var(--tier2-text)' }}>{tierCounts.tier2_cico}</div>
-                            <div className="kpi-subtext">{pct(tierCounts.tier2_cico)}% (순수 {tier2CicoPure}명)</div>
-                        </div>
-                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--primary-blue)', background: 'var(--primary-light)' }}>
-                            <div className="kpi-label" style={{ color: 'var(--primary-blue)' }}>Tier2(SST)</div>
-                            <div className="kpi-value" style={{ color: 'var(--primary-blue)' }}>{tierCounts.tier2_sst}</div>
-                            <div className="kpi-subtext">{pct(tierCounts.tier2_sst)}%</div>
-                        </div>
-                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier3)', background: 'var(--tier3-bg)' }}>
-                            <div className="kpi-label" style={{ color: 'var(--tier3-text)' }}>Tier 3</div>
-                            <div className="kpi-value" style={{ color: 'var(--tier3-text)' }}>{tierCounts.tier3}</div>
-                            <div className="kpi-subtext">{pct(tierCounts.tier3)}%</div>
-                        </div>
-                        <div className="kpi-card" style={{ borderLeft: '4px solid var(--tier3-plus)', background: 'var(--tier3-plus-bg)' }}>
-                            <div className="kpi-label" style={{ color: 'var(--tier3-plus-text)' }}>Tier 3+</div>
-                            <div className="kpi-value" style={{ color: 'var(--tier3-plus-text)' }}>{tierCounts.tier3_plus}</div>
-                            <div className="kpi-subtext">{pct(tierCounts.tier3_plus)}%</div>
-                        </div>
-                    </div>
 
                     {errorMsg && (
                         <div className="card" style={{ padding: '16px 20px', background: 'var(--tier3-bg)', borderColor: '#fca5a5', color: 'var(--tier3-text)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -1846,8 +1846,14 @@ def create_monthly_cico_sheet(year: int, month: int):
         # 1: 번호, 2: 학급, 3: 학생명(코드), 4: Tier2, 5: Tier3, 6: 목표행동, 7: 목표행동 유형, 8: 척도, 9: 입력 기준, 10: 목표 달성 기준
         fixed_headers = ["번호", "학급", "학생명(코드)", "Tier2", "Tier3", "목표행동", "목표행동 유형", "척도", "입력 기준(베이스라인)", "목표 달성 기준"]
 
-        # 11~35: 25 Sessions (1회차 ~ 25회차)
-        session_headers = [f"{i}회차" for i in range(1, 26)]
+        # 11~35: 25 session columns, headed with the real school-day date (MM-DD) so
+        # nobody has to manually figure out which "N회차" maps to which calendar day.
+        # Dates come from '날짜 관리' sheet holidays via get_business_days (weekdays
+        # minus holidays). Any slots beyond the month's real business-day count keep
+        # the old "N회차" placeholder (short months rarely use all 25 slots).
+        holidays = get_holidays_from_config()
+        business_days = get_business_days(year, month, holidays)
+        session_headers = [business_days[i] if i < len(business_days) else f"{i + 1}회차" for i in range(25)]
 
         # 36~41: Stats and others
         tail_headers = ["수행/발생률", "목표 달성 여부", "교사메모", "입력자", "팀 협의 내용", "차월 대상여부"]
@@ -3772,22 +3778,30 @@ def delete_board_post(post_id: str):
 # =============================
 # BIP (Behavior Intervention Plan) Worksheet
 # =============================
+BIP_EBP_HEADERS = ["PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP"]
+
 def ensure_bip_sheet():
-    """Ensure 'BIP' sheet exists with correct headers."""
+    """Ensure 'BIP' sheet exists with correct headers, migrating in the EBP-selection columns if missing."""
     client = get_sheets_client()
     if not client: return None
     try:
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
             ws = sheet.worksheet("BIP")
+            existing_headers = ws.row_values(1)
+            missing = [h for h in BIP_EBP_HEADERS if h not in existing_headers]
+            if missing:
+                for i, h in enumerate(missing):
+                    ws.update_cell(1, len(existing_headers) + 1 + i, h)
         except gspread.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="BIP", rows=300, cols=15)
+            ws = sheet.add_worksheet(title="BIP", rows=300, cols=20)
             headers = [
                 "StudentCode", "TargetBehavior", "Hypothesis", "Goals",
                 "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies",
                 "CrisisPlan", "EvaluationPlan",
                 "MedicationStatus", "ReinforcerInfo", "OtherConsiderations",
-                "UpdatedAt", "Author"
+                "UpdatedAt", "Author",
+                *BIP_EBP_HEADERS
             ]
             ws.append_row(headers)
         return ws
@@ -3901,4 +3915,160 @@ def delete_holiday(date_str):
     except Exception as e:
         print(f"Error deleting holiday: {e}")
         return {"error": str(e)}
+
+
+# =============================
+# Class Rules & School-wide Token Economy
+# =============================
+def ensure_class_rules_sheet():
+    """Ensure 'ClassRules' sheet exists (3 rows per class: 스스로/바르게/안전하게)."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("ClassRules")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="ClassRules", rows=200, cols=6)
+            ws.append_row(["ClassID", "Category", "RuleText", "SourceId", "UpdatedAt", "Author"])
+        return ws
+    except Exception as e:
+        print(f"Error checking ClassRules sheet: {e}")
+        return None
+
+def get_class_rules(class_id: str) -> list:
+    ws = ensure_class_rules_sheet()
+    if not ws: return []
+    clean = str(class_id).strip()
+    try:
+        records = safe_get_all_records(ws)
+        return [r for r in records if str(r.get("ClassID", "")).strip() == clean]
+    except Exception as e:
+        print(f"Error getting class rules: {e}")
+        return []
+
+def save_class_rules(class_id: str, rules: list, author: str = ""):
+    """rules: list of up to 3 {category, text, source_id} dicts. Replaces all existing rows for this class."""
+    ws = ensure_class_rules_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    clean = str(class_id).strip()
+    try:
+        all_values = ws.get_all_values()
+        for i in range(len(all_values) - 1, 0, -1):
+            if all_values[i] and str(all_values[i][0]).strip() == clean:
+                ws.delete_rows(i + 1)
+        now = now_kst().strftime("%Y-%m-%d %H:%M")
+        for r in rules:
+            ws.append_row([clean, r.get("category", ""), r.get("text", ""), str(r.get("source_id", "") or ""), now, author])
+        return {"message": "Class rules saved"}
+    except Exception as e:
+        print(f"Error saving class rules: {e}")
+        return {"error": str(e)}
+
+
+def ensure_token_board_sheet():
+    """Ensure 'TokenBoard' sheet exists (one row per student, running token tally)."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("TokenBoard")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="TokenBoard", rows=300, cols=5)
+            ws.append_row(["StudentCode", "ClassID", "TokenCount", "ExchangedCount", "UpdatedAt"])
+        return ws
+    except Exception as e:
+        print(f"Error checking TokenBoard sheet: {e}")
+        return None
+
+def get_token_board(class_id: str) -> list:
+    ws = ensure_token_board_sheet()
+    if not ws: return []
+    clean = str(class_id).strip()
+    try:
+        records = safe_get_all_records(ws)
+        return [r for r in records if str(r.get("ClassID", "")).strip() == clean]
+    except Exception as e:
+        print(f"Error getting token board: {e}")
+        return []
+
+def award_token(student_code: str, class_id: str, category: str, delta: int, author: str = ""):
+    """
+    Adds `delta` tokens to a student's board (토큰 1개 = 100원).
+    Every 10 tokens (=1000원) auto-converts into ExchangedCount and TokenCount wraps around.
+    """
+    ws = ensure_token_board_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    clean_code = str(student_code).strip()
+    clean_class = str(class_id).strip()
+    try:
+        records = safe_get_all_records(ws)
+        row_idx = None
+        cur_count, cur_exchanged = 0, 0
+        for i, r in enumerate(records):
+            if str(r.get("StudentCode", "")).strip() == clean_code:
+                row_idx = i + 2
+                cur_count = int(r.get("TokenCount", 0) or 0)
+                cur_exchanged = int(r.get("ExchangedCount", 0) or 0)
+                break
+
+        cur_count = max(0, cur_count + delta)
+        exchanged_now = cur_count // 10
+        cur_exchanged += exchanged_now
+        cur_count = cur_count % 10
+        now = now_kst().strftime("%Y-%m-%d %H:%M")
+        row = [clean_code, clean_class, cur_count, cur_exchanged, now]
+
+        if row_idx:
+            ws.delete_rows(row_idx)
+            ws.insert_row(row, index=row_idx)
+        else:
+            ws.append_row(row)
+
+        log_token_award(clean_code, clean_class, category, delta, author)
+        return {"student_code": clean_code, "token_count": cur_count, "exchanged_count": cur_exchanged, "exchanged_now": exchanged_now}
+    except Exception as e:
+        print(f"Error awarding token: {e}")
+        return {"error": str(e)}
+
+
+def ensure_token_log_sheet():
+    """Ensure 'TokenLog' sheet exists (award history for accountability)."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("TokenLog")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="TokenLog", rows=1000, cols=7)
+            ws.append_row(["Date", "StudentCode", "ClassID", "Category", "Delta", "Author", "CreatedAt"])
+        return ws
+    except Exception as e:
+        print(f"Error checking TokenLog sheet: {e}")
+        return None
+
+def log_token_award(student_code: str, class_id: str, category: str, delta: int, author: str = ""):
+    ws = ensure_token_log_sheet()
+    if not ws: return
+    try:
+        now = now_kst()
+        ws.append_row([now.strftime("%Y-%m-%d"), str(student_code).strip(), str(class_id).strip(), category, delta, author, now.strftime("%Y-%m-%d %H:%M:%S")])
+    except Exception as e:
+        print(f"Error logging token award: {e}")
+
+def get_token_log(class_id: str = None, student_code: str = None, limit: int = 50) -> list:
+    ws = ensure_token_log_sheet()
+    if not ws: return []
+    try:
+        records = safe_get_all_records(ws)
+        if class_id:
+            records = [r for r in records if str(r.get("ClassID", "")).strip() == str(class_id).strip()]
+        if student_code:
+            records = [r for r in records if str(r.get("StudentCode", "")).strip() == str(student_code).strip()]
+        return records[-limit:][::-1]
+    except Exception as e:
+        print(f"Error getting token log: {e}")
+        return []
 

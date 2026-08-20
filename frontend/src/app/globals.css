@@ -488,6 +488,18 @@ a {
   }
 }
 
+/* CICO 관리: 300px 학생목록 + 상세패널 2열 레이아웃도 좁은 화면에서는 겹치므로 1열로 전환.
+   min-width:0은 그리드 아이템의 기본 min-content 폭 제약을 풀어, 내부의 가로 스크롤(일별 기록
+   스트립)이 페이지 전체를 밀어내지 않고 자기 영역 안에서만 스크롤되게 한다. */
+.cico-unified-layout > * {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .cico-unified-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @media (max-width: 768px) {
   .app-topbar {
     padding: 0 var(--space-3);

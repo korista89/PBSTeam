@@ -4,13 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LabelList, PieChart, Pie, Cell, Legend, LineChart, Line,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
 } from "recharts";
 import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
-import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
-import { maskName, formatWeek } from "../../utils";
+import { maskName, formatWeek, parseBIPAIResult } from "../../utils";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -45,6 +44,58 @@ const DECISION_OPTIONS = [
 
 const PIE_COLORS = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316'];
 
+// 39 Be-Able EBP catalog categories mapped to the 3 selectable EBP columns.
+// 위기행동지원절차(CrisisEBP) is not EBP-catalog-driven — it's the school's
+// fixed crisis response protocol, edited via CrisisProtocolEditor below.
+const EBP_CATEGORY_MAP: Record<string, string[]> = {
+  PreventionEBP: ["ANTECEDENT", "SETTING_EVENT"],
+  TeachingEBP: ["TEACHING"],
+  ConsequenceEBP: ["REINFORCEMENT", "CONSEQUENCE"],
+};
+const EBP_COLUMN_LABELS: Record<string, string> = {
+  PreventionEBP: "🛡️ 예방 전략",
+  TeachingEBP: "📚 교수 전략",
+  ConsequenceEBP: "🎁 후속결과 전략",
+};
+
+// 경은학교 위기행동지원절차 표준 프로토콜 기본값 — 학생별로 자유롭게 수정 가능.
+const CRISIS_PROTOCOL_FIELDS: { key: string; label: string; default: string }[] = [
+  { key: "precursor", label: "전조", default: "표정이 굳거나 목소리가 커짐, 자리 이탈 시도, 물건을 만지작거리는 등 평소와 다른 신호를 관찰한다. 이 단계에서 즉시 개입하여 고조를 예방한다." },
+  { key: "escalation", label: "고조", default: "언어적 자극과 지시·요구를 즉시 중단하고 안전거리를 확보한다. 시각적 지원 도구(감정카드, 진정카드 등)를 제시하여 자기조절을 유도한다." },
+  { key: "notification", label: "알림", default: "위기대응팀(또는 관리자·보건교사)에게 즉시 알린다. 학급 내 다른 학생의 안전 확보를 위해 보조인력을 요청한다." },
+  { key: "location", label: "장소/이동방법", default: "사전 지정된 안전공간(심리안정실 등)으로 이동한다. 최소 인원으로 측면에서 유도하며 신체 접촉은 최소화한다." },
+  { key: "observation", label: "관찰 방법", default: "10분 간격으로 행동강도와 안전상태를 관찰·기록한다. 자해·타해 위험이 지속되는지 우선 확인한다." },
+  { key: "response_check", label: "호명반응 확인 방법", default: "이름을 부드럽게 호명하여 반응 여부를 확인한다(눈맞춤, 고개 돌림 등). 반응이 없으면 관찰을 지속하고, 반응이 있으면 회복 단계 전환을 시도한다." },
+  { key: "instructions", label: "지시 목록", default: "짧고 단순한 1단계 지시만 사용한다(예: \"앉자\", \"숨 쉬자\"). 여러 지시를 한 번에 주거나 장황하게 설명하지 않으며, 선택형 지시는 지양한다." },
+  { key: "recovery_talk", label: "회복대화 방법", default: "행동이 진정된 후 감정을 먼저 인정한다(\"많이 힘들었구나\"). 상황 설명은 짧게 하고 비난·훈계는 하지 않는다." },
+  { key: "return_intent", label: "복귀의사 방법", default: "학생에게 교실 복귀 의사를 직접 묻고 스스로 결정할 시간을 준다(예: \"준비되면 알려줘\")." },
+  { key: "post_return", label: "복귀 후 반응", default: "복귀 후 15~20분간 참여도와 정서 상태를 관찰한다. 필요 시 과제량을 조정하고 성공 경험을 제공하여 안정을 강화한다." },
+];
+
+function withCrisisDefaults(value: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const f of CRISIS_PROTOCOL_FIELDS) result[f.key] = value?.[f.key] ?? f.default;
+  return result;
+}
+
+function safeParseCrisisProtocol(v: any): Record<string, string> {
+  if (!v) return withCrisisDefaults({});
+  try {
+    const parsed = JSON.parse(v);
+    return withCrisisDefaults(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {});
+  } catch { return withCrisisDefaults({}); }
+}
+
+interface EBPItem { code?: string; name: string; fidelity: string; }
+
+function safeParseEBP(v: any): EBPItem[] {
+  if (!v) return [];
+  try {
+    const parsed = JSON.parse(v);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
@@ -63,7 +114,7 @@ export default function Tier3Report() {
   const [data, setData] = useState<Tier3ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [ebpCatalog, setEbpCatalog] = useState<any[]>([]);
 
   const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
 
@@ -94,32 +145,21 @@ export default function Tier3Report() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const getIntensityColor = (i: number) => i >= 5 ? "#ef4444" : i >= 3 ? "#f59e0b" : "#22c55e";
-  const getIntensityBar = (val: number) => {
-    const pct = Math.min(100, (val / 5) * 100);
-    return (
-      <div style={{ width: '60px', height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden', display: 'inline-block', verticalAlign: 'middle' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: getIntensityColor(val) }} />
-      </div>
-    );
-  };
+  useEffect(() => {
+    axios.get(`${apiUrl}/api/v1/ebp/catalog`).then(res => setEbpCatalog(res.data.strategies || [])).catch(() => {});
+  }, [apiUrl]);
 
-  // Filter students for class managers
   // Backend /api/v1/analytics/tier3-report already scopes `data.students` to the
   // caller's own class for non-admins (server derives+overrides class_id from the
-  // session). A redundant client-side filter here used to compare the numeric
-  // student code against user.class_id via .startsWith(), which can never match.
+  // session) — no client-side re-filtering needed here.
   const students = data ? data.students : [];
-
-  // Max incidents for comparison chart
-  const maxIncidents = students.length > 0 ? Math.max(...students.map(s => s.incidents), 1) : 1;
 
   return (
     <AuthCheck>
       <AppShell
         currentPage="report-tier3"
-        title="🔴 Tier 3 위기행동 집중 관리 리포트"
-        subtitle={`Tier 3 대상 학생 위기행동 분석 및 개별 의사결정 지원 ${startDate && endDate ? `(${startDate} ~ ${endDate})` : ""}`}
+        title="🧩 FBA/BIP관리"
+        subtitle={`Tier 3(Tier3+) 대상학생 기능적행동평가(FBA) 기반 행동중재계획(BIP) 수립·관리 ${startDate && endDate ? `(${startDate} ~ ${endDate})` : ""}`}
         headerActions={
           <button onClick={fetchData} className="btn btn-secondary">
             🔄 새로고침
@@ -143,62 +183,8 @@ export default function Tier3Report() {
 
           {!loading && !error && data && (
             <>
-              {/* Summary Cards with Trend Chart */}
-              <div style={{ marginBottom: "24px" }} className="grid-responsive">
-                <WeeklyAnalysisChart
-                  data={data.summary.weekly_trend || []}
-                  title="T3 위기행동 주별 트렌드 (통합)"
-                  color="#ef4444"
-                  dataKey="count"
-                  yLabel="보고 건수"
-                />
-
-                <div className="glass-panel" style={{ padding: '24px', borderRadius: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>Tier3 대상</div>
-                      <div style={{ color: "#ef4444", fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.total_students}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>명</span></div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>총 위기행동</div>
-                      <div style={{ color: "#f59e0b", fontSize: "1.8rem", fontWeight: 950 }}>{data.summary.total_incidents}<span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>건</span></div>
-                    </div>
-                    <div style={{ textAlign: "center", gridColumn: "span 2", marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                      <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 800, marginBottom: '4px' }}>평균 행동 강도</div>
-                      <div style={{ color: getIntensityColor(data.summary.avg_intensity), fontSize: "2rem", fontWeight: 950 }}>
-                        {data.summary.avg_intensity}<span style={{ fontSize: "0.9rem", color: "#64748b" }}>/5</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ===== Chart 1: Student Comparison Bar ===== */}
-              {students.length > 0 && (
-                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '16px', color: '#0f172a' }}>📊 Tier3 학생별 보고빈도 비교</div>
-                  <ResponsiveContainer width="100%" height={Math.max(200, students.length * 42)}>
-                    <BarChart data={students.map(s => ({
-                      name: s.name ? `${maskName(s.name)} (${s.code})` : s.code,
-                      보고건수: s.incidents,
-                      class: s.class,
-                      tier: s.tier
-                    }))} layout="vertical" margin={{ left: 10, right: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                      <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} style={{ fontSize: '11px' }} />
-                      <YAxis dataKey="name" type="category" width={70} style={{ fontSize: '11px' }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="보고건수" fill="#ef4444" barSize={22} radius={[0, 6, 6, 0]}>
-                        <LabelList dataKey="보고건수" position="right" style={{ fontSize: 11, fill: '#ef4444', fontWeight: 700 }}
-                          formatter={(v: number) => `${v}건`} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {/* ===== Decision Legend ===== */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "16px", padding: "12px 16px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px" }}>
+              {/* Decision Legend */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "4px", padding: "12px 16px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px" }}>
                 <span style={{ color: "#64748b", fontSize: "0.75rem", alignSelf: "center", fontWeight: 600 }}>의사결정 기준:</span>
                 {DECISION_OPTIONS.map(opt => (
                   <span key={opt.label} style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.7rem", color: opt.color, background: `${opt.color}15`, padding: "3px 8px", borderRadius: "4px" }}>
@@ -208,204 +194,39 @@ export default function Tier3Report() {
                 ))}
               </div>
 
-              {/* Meeting Notes */}
-              <div style={{ marginBottom: "24px" }}>
-                <MeetingNotesSection apiUrl={apiUrl} meetingType="tier3" title="Tier 3 사례회의록" />
-              </div>
+              <MeetingNotesSection apiUrl={apiUrl} meetingType="tier3" title="Tier 3 사례회의록 (학급 공통)" />
 
-              {/* ===== Student Table with Expandable Charts ===== */}
+              {/* ===== Per-student FBA/BIP frames ===== */}
               {students.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", color: "#64748b" }}>
                   Tier3 대상 학생이 없습니다.
                 </div>
               ) : (
-                <div className="table-responsive-wrapper" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.06)', borderRadius: '24px' }}>
-                  <div style={{ overflowX: 'auto', width: '100%' }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-                    <thead>
-                      <tr style={{ background: "#f8fafc" }}>
-                        {["Tier", "성명", "학생코드", "학급", "보고건수", "최대강도", "평균강도", "주요행동", "의사결정 제안", "관리", "상세차트"].map(h => (
-                          <th key={h} style={{ padding: "12px 10px", color: "#475569", fontWeight: 600, borderBottom: "2px solid #e2e8f0", textAlign: "left", whiteSpace: "nowrap", fontSize: '0.78rem' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((s, i) => (
-                        <>
-                          <tr key={i} style={{ borderBottom: expandedStudent === s.code ? 'none' : '1px solid #f1f5f9', background: expandedStudent === s.code ? '#fef9ff' : i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                            <td style={{ padding: "10px" }}>
-                              <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700, color: s.tier === "Tier3+" ? "#7c3aed" : "#ef4444", background: s.tier === "Tier3+" ? "#7c3aed15" : "#ef444415" }}>{s.tier}</span>
-                            </td>
-                            <td style={{ padding: "10px", fontWeight: 700, color: '#0f172a' }}>{maskName(s.name) || "-"}</td>
-                            <td style={{ padding: "10px", color: '#64748b', fontSize: '0.75rem' }}>{s.code}</td>
-                            <td style={{ padding: "10px", color: "#64748b", fontSize: '0.75rem' }}>{s.class}</td>
-                            <td style={{ padding: "10px", fontWeight: 700, color: s.incidents >= 6 ? "#ef4444" : "#1e293b" }}>{s.incidents}건</td>
-                            <td style={{ padding: "10px" }}>
-                              {getIntensityBar(s.max_intensity)}{" "}
-                              <span style={{ color: getIntensityColor(s.max_intensity), fontSize: "0.75rem", fontWeight: 600 }}>{s.max_intensity}</span>
-                            </td>
-                            <td style={{ padding: "10px" }}>
-                              {getIntensityBar(s.avg_intensity)}{" "}
-                              <span style={{ color: getIntensityColor(s.avg_intensity), fontSize: "0.75rem" }}>{s.avg_intensity}</span>
-                            </td>
-                            <td style={{ padding: "10px", color: "#64748b", maxWidth: "130px" }}>
-                              {s.behavior_types.length > 0 ? s.behavior_types.slice(0, 2).map(b => b.name.split(':')[0]).join(", ") : "-"}
-                            </td>
-                            <td style={{ padding: "10px" }}>
-                              <span style={{ display: "inline-block", padding: "4px 10px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 600, color: s.decision_color, background: `${s.decision_color}12`, border: `1px solid ${s.decision_color}30`, whiteSpace: "nowrap" }}>{s.decision}</span>
-                            </td>
-                            <td style={{ padding: "10px" }}>
-                              <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
-                                <button onClick={() => window.location.href = `/student/${s.code}`} style={{ padding: "3px 8px", background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", fontSize: "0.7rem", cursor: "pointer" }}>상세</button>
-                                <button onClick={() => window.location.href = `/student/${s.code}/bip`} style={{ padding: "3px 8px", background: "#8b5cf6", color: "white", border: "none", borderRadius: "4px", fontSize: "0.7rem", cursor: "pointer" }}>BIP</button>
-                              </div>
-                            </td>
-                            <td style={{ padding: "10px" }}>
-                              <button onClick={() => setExpandedStudent(expandedStudent === s.code ? null : s.code)}
-                                style={{ padding: "4px 10px", background: expandedStudent === s.code ? '#7c3aed' : '#f1f5f9', color: expandedStudent === s.code ? 'white' : '#475569', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>
-                                {expandedStudent === s.code ? '▲ 접기' : '📈 차트'}
-                              </button>
-                            </td>
-                          </tr>
-
-                                {/* Expandable Charts Row */}
-                          {expandedStudent === s.code && (
-                            <tr key={`${i}-charts`} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                              <td colSpan={10} style={{ padding: '20px', background: '#faf5ff' }}>
-
-                                {/* Tier2 하향 검토 경고 배너 */}
-                                {s.zero_week_alert && (
-                                  <div style={{
-                                    marginBottom: '16px',
-                                    padding: '14px 18px',
-                                    background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
-                                    border: '2px solid #10b981',
-                                    borderRadius: '12px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                  }}>
-                                    <span style={{ fontSize: '1.4rem' }}>🟢</span>
-                                    <div>
-                                      <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#065f46' }}>
-                                        Tier2 하향 검토 권장
-                                      </div>
-                                      <div style={{ fontSize: '0.78rem', color: '#047857', marginTop: '2px' }}>
-                                        최근 <strong>4주간</strong> 주간 보고빈도 및 발생빈도가 모두 <strong>0</strong>으로 기록되었습니다.
-                                        Tier3 집중지원이 더 이상 필요하지 않을 수 있으며, Tier2(CICO) 하향 또는 종결을 검토하세요.
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-
-                                  {/* Weekly Trend (Report Frequency) */}
-                                  <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>📈 주간 보고빈도 추이 (행정/관찰 지표)</div>
-                                    {s.weekly_trend.length > 0 ? (
-                                      <ResponsiveContainer width="100%" height={160}>
-                                        <LineChart data={s.weekly_trend}>
-                                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                          <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
-                                          <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
-                                          <Tooltip content={<CustomTooltip />} />
-                                          <Line type="monotone" dataKey="count" name="보고건수" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-                                        </LineChart>
-                                      </ResponsiveContainer>
-                                    ) : <p style={{ color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
-                                  </div>
-
-                                  {/* Weekly Trend (Occurrence Frequency) */}
-                                  <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>📈 주간 발생빈도 추이 (경은PBST 핵심지표)</div>
-                                    {s.weekly_trend_freq && s.weekly_trend_freq.length > 0 ? (
-                                      <ResponsiveContainer width="100%" height={160}>
-                                        <LineChart data={s.weekly_trend_freq}>
-                                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                          <XAxis dataKey="week" style={{ fontSize: '9px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
-                                          <YAxis allowDecimals={false} style={{ fontSize: '9px' }} axisLine={false} tickLine={false} />
-                                          <Tooltip content={<CustomTooltip />} />
-                                          <Line type="monotone" dataKey="count" name="발생빈도" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                                        </LineChart>
-                                      </ResponsiveContainer>
-                                    ) : <p style={{ color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
-                                  </div>
-
-                                  {/* Behavior Types Pie */}
-                                  <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>🎭 행동 유형 분포</div>
-                                    {s.behavior_types.length > 0 ? (
-                                      <ResponsiveContainer width="100%" height={160}>
-                                        <PieChart>
-                                          <Pie data={s.behavior_types.map(b => ({ ...b, name: b.name.split(':')[0] }))} cx="50%" cy="50%" outerRadius={65} innerRadius={35} paddingAngle={3} dataKey="value">
-                                            {s.behavior_types.map((_: any, idx: number) => <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />)}
-                                          </Pie>
-                                          <Tooltip formatter={(v: any) => [`${v}건`, '']} />
-                                          <Legend wrapperStyle={{ fontSize: '9px' }} />
-                                        </PieChart>
-                                      </ResponsiveContainer>
-                                    ) : <p style={{ color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
-                                  </div>
-
-                                  {/* Intensity Bar */}
-                                  <div style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', color: '#0f172a' }}>⚡ 행동 강도 정보</div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px' }}>
-                                      {[
-                                        { label: '최대 강도', val: s.max_intensity, max: 5 },
-                                        { label: '평균 강도', val: s.avg_intensity, max: 5 },
-                                        { label: '보고 건수 비율', val: s.incidents, max: maxIncidents },
-                                      ].map((item, idx) => (
-                                        <div key={idx}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: '4px' }}>
-                                            <span style={{ color: '#64748b' }}>{item.label}</span>
-                                            <span style={{ fontWeight: 700, color: getIntensityColor(item.val) }}>{item.val}{idx === 0 || idx === 1 ? '/5' : '건'}</span>
-                                          </div>
-                                          <div style={{ height: '10px', background: '#f1f5f9', borderRadius: '5px', overflow: 'hidden' }}>
-                                            <div style={{ width: `${Math.min(100, (item.val / item.max) * 100)}%`, height: '100%', background: idx === 2 ? '#ef4444' : getIntensityColor(item.val), borderRadius: '5px', transition: 'width 0.6s' }} />
-                                          </div>
-                                        </div>
-                                      ))}
-                                      <div style={{ marginTop: '8px', padding: '8px', background: `${s.decision_color}10`, borderRadius: '8px', border: `1px solid ${s.decision_color}25` }}>
-                                        <span style={{ fontSize: '0.78rem', color: s.decision_color, fontWeight: 700 }}>💡 {s.decision}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {students.map(s => (
+                    <StudentFBAFrame key={s.code} student={s} apiUrl={apiUrl} startDate={startDate} endDate={endDate} ebpCatalog={ebpCatalog} />
+                  ))}
                 </div>
               )}
-
-              {/* AI Analysis */}
-              <Tier3AIAnalysis apiUrl={apiUrl} startDate={startDate} endDate={endDate} />
             </>
           )}
-        {/* T3 리포트 해석 가이드 */}
-        <div style={{ marginTop:32, padding:"22px 26px", background:"linear-gradient(135deg,#fff1f2,#ffe4e6)", borderRadius:20, border:"1px solid #fecdd3" }}>
-          <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#881337" }}>📖 T3 리포트 해석 가이드</h3>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
-            {[
-              {t:"주간 보고빈도 추이", b:"주마다 행동 보고(사건)가 몇 번 발생했는지 꺾은선으로 표시. 우상향=악화, 우하향=개선. 최근 4주 연속 0이면 Tier2 하향 권장."},
-              {t:"주간 발생빈도 추이", b:"행동 1건 당 발생 횟수(빈도). 보고빈도와 함께 해석하세요. 보고빈도는 낮은데 발생빈도가 높으면 보고 누락 가능성."},
-              {t:"행동 유형 분포", b:"공격성·자해·방해 등 행동 유형별 구성 비율. 가장 많은 유형을 BIP 우선 타겟 행동으로 설정하세요."},
-              {t:"행동 기능 분포", b:"행동의 이유(기능)별 분포. 관심 추구·회피 등. 기능에 맞는 대체행동 지도 전략을 수립하는 데 활용."},
-              {t:"행동 강도 정보", b:"각 강도 수준(1~5)별 발생 빈도. 최고 강도 빈도가 높으면 위기 대응 계획이 필요합니다."},
-              {t:"의사결정 제안", b:"Tier2 하향(4주 연속 0건), Tier3 유지, Tier3+ 전환 필요 등을 자동 제안. 팀 협의 후 최종 결정하세요."},
-            ].map((item,i) => (
-              <div key={i} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #fecdd3" }}>
-                <div style={{ fontWeight:800, color:"#be123c", marginBottom:3 }}>{item.t}</div>
-                <div style={{ color:"#334155" }}>{item.b}</div>
-              </div>
-            ))}
-          </div>
+
+          {/* 해석 가이드 */}
+          <div style={{ marginTop:12, padding:"22px 26px", background:"linear-gradient(135deg,#fff1f2,#ffe4e6)", borderRadius:20, border:"1px solid #fecdd3" }}>
+            <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#881337" }}>📖 FBA/BIP관리 해석 가이드</h3>
+            <div className="grid-responsive" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
+              {[
+                {t:"학생별 프레임", b:"Tier3 대상학생마다 FBA 관련 추세 차트 3개 + 최초 FBA기반BIP작성 제안 AI, EBP 선택/충실도 입력, 개별화교육지원팀 협의 기록, 데이터기반 의사결정 제안 AI를 한 프레임에서 관리합니다."},
+                {t:"EBP 선택 & 충실도", b:"39 경기 Be-Able EBP 카탈로그에서 선택하거나 직접 입력할 수 있습니다. 각 전략 옆 충실도 체크포인트에 실제 실행 여부를 한 줄로 기록하면 AI 제안의 근거가 됩니다."},
+                {t:"개별화교육지원팀 협의", b:"학생별로 누적 기록됩니다. 회의 때마다 새로 입력해도 이전 기록은 삭제되지 않고 아래에 계속 쌓입니다."},
+                {t:"데이터기반 의사결정 제안", b:"저장된 기간 데이터 + 현재 BIP + EBP 충실도 + 협의 기록을 종합해 BIP 유지/수정/Tier 조정 여부를 제안합니다. 실행 전 EBP·협의 내용을 먼저 저장하세요."},
+              ].map((item,i) => (
+                <div key={i} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #fecdd3" }}>
+                  <div style={{ fontWeight:800, color:"#be123c", marginBottom:3 }}>{item.t}</div>
+                  <div style={{ color:"#334155" }}>{item.b}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </AppShell>
@@ -413,63 +234,387 @@ export default function Tier3Report() {
   );
 }
 
-function Tier3AIAnalysis({ apiUrl, startDate, endDate }: { apiUrl: string; startDate?: string; endDate?: string }) {
-  const [analysis, setAnalysis] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [visible, setVisible] = useState(false);
+// ====== 학생별 FBA/BIP 프레임 (1열, 내부 1행 4열 FBA차트+AI / 2행 4열 EBP선택 / 협의기록 / 종합 AI) ======
+interface BIPRecord { [key: string]: any; }
 
-  const requestAnalysis = async () => {
-    setLoading(true); setVisible(true);
+function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }: {
+  student: Tier3Student; apiUrl: string; startDate?: string; endDate?: string; ebpCatalog: any[];
+}) {
+  const [bip, setBip] = useState<BIPRecord | null>(null);
+  const [ebp, setEbp] = useState<Record<string, EBPItem[]>>({ PreventionEBP: [], TeachingEBP: [], ConsequenceEBP: [] });
+  const [crisisProtocol, setCrisisProtocol] = useState<Record<string, string>>(withCrisisDefaults({}));
+  const [loadingBip, setLoadingBip] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [aiInitial, setAiInitial] = useState<{ loading: boolean; text: string; saved: boolean }>({ loading: false, text: "", saved: false });
+  const [aiDecision, setAiDecision] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
+
+  const getIntensityColor = (i: number) => i >= 5 ? "#ef4444" : i >= 3 ? "#f59e0b" : "#22c55e";
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await axios.get(`${apiUrl}/api/v1/bip/students/${s.code}/bip`);
+        const d = res.data || {};
+        setBip(d);
+        setEbp({
+          PreventionEBP: safeParseEBP(d.PreventionEBP),
+          TeachingEBP: safeParseEBP(d.TeachingEBP),
+          ConsequenceEBP: safeParseEBP(d.ConsequenceEBP),
+        });
+        setCrisisProtocol(safeParseCrisisProtocol(d.CrisisEBP));
+      } catch { setBip({ StudentCode: s.code }); }
+      finally { setLoadingBip(false); }
+    })();
+  }, [apiUrl, s.code]);
+
+  const handleSaveEBP = async () => {
+    setSaving(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-tier3-analysis`, { start_date: startDate || null, end_date: endDate || null }, { timeout: 180000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch (e: any) { setAnalysis("⚠️ AI 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")"); }
-    finally { setLoading(false); }
+      await axios.post(`${apiUrl}/api/v1/bip/students/${s.code}/bip`, {
+        ...(bip || {}),
+        StudentCode: s.code,
+        PreventionEBP: JSON.stringify(ebp.PreventionEBP),
+        TeachingEBP: JSON.stringify(ebp.TeachingEBP),
+        ConsequenceEBP: JSON.stringify(ebp.ConsequenceEBP),
+        CrisisEBP: JSON.stringify(crisisProtocol),
+      });
+      alert("EBP 선택·위기행동지원절차·충실도 체크포인트가 저장되었습니다.");
+    } catch { alert("저장 실패"); }
+    finally { setSaving(false); }
   };
 
+  const handleInitialBIP = async () => {
+    setAiInitial({ loading: true, text: "", saved: false });
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/bip/students/${s.code}/ai-bip-full`, {
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+        medication_status: bip?.MedicationStatus || "",
+        reinforcer_info: bip?.ReinforcerInfo || "",
+        other_considerations: bip?.OtherConsiderations || "",
+      }, { timeout: 180000 });
+      const analysisText = res.data.analysis || "분석 결과가 없습니다.";
+
+      // 실제 BIP 문서(1~8번 필드)에 자동 반영 — 기존 내용은 지우지 않고 뒤에 이어붙인다.
+      const parsed = parseBIPAIResult(analysisText);
+      let saved = false;
+      if (Object.keys(parsed).length > 0) {
+        const updatedBip: BIPRecord = { ...(bip || {}), StudentCode: s.code };
+        for (const [k, v] of Object.entries(parsed)) {
+          if (!v) continue;
+          const existing = (updatedBip[k] || "").toString().trim();
+          updatedBip[k] = existing ? `${existing}\n\n${v}` : v;
+        }
+        await axios.post(`${apiUrl}/api/v1/bip/students/${s.code}/bip`, updatedBip);
+        setBip(updatedBip);
+        saved = true;
+      }
+      setAiInitial({ loading: false, text: analysisText, saved });
+    } catch (e: any) {
+      setAiInitial({ loading: false, text: "⚠️ 요청 실패: " + (e?.response?.data?.detail || e?.message || "타임아웃"), saved: false });
+    }
+  };
+
+  const handleDecisionAI = async () => {
+    setAiDecision({ loading: true, text: "" });
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/bip/students/${s.code}/ai-decision-recommendation`, {
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      }, { timeout: 180000 });
+      setAiDecision({ loading: false, text: res.data.analysis || "분석 결과가 없습니다." });
+    } catch (e: any) {
+      setAiDecision({ loading: false, text: "⚠️ 요청 실패: " + (e?.response?.data?.detail || e?.message || "타임아웃") });
+    }
+  };
+
+  const maxIncidents = Math.max(s.incidents, 1);
+
   return (
-    <div style={{ marginTop: "20px" }}>
-      {!visible ? (
-        <button onClick={requestAnalysis} style={{
-          padding: "10px 22px", background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-          color: "white",
-          border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼) */
-          borderRadius: "10px", cursor: "pointer",
-          fontSize: "0.9rem", fontWeight: 700, boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
-          display: "inline-flex", alignItems: "center", gap: "8px",
-          transition: "transform 0.2s"
-        }}
-        onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-        onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-          <span>🤖</span> BCBA AI 종합 분석
-        </button>
-      ) : (
-        <div style={{
-          background: "#fff",
-          border: "2.5px solid #2563eb", /* 파란색 외곽선 (기존 버튼 모달) */
-          borderRadius: "14px", padding: "24px", marginTop: "12px",
-          boxShadow: "0 10px 30px rgba(37,99,235,0.15)"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <h3 style={{ margin: 0, color: "#2563eb", fontSize: "1.05rem", fontWeight: 800 }}>🤖 BCBA AI 분석 — Tier 3 학생 종합</h3>
-            <button onClick={() => setVisible(false)} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "1.1rem" }}>✕</button>
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
+      {/* Frame header */}
+      <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #fef2f2, #fff)', borderBottom: '2px solid #fecdd3', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700, color: s.tier === "Tier3+" ? "#7c3aed" : "#ef4444", background: s.tier === "Tier3+" ? "#7c3aed15" : "#ef444415" }}>{s.tier}</span>
+          <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{maskName(s.name) || s.code}</strong>
+          <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{s.code} · {s.class}</span>
+          <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 600, color: s.decision_color, background: `${s.decision_color}12`, border: `1px solid ${s.decision_color}30` }}>{s.decision}</span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => window.location.href = `/student/${s.code}`} style={{ padding: "5px 12px", background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}>상세</button>
+          <button onClick={() => window.location.href = `/student/${s.code}/bip`} style={{ padding: "5px 12px", background: "#8b5cf6", color: "white", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}>BIP 전문 편집</button>
+        </div>
+      </div>
+
+      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+        {/* Row 1: 3 FBA trend charts + AI cell (4-col) */}
+        <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          <div style={{ background: '#fafafa', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 발생빈도 추이</div>
+            {s.weekly_trend_freq && s.weekly_trend_freq.length > 0 ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <LineChart data={s.weekly_trend_freq}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="week" style={{ fontSize: '8px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
+                  <YAxis allowDecimals={false} style={{ fontSize: '8px' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line type="monotone" dataKey="count" name="발생빈도" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
           </div>
-          {loading ? <div style={{ textAlign: "center", padding: "30px", color: "#2563eb", fontWeight: 700 }}>⏳ AI가 Tier 3 위기 학생 데이터를 심층 분석 중입니다...</div>
-            : <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem", lineHeight: "1.8", color: "#334155" }}>{analysis}</div>}
+
+          <div style={{ background: '#fafafa', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#0f172a' }}>🎭 행동 유형 분포</div>
+            {s.behavior_types.length > 0 ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <PieChart>
+                  <Pie data={s.behavior_types.map(b => ({ ...b, name: b.name.split(':')[0] }))} cx="50%" cy="50%" outerRadius={55} innerRadius={30} paddingAngle={3} dataKey="value">
+                    {s.behavior_types.map((_: any, idx: number) => <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => [`${v}건`, '']} />
+                  <Legend wrapperStyle={{ fontSize: '8px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
+          </div>
+
+          <div style={{ background: '#fafafa', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#0f172a' }}>⚡ 행동 강도 정보</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '4px' }}>
+              {[
+                { label: '최대 강도', val: s.max_intensity, max: 5 },
+                { label: '평균 강도', val: s.avg_intensity, max: 5 },
+                { label: '보고 건수', val: s.incidents, max: maxIncidents },
+              ].map((item, idx) => (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: '3px' }}>
+                    <span style={{ color: '#64748b' }}>{item.label}</span>
+                    <span style={{ fontWeight: 700, color: getIntensityColor(item.val) }}>{item.val}{idx < 2 ? '/5' : '건'}</span>
+                  </div>
+                  <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(100, (item.val / item.max) * 100)}%`, height: '100%', background: idx === 2 ? '#ef4444' : getIntensityColor(item.val), borderRadius: '4px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background: 'linear-gradient(135deg, #faf5ff, #fff)', borderRadius: '12px', padding: '14px', border: '1px solid #ddd5f5', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#7c3aed' }}>🤖 AI 분석 결과</div>
+            <button
+              onClick={handleInitialBIP}
+              disabled={aiInitial.loading}
+              style={{
+                padding: '7px 10px', background: aiInitial.loading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                color: 'white', border: '2px solid #2563eb', borderRadius: '8px',
+                cursor: aiInitial.loading ? 'wait' : 'pointer', fontSize: '0.72rem', fontWeight: 700, marginBottom: '10px'
+              }}
+            >
+              {aiInitial.loading ? "⏳ 분석 중..." : "🤖 최초 FBA기반BIP작성 제안"}
+            </button>
+            {aiInitial.saved && (
+              <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                ✅ BIP 문서에 자동 반영됨 —
+                <a href={`/student/${s.code}/bip`} style={{ color: '#2563eb', textDecoration: 'underline' }}>전문 편집에서 확인/다듬기</a>
+              </div>
+            )}
+            <div style={{ flex: 1, overflowY: 'auto', maxHeight: 150, fontSize: '0.72rem', lineHeight: 1.6, color: '#334155', whiteSpace: 'pre-wrap' }}>
+              {!aiInitial.text && !aiInitial.loading && <span style={{ color: '#94a3b8' }}>현재 설정 기간 데이터를 바탕으로 최초 BIP 초안을 제안받으세요. (BIP 문서 1~8번 필드에 자동 반영됩니다)</span>}
+              {aiInitial.loading && <span style={{ color: '#7c3aed' }}>🧠 FBA 데이터 분석 중...</span>}
+              {aiInitial.text}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: EBP selection (예방/교수/후속결과) + 위기행동지원절차 (4-col) */}
+        <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, alignItems: 'start' }}>
+          {(["PreventionEBP", "TeachingEBP", "ConsequenceEBP"] as const).map(fieldKey => (
+            <EBPColumnEditor
+              key={fieldKey}
+              fieldKey={fieldKey}
+              items={ebp[fieldKey]}
+              onChange={(items) => setEbp(prev => ({ ...prev, [fieldKey]: items }))}
+              catalog={ebpCatalog}
+            />
+          ))}
+          <CrisisProtocolEditor value={crisisProtocol} onChange={setCrisisProtocol} />
+        </div>
+        <div>
+          <button onClick={handleSaveEBP} disabled={saving || loadingBip} style={{ padding: '8px 18px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }}>
+            {saving ? "저장 중..." : "💾 EBP 선택·위기행동지원절차 저장"}
+          </button>
+        </div>
+
+        {/* 개별화교육지원팀 협의 (누적, 학생별) */}
+        <MeetingNotesSection apiUrl={apiUrl} meetingType="fba_bip_team" studentCode={s.code} title="개별화교육지원팀 협의 기록" />
+
+        {/* 종합 데이터기반 의사결정 제안 */}
+        <div style={{ background: 'linear-gradient(135deg, #eff6ff, #fff)', borderRadius: '14px', border: '1px solid #bfdbfe', padding: '16px 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1e3a8a' }}>📊 데이터기반 의사결정을 위한 제안 (DBDM)</div>
+            <button
+              onClick={handleDecisionAI}
+              disabled={aiDecision.loading}
+              style={{
+                padding: '8px 18px', background: aiDecision.loading ? '#93c5fd' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                color: 'white', border: '2px solid #1e3a8a', borderRadius: '8px',
+                cursor: aiDecision.loading ? 'wait' : 'pointer', fontSize: '0.82rem', fontWeight: 700
+              }}
+            >
+              {aiDecision.loading ? "⏳ 종합 분석 중..." : "🤖 데이터기반 의사결정 제안 받기"}
+            </button>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: aiDecision.text ? 10 : 0 }}>
+            현재 설정 기간 데이터 + 현재 BIP + 위 EBP 실행충실도 + 개별화교육지원팀 협의 기록을 종합 분석합니다. (실행 전 EBP·협의 내용을 먼저 저장하세요)
+          </div>
+          {aiDecision.loading && <div style={{ textAlign: 'center', padding: '20px', color: '#2563eb', fontWeight: 700, fontSize: '0.82rem' }}>⏳ 종합 분석 중입니다...</div>}
+          {aiDecision.text && !aiDecision.loading && (
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: 1.75, color: '#1e293b', background: '#fff', padding: '14px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
+              {aiDecision.text}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ====== EBP 선택/직접입력 + 충실도 체크포인트 1개 컬럼 ======
+function EBPColumnEditor({ fieldKey, items, onChange, catalog }: {
+  fieldKey: string; items: EBPItem[]; onChange: (items: EBPItem[]) => void; catalog: any[];
+}) {
+  const [pickCode, setPickCode] = useState("");
+  const [customName, setCustomName] = useState("");
+  const categories = EBP_CATEGORY_MAP[fieldKey] || [];
+  const options = categories.length > 0 ? catalog.filter(c => categories.includes(c.category)) : [];
+
+  const addFromCatalog = () => {
+    const strat = options.find(o => o.code === pickCode);
+    if (!strat) return;
+    if (items.some(i => i.code === strat.code)) { setPickCode(""); return; }
+    onChange([...items, { code: strat.code, name: strat.name, fidelity: "" }]);
+    setPickCode("");
+  };
+
+  const addCustom = () => {
+    if (!customName.trim()) return;
+    onChange([...items, { name: customName.trim(), fidelity: "" }]);
+    setCustomName("");
+  };
+
+  const removeItem = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+  const updateFidelity = (idx: number, val: string) => onChange(items.map((it, i) => i === idx ? { ...it, fidelity: val } : it));
+
+  return (
+    <div style={{ background: '#fafafa', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#0f172a' }}>{EBP_COLUMN_LABELS[fieldKey]}</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((it, idx) => (
+          <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0f172a' }}>
+                {it.code && <span style={{ padding: '1px 5px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '0.65rem', marginRight: 5 }}>{it.code}</span>}
+                {it.name}
+              </span>
+              <button onClick={() => removeItem(idx)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
+            </div>
+            <input
+              type="text"
+              value={it.fidelity}
+              onChange={e => updateFidelity(idx, e.target.value)}
+              placeholder="충실도 체크포인트 (예: 매 수업 시작 5분 내 실시 여부)"
+              style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.72rem', boxSizing: 'border-box' }}
+            />
+          </div>
+        ))}
+        {items.length === 0 && <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: 0 }}>선택된 전략이 없습니다.</p>}
+      </div>
+
+      {options.length > 0 && (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <select value={pickCode} onChange={e => setPickCode(e.target.value)} style={{ flex: 1, padding: '5px 6px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.72rem' }}>
+            <option value="">EBP 카탈로그에서 선택...</option>
+            {options.map(o => <option key={o.code} value={o.code}>{o.code} — {o.name}</option>)}
+          </select>
+          <button onClick={addFromCatalog} disabled={!pickCode} style={{ padding: '5px 10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}>추가</button>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="text"
+          value={customName}
+          onChange={e => setCustomName(e.target.value)}
+          placeholder="직접 입력..."
+          style={{ flex: 1, padding: '5px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.72rem' }}
+          onKeyDown={e => { if (e.key === 'Enter') addCustom(); }}
+        />
+        <button onClick={addCustom} disabled={!customName.trim()} style={{ padding: '5px 10px', background: '#64748b', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}>추가</button>
+      </div>
+    </div>
+  );
+}
+
+// ====== 위기행동지원절차 편집기 (학교 표준 프로토콜 기본값, 학생별 수정 가능) ======
+function CrisisProtocolEditor({ value, onChange }: {
+  value: Record<string, string>; onChange: (v: Record<string, string>) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const update = (key: string, text: string) => onChange({ ...value, [key]: text });
+  const resetOne = (key: string, def: string) => onChange({ ...value, [key]: def });
+
+  return (
+    <div style={{ background: '#fff5f5', borderRadius: '12px', padding: '14px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#0f172a' }}>🚨 위기행동지원절차</div>
+        <span style={{ fontSize: '0.7rem', color: '#b91c1c', fontWeight: 700 }}>{expanded ? '▲ 접기' : `▼ ${CRISIS_PROTOCOL_FIELDS.length}단계 펼치기`}</span>
+      </div>
+      {!expanded && (
+        <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>학교 표준 프로토콜 기본값이 적용되어 있습니다. 펼쳐서 학생별로 수정할 수 있습니다.</p>
+      )}
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {CRISIS_PROTOCOL_FIELDS.map(f => (
+            <div key={f.key}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#b91c1c' }}>{f.label}</span>
+                {value[f.key] !== f.default && (
+                  <button onClick={() => resetOne(f.key, f.default)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.68rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                    기본값으로
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={value[f.key] ?? f.default}
+                onChange={e => update(f.key, e.target.value)}
+                rows={2}
+                style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #fecaca', fontSize: '0.72rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+              />
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, meetingType: string, title: string }) {
+// ====== 회의록/협의기록 섹션 (학급 공통 또는 학생별, 누적기록) ======
+function MeetingNotesSection({ apiUrl, meetingType, title, studentCode }: { apiUrl: string, meetingType: string, title: string, studentCode?: string }) {
   const [expanded, setExpanded] = useState(false);
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchNotes = async () => {
-    try { const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${meetingType}`); setNotes(res.data.notes || []); } catch (e) { }
+    try {
+      const params = new URLSearchParams({ meeting_type: meetingType });
+      if (studentCode) params.append("student_code", studentCode);
+      const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?${params.toString()}`);
+      setNotes(res.data.notes || []);
+    } catch (e) { }
   };
 
   useEffect(() => { if (expanded) fetchNotes(); }, [expanded]);
@@ -478,7 +623,7 @@ function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, m
     if (!content.trim()) return;
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/v1/meeting-notes`, { meeting_type: meetingType, date: new Date().toISOString().split('T')[0], content, author: "Teacher" });
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, { meeting_type: meetingType, date: new Date().toISOString().split('T')[0], content, author: "Teacher", student_code: studentCode || "" });
       setContent(""); fetchNotes(); alert("저장되었습니다.");
     } catch { alert("저장 실패"); } finally { setLoading(false); }
   };
@@ -492,14 +637,14 @@ function MeetingNotesSection({ apiUrl, meetingType, title }: { apiUrl: string, m
       {expanded && (
         <div style={{ padding: "20px", borderTop: "1px solid #e2e8f0" }}>
           <div style={{ marginBottom: "16px" }}>
-            <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="회의 내용을 비식별화하여 입력하세요..."
-              style={{ width: "100%", minHeight: "80px", padding: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", color: "#1e293b", marginBottom: "8px", fontFamily: 'inherit' }} />
+            <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="협의 내용을 비식별화하여 입력하세요..."
+              style={{ width: "100%", minHeight: "80px", padding: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", color: "#1e293b", marginBottom: "8px", fontFamily: 'inherit', boxSizing: 'border-box' }} />
             <button onClick={saveNote} disabled={loading || !content.trim()}
               style={{ padding: "8px 16px", background: "#6366f1", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.85rem", opacity: loading ? 0.7 : 1 }}>
-              {loading ? "저장 중..." : "회의록 저장"}
+              {loading ? "저장 중..." : "협의 기록 저장 (누적)"}
             </button>
           </div>
-          <h4 style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "#64748b" }}>📋 최근 기록</h4>
+          <h4 style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "#64748b" }}>📋 누적 기록</h4>
           {notes.length === 0 ? <p style={{ color: "#94a3b8", fontSize: "0.85rem" }}>기록이 없습니다.</p> : (
             <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "200px", overflowY: "auto" }}>
               {notes.map(n => (

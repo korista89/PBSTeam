@@ -94,24 +94,28 @@ export default function AppShell({
             groupTitle: "기록 / 학생",
             items: [
                 { href: "/behavior", label: "행동기록", key: "behavior", icon: "✍️" },
+                { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
                 { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },
-                { href: "/cico", label: "CICO입력", key: "cico", icon: "📝" }
+                { href: "/cico", label: "CICO 관리", key: "cico", icon: "📝" }
             ]
         },
         {
             groupTitle: "분석 / EBP",
             items: [
-                { href: "/report/tier2", label: "CICO리포트", key: "report-tier2", icon: "📈" },
-                { href: "/report/tier3", label: "T3리포트", key: "report-tier3", icon: "🔴" },
+                { href: "/report/tier3", label: "FBA/BIP관리", key: "report-tier3", icon: "🧩" },
                 { href: "/ebp", label: "Be-Able EBP", key: "ebp", icon: "📚" }
             ]
         },
         {
             groupTitle: "협업 / 도구",
             items: [
-                { href: "/meeting", label: "협의회", key: "meeting", icon: "🤝" },
-                { href: "/protocol", label: "프로토콜", key: "protocol", icon: "📜" },
                 { href: "/picture-word", label: "경은그림말", key: "picture-word", icon: "🎨" }
+            ]
+        },
+        {
+            groupTitle: "도움말",
+            items: [
+                { href: "/protocol", label: "프로토콜 안내", key: "protocol", icon: "📜" }
             ]
         }
     ];

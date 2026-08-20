@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
+import { useRouter } from "next/navigation";
 import { EBPStrategy, EBPCategory, FunctionCode } from "../../types/domain";
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: string; color: string }> = {
@@ -26,6 +27,7 @@ const FUNCTION_LABELS: Record<string, string> = {
 };
 
 export default function EBPLibraryPage() {
+    const router = useRouter();
     const [strategies, setStrategies] = useState<EBPStrategy[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -396,9 +398,24 @@ export default function EBPLibraryPage() {
                                     </div>
                                 )}
 
-                                <div style={{ textAlign: "right", marginTop: "24px" }}>
+                                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px" }}>
                                     <button
                                         onClick={() => setActiveStrategy(null)}
+                                        style={{
+                                            padding: "10px 24px",
+                                            background: "#f1f5f9",
+                                            color: "#475569",
+                                            border: "none",
+                                            borderRadius: "10px",
+                                            fontWeight: 700,
+                                            cursor: "pointer"
+                                        }}
+                                    >
+                                        닫기
+                                    </button>
+                                    <button
+                                        onClick={() => router.push("/report/tier3")}
+                                        title="FBA/BIP관리에서 이 전략을 학생에게 선택·적용하고 충실도를 기록할 수 있습니다"
                                         style={{
                                             padding: "10px 24px",
                                             background: "#0f172a",
@@ -409,7 +426,7 @@ export default function EBPLibraryPage() {
                                             cursor: "pointer"
                                         }}
                                     >
-                                        닫기
+                                        🧩 학생에게 적용 →
                                     </button>
                                 </div>
                             </div>
