@@ -3,7 +3,10 @@
 # 실행: PowerShell에서 .\start_tunnel.ps1
 # =============================================================
 
-$VERCEL_TOKEN = "YOUR_VERCEL_TOKEN_HERE"   # vercel.com → Account Settings → Tokens 에서 발급 후 여기에 붙여넣기
+# 토큰은 이 파일(git 추적됨)에 절대 직접 붙여넣지 말 것 - 공개 GitHub 저장소에 올라갈 수 있음.
+# 대신 실행 전에 한 번만 환경변수로 설정: $env:VERCEL_TOKEN = "발급받은 토큰"
+$VERCEL_TOKEN = $env:VERCEL_TOKEN
+if (-not $VERCEL_TOKEN) { $VERCEL_TOKEN = "YOUR_VERCEL_TOKEN_HERE" }
 $VERCEL_PROJECT_ID = "prj_XKReCjAFJ3bzYFV3m5cAruaIdJHu"   # pbs-team 프로젝트 ID (확인 완료)
 $VERCEL_TEAM_ID = "team_MdTGyz07UGIlSIeDpTpNxy57"         # korista89's projects 팀 ID (확인 완료)
 
@@ -24,28 +27,29 @@ try {
 
 # 2. cloudflared 터널 시작 (백그라운드)
 Write-Host "`n[2/3] Cloudflare 터널 시작 중..." -ForegroundColor Yellow
-$logFile = "$env:TEMP\cloudflared_tunnel.log"
+# cloudflared는 터널 URL을 stderr로 출력하는 경우가 많아, stdout/stderr를 각각 다른 파일로
+# 받아서(Start-Process는 두 스트림에 같은 파일을 쓸 수 없음) 둘 다 검색한다.
+$logFileOut = "$env:TEMP\cloudflared_tunnel.out.log"
+$logFileErr = "$env:TEMP\cloudflared_tunnel.err.log"
 $process = Start-Process -FilePath "cloudflared" `
     -ArgumentList "tunnel --url http://127.0.0.1:1234" `
-    -RedirectStandardOutput $logFile `
-    -RedirectStandardError $logFile `
+    -RedirectStandardOutput $logFileOut `
+    -RedirectStandardError $logFileErr `
     -PassThru -WindowStyle Hidden
 
 # URL이 나올 때까지 대기 (최대 15초)
 $tunnelUrl = ""
 for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Milliseconds 500
-    if (Test-Path $logFile) {
-        $content = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
-        if ($content -match "https://[a-z0-9\-]+\.trycloudflare\.com") {
-            $tunnelUrl = $Matches[0]
-            break
-        }
+    $content = (Get-Content $logFileOut -Raw -ErrorAction SilentlyContinue) + (Get-Content $logFileErr -Raw -ErrorAction SilentlyContinue)
+    if ($content -match "https://[a-z0-9\-]+\.trycloudflare\.com") {
+        $tunnelUrl = $Matches[0]
+        break
     }
 }
 
 if (-not $tunnelUrl) {
-    Write-Host "  ❌ 터널 URL을 감지하지 못했습니다. 터널 로그를 확인하세요: $logFile" -ForegroundColor Red
+    Write-Host "  ❌ 터널 URL을 감지하지 못했습니다. 터널 로그를 확인하세요: $logFileOut / $logFileErr" -ForegroundColor Red
     exit 1
 }
 
