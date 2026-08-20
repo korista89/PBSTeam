@@ -205,6 +205,13 @@ a {
   gap: var(--space-2);
 }
 
+/* Generic responsive grids - collapse to a single column at <=768px (see Responsive Rules below) */
+.grid-responsive {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
 /* KPI Strip */
 .kpi-grid {
   display: grid;
@@ -285,6 +292,7 @@ a {
 
 .dense-table {
   width: 100%;
+  min-width: 600px;
   border-collapse: collapse;
   font-size: 0.85rem;
   text-align: left;
@@ -306,6 +314,7 @@ a {
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-primary);
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .dense-table tr:last-child td {
@@ -468,32 +477,18 @@ a {
 }
 
 /* Responsive Rules */
+/* .app-sidebar's own mobile (<=1024px) hide/show-as-drawer behavior lives in
+   AppShell.tsx's scoped <style jsx> alongside the hamburger toggle it depends on -
+   this used to also collapse it to an icon-only rail here, which fought with that
+   drawer (labels stayed hidden even while the drawer was open). Only non-sidebar
+   layout rules belong here. */
 @media (max-width: 1024px) {
-  .app-sidebar {
-    width: 64px;
-  }
-  .sidebar-group-label,
-  .sidebar-link-text,
-  .sidebar-logo-text {
-    display: none !important;
-  }
-  .sidebar-link {
-    justify-content: center !important;
-    padding: 10px 0 !important;
+  .responsive-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
 @media (max-width: 768px) {
-  .app-layout {
-    flex-direction: column;
-  }
-  .app-sidebar {
-    width: 100%;
-    height: auto;
-    position: relative;
-    border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
   .app-topbar {
     padding: 0 var(--space-3);
   }
@@ -502,5 +497,18 @@ a {
   }
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  /* Fixed-px two-column layouts (student list + form/timeline splits) forced
+     horizontal overflow at phone widths - collapse to a single stacked column.
+     !important is required: these grids are set via inline style, which wins
+     over a plain external rule regardless of media query. */
+  .behavior-outer-grid,
+  .behavior-split-grid,
+  .minutes-form-grid,
+  .responsive-grid-2,
+  .responsive-grid-3,
+  .responsive-grid-4,
+  .grid-responsive {
+    grid-template-columns: 1fr !important;
   }
 }

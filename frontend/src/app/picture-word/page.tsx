@@ -1619,6 +1619,7 @@ export default function PictureWordPage() {
           + 협의록 추가
         </h3>
         <div
+          className="minutes-form-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "150px 160px 1fr 1fr auto",
@@ -1755,9 +1756,11 @@ export default function PictureWordPage() {
 
       {/* 협의록 테이블 */}
       <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
         <table
           style={{
             width: "100%",
+            minWidth: "600px",
             borderCollapse: "collapse",
             fontSize: "0.87rem",
           }}
@@ -1948,6 +1951,7 @@ export default function PictureWordPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

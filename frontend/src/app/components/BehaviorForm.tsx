@@ -395,7 +395,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
             </div>
 
             {/* 1차/2차 개별학생교육지원 */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '0.9rem' }}>
+            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+            <table style={{ width: '100%', minWidth: '520px', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <tbody>
                 <tr>
                   <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', width: '15%', verticalAlign: 'top' }}>1차 개별학생<br/>교육지원</td>
@@ -427,6 +428,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
                 </tr>
               </tbody>
             </table>
+            </div>
 
             {/* A-B-C 행동 분석 */}
             <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>행동 분석 (A-B-C)</h4>
@@ -445,7 +447,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
 
             {/* 발생 이후 조치사항 */}
             <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>발생 이후 조치사항</h4>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+            <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: '480px', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f1f5f9' }}>
                   <th style={{ border: '1px solid #ccc', padding: '8px', width: '20%' }}>구분</th>
@@ -476,6 +479,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 

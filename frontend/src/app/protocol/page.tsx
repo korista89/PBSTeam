@@ -19,7 +19,7 @@ export default function ProtocolPage() {
             >
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     {/* Tier Summary KPI Grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px" }}>
+                    <div className="kpi-grid">
                         <div className="card" style={{ padding: "14px", borderLeft: "4px solid var(--tier1)", background: "var(--tier1-bg)" }}>
                             <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--tier1-text)" }}>Tier 1 (보편적 지원)</div>
                             <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)", marginTop: "4px" }}>전교생 예방 교육</div>
@@ -48,7 +48,7 @@ export default function ProtocolPage() {
                     </div>
 
                     {/* Main Split: Left Decision Flow Chart + Right Detailed Protocol Table */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "20px", alignItems: "start" }}>
+                    <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "20px", alignItems: "start" }}>
                         {/* Left: Pure React/CSS Decision Tree Flow */}
                         <div className="card" style={{ padding: "20px" }}>
                             <div className="card-header">

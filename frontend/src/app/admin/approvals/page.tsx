@@ -123,7 +123,7 @@ export default function AdminApprovalsPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                   <div>
                     <p><strong>학생:</strong> {log['학생명']} ({log['학생코드']})</p>
                     <p><strong>날짜/시간:</strong> {log['행동발생날짜']} ({log['시간대']})</p>

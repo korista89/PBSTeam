@@ -360,7 +360,8 @@ function TierUpgradeList({
   return (
     <div style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
       {listHeader}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+      <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', minWidth: '640px', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
         <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
           <tr>
             {['우선순위', '학생명', '학급', '누적 빈도', '위험도', '차트'].map(h => (
@@ -498,6 +499,7 @@ function TierUpgradeList({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

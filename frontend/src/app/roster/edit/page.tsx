@@ -160,7 +160,8 @@ export default function CodeManagementPage() {
             </div>
           ) : (
             <div className="card" style={{ padding: "20px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "120px 180px 1fr", gap: "10px", fontWeight: 800, paddingBottom: "10px", borderBottom: "2px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: "0.82rem" }}>
+              <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: "480px", display: "grid", gridTemplateColumns: "120px 180px 1fr", gap: "10px", fontWeight: 800, paddingBottom: "10px", borderBottom: "2px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: "0.82rem" }}>
                 <div>코드 (ID)</div>
                 <div>학생 실명</div>
                 <div>비고 (학년/반/번호)</div>
@@ -168,7 +169,7 @@ export default function CodeManagementPage() {
 
               <div style={{ maxHeight: "70vh", overflowY: "auto" }}>
                 {codes.map((item, idx) => (
-                  <div key={idx} style={{ display: "grid", gridTemplateColumns: "120px 180px 1fr", gap: "10px", padding: "10px 0", borderBottom: "1px solid var(--border-subtle)", alignItems: "center" }}>
+                  <div key={idx} style={{ minWidth: "480px", display: "grid", gridTemplateColumns: "120px 180px 1fr", gap: "10px", padding: "10px 0", borderBottom: "1px solid var(--border-subtle)", alignItems: "center" }}>
                     <div style={{ fontWeight: 800, color: "var(--primary-blue)", fontSize: "0.88rem" }}>
                       {item.code}
                     </div>
@@ -193,6 +194,7 @@ export default function CodeManagementPage() {
                     </div>
                   </div>
                 ))}
+              </div>
               </div>
             </div>
           )}
