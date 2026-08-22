@@ -201,7 +201,7 @@ async def ai_bip_full(
     if req.start_date and req.end_date:
         sd = normalize_date_string(req.start_date)
         ed = normalize_date_string(req.end_date)
-        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("발생날짜", r.get("date", ""))) <= ed]
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
         
     status_records = fetch_student_status()
     student_info = {"code": student_code}
@@ -260,7 +260,7 @@ async def ai_decision_recommendation(
     if req.start_date and req.end_date:
         sd = normalize_date_string(req.start_date)
         ed = normalize_date_string(req.end_date)
-        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("발생날짜", r.get("date", ""))) <= ed]
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
 
     status_records = fetch_student_status()
     student_info = {"code": student_code}
