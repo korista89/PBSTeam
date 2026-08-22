@@ -24,3 +24,10 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Local-only tool state (not shareable)
+.claude/settings.local.json
+.claude/.headroom_wrap_marker.json
+.claude/worktrees/
+.serena/project.local.yml
+.serena/cache/
