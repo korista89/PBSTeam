@@ -47,23 +47,33 @@ export function formatWeek(weekStr: string): string {
 }
 
 /**
- * AI BIP 전문(생성 텍스트, 1~8번 형식)을 BIPData 8개 필드로 파싱합니다.
+ * AI BIP 전문(생성 텍스트, 1~11번 형식)을 BIPData 11개 필드로 파싱합니다.
  * `/student/[id]/bip`와 `/report/tier3`(FBA/BIP관리) 양쪽에서 공유합니다.
  */
 export function parseBIPAIResult(text: string): Record<string, string> {
   const sections: Record<string, string> = {};
-  const patterns: { key: string; pattern: RegExp }[] = [
-    { key: "TargetBehavior", pattern: /\*?\*?\[?1\.\s*표적행동\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?2\.|$)/i },
-    { key: "Hypothesis", pattern: /\*?\*?\[?2\.\s*가설[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?3\.|$)/i },
-    { key: "Goals", pattern: /\*?\*?\[?3\.\s*목표\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?4\.|$)/i },
-    { key: "PreventionStrategies", pattern: /\*?\*?\[?4\.\s*예방[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?5\.|$)/i },
-    { key: "TeachingStrategies", pattern: /\*?\*?\[?5\.\s*교수[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?6\.|$)/i },
-    { key: "ReinforcementStrategies", pattern: /\*?\*?\[?6\.\s*강화[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?7\.|$)/i },
-    { key: "CrisisPlan", pattern: /\*?\*?\[?7\.\s*위기[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)(?=\*?\*?\[?8\.|$)/i },
-    { key: "EvaluationPlan", pattern: /\*?\*?\[?8\.\s*평가[\s\S]*?\]?\*?\*?\s*\n([\s\S]*?)$/i },
+  const cleanText = text.split(/\n\s*---\s*\n\s*>/)[0].trim();
+  const fields: { key: string; num: number }[] = [
+    { key: "TargetBehavior", num: 1 },
+    { key: "Hypothesis", num: 2 },
+    { key: "Goals", num: 3 },
+    { key: "PreventionStrategies", num: 4 },
+    { key: "TeachingStrategies", num: 5 },
+    { key: "ReinforcementStrategies", num: 6 },
+    { key: "CrisisPlan", num: 7 },
+    { key: "EvaluationPlan", num: 8 },
+    { key: "MedicationStatus", num: 9 },
+    { key: "ReinforcerInfo", num: 10 },
+    { key: "OtherConsiderations", num: 11 },
   ];
-  for (const { key, pattern } of patterns) {
-    const match = text.match(pattern);
+
+  for (const { key, num } of fields) {
+    const current = `(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*{0,2})?\\[?${num}\\s*[.)]`;
+    const next = num < 11
+      ? `(?=\\n\\s*(?:#{1,6}\\s*)?(?:\\*{0,2})?\\[?${num + 1}\\s*[.)])`
+      : `(?=$)`;
+    const pattern = new RegExp(`${current}[^\\n]*\\n([\\s\\S]*?)${next}`, "i");
+    const match = cleanText.match(pattern);
     if (match) sections[key] = match[1].trim();
   }
   return sections;

@@ -2370,10 +2370,10 @@ def test_phase4_b_ai_structured_summary_suite():
     assert "기능분석(FA) 결과나 실제 기능 확률이 아님" in notice_st
     print("✅ [AI8] Recorded function wording safety guard verified: OK")
 
-    # AI9: n<5 / denominator / data-quality guards
+    # AI9: n<3 / denominator / data-quality guards
     assert "sample_size_n" in student_payload["data_quality_and_guards"]
     assert "denominator" in cico_payload["guards"]
-    print("✅ [AI9] n<5, denominator, data-quality guards present: OK")
+    print("✅ [AI9] n<3, denominator, data-quality guards present: OK")
 
     # AI10: API output response key contract
     with mock.patch("app.services.ai_insight._call_llm", return_value="### 1. 요약\n정상 분석"):
@@ -2459,11 +2459,11 @@ def test_phase4_b_ai_structured_summary_suite():
     from app.services.ai_insight import COMMON_BCBA_SYSTEM_PROMPT
     assert "추정기능" in COMMON_BCBA_SYSTEM_PROMPT
     assert "분모와 표본수" in COMMON_BCBA_SYSTEM_PROMPT
-    assert "표본 부족(n<5)" in COMMON_BCBA_SYSTEM_PROMPT
+    assert "3건 미만" in COMMON_BCBA_SYSTEM_PROMPT
     assert "데이터에 없는 내용" in COMMON_BCBA_SYSTEM_PROMPT
     print("✅ [AI18] System safety rules and clinical guardrails intact: OK")
 
-    # AI19: Token Ceiling Regressions (CICO <= 2300, Student <= 2000, Tier3 <= 2000)
+    # AI19: Token Ceiling Regressions (CICO <= 2300, Student <= 2500, Tier3 <= 2000)
     import math
     def mock_call_llm_capture(sys_p, user_p, max_t=8192):
         return user_p
@@ -2487,7 +2487,10 @@ def test_phase4_b_ai_structured_summary_suite():
         st_user_p = generate_bcba_student_analysis({"code": "21101", "name": "김철수", "class": "초1-1", "tier": 3}, mock_benchmark_student_logs)
         st_total_chars = len(COMMON_BCBA_SYSTEM_PROMPT) + len(st_user_p)
         st_tokens = int(st_total_chars / 1.8)
-        assert st_tokens <= 2000, f"Student token ceiling violated: {st_tokens} > 2000"
+        # Narrative-first FBA now carries structured fields, notes coverage,
+        # cross-tabs and five representative events; keep that richer payload
+        # bounded without dropping user-requested evidence.
+        assert st_tokens <= 2500, f"Student token ceiling violated: {st_tokens} > 2500"
 
         # 3. Tier 3 Token Check (Standard Tier3 benchmark fixture)
         t3_user_p = generate_bcba_tier3_analysis(mock_tier3_students, mock_benchmark_student_logs)
@@ -2495,7 +2498,7 @@ def test_phase4_b_ai_structured_summary_suite():
         t3_tokens = int(t3_total_chars / 1.8)
         assert t3_tokens <= 2000, f"Tier3 token ceiling violated: {t3_tokens} > 2000"
 
-    print(f"✅ [AI19] Token ceilings verified: CICO={cico_tokens} (<=2300), Student={st_tokens} (<=2000), Tier3={t3_tokens} (<=2000): OK")
+    print(f"✅ [AI19] Token ceilings verified: CICO={cico_tokens} (<=2300), Student={st_tokens} (<=2500), Tier3={t3_tokens} (<=2000): OK")
     return True
 
 

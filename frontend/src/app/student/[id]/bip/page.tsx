@@ -8,6 +8,7 @@ import { AuthCheck } from "../../../components/AuthProvider";
 import AppShell from "../../../components/AppShell";
 import { useDateRange } from "../../../components/GlobalNav";
 import { parseBIPAIResult } from "../../../utils";
+import ReadableAIResult from "../../../components/ReadableAIResult";
 import * as XLSX from "xlsx";
 
 
@@ -56,7 +57,7 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
     },
     {
         key: "CrisisPlan", num: 7, title: "위기행동지원 전략", color: "#be123c",
-        placeholder: "학교 차원 위기행동 지원 프로토콜을 기반으로 작성합니다:\n\n1단계(전조): 전조 징후 관찰 → 시각 도구로 자기조절 유도\n2단계(고조): 언어 자극 최소화 → 시각자료 활용하여 자극 차단\n3단계(대응): 위기대응팀 호출 → 제한적 물리적 제지\n4단계(분리): 안전한 분리 이동 → 10분 간격 관찰\n5단계(보고): 관리자 보고 → 행동데이터 입력 → 보고서 제출"
+        placeholder: "🚨 위기행동지원절차\n• 전조: 관찰 가능한 초기 신호와 즉시 줄일 자극\n• 고조: 언어·요구 축소와 안전거리 확보\n• 알림: 연락 대상·방법·시점\n• 장소/이동방법: 지정 장소와 승인된 안전 이동 절차\n• 관찰 방법: 행동강도·안전·회복 신호 기록\n• 호명반응 확인 방법: 학생에게 맞는 반응 기준\n• 지시 목록: 짧은 1단계 지시\n• 회복대화 방법: 감정 확인 후 짧게\n• 복귀의사 방법: 말·그림·몸짓 등 학생 방식\n• 복귀 후 반응: 낮은 요구부터 성공 강화"
     },
     {
         key: "EvaluationPlan", num: 8, title: "평가 계획(Tier3 졸업 기준 포함)", color: "#64748b",
@@ -228,7 +229,8 @@ export default function BIPEditor() {
                 medication_status: bip.MedicationStatus,
                 reinforcer_info: bip.ReinforcerInfo,
                 other_considerations: bip.OtherConsiderations,
-            }, { timeout: 180000 });
+                mode: "detailed",
+            }, { timeout: 240000 });
             setAiResult(res.data.analysis || "분석 결과가 없습니다.");
         } catch (e: any) {
             setAiResult("⚠️ AI BIP 제안 요청에 실패했습니다. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
@@ -473,16 +475,14 @@ export default function BIPEditor() {
                         <div style={{ padding: '16px' }}>
                             {!aiResult && !aiLoading && (
                                 <div style={{ color: '#9ca3af', fontSize: '0.85rem', lineHeight: '1.6' }}>
-                                    💡 AI BIP 제안 버튼을 누르면 아래 데이터를 종합 분석하여 1~8번 필드에 들어갈 BIP 내용을 제안합니다:
-                                    <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                                        <li>BehaviorLogs (설정 기간의 행동 데이터)</li>
-                                        <li>MeetingNotes (상담/관찰 기록)</li>
-                                        <li>TierStatus (현재 지원 현황)</li>
-                                        <li>CICO 월별 기록 데이터</li>
-                                        <li>9~11번 입력 내용 (약물/강화제/기타)</li>
-                                    </ul>
-                                    <p style={{ margin: '8px 0 0 0', fontStyle: 'italic' }}>
-                                        ※ &quot;생성 내용 추가&quot; 버튼을 누르면 기존 내용을 삭제하지 않고 AI 결과가 1~8번 칸에 자동 추가됩니다.
+                                     💡 3건 이상의 위기행동 자료가 있으면 아래 데이터를 교차분석하여 1~11번 전체 양식의 쉽고 상세한 BIP 제안을 만듭니다:
+                                     <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                                         <li>추정기능·행동유형·강도·횟수·시간대·장소·안전사건</li>
+                                         <li>특기사항(기타)의 서술식 기록에서 확인되는 맥락 단서</li>
+                                         <li>9~11번 입력 내용(약물·강화제·기타 고려사항)</li>
+                                     </ul>
+                                     <p style={{ margin: '8px 0 0 0', fontStyle: 'italic' }}>
+                                         ※ 없는 선행사건·후속결과는 만들지 않으며, &quot;생성 내용 추가&quot;를 누르면 기존 내용을 지우지 않고 1~11번 칸에 추가합니다.
                                     </p>
                                 </div>
                             )}
@@ -500,14 +500,14 @@ export default function BIPEditor() {
                                 </div>
                             )}
                             {aiResult && !aiLoading && (
-                                <div style={{
-                                    whiteSpace: 'pre-wrap', fontSize: '0.88rem',
-                                    lineHeight: '1.7', color: '#334155',
-                                    backgroundColor: '#faf9ff', padding: '16px', borderRadius: '8px',
-                                    border: '1px solid #ede9fe', maxHeight: '600px', overflowY: 'auto'
-                                }}>
-                                    {aiResult}
-                                </div>
+                                 <div style={{
+                                     fontSize: '0.88rem',
+                                     lineHeight: '1.7', color: '#334155',
+                                     backgroundColor: '#faf9ff', padding: '16px', borderRadius: '8px',
+                                     border: '1px solid #ede9fe', maxHeight: '600px', overflowY: 'auto'
+                                 }}>
+                                     <ReadableAIResult text={aiResult} />
+                                 </div>
                             )}
                         </div>
                     </div>

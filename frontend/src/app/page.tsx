@@ -13,6 +13,7 @@ import { useDateRange } from "./components/GlobalNav";
 import AppShell from "./components/AppShell";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
 import SectionAIButton from "./components/SectionAIButton";
+import ReadableAIResult from "./components/ReadableAIResult";
 import { maskName, formatWeek } from "./utils";
 import { useSheetLiveSync } from "./hooks/useSheetLiveSync";
 
@@ -587,12 +588,12 @@ export default function Home() {
                   <div style={{ width: '4px', height: '18px', background: '#ef4444', borderRadius: '2px' }} />
                   🔎 {interpretation ? `${interpretation.title} 차트 해석` : '차트 해석 보기'}
                 </div>
-                <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.8rem', lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-wrap' }}>
+                <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.8rem', lineHeight: 1.7, color: '#334155' }}>
                   {!interpretation && (
                     <span style={{ color: '#94a3b8' }}>아래 2행 차트의 &quot;📊 차트 해석&quot; 버튼을 누르면 여기에 결과가 뜹니다. 차트를 보면서 함께 읽을 수 있습니다.</span>
                   )}
                   {interpretation?.loading && <span style={{ color: '#ef4444' }}>🧠 분석 중입니다...</span>}
-                  {interpretation && !interpretation.loading && interpretation.text}
+                  {interpretation && !interpretation.loading && <ReadableAIResult text={interpretation.text} compact />}
                 </div>
               </div>
 
@@ -716,7 +717,7 @@ function TeamMeetingMinutesCard({ startDate, endDate }: { startDate: string; end
         end_date: periodEnd,
         context_start_date: `${new Date().getFullYear()}-01-01`,
         context_end_date: periodEnd
-      }, { timeout: 180000 });
+      }, { timeout: 240000 });
       setResult(res.data.analysis || "");
     } catch (e: any) {
       alert("협의록 생성 실패: " + (e.response?.data?.detail || e.message));
@@ -829,7 +830,7 @@ function TeamRequestSuggestionCard({
         },
         start_date: startDate || null,
         end_date: endDate || null
-      }, { timeout: 180000 });
+      }, { timeout: 240000 });
       setResult(res.data.analysis || "");
     } catch (e: any) {
       alert("의견 생성 실패: " + (e.response?.data?.detail || e.message));

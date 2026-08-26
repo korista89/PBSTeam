@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import axios from "axios";
+import ReadableAIResult from "./ReadableAIResult";
 
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
@@ -39,7 +40,7 @@ export default function SectionAIButton({
         data_context: dataContext || {},
         start_date: startDate || null,
         end_date: endDate || null
-      }, { timeout: 180000 });
+      }, { timeout: 240000 });
       const text = res.data.analysis || "분석 결과가 없습니다.";
       setAnalysis(text);
       if (onResult) onResult({ title, loading: false, text });
@@ -118,14 +119,14 @@ export default function SectionAIButton({
                 <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
               </div>
             </div>
-            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: '1.85', fontSize: '0.95rem', color: '#334155' }}>
+            <div style={{ padding: '28px', overflowY: 'auto', flex: 1, lineHeight: '1.75', fontSize: '0.95rem', color: '#334155' }}>
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '60px 0', color: '#ef4444' }}>
                   <div style={{ fontSize: '2.5rem', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>🧠</div>
                   <p style={{ fontWeight: 800, fontSize: '1.1rem' }}>{title} 데이터를 바탕으로 BCBA 정밀 분석 중입니다...</p>
                 </div>
               ) : (
-                analysis
+                <ReadableAIResult text={analysis} />
               )}
             </div>
           </div>

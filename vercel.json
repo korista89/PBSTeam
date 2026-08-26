@@ -10,7 +10,7 @@
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "15mb",
-        "maxDuration": 60
+        "maxDuration": 300
       }
     }
   ],

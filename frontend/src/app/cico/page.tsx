@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
+import ReadableAIResult from "../components/ReadableAIResult";
 import { maskName } from "../utils";
 import { requestSheetLiveRefresh, useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import {
@@ -318,7 +319,7 @@ export default function CICOPage() {
           code: student.code, target_behavior: student.target_behavior, behavior_type: student.behavior_type,
           scale: student.scale, goal_criteria: student.goal_criteria, rate: student.rate, achieved: student.achieved,
         }]
-      }, { timeout: 180000 });
+      }, { timeout: 240000 });
       setAiState({ loading: false, text: res.data.analysis || "분석 결과가 없습니다." });
     } catch (e: any) {
       setAiState({ loading: false, text: "⚠️ AI 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")" });
@@ -714,8 +715,8 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
           </button>
         </div>
         {aiState.text && (
-          <div style={{ marginTop: 12, whiteSpace: "pre-wrap", fontSize: "0.85rem", lineHeight: 1.7, color: "#334155", background: "#faf9ff", padding: 14, borderRadius: 8, border: "1px solid #ede9fe" }}>
-            {aiState.text}
+          <div style={{ marginTop: 12, fontSize: "0.85rem", lineHeight: 1.7, color: "#334155", background: "#faf9ff", padding: 14, borderRadius: 8, border: "1px solid #ede9fe" }}>
+            <ReadableAIResult text={aiState.text} />
           </div>
         )}
       </div>

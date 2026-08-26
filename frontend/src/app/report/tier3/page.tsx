@@ -10,6 +10,7 @@ import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import { maskName, formatWeek, parseBIPAIResult } from "../../utils";
+import ReadableAIResult from "../../components/ReadableAIResult";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -285,6 +286,14 @@ function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }:
   };
 
   const handleInitialBIP = async () => {
+    if (s.incidents < 3) {
+      setAiInitial({
+        loading: false,
+        text: `⚠️ 기능 추정을 위해 최소 3건 이상의 위기행동 데이터가 필요합니다. 현재 ${s.incidents}건입니다. 위기행동 데이터를 추가로 입력한 뒤 다시 시도해 주세요.`,
+        saved: false,
+      });
+      return;
+    }
     setAiInitial({ loading: true, text: "", saved: false });
     try {
       const res = await axios.post(`${apiUrl}/api/v1/bip/students/${s.code}/ai-bip-full`, {
@@ -293,10 +302,11 @@ function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }:
         medication_status: bip?.MedicationStatus || "",
         reinforcer_info: bip?.ReinforcerInfo || "",
         other_considerations: bip?.OtherConsiderations || "",
-      }, { timeout: 180000 });
+        mode: "compact",
+      }, { timeout: 240000 });
       const analysisText = res.data.analysis || "분석 결과가 없습니다.";
 
-      // 실제 BIP 문서(1~8번 필드)에 자동 반영 — 기존 내용은 지우지 않고 뒤에 이어붙인다.
+      // 실제 BIP 문서(1~11번 필드)에 자동 반영 — 기존 내용은 지우지 않고 뒤에 이어붙인다.
       const parsed = parseBIPAIResult(analysisText);
       let saved = false;
       if (Object.keys(parsed).length > 0) {
@@ -322,7 +332,7 @@ function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }:
       const res = await axios.post(`${apiUrl}/api/v1/bip/students/${s.code}/ai-decision-recommendation`, {
         start_date: startDate || undefined,
         end_date: endDate || undefined,
-      }, { timeout: 180000 });
+      }, { timeout: 240000 });
       setAiDecision({ loading: false, text: res.data.analysis || "분석 결과가 없습니다." });
     } catch (e: any) {
       setAiDecision({ loading: false, text: "⚠️ 요청 실패: " + (e?.response?.data?.detail || e?.message || "타임아웃") });
@@ -407,13 +417,14 @@ function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }:
             <button
               onClick={handleInitialBIP}
               disabled={aiInitial.loading}
+              title={s.incidents < 3 ? `현재 ${s.incidents}건 — 최소 3건 필요` : "11개 항목의 짧고 쉬운 BIP 초안 생성"}
               style={{
                 padding: '7px 10px', background: aiInitial.loading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
                 color: 'white', border: '2px solid #2563eb', borderRadius: '8px',
                 cursor: aiInitial.loading ? 'wait' : 'pointer', fontSize: '0.72rem', fontWeight: 700, marginBottom: '10px'
               }}
             >
-              {aiInitial.loading ? "⏳ 분석 중..." : "🤖 최초 FBA기반BIP작성 제안"}
+              {aiInitial.loading ? "⏳ 분석 중..." : "🧩 AI 초안 생성 (짧게)"}
             </button>
             {aiInitial.saved && (
               <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -421,10 +432,16 @@ function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }:
                 <a href={`/student/${s.code}/bip`} style={{ color: '#2563eb', textDecoration: 'underline' }}>전문 편집에서 확인/다듬기</a>
               </div>
             )}
-            <div style={{ flex: 1, overflowY: 'auto', maxHeight: 150, fontSize: '0.72rem', lineHeight: 1.6, color: '#334155', whiteSpace: 'pre-wrap' }}>
-              {!aiInitial.text && !aiInitial.loading && <span style={{ color: '#94a3b8' }}>현재 설정 기간 데이터를 바탕으로 최초 BIP 초안을 제안받으세요. (BIP 문서 1~8번 필드에 자동 반영됩니다)</span>}
+            <div style={{ flex: 1, overflowY: 'auto', maxHeight: 260, fontSize: '0.72rem', lineHeight: 1.6, color: '#334155' }}>
+              {!aiInitial.text && !aiInitial.loading && (
+                <span style={{ color: s.incidents < 3 ? '#b45309' : '#64748b' }}>
+                  {s.incidents < 3
+                    ? `최소 3건 필요 · 현재 ${s.incidents}건입니다. 데이터를 추가 입력하면 11개 항목의 짧은 초안을 생성합니다.`
+                    : `현재 ${s.incidents}건의 구조화 필드와 특기사항(기타)을 교차분석해 1~11번 필드에 자동 반영합니다.`}
+                </span>
+              )}
               {aiInitial.loading && <span style={{ color: '#7c3aed' }}>🧠 FBA 데이터 분석 중...</span>}
-              {aiInitial.text}
+              {aiInitial.text && <ReadableAIResult text={aiInitial.text} compact />}
             </div>
           </div>
         </div>
@@ -472,8 +489,8 @@ function StudentFBAFrame({ student: s, apiUrl, startDate, endDate, ebpCatalog }:
           </div>
           {aiDecision.loading && <div style={{ textAlign: 'center', padding: '20px', color: '#2563eb', fontWeight: 700, fontSize: '0.82rem' }}>⏳ 종합 분석 중입니다...</div>}
           {aiDecision.text && !aiDecision.loading && (
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: 1.75, color: '#1e293b', background: '#fff', padding: '14px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
-              {aiDecision.text}
+            <div style={{ fontSize: '0.85rem', lineHeight: 1.75, color: '#1e293b', background: '#fff', padding: '14px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
+              <ReadableAIResult text={aiDecision.text} />
             </div>
           )}
         </div>

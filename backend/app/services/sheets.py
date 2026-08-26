@@ -3766,9 +3766,17 @@ def delete_board_post(post_id: str):
 # BIP (Behavior Intervention Plan) Worksheet
 # =============================
 BIP_EBP_HEADERS = ["PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP"]
+BIP_BASE_HEADERS = [
+    "StudentCode", "TargetBehavior", "Hypothesis", "Goals",
+    "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies",
+    "CrisisPlan", "EvaluationPlan",
+    "MedicationStatus", "ReinforcerInfo", "OtherConsiderations",
+    "UpdatedAt", "Author",
+]
+BIP_REQUIRED_HEADERS = [*BIP_BASE_HEADERS, *BIP_EBP_HEADERS]
 
 def ensure_bip_sheet():
-    """Ensure 'BIP' sheet exists with correct headers, migrating in the EBP-selection columns if missing."""
+    """Ensure the live BIP sheet can persist every frontend 1~11 field."""
     client = get_sheets_client()
     if not client: return None
     try:
@@ -3776,21 +3784,16 @@ def ensure_bip_sheet():
         try:
             ws = sheet.worksheet("BIP")
             existing_headers = ws.row_values(1)
-            missing = [h for h in BIP_EBP_HEADERS if h not in existing_headers]
+            missing = [h for h in BIP_REQUIRED_HEADERS if h not in existing_headers]
             if missing:
+                required_columns = len(existing_headers) + len(missing)
+                if ws.col_count < required_columns:
+                    ws.resize(cols=required_columns)
                 for i, h in enumerate(missing):
                     ws.update_cell(1, len(existing_headers) + 1 + i, h)
         except gspread.WorksheetNotFound:
             ws = sheet.add_worksheet(title="BIP", rows=300, cols=20)
-            headers = [
-                "StudentCode", "TargetBehavior", "Hypothesis", "Goals",
-                "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies",
-                "CrisisPlan", "EvaluationPlan",
-                "MedicationStatus", "ReinforcerInfo", "OtherConsiderations",
-                "UpdatedAt", "Author",
-                *BIP_EBP_HEADERS
-            ]
-            ws.append_row(headers)
+            ws.append_row(BIP_REQUIRED_HEADERS)
         return ws
     except Exception as e:
         print(f"Error checking BIP sheet: {e}")

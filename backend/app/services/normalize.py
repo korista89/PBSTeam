@@ -417,6 +417,28 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     restr_val = str(raw_row.get("restraint_report", raw_row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", raw_row.get("물리적제지", "X")))).strip()
     freq_val = str(raw_row.get("frequency", raw_row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", raw_row.get("발생횟수", "1")))).strip()
     notes_val = str(raw_row.get("notes", raw_row.get("특기사항(기타)", raw_row.get("특기사항", "")))).strip()
+    # The ordinary behavior form uses narrative ``특기사항(기타)`` rather than
+    # mandatory A-B-C questions.  Some legacy/high-safety reports may still
+    # contain these optional columns, so preserve them as corroborating data
+    # without assuming they exist.
+    antecedent_val = str(
+        raw_row.get(
+            "antecedent",
+            raw_row.get("A_배경_선행사건", raw_row.get("선행사건", raw_row.get("선행", "")))
+        )
+    ).strip()
+    behavior_description_val = str(
+        raw_row.get(
+            "behavior_description",
+            raw_row.get("B_나타난_위기행동", raw_row.get("나타난_위기행동", ""))
+        )
+    ).strip()
+    consequence_val = str(
+        raw_row.get(
+            "consequence",
+            raw_row.get("C_후속결과", raw_row.get("후속결과", raw_row.get("결과", "")))
+        )
+    ).strip()
     ts_val = str(raw_row.get("timestamp", raw_row.get("타임스탬프", ""))).strip()
     teacher_val = str(raw_row.get("teacher_name", raw_row.get("입력교사명", ""))).strip()
     
@@ -463,6 +485,9 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
         "restraint": "O" if signals["is_restrained"] else "X",
         "is_restrained": signals["is_restrained"],
         "notes": notes_val,
+        "antecedent": antecedent_val,
+        "behavior_description": behavior_description_val,
+        "consequence": consequence_val,
         "teacher_name": teacher_val,
         "entry_lag_days": lag_days,
         "has_staff_injury": signals["has_staff_injury"],
@@ -477,7 +502,10 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
         "raw_function": func_val,
         "raw_frequency": freq_val,
         "raw_timestamp": ts_val,
-        "raw_notes": notes_val
+        "raw_notes": notes_val,
+        "raw_antecedent": antecedent_val,
+        "raw_behavior_description": behavior_description_val,
+        "raw_consequence": consequence_val,
     }
 
 

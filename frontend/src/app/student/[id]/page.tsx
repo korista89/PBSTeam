@@ -15,6 +15,7 @@ import { useSheetLiveSync } from "../../hooks/useSheetLiveSync";
 import { useDateRange } from "../../components/GlobalNav";
 import { TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
+import ReadableAIResult from "../../components/ReadableAIResult";
 import { maskName } from "../../utils";
 
 export default function StudentDetail() {
@@ -342,7 +343,7 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   const requestAnalysis = async () => {
     setLoading(true); setVisible(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode }, { timeout: 180000 });
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode }, { timeout: 240000 });
       setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
     } catch (e: any) { setAnalysis("⚠️ AI 전문가 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")"); } finally { setLoading(false); }
   };
@@ -362,7 +363,7 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
             {loading ? (
                 <div style={{ color: '#2563eb', fontWeight: 700, textAlign: 'center', padding: '20px' }}>패턴 분석 및 데이터 요약 중... 🧠</div>
             ) : (
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.8', color: '#1e293b', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">{analysis}</div>
+                <div style={{ fontSize: '0.95rem', lineHeight: '1.8', color: '#1e293b', maxHeight: '520px', overflowY: 'auto' }} className="custom-scrollbar"><ReadableAIResult text={analysis} /></div>
             )}
          </div>
        )}

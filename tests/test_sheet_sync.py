@@ -106,6 +106,34 @@ class SheetSyncTests(unittest.TestCase):
         self.assertNotIn("error", result)
         worksheet.update_cell.assert_called_once_with(2, 4, "X")
 
+    def test_existing_bip_sheet_migrates_all_11_field_headers(self):
+        from app.services.sheets import ensure_bip_sheet
+
+        existing_headers = [
+            "StudentCode", "TargetBehavior", "Hypothesis",
+            "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies",
+            "CrisisPlan", "EvaluationPlan", "UpdatedAt", "Author",
+            "PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP",
+        ]
+        worksheet = mock.MagicMock()
+        worksheet.row_values.return_value = existing_headers
+        worksheet.col_count = 15
+        sheet = mock.MagicMock()
+        sheet.worksheet.return_value = worksheet
+        client = mock.MagicMock()
+        client.open_by_url.return_value = sheet
+
+        with mock.patch("app.services.sheets.get_sheets_client", return_value=client):
+            result = ensure_bip_sheet()
+
+        self.assertIs(result, worksheet)
+        added = [call.args[2] for call in worksheet.update_cell.call_args_list]
+        self.assertEqual(
+            added,
+            ["Goals", "MedicationStatus", "ReinforcerInfo", "OtherConsiderations"],
+        )
+        worksheet.resize.assert_called_once_with(cols=18)
+
 
 if __name__ == "__main__":
     unittest.main()

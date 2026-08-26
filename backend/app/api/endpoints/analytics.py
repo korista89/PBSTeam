@@ -21,6 +21,7 @@ from app.services.ai_insight import (
     generate_bcba_student_analysis,
     generate_peer_contagion_analysis
 )
+from app.services.fba_evidence import fba_data_gate
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
 
 router = APIRouter()
@@ -342,11 +343,12 @@ async def ai_tier3_analysis(
         if l.get("student_code") in t3_codes or l.get("student_name") in t3_codes
     ]
 
+    gate = fba_data_gate(len(t3_logs))
     result = generate_bcba_tier3_analysis(
         tier3_students=t3_students,
         behavior_logs=t3_logs
     )
-    return {"analysis": result}
+    return {"analysis": result, **gate}
 
 
 @router.post("/ai-student-analysis")
@@ -354,7 +356,7 @@ async def ai_student_analysis(
     req: StudentAnalysisRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    """⑥ 🤖 개별 학생 A-B-C 기능평가 기반 AI 종합 진단 (학생 Scope 검증)"""
+    """⑥ 🤖 구조화 필드+특기사항 기반 개별 학생 잠정 FBA 분석 (학생 Scope 검증)"""
     beable_mapping = get_beable_code_mapping()
     target_code = str(req.student_code or "").strip()
 
@@ -403,12 +405,13 @@ async def ai_student_analysis(
 
     all_notes = [{"date": l.get("date"), "content": l.get("notes")} for l in student_logs if l.get("notes")]
 
+    gate = fba_data_gate(len(student_logs))
     result = generate_bcba_student_analysis(
         student_info=student_info,
         student_logs=student_logs,
         all_notes=all_notes
     )
-    return {"analysis": result}
+    return {"analysis": result, **gate}
 
 
 @router.get("/debug-sheets")

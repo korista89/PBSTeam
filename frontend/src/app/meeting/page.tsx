@@ -31,7 +31,7 @@ export default function MeetingPage() {
                 end_date: endDate,
                 context_start_date: contextStartDate,
                 context_end_date: contextEndDate
-            }, { timeout: 180000 });
+            }, { timeout: 240000 });
             setResult(res.data.analysis || "");
         } catch (e: any) {
             console.error(e);

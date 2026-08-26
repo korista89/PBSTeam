@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from app.services.normalize import normalize_behavior_log
 from app.services.ai_insight import (
     generate_bip_hypothesis,
@@ -8,6 +8,7 @@ from app.services.ai_insight import (
     generate_full_bip,
     generate_data_based_decision_recommendation
 )
+from app.services.fba_evidence import build_fba_evidence_summary, fba_data_gate
 from app.api.deps import require_authenticated_user, check_student_scope
 
 router = APIRouter()
@@ -15,19 +16,18 @@ router = APIRouter()
 class BIPData(BaseModel):
     StudentCode: str
     TargetBehavior: Optional[str] = ""
-    AntecedentTriggers: Optional[str] = ""
-    SettingEvents: Optional[str] = ""
-    EstimatedFunction: Optional[str] = ""
-    FunctionalHypothesis: Optional[str] = ""
-    BehaviorGoal: Optional[str] = ""
-    AntecedentInterventions: Optional[str] = ""
-    TeachingInterventions: Optional[str] = ""
-    ConsequenceInterventions: Optional[str] = ""
-    CrisisManagementPlan: Optional[str] = ""
+    Hypothesis: Optional[str] = ""
+    Goals: Optional[str] = ""
+    PreventionStrategies: Optional[str] = ""
+    TeachingStrategies: Optional[str] = ""
+    ReinforcementStrategies: Optional[str] = ""
+    CrisisPlan: Optional[str] = ""
     EvaluationPlan: Optional[str] = ""
     MedicationStatus: Optional[str] = ""
     ReinforcerInfo: Optional[str] = ""
     OtherConsiderations: Optional[str] = ""
+    UpdatedAt: Optional[str] = ""
+    Author: Optional[str] = ""
     PreventionEBP: Optional[str] = ""
     TeachingEBP: Optional[str] = ""
     ConsequenceEBP: Optional[str] = ""
@@ -117,18 +117,25 @@ async def ai_bip_hypothesis(
             break
             
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+
+    gate = fba_data_gate(len(norm_logs))
+    if not gate["eligible"]:
+        return {"hypothesis": gate["notice"], **gate}
     
     target_behaviors = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
     tb_str = ", ".join(target_behaviors) if target_behaviors else "수업 방해 및 과제 불응"
     
-    antecedents = list(dict.fromkeys([f"{l['location']} ({','.join(l['time_slot_labels'])})" for l in norm_logs[:5]]))
-    ant_str = "; ".join(antecedents) if antecedents else "과제 제시 및 교실 일과 상황"
+    contexts = list(dict.fromkeys([
+        f"{l['location']} ({','.join(l['time_slot_labels']) or '시간대 미상'})"
+        for l in norm_logs
+    ]))
+    ant_str = "; ".join(contexts[:8]) if contexts else "시간대·장소 기록 미상"
     
     functions = list(dict.fromkeys([','.join(l['function_labels']) for l in norm_logs if l['function_labels']]))
-    func_str = ", ".join(functions) if functions else "불편해소 또는 과제회피"
+    func_str = ", ".join(functions) if functions else "교사 추정기능 미입력"
     
     notes_list = [l["notes"] for l in norm_logs if l.get("notes")]
-    notes_summary = " / ".join(notes_list[:5])
+    notes_summary = " / ".join(note[:250] for note in notes_list[:5])
     
     result = generate_bip_hypothesis(
         student_info=student_info,
@@ -138,7 +145,7 @@ async def ai_bip_hypothesis(
         notes_summary=notes_summary,
         sample_size=len(norm_logs)
     )
-    return {"hypothesis": result}
+    return {"hypothesis": result, **gate}
 
 
 class AIStrategiesRequest(BaseModel):
@@ -154,7 +161,8 @@ async def ai_bip_strategies(
 ):
     """⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)"""
     check_student_scope(student_code, current_user)
-    from app.services.sheets import fetch_student_status
+    from app.services.sheets import fetch_all_records, fetch_student_status
+    import json
     
     status_records = fetch_student_status()
     student_info = {"code": student_code}
@@ -167,14 +175,30 @@ async def ai_bip_strategies(
                 "tier": s.get("Tier", 1)
             }
             break
-            
+
+    beable_code = _resolve_beable_code(student_code)
+    raw_logs = _filter_student_logs(fetch_all_records(), student_code, beable_code)
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+    gate = fba_data_gate(len(norm_logs))
+    if not gate["eligible"]:
+        return {"strategies": gate["notice"], **gate}
+    evidence = build_fba_evidence_summary(student_info, norm_logs)
+
     result = generate_bip_strategies(
         student_info=student_info,
         target_behavior=req.target_behavior or "표적행동",
         hypothesis_data=req.hypothesis or "가설 데이터",
-        function_data=req.goals or "추정 기능"
+        function_data=json.dumps(
+            {
+                "teacher_input": req.goals or "추정 기능 미입력",
+                "evidence": evidence["deterministic_metrics"],
+                "narrative_coverage": evidence["narrative_and_abc_coverage"],
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
     )
-    return {"strategies": result}
+    return {"strategies": result, **gate}
 
 
 class AIBIPFullRequest(BaseModel):
@@ -183,6 +207,7 @@ class AIBIPFullRequest(BaseModel):
     medication_status: str = ""
     reinforcer_info: str = ""
     other_considerations: str = ""
+    mode: Literal["compact", "detailed"] = "detailed"
 
 @router.post("/students/{student_code}/ai-bip-full")
 async def ai_bip_full(
@@ -216,27 +241,35 @@ async def ai_bip_full(
             break
             
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
-    
-    if not norm_logs:
-        return {"analysis": "INSUFFICIENT_DATA: 행동 관찰 기록이 부족하여 기능적 가설 및 BIP를 자동 생성할 수 없습니다. 직접 관찰 기록을 먼저 수집해 주세요."}
+
+    gate = fba_data_gate(len(norm_logs))
+    if not gate["eligible"]:
+        return {"analysis": gate["notice"], **gate}
         
     tb_list = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
     avg_int = round(sum(l['intensity'] for l in norm_logs)/len(norm_logs), 1) if norm_logs else 0
     target_behavior = f"{', '.join(tb_list)} (평균 강도 {avg_int}/5, 누적 {len(norm_logs)}건)"
     
     func_list = list(dict.fromkeys([','.join(l['function_labels']) for l in norm_logs if l['function_labels']]))
-    hypothesis_data = f"관찰된 추정 기능: {', '.join(func_list)}" if func_list else "기능 미상 (추가 FBA 직접 관찰 필요)"
+    hypothesis_data = f"교사 입력 추정 기능: {', '.join(func_list)}" if func_list else "교사 추정기능 미입력 — 특기사항과 구조화 필드 교차검토 필요"
+
+    evidence_summary = build_fba_evidence_summary(student_info, norm_logs)
         
     result = generate_full_bip(
         student_info=student_info,
         target_behavior=target_behavior,
         hypothesis_data=hypothesis_data,
-        strategies_data=f"건강/복약 관찰: {req.medication_status}, 선호강화제: {req.reinforcer_info}, 기타: {req.other_considerations}",
+        strategies_data="예방-교수-강화 전략은 잠정 기능가설과 1:1로 연결",
         school_crisis_protocol="경은학교 위기관리 4단계 프로토콜 (전조-고조-위기-회복 및 최소제한원칙 준수)",
-        behavior_logs=norm_logs
+        behavior_logs=norm_logs,
+        mode=req.mode,
+        medication_status=req.medication_status,
+        reinforcer_info=req.reinforcer_info,
+        other_considerations=req.other_considerations,
+        evidence_summary=evidence_summary,
     )
 
-    return {"analysis": result}
+    return {"analysis": result, **gate, "mode": req.mode}
 
 
 class AIDecisionRecommendationRequest(BaseModel):
@@ -275,11 +308,20 @@ async def ai_decision_recommendation(
             break
 
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
-    tb_list = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
-    avg_int = round(sum(l['intensity'] for l in norm_logs)/len(norm_logs), 1) if norm_logs else 0
-    period_data = (
-        f"기간: {req.start_date or '전체'} ~ {req.end_date or '전체'}, 누적 {len(norm_logs)}건, "
-        f"평균 강도 {avg_int}/5, 주요 행동유형: {', '.join(tb_list) or '없음'}"
+    gate = fba_data_gate(len(norm_logs))
+    if not gate["eligible"]:
+        return {"analysis": gate["notice"], **gate}
+    import json
+    evidence_summary = build_fba_evidence_summary(student_info, norm_logs)
+    period_data = json.dumps(
+        {
+            "period": f"{req.start_date or '전체'} ~ {req.end_date or '전체'}",
+            "metrics": evidence_summary["deterministic_metrics"],
+            "narrative_coverage": evidence_summary["narrative_and_abc_coverage"],
+            "representative_evidence": evidence_summary["representative_evidence_samples"],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
 
     bip = get_bip(student_code) or {}
@@ -302,4 +344,4 @@ async def ai_decision_recommendation(
         ebp_selections=ebp_str,
         team_notes=team_notes_str
     )
-    return {"analysis": result}
+    return {"analysis": result, **gate}

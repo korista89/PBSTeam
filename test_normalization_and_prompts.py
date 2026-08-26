@@ -11,6 +11,7 @@ from app.services.normalize import (
     calculate_data_quality_report
 )
 from app.services.contagion import analyze_peer_contagion
+from app.services.fba_evidence import build_fba_evidence_summary, fba_data_gate
 
 print("=" * 60)
 print("🧪 [경은PBS] 데이터 정규화 레이어 및 임상 규칙 단위 테스트")
@@ -60,6 +61,24 @@ mock_logs = [
 ]
 contagion = analyze_peer_contagion(mock_logs, [{"name": "곽승현", "class": "초6-2"}, {"name": "이한결", "class": "초6-2"}, {"name": "정재민", "class": "초2-2"}])
 print(f"7. 또래 전염 엣지 수: {len(contagion['edges'])}개 (기대: >=2) -> {'✅ 통과' if len(contagion['edges']) >= 2 else '❌ 실패'}")
+
+# 8. 별도 ABC 문항이 없는 특기사항 중심 FBA 근거 집계
+narrative_logs = [
+    normalize_behavior_log({
+        "학생코드": "21101", "발생날짜": f"2026-08-0{i}", "시간대": "2구간: 1교시",
+        "행동 발생 장소": "교실", "행동유형": "자리이탈", "강도(1~5)": "3",
+        "추정기능": "과제회피", "특기사항(기타)": "어려운 쓰기활동을 시작하자 교실 뒤로 이동했고 과제가 잠시 중단됨."
+    })
+    for i in range(1, 4)
+]
+fba_summary = build_fba_evidence_summary({"code": "21101"}, narrative_logs)
+assert fba_data_gate(2)["eligible"] is False
+assert fba_data_gate(3)["eligible"] is True
+assert fba_summary["data_quality_and_guards"]["analysis_status"] == "ANALYSIS_ALLOWED"
+assert fba_summary["narrative_and_abc_coverage"]["narrative_notes_present_count"] == 3
+assert fba_summary["narrative_and_abc_coverage"]["explicit_abc_complete_count"] == 0
+assert fba_summary["deterministic_metrics"]["teacher_inferred_function_distribution"][0]["item"] == "과제회피"
+print("8. 특기사항 중심 3건 FBA 게이트·근거 집계 -> ✅ 통과")
 
 print("=" * 60)
 print("🎉 모든 정규화 및 임상 분석 엔진 단위 테스트 완료!")

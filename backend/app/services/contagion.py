@@ -85,7 +85,7 @@ def analyze_peer_contagion(normalized_logs: List[dict], tier_info_list: List[dic
         slot = log.get("primary_slot")
         name = log.get("student_name", "")
         if cls and date and slot and name:
-            co_key = f"{cls}_{date}_{slot}구간"
+            co_key = (cls, date, slot)
             co_occurrences[co_key].append({
                 "student": name,
                 "behavior": log.get("behavior_type", ""),
@@ -97,8 +97,12 @@ def analyze_peer_contagion(normalized_logs: List[dict], tier_info_list: List[dic
     for co_key, logs in co_occurrences.items():
         unique_students = list(dict.fromkeys([l["student"] for l in logs]))
         if len(unique_students) >= 2:
+            cls, date, slot = co_key
             significant_clusters.append({
-                "cluster_key": co_key,
+                "cluster_key": f"{cls}_{date}_{slot}구간",
+                "class": cls,
+                "date": date,
+                "time_slot": f"{slot}구간",
                 "students": unique_students,
                 "count": len(logs),
                 "episodes": logs
@@ -132,7 +136,7 @@ def analyze_peer_contagion(normalized_logs: List[dict], tier_info_list: List[dic
     dynamic_findings = []
     if formatted_edges:
         top_edge = formatted_edges[0]
-        dynamic_findings.append(f"상호작용 빈발 패턴: {top_edge['source']} ➔ {top_edge['target']} (총 {top_edge['count']}회 공동발생/언급)")
+        dynamic_findings.append(f"상호작용 빈발 패턴: {top_edge['source']} ➔ {top_edge['reactor']} (총 {top_edge['count']}회 공동발생/언급)")
     if significant_clusters:
         top_cluster = significant_clusters[0]
         dynamic_findings.append(f"학급 내 동시 사건 클러스터: {top_cluster.get('date', '')} ({top_cluster.get('time_slot', '')}) - 참여 학생 {top_cluster.get('count', 0)}명")

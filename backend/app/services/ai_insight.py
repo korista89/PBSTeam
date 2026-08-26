@@ -1,14 +1,39 @@
 import os
 import json
 import re
+import time
 import requests
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Any
+from app.services.fba_evidence import (
+    MIN_FBA_RECORDS,
+    build_fba_evidence_summary,
+    fba_data_gate,
+)
 
 load_dotenv()
 
 # Gemini & Cloud API setup
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+
+def _is_serverless_runtime() -> bool:
+    """Return True when the request is running inside the deployed function."""
+    return bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+
+
+def _remaining_seconds(deadline: float) -> float:
+    return max(0.0, deadline - time.monotonic())
+
+
+def _bounded_request_timeout(deadline: float, cap_seconds: float) -> Optional[tuple]:
+    """Build a requests connect/read timeout that stays inside a shared deadline."""
+    remaining = min(cap_seconds, _remaining_seconds(deadline))
+    if remaining < 2.0:
+        return None
+    connect_timeout = min(3.0, max(1.0, remaining * 0.2))
+    read_timeout = max(1.0, remaining - connect_timeout)
+    return (connect_timeout, read_timeout)
 
 # ==============================================================================
 # §1. 모든 AI 버튼 공통 BCBA 임상 시스템 프롬프트 (Common System Prompt)
@@ -25,7 +50,8 @@ COMMON_BCBA_SYSTEM_PROMPT = """너는 한국 특수학교의 학교차원 긍정
 3. 기간 비교 시 반드시 경고한다: 이 데이터에는 관찰 시간·기회 수가 없어 비율(rate) 산출이 불가능하다.
    건수 증가가 실제 행동 증가인지 교사 기록 충실도 증가인지 구분할 수 없다.
 4. '건수'(에피소드 행 수)와 '발생횟수 합계'를 절대 섞지 마라. 항상 어느 쪽인지 명시한다.
-5. 표본이 5건 미만이면 해석하지 말고 "표본 부족(n<5)으로 해석 보류"라고 쓴다.
+5. 개별 학생 위기행동 자료가 3건 미만이면 기능 추정을 보류하고 최소 3건 입력 안내만 한다.
+   3건 이상이면 분석하되, 별도 ABC 문항이 없는 운영 자료임을 고려해 결과를 '잠정 기능가설'로 표시한다.
 
 [작성 원칙]
 6. 모든 행동은 관찰 가능하고 측정 가능한 조작적 정의로 기술한다.
@@ -43,7 +69,8 @@ COMMON_BCBA_SYSTEM_PROMPT = """너는 한국 특수학교의 학교차원 긍정
 
 [출력 형식]
 - 한국어. 개조식. 소제목 사용. 이모지 남용 금지.
-- 순서: 핵심 요약(3줄) → 데이터 근거 → 해석 → 실행 제안(우선순위 표시) → 검증 방법 → 데이터 한계
+- 판단을 먼저 쓰고 근거는 불릿으로 쓴다.
+- 실행안에는 담당·시점·확인 지표를 넣고, 전문용어는 처음 한 번만 쉽게 설명한다. 반복과 장문 서론은 피한다.
 - 마지막에 반드시 [데이터 한계] 섹션을 넣어 이번 분석에서 신뢰할 수 없는 부분을 명시한다."""
 
 
@@ -58,8 +85,96 @@ def _clean_llm_output(text: str) -> str:
     text = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE).strip()
     return text
 
+
+_BIP_SECTION_TITLES = {
+    1: "표적행동",
+    2: "가설(기능)",
+    3: "목표",
+    4: "예방 전략",
+    5: "교수 전략",
+    6: "강화 전략",
+    7: "위기행동지원 전략",
+    8: "평가 계획(Tier3 졸업 기준 포함)",
+    9: "약물 복용 현황",
+    10: "강화제 정보",
+    11: "기타 고려사항",
+}
+
+_CRISIS_SUBFIELDS = [
+    "전조", "고조", "알림", "장소/이동방법", "관찰 방법",
+    "호명반응 확인 방법", "지시 목록", "회복대화 방법",
+    "복귀의사 방법", "복귀 후 반응",
+]
+
+
+def _ensure_bip_output_contract(
+    result: str,
+    *,
+    target_behavior: str,
+    hypothesis_data: str,
+    medication_status: str,
+    reinforcer_info: str,
+    other_considerations: str,
+) -> str:
+    """Guarantee the editable 11-section BIP contract without inventing facts."""
+    cleaned = (result or "").strip()
+    if not cleaned or cleaned.startswith(("⚠️", "⏳")):
+        return cleaned
+
+    footer = ""
+    body = cleaned
+    footer_match = re.search(r"\n\s*---\s*\n(?=>)", cleaned)
+    if footer_match:
+        body = cleaned[:footer_match.start()].strip()
+        footer = cleaned[footer_match.start():].strip()
+
+    extracted = {}
+    for number in _BIP_SECTION_TITLES:
+        match = re.search(
+            rf"(?ms)^###\s*{number}\.\s*[^\n]*\n(.*?)(?=^###\s*\d+\.|\Z)",
+            body,
+        )
+        if match:
+            extracted[number] = match.group(1).strip()
+
+    fallbacks = {
+        1: f"- {target_behavior or '미상 — 직접 관찰로 조작적 정의 확인 필요'}",
+        2: f"- {hypothesis_data or '미상 — 특기사항(기타) 서술과 직접관찰로 확인 필요'}",
+        3: "- 기준선 대비 위기행동과 강도를 줄이고, 같은 기능의 대체행동 사용을 늘린다. 구체 수치는 기준선 확인 후 팀이 확정한다.",
+        4: "- AI 응답에서 누락됨 — 잠정 기능에 맞는 선행사건 조절 방법을 팀이 확인한다.",
+        5: "- AI 응답에서 누락됨 — 학생이 가장 쉽고 빠르게 사용할 수 있는 대체 의사소통 방식을 평가·교수한다.",
+        6: "- AI 응답에서 누락됨 — 대체행동 직후 같은 기능의 결과를 더 빠르고 일관되게 제공한다.",
+        7: "- AI 응답에서 누락됨 — 학교 위기행동지원 절차와 학생별 안전계획을 팀이 확인한다.",
+        8: "- 위기행동 건수·강도, 대체행동 사용, 실행충실도를 매주 기록하고 2주마다 팀이 검토한다.\n- Tier3 졸업은 기준선 대비 안정적 감소, 중대한 안전사건 없음, 대체행동 증가, 실행충실도 확보가 4주 이상 유지되고 팀이 합의할 때 검토한다.",
+        9: f"- {medication_status or '미입력 — 현재 처방 사실만 보호자·보건교사와 확인 필요'}",
+        10: f"- {reinforcer_info or '미입력 — 간단한 선호도 평가로 현재 강화제를 확인 필요'}",
+        11: f"- {other_considerations or '미입력 — 의사소통·감각·건강·환경·팀 역할을 추가 확인 필요'}",
+    }
+
+    completed_sections = []
+    for number, title in _BIP_SECTION_TITLES.items():
+        content = extracted.get(number) or fallbacks[number]
+        if number in {4, 5, 6} and "📚 EBP 추가" not in content:
+            content += "\n\n#### 📚 EBP 추가\n- AI 응답에서 누락됨 — 잠정 기능과 학생 특성에 맞는 EBP를 팀이 확인한다."
+        if number == 7:
+            if "🚨 위기행동지원절차" not in content:
+                content += "\n\n#### 🚨 위기행동지원절차"
+            for label in _CRISIS_SUBFIELDS:
+                if not re.search(rf"\*\*{re.escape(label)}:\*\*", content):
+                    content += f"\n- **{label}:** 미상 — 학교 절차와 학생별 자료를 확인한다."
+        completed_sections.append(f"### {number}. {title}\n{content.strip()}")
+
+    completed = "\n\n".join(completed_sections)
+    if footer:
+        completed += f"\n\n{footer}"
+    return completed
+
 def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Optional[str]:
     """Call Local LLM endpoint (LM Studio on :1234 or Cloudflare Tunnel or Ollama) with Gemma 4 E4B."""
+    # The user explicitly prefers waiting up to three minutes for the local
+    # model. The deployed function is configured for a five-minute ceiling so
+    # the cloud fallback still has time after this local-model window.
+    deadline = time.monotonic() + 180
     raw_url = os.getenv("LOCAL_LLM_URL", "").strip()
     configured_model = os.getenv("LOCAL_LLM_MODEL", "").strip()
     
@@ -89,10 +204,15 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
             
     # 1. OpenAI-compatible /v1/chat/completions 호출 (LM Studio / Cloudflare Tunnel / Ollama v1)
     for endpoint in unique_urls:
+        if _remaining_seconds(deadline) < 2:
+            break
         try:
             model_to_use = configured_model or "google/gemma-4-e4b"
             try:
-                m_resp = requests.get(f"{endpoint}/models", timeout=3)
+                model_timeout = min(2.0, _remaining_seconds(deadline))
+                if model_timeout < 0.5:
+                    break
+                m_resp = requests.get(f"{endpoint}/models", timeout=model_timeout)
                 if m_resp.status_code == 200:
                     m_data = m_resp.json().get("data", [])
                     if m_data and isinstance(m_data, list):
@@ -105,7 +225,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 "messages": [
                     {
                         "role": "system", 
-                        "content": "/no_think\n" + system_prompt + "\n\n[최우선 지침: 생각/추론 과정(Thinking/Reasoning)을 일체 출력하지 말고, 즉시 <1. 핵심 요약>부터 시작하는 한국어 최종 보고서 본문만을 출력하라.]"
+                        "content": "/no_think\n" + system_prompt + "\n\n[최우선 지침: 생각/추론 과정(Thinking/Reasoning)을 출력하지 말고, 사용자 프롬프트에 지정된 제목·번호·순서의 한국어 최종 결과만 출력하라.]"
                     },
                     {"role": "user", "content": user_prompt}
                 ],
@@ -115,10 +235,14 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 "chat_template_kwargs": {"enable_thinking": False},
                 "extra_body": {"thinking": False}
             }
-            # (connect_timeout, read_timeout): 죽은 터널/미가동 로컬 서버는 연결 단계에서 몇 초 안에 실패해야
-            # Vercel의 60초 함수 제한 안에서 Gemini/Groq 폴백까지 도달할 수 있다. 실제로 연결된 뒤의
-            # 생성 시간(20 tokens/s 기준)은 기존과 동일하게 175초까지 여유있게 기다린다.
-            resp = requests.post(f"{endpoint}/chat/completions", json=payload, timeout=(5, 175))
+            request_timeout = _bounded_request_timeout(deadline, 175)
+            if request_timeout is None:
+                break
+            resp = requests.post(
+                f"{endpoint}/chat/completions",
+                json=payload,
+                timeout=request_timeout,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get("choices", [])
@@ -140,6 +264,8 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
     # 2. Ollama 네이티브 API (:11434/api/chat)
     ollama_candidates = ["http://localhost:11434", "http://127.0.0.1:11434"]
     for o_url in ollama_candidates:
+        if _remaining_seconds(deadline) < 2:
+            break
         try:
             payload = {
                 "model": configured_model or "gemma-4-e4b",
@@ -153,7 +279,10 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                     "num_predict": max_tokens
                 }
             }
-            resp = requests.post(f"{o_url}/api/chat", json=payload, timeout=(5, 175))
+            request_timeout = _bounded_request_timeout(deadline, 175)
+            if request_timeout is None:
+                break
+            resp = requests.post(f"{o_url}/api/chat", json=payload, timeout=request_timeout)
             if resp.status_code == 200:
                 res_data = resp.json()
                 msg = res_data.get("message", {}).get("content", "").strip()
@@ -171,6 +300,7 @@ def _call_ollama(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
 def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
     """Fallback Gemini & Cloud API call wrapper - with thinkingBudget fix and robust fallbacks."""
+    deadline = time.monotonic() + (100 if _is_serverless_runtime() else 180)
     gemini_key = (
         os.getenv("GEMINI_API_KEY", "").strip()
         or os.getenv("GEMINI_API_KEY_0817", "").strip()
@@ -193,6 +323,8 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
             "gemini-2.5-flash-lite",
         ]
         for g_model in gemini_models:
+            if _remaining_seconds(deadline) < 2:
+                break
             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
             
             # Gemini 2.5 Flash의 Thinking 버짓 문제를 해결하기 위한 요청 생성
@@ -220,8 +352,13 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
             ]
             
             for req_body in req_configs:
+                if _remaining_seconds(deadline) < 2:
+                    break
                 try:
-                    resp = requests.post(g_url, json=req_body, timeout=55)
+                    request_timeout = _bounded_request_timeout(deadline, 55)
+                    if request_timeout is None:
+                        break
+                    resp = requests.post(g_url, json=req_body, timeout=request_timeout)
                     if resp.status_code == 200:
                         resp_json = resp.json()
                         candidates = resp_json.get("candidates", [])
@@ -264,7 +401,12 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
         groq_user = user_prompt[:GROQ_MAX_CHARS] if len(user_prompt) > GROQ_MAX_CHARS else user_prompt
 
         for g_model in ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
+            if _remaining_seconds(deadline) < 2:
+                break
             try:
+                request_timeout = _bounded_request_timeout(deadline, 45)
+                if request_timeout is None:
+                    break
                 resp = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
@@ -277,7 +419,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                         "max_tokens": min(max_tokens, 4096),
                         "temperature": 0.6
                     },
-                    timeout=45
+                    timeout=request_timeout
                 )
                 if resp.status_code == 200:
                     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
@@ -842,7 +984,7 @@ def _build_cico_summary_payload(
     }
 
 
-def _build_student_summary_payload(
+def _build_student_summary_payload_legacy(
     student_info: dict,
     student_logs: list,
     cico_data: list = None,
@@ -876,7 +1018,7 @@ def _build_student_summary_payload(
         if val_int > 0:
             intensities.append(val_int)
 
-        restr = str(l.get("physical_restraint") or l.get("물리적제지") or "").strip()
+        restr = str(l.get("restraint") or l.get("physical_restraint") or l.get("물리적제지") or "").strip()
         if restr == "O":
             restraint_count += 1
 
@@ -890,8 +1032,12 @@ def _build_student_summary_payload(
         loc = str(l.get("location") or l.get("장소") or "교실").strip()
         location_counts[loc] = location_counts.get(loc, 0) + 1
 
-        ts = str(l.get("time_slot") or l.get("시간대") or "수업시간").strip()
-        time_slot_counts[ts] = time_slot_counts.get(ts, 0) + 1
+        time_labels = l.get("time_slot_labels") or [l.get("time_slot") or l.get("시간대") or "미상"]
+        if isinstance(time_labels, str):
+            time_labels = [time_labels]
+        for ts in time_labels:
+            ts = str(ts).strip() or "미상"
+            time_slot_counts[ts] = time_slot_counts.get(ts, 0) + 1
 
         sep = str(l.get("separation") or l.get("분리지도") or "X").strip()
         consequence_counts[f"분리지도({sep})"] = consequence_counts.get(f"분리지도({sep})", 0) + 1
@@ -932,11 +1078,11 @@ def _build_student_summary_payload(
         return {
             "selection_reason": reason_tag,
             "date": log_item.get("date") or log_item.get("발생날짜") or "",
-            "time_slot": log_item.get("time_slot") or log_item.get("시간대") or "",
+            "time_slot": ", ".join(log_item.get("time_slot_labels") or []) or log_item.get("time_slot") or log_item.get("시간대") or "",
             "location": log_item.get("location") or log_item.get("장소") or "",
             "behavior_type": log_item.get("behavior_type") or log_item.get("행동유형") or "",
             "intensity": log_item.get("intensity") or log_item.get("강도") or 0,
-            "physical_restraint": log_item.get("physical_restraint") or log_item.get("물리적제지") or "X",
+            "physical_restraint": log_item.get("restraint") or log_item.get("physical_restraint") or log_item.get("물리적제지") or "X",
             "teacher_inferred_function": log_item.get("function") or log_item.get("기능") or "미상",
             "context": raw_notes
         }
@@ -1017,11 +1163,21 @@ def _build_student_summary_payload(
         "representative_evidence_samples": selected_evidence[:5],
         "data_quality_and_guards": {
             "sample_size_n": sample_size,
-            "is_insufficient_sample": sample_size < 5,
+            "is_insufficient_sample": sample_size < MIN_FBA_RECORDS,
             "recorded_function_notice": "교사 추정 분포이며, 기능분석(FA) 결과나 실제 기능 확률이 아님.",
             "interpretation_limit": "관찰 기회수 미통제 빈도 데이터이므로 단순 증감 단정 지양."
         }
     }
+
+
+def _build_student_summary_payload(
+    student_info: dict,
+    student_logs: list,
+    cico_data: list = None,
+    all_notes: list = None,
+) -> dict:
+    """Build the current narrative-first FBA evidence payload."""
+    return build_fba_evidence_summary(student_info, student_logs, all_notes)
 
 
 def _build_tier3_summary_payload(
@@ -1056,7 +1212,7 @@ def _build_tier3_summary_payload(
         if val_int > 0:
             intensities.append(val_int)
 
-        restr = str(l.get("physical_restraint") or l.get("물리적제지") or "").strip()
+        restr = str(l.get("restraint") or l.get("physical_restraint") or l.get("물리적제지") or "").strip()
         if restr == "O":
             restraint_count += 1
 
@@ -1070,8 +1226,12 @@ def _build_tier3_summary_payload(
         loc = str(l.get("location") or l.get("장소") or "교실").strip()
         location_counts[loc] = location_counts.get(loc, 0) + 1
 
-        ts = str(l.get("time_slot") or l.get("시간대") or "수업시간").strip()
-        time_slot_counts[ts] = time_slot_counts.get(ts, 0) + 1
+        time_labels = l.get("time_slot_labels") or [l.get("time_slot") or l.get("시간대") or "미상"]
+        if isinstance(time_labels, str):
+            time_labels = [time_labels]
+        for ts in time_labels:
+            ts = str(ts).strip() or "미상"
+            time_slot_counts[ts] = time_slot_counts.get(ts, 0) + 1
 
         funcs = l.get("function_labels") or [l.get("function") or l.get("기능") or "미상"]
         if isinstance(funcs, str):
@@ -1104,11 +1264,11 @@ def _build_tier3_summary_payload(
             "selection_reason": reason_tag,
             "student_code": log_item.get("student_code") or log_item.get("학생코드") or "",
             "date": log_item.get("date") or log_item.get("발생날짜") or "",
-            "time_slot": log_item.get("time_slot") or log_item.get("시간대") or "",
+            "time_slot": ", ".join(log_item.get("time_slot_labels") or []) or log_item.get("time_slot") or log_item.get("시간대") or "",
             "location": log_item.get("location") or log_item.get("장소") or "",
             "behavior_type": log_item.get("behavior_type") or log_item.get("행동유형") or "",
             "intensity": log_item.get("intensity") or log_item.get("강도") or 0,
-            "physical_restraint": log_item.get("physical_restraint") or log_item.get("물리적제지") or "X",
+            "physical_restraint": log_item.get("restraint") or log_item.get("physical_restraint") or log_item.get("물리적제지") or "X",
             "context": log_item.get("notes") or log_item.get("특기사항") or ""
         }
 
@@ -1191,7 +1351,7 @@ def _build_tier3_summary_payload(
         "representative_crisis_evidence_samples": selected_evidence[:5],
         "data_quality_and_guards": {
             "sample_size_n": sample_size,
-            "is_insufficient_sample": sample_size < 5,
+            "is_insufficient_sample": sample_size < MIN_FBA_RECORDS,
             "recorded_function_notice": "이 값은 교직원이 일상 기록에서 추정한 분포이며, 기능분석(FA) 결과나 실제 기능 확률이 아님.",
             "interpretation_limit": "관찰 기회수가 통제되지 않은 빈도 데이터이므로 위기 관리 프로토콜 적용 시 교직원 안전 및 최소제한원칙 준수를 최우선함."
         }
@@ -1235,9 +1395,12 @@ def generate_bcba_cico_analysis(
    - <70% 2주: 충실도 점검 및 피드백 주기 단축.
    - <70% 4주 또는 강도 4~5: Tier 3 상향 및 정식 FBA/BIP 의뢰.
 4. **Log_Main 교차 검증**: DPR 점수가 높은데 문제행동 로그가 많은 경우 목표행동 정합성 지적.
-5. **강화제 포화 점검**: 3~4주 차 하락 학생에 대한 강화제 교체 팁 제공."""
+5. **강화제 포화 점검**: 3~4주 차 하락 학생에 대한 강화제 교체 팁 제공.
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+[출력 형식]
+`핵심 판단`, `학생별 우선순위`, `Tier 결정`, `이번 주 실행`, `데이터 한계` 5개 소제목만 사용한다. 학생별 내용은 한 학생당 3줄 이내, 실행 항목은 3개 이하로 쓴다."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2600)
 
 
 # ------------------------------------------------------------------------------
@@ -1270,9 +1433,10 @@ def generate_bcba_meeting_minutes(
 3. **실행 가능한 결정사항 기술**: "지속 관찰" 같은 모호한 문구를 금지하고 구체적인 실행 행동을 기술하라.
 4. **다학제 역할 분담 명시**: 담임교사 / 특수교육지도사 / 전문상담사 / 치료사 / 보호자 / 관리자 역할 구분.
 5. **보호자 협력 사항 분리**: 학교가 제공할 지원과 가정에 요청할 지원을 명확히 구분.
-6. **금지**: 논의되지 않은 내용을 데이터만 보고 지어내지 말고, 제안 사항은 `[AI 제안 — 협의 필요]` 태그를 붙여라."""
+6. **금지**: 논의되지 않은 내용을 데이터만 보고 지어내지 말고, 제안 사항은 `[AI 제안 — 협의 필요]` 태그를 붙여라.
+7. 안건별 현황·결정·담당·기한은 각각 3줄 이내로 쓰고 반복 설명은 제거하라."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 3000)
 
 
 # ------------------------------------------------------------------------------
@@ -1287,6 +1451,10 @@ def generate_bcba_tier3_analysis(
     Tier 3 위기 컨설팅: Python 정량 집계 및 대표 위기 증거 기반 4단계 위기 프로토콜.
     (원시 30건 로그 dump를 제거하고 정밀 위기 지표와 선별된 5건 이내의 대표 사건 전달)
     """
+    gate = fba_data_gate(len(behavior_logs or []))
+    if not gate["eligible"]:
+        return gate["notice"]
+
     summary_payload = _build_tier3_summary_payload(
         tier3_students=tier3_students,
         behavior_logs=behavior_logs,
@@ -1307,11 +1475,14 @@ def generate_bcba_tier3_analysis(
    - ③ 위기(Peak): 안전 확보 최우선, 2인 1조 최소 신체 개입 원칙.
    - ④ 회복(Recovery): 복귀 기준, 진정 시간 확보 및 사후 디브리핑.
 2. **실제 효과가 있었던 대응 vs 실패한 대응 추출**: 로그 텍스트에서 성공/실패 사례를 요약하라.
-3. **교직원 안전 및 신체 방어 가이드**: 형태별 방어 자세 및 3/4호 분리지도 법적 보고 요건 명시.
+3. **교직원·학생 안전 가이드**: 거리·동선·주변 학생 이동·지원 요청·최소제한 원칙을 구체화하고, 승인된 학교 절차 밖의 신체 개입은 제안하지 마라.
 4. **위기 발생 후 24시간 내 처리 체크리스트**: 보고서 작성, 보호자 소통, 학생 회복, 교직원 디브리핑.
-5. **예방 실패 신호 경고**: 반복적 위기는 선행사건 예방 실패 신호이므로 BIP 예방 전략 재검토 항목 제시."""
+5. **예방 실패 신호 경고**: 반복적 위기는 예방 전략 재검토 신호이므로 BIP 점검 항목을 제시.
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+[출력 형식]
+`핵심 위험`, `전조→고조→최고조→회복`, `효과/악화 단서`, `24시간 내 조치`, `데이터 한계` 5개 소제목만 사용한다. 각 단계는 해야 할 일과 피할 일을 각각 2개 이하로 쓴다."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2800)
 
 
 # ------------------------------------------------------------------------------
@@ -1324,9 +1495,13 @@ def generate_bcba_student_analysis(
     all_notes: list = None
 ) -> str:
     """
-    개별 학생 종합 분석: Python 정량 집계 및 대표 5건 증거 기반 A-B-C 임상 진단.
+    개별 학생 종합 분석: 구조화 필드와 특기사항 서술을 교차한 잠정 FBA 분석.
     (원시 30건 로그 dump를 제거하고 통계 분포와 엄선된 대표 사건 전달)
     """
+    gate = fba_data_gate(len(student_logs or []))
+    if not gate["eligible"]:
+        return gate["notice"]
+
     summary_payload = _build_student_summary_payload(
         student_info=student_info,
         student_logs=student_logs,
@@ -1335,38 +1510,28 @@ def generate_bcba_student_analysis(
     )
     student_summary_json = json.dumps(summary_payload, ensure_ascii=False, separators=(',', ':'))
 
-    prompt = f"""[학생 A-B-C 정량 집계 및 대표 관찰 증거 요약]
+    prompt = f"""[학생 위기행동 정량 집계 및 대표 관찰 증거 요약]
 {student_summary_json}
 
 [지시사항]
-특수교사·담임교사·IEP팀이 교실에서 바로 적용할 수 있는 수준의 개별 A-B-C 임상 분석 리포트를 작성하라.
-제공된 실제 정량 지표(건수, 평균강도, 유형 분포, 시간대, 장소)와 대표 관찰 증거를 인용하라.
+특수교사·담임교사·IEP팀이 바로 이해하고 실행할 수 있는 개별 FBA 참고 리포트를 작성하라.
+별도 ABC 문항이 아니라 특기사항(기타)에 서술된 자료가 주된 맥락 자료다. 구조화 필드(추정기능·행동유형·강도·횟수·시간대·장소·안전사건)와 특기사항을 교차하라. 특기사항에서 A/B/C 단서를 구분할 수는 있으나, 기록되지 않은 선행사건이나 후속결과를 사실처럼 만들지 마라.
 
-1. **A-B-C 프로파일 (데이터 기반)**:
-   - A(선행사건): 가장 위험한 시간대·장소·활동 조합 Top 3 (실제 건수/비율 명시).
-   - B(표적행동): 유형별 건수 분포, 평균 강도(실제 수치), 물리적 제지 발생 여부.
-   - C(후속결과): 관찰 기록에서 추론 가능한 유지 강화 패턴 (없으면 "기록 없음" 명시).
+[출력 형식 — 아래 6개 소제목만 사용]
+### 1. 핵심 판단
+- 잠정 기능가설 1~2개와 신뢰수준을 3줄 이내로 쓴다.
+### 2. 근거
+- 실제 n, 주요 행동·기능·시간·장소·강도·특기사항 근거를 5개 이하 불릿으로 쓴다.
+### 3. 특기사항에서 확인된 A-B-C 단서
+- A/B/C를 각각 쓰되 없으면 반드시 "별도 기록 없음"이라고 쓴다.
+### 4. 기능에 맞는 교실 지원
+- 예방·대체행동 교수·강화를 각각 2개 이하로 쓴다. 학생의 의사소통 방식이 미상이면 선택 가능한 반응형태를 제시하고 확인 필요로 표시한다.
+### 5. 이번 주 확인할 데이터
+- 담당자·관찰상황·측정항목을 3개 이하로 쓴다.
+### 6. 데이터 한계
+- 잠정 가설이며 직접 ABC 관찰로 확인해야 할 부분을 2문장 이내로 쓴다."""
 
-2. **배경사건(Setting Event) 분석**:
-   - 대표 증거 및 특기사항에서 수면 부족, 투약 누락("약을 안먹음"), 배고픔, 가정사 언급 건수 추출.
-   - 배경사건 기록 유무에 따른 발생 비교 (부족 시 "배경사건 기록 부재로 분석 불가" 명시).
-
-3. **또래 영향 점검**:
-   - 타 학생 언급 시 학급 청각 환경 자극원으로 파악 → 좌석 배치 및 분리 타이밍 제안 (없으면 "또래 관련 기록 없음").
-
-4. **담임교사용 즉시 실행 팁 5개** (준비물·예산 없이 내일 아침부터 가능한 것):
-   - [적용 상황], [구체적 행동 지침], [기대 효과] 각 3줄 이내 작성.
-   - 경은학교 자원(경은그림말 AAC, 시각적 일과표, 심리안정실) 활용 명시.
-
-5. **IEP·개별화교육지원팀을 위한 행동 목표 초안**:
-   - 현재 데이터를 기준선으로 4주/12주 SMART 목표 제시 (수치 부족 시 "직접 관찰 1주 후 확정").
-
-6. **학부모 가정 협력 요청 사항** (일상어로 학교 실행 3개, 가정 협력 3개 구분).
-
-7. **데이터 한계 및 추가 수집 권고**:
-   - 기록 지연일, 강도/기능 기록 누락 수치 명시 및 다음 단계 필요 데이터(ABC 직접관찰, FBA 등) 우선순위 제시."""
-
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2600)
 
 
 # ------------------------------------------------------------------------------
@@ -1381,27 +1546,28 @@ def generate_bip_hypothesis(
     sample_size: int = 5
 ) -> str:
     """
-    BIP Step 4 가설 생성: 표준 공식 + 조작적 정의 + 배경 vs 선행 분리 + 복수 가설 + 반증 예측 + n<5 가드
+    BIP Step 4 가설 생성: 구조화 필드와 특기사항 기반 잠정 가설 + n<3 가드.
     """
-    if sample_size < 5:
-        return "⚠️ 직접관찰 데이터 부족(표본 n<5). 신뢰할 수 있는 기능적 가설 수립을 위해 최소 2주간의 ABC 직접관찰 기록이 선행되어야 합니다."
+    gate = fba_data_gate(sample_size)
+    if not gate["eligible"]:
+        return gate["notice"]
 
     prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
 [표적행동] {target_behavior}
-[선행사건 및 배경사건 데이터] {antecedent_data}
-[추정기능 및 관찰 텍스트] {function_data} / {notes_summary}
+[시간대·장소 등 맥락 데이터] {antecedent_data}
+[교사 추정기능 및 특기사항(기타) 서술] {function_data} / {notes_summary}
 
 [지시사항]
-아래 표준 공식에 맞추어 기능적 가설을 작성하라.
-공식: "[배경사건]이 있는 상황에서 [선행사건]이 제시되면, [학생]은 [조작적으로 정의된 표적행동]을 보이며, 그 결과 [후속결과]를 얻는다. 따라서 이 행동의 기능은 [기능]으로 추정된다."
+별도 ABC 문항이 없는 운영 자료다. 특기사항에서 확인되는 A/B/C 단서와 구조화 필드의 반복 패턴을 결합하여 잠정 기능가설을 작성하라.
 
 [작성 규칙]
-1. 표적행동은 관찰·측정 가능하게 기술하라.
-2. 배경사건(원거리 조건)과 선행사건(직전 자극)을 명확히 구분하라.
-3. 기능이 복수이면 가설 1, 가설 2로 분리하라.
-4. 각 가설마다 데이터 근거와 "이 가설이 맞다면 [조건]에서 행동이 감소할 것"이라는 반증 가능한 예측을 제시하라."""
+1. 첫 줄에 `잠정 기능가설:`을 쓰고 2문장 이내로 요약하라.
+2. 표적행동은 관찰·측정 가능하게 기술하라.
+3. 기능이 복수이면 가설 1, 가설 2로 나누되 각 가설은 근거 2개 이하로 쓴다.
+4. 없는 선행사건·후속결과를 채우지 말고 `별도 기록 없음`으로 표시하라.
+5. 마지막에 `확인 관찰:`로 반증 가능한 직접관찰 방법 1개를 제시하라."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 3000)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1000)
 
 
 # ------------------------------------------------------------------------------
@@ -1427,9 +1593,12 @@ def generate_bip_strategies(
    - 동일 기능 수행 여부 / 표적행동 대비 적은 노력 / 더 빠르고 확실한 강화 여부를 표로 점검.
 3. **경은학교 기존 자원 연계**: 경은그림말 AAC, 경은마트 토큰경제, 심리안정실, 시각적 일과표 적극 활용.
 4. **소거 폭발(Extinction Burst) 주의**: 자해/공격행동에 대한 단독 소거 금지 및 안전 조건 명시.
-5. **우선순위 부여**: 전략별 [실행 난이도: 상/중/하] 및 [효과 발현 예상 시점] 표기."""
+5. **우선순위 부여**: 전략별 [실행 난이도: 상/중/하] 및 [효과 발현 예상 시점] 표기.
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+[출력 형식]
+`1. 예방`, `2. 교수`, `3. 강화`, `확인 방법` 네 소제목만 사용한다. 각 단계는 실행문 3개 이하, 한 항목은 2문장 이하로 쓴다."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1600)
 
 
 # ------------------------------------------------------------------------------
@@ -1441,39 +1610,128 @@ def generate_full_bip(
     hypothesis_data: str,
     strategies_data: str,
     school_crisis_protocol: str = "",
-    behavior_logs: list = None
+    behavior_logs: list = None,
+    mode: str = "detailed",
+    medication_status: str = "",
+    reinforcer_info: str = "",
+    other_considerations: str = "",
+    evidence_summary: dict = None,
 ) -> str:
     """
-    BIP Step 12 전문: 8대 핵심 요소 + 8항목 내부 정합성 자체 검증표 + 실제 기준선(Baseline) + 학부모 1페이지 요약
+    Generate the same 11-field BIP contract in two reading depths.
+
+    ``compact`` is used by FBA/BIP관리 for a short editable first draft.
+    ``detailed`` is used by AI BIP 제안 받기 for classroom-ready guidance.
     """
-    logs_summary = f"누적 행동 로그 {len(behavior_logs)}건 분석 완료" if behavior_logs else "기본 로그 연동"
-    
-    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
-[표적행동] {target_behavior}
-[기능 가설] {hypothesis_data}
-[3단계 중재 전략] {strategies_data}
-[학교 위기 프로토콜 및 데이터] {school_crisis_protocol} / {logs_summary}
+    behavior_logs = behavior_logs or []
+    gate = fba_data_gate(len(behavior_logs))
+    if not gate["eligible"]:
+        return gate["notice"]
+
+    mode = "compact" if mode == "compact" else "detailed"
+    evidence_summary = evidence_summary or build_fba_evidence_summary(
+        student_info, behavior_logs
+    )
+    evidence_json = json.dumps(evidence_summary, ensure_ascii=False, separators=(",", ":"))
+
+    if mode == "compact":
+        depth_rules = """- 쉽고 짧은 최초 초안이다.
+- 1~6, 8~11번은 각각 1~3개 불릿, 불릿당 한 문장으로 쓴다.
+- 7번은 지정된 10개 항목을 빠짐없이 쓰되 각 항목은 한 문장으로 쓴다.
+- 전체 분량은 약 1,800자 이내로 압축한다."""
+    else:
+        depth_rules = """- 교사가 보고 바로 실행할 수 있는 쉽고 상세한 제안이다.
+- 가장 먼저 1~11번과 위기지원 10개 항목을 모두 완성한다. 번호 누락은 가장 큰 오류다.
+- 1~6, 8~11번은 각각 1~3개 불릿으로 쓰고, 상황·교사 행동·학생 반응·확인 기준을 압축한다.
+- 7번은 지정된 10개 항목마다 관찰 기준과 실행 행동을 1~2문장으로 쓴다.
+- 전문용어는 쉬운 뜻을 함께 쓰며 전체 분량은 약 3,200자 이내로 제한한다."""
+
+    prompt = f"""[출력 목적] {"FBA/BIP관리의 짧은 AI 초안" if mode == "compact" else "AI BIP 제안 받기의 쉽고 상세한 제안"}
+[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+[위기행동 전체 근거 요약] {evidence_json}
+[기존 표적행동 요약] {target_behavior}
+[기존 잠정 기능가설] {hypothesis_data}
+[사용자 입력 정보]
+- 약물 복용 현황: {medication_status or "미입력"}
+- 강화제 정보: {reinforcer_info or "미입력"}
+- 기타 고려사항: {other_considerations or "미입력"}
+[학교 위기 프로토콜] {school_crisis_protocol or "학교 절차 확인 필요"}
 
 [지시사항]
-미국 PBIS 표준 8대 핵심 요소를 충족하는 공식 행동중재계획서(BIP) 전문을 작성하라.
-[8대 필수 요소]
-1. 표적행동의 조작적 정의 (실제 데이터 기준선 수치 포함)
-2. A-B-C 기능적 가설
-3. SMART 단기(4주)/장기(12주) 행동 목표
-4. 선행사건 및 배경사건 예방 전략
-5. 기능적 대체행동 교수 계획 (FCT/경은그림말 AAC)
-6. 강화 전략 (DRA/토큰)
-7. 위기관리계획 (전조-고조-위기-회복 및 3/4호 분리지도 법적 보고)
-8. 평가 및 재검토 계획 (Tier 하향 졸업 기준)
+1. 별도 ABC 문항이 없는 자료다. 특기사항(기타) 서술과 추정기능·행동유형·강도·횟수·시간대·장소·안전사건을 교차하여 잠정 기능가설을 세운다.
+2. 데이터에 없는 선행사건·후속결과·의사소통 방식·약물·강화제·가정 정보는 만들지 말고 `미상 — 확인 필요`로 쓴다.
+3. 단일 기능으로 확정하지 말고, 행동형태·상황별 다중통제 가능성과 직접관찰 확인 항목을 반영한다.
+4. 예방→대체행동 교수→강화가 동일한 잠정 기능에 연결되게 한다. 의사소통 방식이 미상이면 그림·몸짓·AAC·말 중 학생이 가장 쉽고 빠르게 사용할 방식을 평가하도록 쓴다.
+5. 자해·공격·물건파괴 위험에는 소거 단독을 제안하지 않는다. 최고조에서는 안전 확보와 자극 축소를 우선한다.
+6. 약물은 사용자가 입력한 사실만 옮기고 조정·중단을 제안하지 않는다.
 
-[문서 말미 필수 첨부 1: BIP 내부 정합성 자체 검증표]
-아래 8개 항목에 대해 충족/미충족/보완점을 판정한 검증표를 첨부하라:
-1) 조작적 정의 측정가능성 2) 가설과 대체행동 기능 일치 3) 대체행동 효율성 4) 예방전략의 선행사건 대응성 5) 강화전략의 기능 일치 6) 위기계획의 최고강도 감당성 7) 평가방식 적합성 8) SMART 목표 기준선 근거
+[분량 규칙]
+{depth_rules}
 
-[문서 말미 필수 첨부 2: 보호자 설명용 요약서 (1페이지 분량)]
-전문용어를 쉬운 일상어로 풀어쓰고 학교와 가정의 협력 방안을 정리하라."""
+[출력 형식 — 제목 문구, 번호, 순서를 정확히 지키고 다른 앞뒤 문구를 붙이지 말 것]
+### 1. 표적행동
+(내용)
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 8192)
+### 2. 가설(기능)
+(잠정 가설, 근거, 확인 필요 사항)
+
+### 3. 목표
+(측정 가능한 단기·장기 목표)
+
+### 4. 예방 전략
+(내용)
+#### 📚 EBP 추가
+(기능에 맞는 EBP 이름과 쉬운 적용법)
+
+### 5. 교수 전략
+(내용)
+#### 📚 EBP 추가
+(기능적으로 같은 결과를 얻는 대체행동 교수 EBP)
+
+### 6. 강화 전략
+(내용)
+#### 📚 EBP 추가
+(기능에 맞는 강화 EBP와 전달 기준)
+
+### 7. 위기행동지원 전략
+#### 🚨 위기행동지원절차
+- **전조:** (내용)
+- **고조:** (내용)
+- **알림:** (내용)
+- **장소/이동방법:** (내용)
+- **관찰 방법:** (내용)
+- **호명반응 확인 방법:** (내용)
+- **지시 목록:** (내용)
+- **회복대화 방법:** (내용)
+- **복귀의사 방법:** (내용)
+- **복귀 후 반응:** (내용)
+
+### 8. 평가 계획(Tier3 졸업 기준 포함)
+(측정항목·검토주기·수정기준·Tier3 졸업기준)
+
+### 9. 약물 복용 현황
+(사용자 입력만 반영)
+
+### 10. 강화제 정보
+(사용자 입력과 선호도 재평가 방법)
+
+### 11. 기타 고려사항
+(의사소통·감각·건강·환경·팀 역할 중 자료로 확인된 내용과 확인 필요 사항)"""
+
+    # Keep both modes finishable inside the three-minute local-model window.
+    raw_result = _call_llm(
+        COMMON_BCBA_SYSTEM_PROMPT,
+        prompt,
+        1600 if mode == "compact" else 2000,
+    )
+    return _ensure_bip_output_contract(
+        raw_result,
+        target_behavior=target_behavior,
+        hypothesis_data=hypothesis_data,
+        medication_status=medication_status,
+        reinforcer_info=reinforcer_info,
+        other_considerations=other_considerations,
+    )
 
 
 def generate_data_based_decision_recommendation(
@@ -1518,7 +1776,7 @@ def generate_data_based_decision_recommendation(
 3) 팀 협의와의 정합성
 4) 제안 (다음 조치)"""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800)
 
 
 # ------------------------------------------------------------------------------
@@ -1541,4 +1799,8 @@ def generate_peer_contagion_analysis(contagion_data: dict) -> str:
    - 소음 차단 헤드셋, 좌석 배치 재조정, 진정 공간 동선 확보, 1차 촉발 학생 조기 분리 타이밍, 반응자 대처 기술(FCT).
 4. **데이터 한계 명시**: 교사 서술에 기록된 건에 한정된 분석임을 명시."""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4096)
+    prompt += """
+
+[출력 형식]
+`핵심 패턴`, `환경 가설`, `학급 전체 예방`, `확인 방법·한계` 4개 소제목만 사용하고, 각 소제목은 3개 이하 불릿으로 작성하라."""
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1600)
