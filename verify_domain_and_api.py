@@ -916,9 +916,10 @@ def test_p0_b3_authorization_and_class_scope():
         # [M] POST /cico/monthly/update Scope Defense (Hardening Blocker 1)
         mock_cico_monthly = {
             "month": 3,
+            "day_columns": [{"index": 9, "label": "03-02"}],
             "students": [
-                {"row": 5, "학생코드": "21101", "학생명": "학생A", "학급": "초등 1학년 1반"},
-                {"row": 6, "학생코드": "21201", "학생명": "학생B", "학급": "초등 1학년 2반"},
+                {"row": 5, "학생코드": "21101", "학생명": "학생A", "학급": "초등 1학년 1반", "척도": "O/X(발생)"},
+                {"row": 6, "학생코드": "21201", "학생명": "학생B", "학급": "초등 1학년 2반", "척도": "O/X(발생)"},
             ]
         }
         client.cookies.set("pbst_session", token_teacher_a)

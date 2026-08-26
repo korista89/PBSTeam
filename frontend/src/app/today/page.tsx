@@ -7,6 +7,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import type { DecisionSignal } from "../../types/domain";
 import { maskName } from "../utils";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 interface TodayData {
   date: string;
@@ -43,8 +44,8 @@ export default function TodayPage() {
 
   const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
 
-  const fetchToday = useCallback(async () => {
-    setLoading(true);
+  const fetchToday = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await axios.get(`${apiUrl}/api/v1/workspace/today`);
@@ -52,11 +53,12 @@ export default function TodayPage() {
     } catch {
       setError("오늘 확인할 데이터를 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [apiUrl]);
 
   useEffect(() => { fetchToday(); }, [fetchToday]);
+  useSheetLiveSync(() => fetchToday(true));
 
   // 오늘 CICO 체크인 여부 (담임 본인 학급만) — 관리자는 특정 학급이 없어 생략
   useEffect(() => {
@@ -112,7 +114,7 @@ export default function TodayPage() {
         currentPage="today"
         title="🧭 오늘 확인할 것"
         subtitle="담임교사가 지금 무엇을 챙겨야 하는지 우선순위대로 정리했습니다"
-        headerActions={<button onClick={fetchToday} className="btn btn-secondary">🔄 새로고침</button>}
+        headerActions={<button onClick={() => void fetchToday()} className="btn btn-secondary">🔄 새로고침</button>}
       >
         {loading ? (
           <div style={{ textAlign: "center", padding: "100px", color: "#64748b" }}>

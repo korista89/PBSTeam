@@ -122,6 +122,29 @@ class BatchUpdateRequest(BaseModel):
     updates: list[CellUpdate]
 
 
+def _is_valid_daily_value(scale: str, value: str) -> bool:
+    """Validate a CICO daily entry against the row's configured scale."""
+    normalized = str(value).strip()
+    if normalized == "":
+        return True
+    scale = str(scale or "").strip()
+    if "O/X" in scale:
+        return normalized in {"O", "X"}
+    if "0점/1점/2점" in scale:
+        return normalized in {"0", "1", "2", "0점", "1점", "2점"}
+    try:
+        numeric = float(normalized.replace("점", "").replace("회", "").replace("분", ""))
+    except ValueError:
+        return False
+    if "0~5" in scale:
+        return 0 <= numeric <= 5
+    if "0~7" in scale:
+        return 0 <= numeric <= 7
+    if "1~100" in scale:
+        return 0 <= numeric <= 100
+    return False
+
+
 @router.post("/monthly/update")
 async def update_cico_cells(
     req: BatchUpdateRequest,
@@ -131,23 +154,29 @@ async def update_cico_cells(
     if req.month < 1 or req.month > 12:
         raise HTTPException(status_code=400, detail="Month must be 1-12")
 
+    monthly_data = get_monthly_cico_data(req.month)
+    if "error" in monthly_data:
+        raise HTTPException(status_code=500, detail=monthly_data["error"])
+
+    students = monthly_data.get("students", [])
+    row_to_student = {int(s.get("row", -1)): s for s in students}
+    allowed_daily_columns = {
+        int(day.get("index", -1)) + 1 for day in monthly_data.get("day_columns", [])
+    }
     role = str(current_user.get("role", "")).lower()
-    if role not in ["admin", "superadmin"]:
-        monthly_data = get_monthly_cico_data(req.month)
-        if "error" in monthly_data:
-            raise HTTPException(status_code=500, detail=monthly_data["error"])
 
-        students = monthly_data.get("students", [])
-        row_to_student = {int(s.get("row", -1)): s for s in students}
-
-        # Pre-validate all rows before any write is attempted
-        for u in req.updates:
-            target_student = row_to_student.get(u.row)
-            if not target_student:
-                raise HTTPException(status_code=404, detail=f"Row {u.row} does not map to a known student record.")
-
-            st_code = target_student.get("학생코드") or target_student.get("학생명") or ""
+    # Pre-validate the complete batch before any Sheet write is attempted.
+    for u in req.updates:
+        target_student = row_to_student.get(u.row)
+        if not target_student:
+            raise HTTPException(status_code=404, detail=f"Row {u.row} does not map to a known student record.")
+        if role not in ["admin", "superadmin"]:
+            st_code = target_student.get("학생코드") or ""
             check_student_scope(str(st_code), current_user)
+        if u.col not in allowed_daily_columns:
+            raise HTTPException(status_code=400, detail=f"Column {u.col} is not a daily CICO input column.")
+        if not _is_valid_daily_value(target_student.get("척도", ""), u.value):
+            raise HTTPException(status_code=400, detail=f"'{u.value}' is not valid for scale '{target_student.get('척도', '')}'.")
 
     updates = [{"row": u.row, "col": u.col, "value": u.value} for u in req.updates]
     result = update_monthly_cico_cells(req.month, updates)

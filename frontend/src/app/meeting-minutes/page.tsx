@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
@@ -11,6 +11,7 @@ import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useDateRange } from "../components/GlobalNav";
 import { maskName } from "../utils";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 export default function MeetingMinutesPage() {
     const [data, setData] = useState<DashboardData | null>(null);
@@ -20,39 +21,36 @@ export default function MeetingMinutesPage() {
     const { startDate, endDate } = useDateRange();
     const date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    useEffect(() => {
+    const fetchData = useCallback(async (silent = false) => {
         if (!startDate || !endDate) return;
+        try {
+            if (!silent) setLoading(true);
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            // 1. Fetch Analytics
+            const analyticsUrl = `${apiUrl}/api/v1/analytics/dashboard`;
+            const params = new URLSearchParams();
+            params.append("start_date", startDate);
+            params.append("end_date", endDate);
 
-                // 1. Fetch Analytics
-                let analyticsUrl = `${apiUrl}/api/v1/analytics/dashboard`;
-                const params = new URLSearchParams();
-                params.append("start_date", startDate);
-                params.append("end_date", endDate);
+            const [analyticsRes, notesRes] = await Promise.all([
+                axios.get(`${analyticsUrl}?${params.toString()}`),
+                axios.get(`${apiUrl}/api/v1/meeting-notes`)
+            ]);
 
-                const [analyticsRes, notesRes] = await Promise.all([
-                    axios.get(`${analyticsUrl}?${params.toString()}`),
-                    axios.get(`${apiUrl}/api/v1/meeting-notes`) // Fetch all notes, filter client-side for simplicity or update API to filter range
-                ]);
+            setData(analyticsRes.data);
 
-                setData(analyticsRes.data);
+            setNotes(notesRes.data.notes || []);
 
-                // Filter notes by date range if needed, for now just show all recent or relevant types
-                // Ideally API matches period.
-                setNotes(notesRes.data.notes || []);
-
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+        } catch (err) {
+            console.error(err);
+        } finally {
+            if (!silent) setLoading(false);
+        }
     }, [startDate, endDate]);
+
+    useEffect(() => { void fetchData(); }, [fetchData]);
+    useSheetLiveSync(() => fetchData(true));
 
     if (loading) return (
         <div style={{ padding: '50px', textAlign: 'center' }}>데이터 준비 중... 🖨️</div>

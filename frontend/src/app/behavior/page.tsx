@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import BehaviorForm from "../components/BehaviorForm";
 import StudentTimeline from "../components/StudentTimeline";
 import AppShell from "../components/AppShell";
 import { useAuth, AuthCheck } from "../components/AuthProvider";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 export default function BehaviorPage() {
   const { user, isAdmin } = useAuth();
@@ -15,11 +16,10 @@ export default function BehaviorPage() {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  useEffect(() => {
+  const fetchStudents = useCallback(async () => {
     // Fetch students to populate list
-    axios
-      .get(`${API_BASE_URL}/api/v1/tier/status`)
-      .then((res) => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/v1/tier/status`);
         // Backend /api/v1/tier/status already scopes `students` to the caller's
         // own class for non-admins (get_student_class_code / normalize_class_identifier).
         // A redundant filter here used to compare the numeric 학생코드 against
@@ -34,12 +34,16 @@ export default function BehaviorPage() {
             a.findIndex((t: any) => t.학생코드 === v.학생코드) === i
         );
         setStudents(unique);
-        if (unique.length > 0 && !selectedStudent) {
-          setSelectedStudent(unique[0]);
-        }
-      })
-      .catch((err) => console.error("Failed to load students", err));
-  }, [user, isAdmin]);
+        setSelectedStudent((current: any) => (
+          unique.find((student: any) => student.학생코드 === current?.학생코드) || unique[0] || null
+        ));
+    } catch (err) {
+      console.error("Failed to load students", err);
+    }
+  }, []);
+
+  useEffect(() => { void fetchStudents(); }, [fetchStudents, user?.id]);
+  useSheetLiveSync(fetchStudents);
 
   const filteredStudents = students.filter((s) => {
     const name = s.학생이름 || s.이름 || s.학생명 || "";

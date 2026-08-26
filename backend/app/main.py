@@ -63,6 +63,41 @@ async def verify_origin_header(request: Request, call_next):
                 )
     return await call_next(request)
 
+
+@app.middleware("http")
+async def sheet_sync_and_api_cache_control(request: Request, call_next):
+    """Provide an explicit fresh-read path for live Google Sheets screens.
+
+    Vercel may serve consecutive requests from different warm instances, so a
+    write-side in-memory invalidation cannot guarantee that the next GET lands
+    on the same cache.  Live-refresh requests therefore clear the local cache
+    of whichever instance receives the GET before the endpoint reads Sheets.
+    """
+    is_api = request.url.path.startswith("/api/")
+    wants_fresh_sheet = (
+        request.method == "GET"
+        and request.url.path.startswith("/api/v1/")
+        and request.headers.get("x-pbst-sheet-refresh", "").strip() == "1"
+    )
+
+    if wants_fresh_sheet:
+        from app.services.sheets import clear_cache
+        clear_cache()
+        try:
+            from app.services.picture_words import clear_pw_cache
+            clear_pw_cache()
+        except Exception:
+            # Picture-word sheets are optional to the core PBST data contract.
+            pass
+
+    response = await call_next(request)
+    if is_api:
+        # Prevent browser/CDN reuse on authenticated, mutable Sheet-backed APIs.
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 from app.api.endpoints import analytics
 from app.api.endpoints import student
 from app.api.endpoints import roster

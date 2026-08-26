@@ -2348,11 +2348,11 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                 })
                 rows_to_recalc.add(row)
 
-        # Recalculate Logic
+        # Recalculate the derived rate/achievement cells with the same logic
+        # used by GET /cico/monthly.  The previous write path only counted O/X
+        # values, which overwrote numeric-scale rows with incorrect 0% results.
         try:
-            # Identify columns using Regex loose matching
             def find_col_regex(pattern):
-                import re
                 for idx, h in enumerate(headers):
                     if re.search(pattern, str(h)):
                         return idx
@@ -2362,23 +2362,23 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             achieved_idx = find_col_regex(r'달성.*여부|성공.*여부')
             goal_idx = find_col_regex(r'달성.*기준|목표.*기준')
             type_idx = find_col_regex(r'행동.*유형')
+            scale_idx = find_col_regex(r'^척도$|Scale')
+            baseline_idx = find_col_regex(r'입력.*기준|베이스라인|Baseline')
 
             if rate_idx == -1:
                 if settings.ENVIRONMENT.lower() != "production":
                     print("DEBUG: '수행/발생률' column missing, skipping calculation")
 
             day_cols = []
-            import re
             for idx, h in enumerate(headers):
                 match = re.search(r'^(\d{1,2})[-/.](\d{1,2})$|^(\d{1,2})(일)?$', str(h).strip())
                 if match:
-                   day_cols.append(idx)
+                    day_cols.append(idx)
 
             if rate_idx != -1:
                 if settings.ENVIRONMENT.lower() != "production":
                     print(f"DEBUG: Recalculating {len(rows_to_recalc)} rows...")
                 for r_idx in rows_to_recalc:
-                    # 0-based index for python list
                     row_data_idx = r_idx - 1
                     if row_data_idx < len(all_values):
                         row_data = list(all_values[row_data_idx])
@@ -2387,62 +2387,35 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                             print(f"DEBUG: Row {r_idx} out of bounds")
                         continue
 
-                    # Apply pending updates to memory for accurate calculation
+                    if len(row_data) < len(headers):
+                        row_data.extend([""] * (len(headers) - len(row_data)))
+
+                    # Apply pending writes to the in-memory row before calculating.
                     for u in updates:
-                        # Logic to find if this update applies to current row
-                        # 'u' has 'row' (1-based)
                         if u.get("row") == r_idx:
                             c = u.get("col")
-                            # Resolve column index again
                             c_idx = -1
-                            if isinstance(c, int): c_idx = c - 1
+                            if isinstance(c, int):
+                                c_idx = c - 1
                             elif isinstance(c, str):
-                                if c in headers: c_idx = headers.index(c)
-                                elif f"{c}일" in headers: c_idx = headers.index(f"{c}일")
+                                if c in headers:
+                                    c_idx = headers.index(c)
+                                elif f"{c}일" in headers:
+                                    c_idx = headers.index(f"{c}일")
 
                             if c_idx != -1 and 0 <= c_idx < len(row_data):
                                 row_data[c_idx] = u.get("value", "")
 
-                    # Calculate Rate
-                    target_type = row_data[type_idx] if (type_idx != -1 and len(row_data) > type_idx) else "증가 목표행동"
-                    goal_criteria = row_data[goal_idx] if (goal_idx != -1 and len(row_data) > goal_idx) else "80% 이상"
-
-                    total_days = 0
-                    success_days = 0
-
-                    for dc in day_cols:
-                        if dc < len(row_data):
-                            val = str(row_data[dc]).strip()
-                            if val in ["O", "X"]:
-                                total_days += 1
-                                if "감소" in str(target_type):
-                                    if val == "X": success_days += 1
-                                else:
-                                    # Default to Increase
-                                    if val == "O": success_days += 1
-
-                    rate_val = 0
-                    if total_days > 0:
-                        rate_val = (success_days / total_days) * 100
-
-                    final_rate_str = f"{int(rate_val)}%" if total_days > 0 else None
-
-                    # Achievement
-                    is_achieved = "X"
-                    try:
-                        # Extract number from criteria
-                        import re
-                        match = re.search(r'\d+', str(goal_criteria))
-                        criteria_num = int(match.group()) if match else 80
-
-                        if "이하" in str(goal_criteria):
-                            if rate_val <= criteria_num: is_achieved = "O"
-                        else: # 이상
-                            if rate_val >= criteria_num: is_achieved = "O"
-                    except:
-                        pass
-
-                    if total_days == 0: is_achieved = None
+                    calc_input = {
+                        "days": {str(headers[dc]): row_data[dc] for dc in day_cols},
+                        "척도": row_data[scale_idx] if scale_idx != -1 else "O/X(발생)",
+                        "목표행동 유형": row_data[type_idx] if type_idx != -1 else "증가 목표행동",
+                        "입력 기준": row_data[baseline_idx] if baseline_idx != -1 else 0,
+                        "목표 달성 기준": row_data[goal_idx] if goal_idx != -1 else "80% 이상",
+                    }
+                    calc_result = _calculate_cico_rate(calc_input)
+                    final_rate_str = calc_result["rate_str"]
+                    is_achieved = calc_result["achieved"]
 
                     cells_to_update.append({
                         "range": f"{_col_letter(rate_idx + 1)}{r_idx}",
@@ -2575,11 +2548,23 @@ def toggle_tier2_status(month: int, student_code: str, status: str):
         all_values = safe_get_all_values(ws)
         headers = all_values[0]
 
-        code_idx = headers.index("학생코드") if "학생코드" in headers else 2
+        code_idx = -1
+        for idx, header in enumerate(headers):
+            normalized = str(header).strip()
+            if "학생코드" in normalized or "(코드)" in normalized or normalized.lower() in {"code", "studentcode"}:
+                code_idx = idx
+                break
+        if code_idx == -1:
+            return {"error": "학생코드 열을 찾을 수 없습니다."}
         tier2_idx = headers.index("Tier2") if "Tier2" in headers else 3
 
         for i, row in enumerate(all_values[1:], start=2):
-            if len(row) > code_idx and str(row[code_idx]).strip() == str(student_code).strip():
+            if len(row) <= code_idx:
+                continue
+            cell_value = str(row[code_idx]).strip()
+            code_match = re.search(r'\((.*?)\)', cell_value)
+            resolved_code = code_match.group(1).strip() if code_match else cell_value
+            if resolved_code == str(student_code).strip():
                 ws.update_cell(i, tier2_idx + 1, status)  # 1-based column
                 cur_year = now_kst().year
                 invalidate_cache(f"sheet:cico:{cur_year}:{month:02d}")

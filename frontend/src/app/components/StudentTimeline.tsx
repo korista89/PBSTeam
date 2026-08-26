@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
+import { useSheetLiveSync } from '../hooks/useSheetLiveSync';
 
 export default function StudentTimeline({ studentId, refreshTrigger }: { studentId: string, refreshTrigger: number }) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!studentId) return;
-
-    const fetchLogs = async () => {
-      setLoading(true);
+  const fetchLogs = useCallback(async (silent = false) => {
+      if (!studentId) return;
+      if (!silent) setLoading(true);
       setError('');
       try {
         const res = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/timeline/${studentId}`);
@@ -26,12 +25,12 @@ export default function StudentTimeline({ studentId, refreshTrigger }: { student
       } catch (err: any) {
         setError(err.response?.data?.detail || err.message || 'Error fetching timeline');
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
-    };
+  }, [studentId]);
 
-    fetchLogs();
-  }, [studentId, refreshTrigger]);
+  useEffect(() => { void fetchLogs(); }, [fetchLogs, refreshTrigger]);
+  useSheetLiveSync(() => fetchLogs(true), { enabled: Boolean(studentId) });
 
   if (!studentId) return <div>학생을 선택해주세요.</div>;
   if (loading) return <div>타임라인 불러오는 중...</div>;

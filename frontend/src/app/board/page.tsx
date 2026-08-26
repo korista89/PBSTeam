@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 interface Post {
     id: string;
@@ -30,20 +31,21 @@ export default function BoardPage() {
     const [editTitle, setEditTitle] = useState("");
     const [editContent, setEditContent] = useState("");
 
-    const fetchPosts = useCallback(async () => {
+    const fetchPosts = useCallback(async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const res = await axios.get(`${apiUrl}/api/v1/board`);
             setPosts(res.data);
         } catch (err) {
             setError("게시글을 불러오는데 실패했습니다.");
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
     useEffect(() => { fetchPosts(); }, [fetchPosts]);
+    useSheetLiveSync(() => fetchPosts(true), { enabled: !isWriting && editingId === null });
 
     const handleWrite = async () => {
         if (!title.trim() || !content.trim()) return;

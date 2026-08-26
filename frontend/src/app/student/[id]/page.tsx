@@ -11,6 +11,7 @@ import {
 import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
+import { useSheetLiveSync } from "../../hooks/useSheetLiveSync";
 import { useDateRange } from "../../components/GlobalNav";
 import { TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
@@ -27,9 +28,9 @@ export default function StudentDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const sparams = new URLSearchParams();
       if (startDate && endDate) {
         sparams.append("start_date", startDate);
@@ -45,13 +46,14 @@ export default function StudentDetail() {
       else if (err.response?.status === 403) setError("이 학생의 데이터에 접근할 권한이 없습니다. 본인 배정 학급 학생의 데이터만 열람 가능합니다.");
       else setError("데이터 로딩 실패");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [apiUrl, studentName, startDate, endDate]);
 
   useEffect(() => {
     if (studentName) fetchData();
   }, [fetchData, studentName]);
+  useSheetLiveSync(() => fetchData(true), { enabled: Boolean(studentName) });
 
   if (loading) return (
     <AuthCheck>
@@ -244,6 +246,7 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
   }, [apiUrl, studentCode]);
 
   useEffect(() => { if (studentCode) fetchNotes(); }, [studentCode, fetchNotes]);
+  useSheetLiveSync(fetchNotes, { enabled: Boolean(studentCode) && editingId === null });
 
   const handleUpdate = async (id: string) => {
     try {

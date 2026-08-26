@@ -5,6 +5,7 @@ import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
+import { requestSheetLiveRefresh, useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import {
   ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -185,8 +186,8 @@ export default function CICOPage() {
   const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
   const studentParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("student") : null;
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError("");
     setIs404(false);
     setAiState({ loading: false, text: "" });
@@ -244,11 +245,12 @@ export default function CICOPage() {
         setError(err.message || "데이터 로딩 실패");
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [month, apiUrl, studentParam]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useSheetLiveSync(() => fetchData(true), { enabled: pendingUpdates.length === 0 });
 
   const handleGenerateSheet = async () => {
     setGenerating(true);
@@ -267,17 +269,24 @@ export default function CICOPage() {
   useEffect(() => {
     if (pendingUpdates.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const batchToSave = pendingUpdates;
     saveTimerRef.current = setTimeout(async () => {
       setSaveStatus("저장 중...");
       try {
-        await axios.post(`${apiUrl}/api/v1/cico/monthly/update`, { month, updates: pendingUpdates });
-        setPendingUpdates([]);
+        await axios.post(`${apiUrl}/api/v1/cico/monthly/update`, { month, updates: batchToSave });
+        setPendingUpdates(current => current.filter(item => !batchToSave.some(saved => (
+          saved.row === item.row && saved.col === item.col && saved.value === item.value
+        ))));
         setSaveStatus("✓ 저장 완료");
+        window.setTimeout(requestSheetLiveRefresh, 300);
         setTimeout(() => setSaveStatus(""), 2000);
       } catch {
         setSaveStatus("⚠ 저장 실패");
       }
     }, 1500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
   }, [pendingUpdates, month, apiUrl]);
 
   const handleCellChange = (student: GridStudent, dayLabel: string, value: string) => {
@@ -342,7 +351,7 @@ export default function CICOPage() {
                 <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
               ))}
             </select>
-            <button onClick={fetchData} className="btn btn-primary">🔄 새로고침</button>
+            <button onClick={() => void fetchData()} className="btn btn-primary">🔄 새로고침</button>
           </div>
         }
       >

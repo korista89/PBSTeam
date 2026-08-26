@@ -14,6 +14,7 @@ import AppShell from "./components/AppShell";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
 import SectionAIButton from "./components/SectionAIButton";
 import { maskName, formatWeek } from "./utils";
+import { useSheetLiveSync } from "./hooks/useSheetLiveSync";
 
 const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
 
@@ -383,37 +384,35 @@ export default function Home() {
   const [interpretation, setInterpretation] = useState<{ title: string; loading: boolean; text: string } | null>(null);
   const { user, isAdmin } = useAuth();
   const { startDate, endDate } = useDateRange();
-  const lastParamsRef = React.useRef("");
+  const dashboardRequestRef = React.useRef(0);
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(async (silent = false) => {
     if (!startDate || !endDate) return;
     const isAdminUser = isAdmin();
     const params = new URLSearchParams();
     params.append("start_date", startDate);
     params.append("end_date", endDate);
     if (!isAdminUser && user?.class_id) params.append("class_id", user.class_id);
-    const currentParams = params.toString();
-    if (currentParams === lastParamsRef.current && data !== null) return;
-
-    const abortController = new AbortController();
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setFetchError(null);
-        lastParamsRef.current = currentParams;
-        const url = `${apiUrl}/api/v1/analytics/dashboard?${currentParams}`;
-        const response = await axios.get(url, { signal: abortController.signal });
-        if (response.data.error) setFetchError(response.data.error);
-        else setData(response.data);
-      } catch (err: any) {
-        if (!axios.isCancel(err)) setFetchError("데이터를 불러오는 중 오류가 발생했습니다.");
-      } finally {
-        setLoading(false);
+    const requestId = ++dashboardRequestRef.current;
+    try {
+      if (!silent) setLoading(true);
+      setFetchError(null);
+      const url = `${apiUrl}/api/v1/analytics/dashboard?${params.toString()}`;
+      const response = await axios.get(url);
+      if (requestId !== dashboardRequestRef.current) return;
+      if (response.data.error) setFetchError(response.data.error);
+      else setData(response.data);
+    } catch {
+      if (requestId === dashboardRequestRef.current) {
+        setFetchError("데이터를 불러오는 중 오류가 발생했습니다.");
       }
-    };
-    fetchData();
-    return () => abortController.abort();
+    } finally {
+      if (!silent && requestId === dashboardRequestRef.current) setLoading(false);
+    }
   }, [startDate, endDate, user?.class_id, user?.id]);
+
+  useEffect(() => { void fetchDashboard(); }, [fetchDashboard]);
+  useSheetLiveSync(() => fetchDashboard(true));
 
   useEffect(() => {
     if (!data || !isAdmin()) return;
@@ -907,6 +906,7 @@ function MeetingNotesContainer({ title, type }: { title: string, type: string })
     }, [type]);
 
     useEffect(() => { fetchNotes(); }, [fetchNotes]);
+    useSheetLiveSync(fetchNotes);
 
     const handleSave = async () => {
         if (!content.trim()) return;

@@ -1,29 +1,31 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 export default function RosterPage() {
   const [roster, setRoster] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchRoster = async () => {
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-        const response = await axios.get(`${apiUrl}/api/v1/roster`);
-        setRoster(response.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRoster();
+  const fetchRoster = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const response = await axios.get(`${apiUrl}/api/v1/roster`);
+      setRoster(response.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void fetchRoster(); }, [fetchRoster]);
+  useSheetLiveSync(() => fetchRoster(true));
 
   return (
     <AuthCheck>

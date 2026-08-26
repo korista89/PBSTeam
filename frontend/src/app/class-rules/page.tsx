@@ -6,6 +6,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { API_BASE_URL, CLASS_LIST } from "../constants";
 import { maskName } from "../utils";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 interface Behavior { id: number; category: string; text: string; }
 interface Catalog { categories: string[]; behaviors: Behavior[]; }
@@ -47,14 +48,14 @@ export default function ClassRulesPage() {
     } catch { setRules({}); }
   }, [classId]);
 
-  const fetchTokens = useCallback(async () => {
+  const fetchTokens = useCallback(async (silent = false) => {
     if (!classId) return;
-    setLoadingTokens(true);
+    if (!silent) setLoadingTokens(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/api/v1/class-rules/${classId}/tokens`);
       setStudents(res.data.students || []);
     } catch { setStudents([]); }
-    finally { setLoadingTokens(false); }
+    finally { if (!silent) setLoadingTokens(false); }
   }, [classId]);
 
   const fetchLog = useCallback(async () => {
@@ -66,6 +67,9 @@ export default function ClassRulesPage() {
   }, [classId]);
 
   useEffect(() => { fetchRules(); fetchTokens(); fetchLog(); }, [fetchRules, fetchTokens, fetchLog]);
+  useSheetLiveSync(async () => { await Promise.all([fetchTokens(true), fetchLog()]); }, {
+    enabled: Boolean(classId) && awardingKey === null,
+  });
 
   const categories = catalog?.categories || ["스스로", "바르게", "안전하게"];
 

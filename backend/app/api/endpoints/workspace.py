@@ -19,6 +19,13 @@ from app.api.deps import require_authenticated_user, check_student_scope, normal
 
 router = APIRouter()
 
+
+def _active_cico_months(as_of_date: date) -> List[int]:
+    """Return the current school-year CICO tabs through the as-of month."""
+    if as_of_date.month < 3:
+        return []
+    return list(range(3, min(as_of_date.month, 12) + 1))
+
 @router.get("/today")
 async def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """
@@ -115,9 +122,9 @@ async def get_student_workspace(
     all_events = LogMainAdapter.fetch_events()
     s_events = [e for e in all_events if e.student_code == student_code]
 
-    # CICO Observations from active months (3~7월)
+    # CICO observations from every active month through today.
     cico_obs: List[CicoObservation] = []
-    for m in [3, 4, 5, 6, 7]:
+    for m in _active_cico_months(today):
         m_obs = CicoMonthAdapter.fetch_observations(m)
         s_m_obs = [o for o in m_obs if o.student_code == student_code]
         cico_obs.extend(s_m_obs)

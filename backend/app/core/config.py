@@ -1,11 +1,16 @@
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Intelligent Behavior Support Dashboard"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "production"))
-    GOOGLE_CREDENTIALS_FILE: str = "service_account.json"
-    SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1pMQIowYYBIk-6owcJqCNK5mA8GtssEEr6XdUq8gC9Cs/edit" 
+    # Resolve local credentials independently of the process working directory.
+    # Production still prefers GOOGLE_SERVICE_ACCOUNT_JSON in the Sheets client.
+    GOOGLE_CREDENTIALS_FILE: str = str(BACKEND_DIR / "service_account.json")
+    SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1pMQIowYYBIk-6owcJqCNK5mA8GtssEEr6XdUq8gC9Cs/edit"
     DAILY_LOG_SHEET: str = "평가문장"
     GEMINI_API_KEY: str = ""
     GAS_WEB_APP_URL: str = ""

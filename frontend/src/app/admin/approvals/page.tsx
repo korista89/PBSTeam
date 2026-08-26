@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../../constants';
 import AppShell from '../../components/AppShell';
 import { AuthCheck, useAuth } from '../../components/AuthProvider';
+import { useSheetLiveSync } from '../../hooks/useSheetLiveSync';
 
 export default function AdminApprovalsPage() {
   const { user } = useAuth();
@@ -13,24 +14,25 @@ export default function AdminApprovalsPage() {
   const [error, setError] = useState('');
   const [adminId, setAdminId] = useState('Admin');
 
-  const fetchPendingLogs = async () => {
-    setLoading(true);
+  const fetchPendingLogs = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/pending`);
       setLogs(res.data.logs || []);
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Error fetching pending logs');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (user) {
       setAdminId(user.name || user.id || 'Admin');
     }
-    fetchPendingLogs();
-  }, [user]);
+    void fetchPendingLogs();
+  }, [user, fetchPendingLogs]);
+  useSheetLiveSync(() => fetchPendingLogs(true));
 
   const handleApprove = async (logId: string) => {
     if (!confirm('해당 위기행동 기록 및 보고서를 승인하시겠습니까?')) return;
@@ -80,7 +82,7 @@ export default function AdminApprovalsPage() {
         subtitle={`대기 중인 위기행동 보고서: ${logs.length}건`}
         hideDateFilter={true}
         headerActions={
-          <button onClick={fetchPendingLogs} className="btn btn-secondary">
+          <button onClick={() => void fetchPendingLogs()} className="btn btn-secondary">
             🔄 새로고침
           </button>
         }

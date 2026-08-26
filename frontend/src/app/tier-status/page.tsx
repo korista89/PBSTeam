@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
+import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 interface StudentStatus {
     번호: number;
@@ -52,13 +53,9 @@ export default function TierStatusPage() {
 
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchStatus();
-    }, []);
-
-    const fetchStatus = async () => {
+    const fetchStatus = useCallback(async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             setErrorMsg(null);
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
@@ -79,9 +76,12 @@ export default function TierStatusPage() {
             setEnrolledCount(0);
             setErrorMsg("DATA_UNAVAILABLE: 학생 지원 단계(TierStatus) 데이터를 불러올 수 없습니다.");
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => { void fetchStatus(); }, [fetchStatus]);
+    useSheetLiveSync(() => fetchStatus(true), { enabled: editingCode === null && !saving });
 
     const handleEdit = (student: StudentStatus) => {
         setEditingCode(student.학생코드);
@@ -195,7 +195,7 @@ export default function TierStatusPage() {
                 title="📋 전교생 Tier 지원 단계 현황"
                 subtitle={`전교생 ${enrolledCount}명 (재학생 기준) · 전체 ${students.length}명`}
                 headerActions={
-                    <button onClick={fetchStatus} className="btn btn-secondary">
+                    <button onClick={() => void fetchStatus()} className="btn btn-secondary">
                         🔄 새로고침
                     </button>
                 }
@@ -210,7 +210,7 @@ export default function TierStatusPage() {
                     {errorMsg && (
                         <div className="card" style={{ padding: '16px 20px', background: 'var(--tier3-bg)', borderColor: '#fca5a5', color: 'var(--tier3-text)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>⚠️ {errorMsg}</span>
-                            <button onClick={fetchStatus} className="btn btn-danger">다시 시도</button>
+                            <button onClick={() => void fetchStatus()} className="btn btn-danger">다시 시도</button>
                         </div>
                     )}
 
