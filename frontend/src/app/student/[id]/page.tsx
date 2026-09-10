@@ -147,17 +147,16 @@ export default function StudentDetail() {
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {/* KPI Cards */}
-            <div className="grid-responsive" style={{ marginBottom: '24px' }}>
+            {/* KPI Cards — 절제된 색(값에만 강조색, 그 외 회색/흰색)으로 통일 */}
+            <div className="grid-responsive" style={{ marginBottom: '8px' }}>
                {[
-                { label: "총 행동 발생", value: `${profile.total_incidents}건`, icon: "📈", color: "#6366f1" },
-                { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), icon: "⚡", color: profile.avg_intensity >= 3.5 ? "#ef4444" : "#f59e0b" },
-                { label: "위험 수준", value: (profile.tier || "").includes("3") ? "높음" : "보통", icon: "🚨", color: (profile.tier || "").includes("3") ? "#ef4444" : "#10b981" }
+                { label: "총 행동 발생", value: `${profile.total_incidents}건`, color: "#0f172a" },
+                { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), color: profile.avg_intensity >= 3.5 ? "#dc2626" : "#0f172a" },
+                { label: "위험 수준", value: (profile.tier || "").includes("3") ? "높음" : "보통", color: (profile.tier || "").includes("3") ? "#dc2626" : "#0f172a" }
                ].map((c, i) => (
-                 <div key={i} className="glass-panel" style={{ padding: '28px', borderRadius: '24px' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '12px' }}>{c.icon}</div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>{c.label}</div>
-                    <div style={{ fontSize: '2.2rem', fontWeight: 950, color: c.color }}>{c.value}</div>
+                 <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '6px' }}>{c.label}</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: 800, color: c.color }}>{c.value}</div>
                  </div>
                ))}
             </div>
@@ -174,7 +173,7 @@ export default function StudentDetail() {
                 등 법정기록을 다시 찾아보려 할 때 결재함을 뒤질 필요가 없도록 하는 것이 목적. */}
             {crisisLogs.length > 0 && (
               <div>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 900, color: '#475569' }}>🚨 위기대응 이력 ({crisisLogs.length}건)</h3>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>🚨 위기대응 이력 ({crisisLogs.length}건)</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {crisisLogs.map((log, i) => {
                     const logId = log.Log_ID || String(i);
@@ -238,7 +237,7 @@ export default function StudentDetail() {
             {/* 발생 추이 — 주별/일별/요일별을 흩어 놓지 않고 한 클러스터로 모아 "언제 발생하는가"를
                 한 번에 훑어볼 수 있게 한다. */}
             <div>
-              <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 900, color: '#475569' }}>📈 발생 추이</h3>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>📈 발생 추이</h3>
               <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' }}>
                 <WeeklyAnalysisChart
                   data={data.weekly_trend || []}
@@ -326,10 +325,10 @@ function FBAEvidencePanel({ evidence }: { evidence: any }) {
   const insufficient = dq.is_insufficient_sample;
 
   return (
-    <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 4px 25px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: 10 }}>
-        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '1.5rem' }}>🔬</span> FBA 증거 요약
+    <section style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: 10 }}>
+        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
+          <span>🔬</span> FBA 증거 요약
         </h3>
         <span style={{
           padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 800,
@@ -396,8 +395,8 @@ function FBAEvidencePanel({ evidence }: { evidence: any }) {
 
 function ChartSection({ title, children, height = 340 }: { title: string, children: React.ReactNode, height?: number }) {
   return (
-    <section className="glass-panel" style={{ padding: '28px', borderRadius: '28px' }}>
-       <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: 900, color: '#475569' }}>{title}</h3>
+    <section style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '20px', borderRadius: '14px' }}>
+       <h3 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>{title}</h3>
        <div style={{ height }}>
           {children}
        </div>
@@ -470,16 +469,16 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
   };
 
   return (
-    <div style={{ background: '#fff', padding: '32px', borderRadius: '28px', border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-      <h3 style={{ margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 900 }}>📝 상담 및 관찰 기록</h3>
-      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="학생 관찰 내용이나 학부모 상담 내용을 기록하십시오..." style={{ width: '100%', minHeight: '120px', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.95rem', boxSizing: 'border-box', outline: 'none' }} />
-      <div style={{ textAlign: 'right', marginTop: '12px' }}>
-          <button onClick={handleSave} disabled={loading || !content.trim()} style={{ padding: '12px 28px', borderRadius: '14px', background: '#1e293b', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer' }}>기록 저장</button>
+    <div style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>📝 상담 및 관찰 기록</h3>
+      <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="학생 관찰 내용이나 학부모 상담 내용을 기록하십시오..." style={{ width: '100%', minHeight: '110px', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none' }} />
+      <div style={{ textAlign: 'right', marginTop: '10px' }}>
+          <button onClick={handleSave} disabled={loading || !content.trim()} className="btn btn-primary">기록 저장</button>
       </div>
 
-      <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
+      <div style={{ marginTop: '18px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
          {notes.map((n, i) => (
-           <div key={n.id || i} style={{ padding: '16px', borderRadius: '20px', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.02)' }}>
+           <div key={n.id || i} style={{ padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>📅 {n.date}</span>
                  <div style={{ display: 'flex', gap: '10px' }}>
@@ -524,15 +523,15 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   };
 
   return (
-    <div style={{ background: '#fff', padding: '28px', borderRadius: '24px', border: '2.5px solid #2563eb', boxShadow: '0 10px 30px rgba(37, 99, 235, 0.15)' }}>
+    <div style={{ background: '#fff', padding: '20px', borderRadius: '14px', border: '1px solid #bfdbfe' }}>
        {!visible ? (
-         <button onClick={requestAnalysis} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff', borderRadius: '14px', border: '2.5px solid #2563eb', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)', transition: 'transform 0.2s' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
+         <button onClick={requestAnalysis} style={{ width: '100%', padding: '14px', background: '#2563eb', color: '#fff', borderRadius: '10px', border: 'none', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
            🤖 AI 종합 분석 리포트 생성
          </button>
        ) : (
          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h4 style={{ margin: 0, color: '#1d4ed8', fontWeight: 900, fontSize: '1.05rem' }}>🤖 AI 전문가 정밀 분석</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <h4 style={{ margin: 0, color: '#1d4ed8', fontWeight: 800, fontSize: '0.95rem' }}>🤖 AI 전문가 정밀 분석</h4>
                 <button onClick={()=>setVisible(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
             </div>
             {loading ? (
@@ -580,10 +579,10 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
   const isUnknown = functionCode === "UNKNOWN";
 
   return (
-    <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', border: '1px solid #e2e8f0', boxShadow: '0 4px 25px rgba(0,0,0,0.03)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+    <section style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
             <span>📚</span> 경기 Be-Able 39 EBP 맞춤 추천 번들
           </h3>
           <p style={{ margin: '6px 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
