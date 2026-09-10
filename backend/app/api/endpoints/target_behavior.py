@@ -10,6 +10,8 @@ from app.services.sheets import (
     get_target_behaviors, create_target_behavior, update_target_behavior_status,
     add_target_behavior_data, get_target_behavior_data,
     add_target_behavior_fidelity, get_target_behavior_fidelity,
+    update_target_behavior_data, delete_target_behavior_data,
+    update_target_behavior_fidelity, delete_target_behavior_fidelity,
     fetch_student_status, fetch_all_records, normalize_date_string,
 )
 from app.services.ai_insight import generate_data_based_decision_recommendation, _redact_dict_name
@@ -126,6 +128,72 @@ def submit_fidelity(
     result = add_target_behavior_fidelity(behavior_id, req.date, req.implemented, req.memo or "", recorded_by)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+
+class UpdateDataPointRequest(BaseModel):
+    student_code: str  # 스코프 확인용
+    date: Optional[str] = None
+    value: Optional[str] = None
+    memo: Optional[str] = None
+
+
+@router.patch("/data/{uuid}")
+def edit_data_point(
+    uuid: str,
+    req: UpdateDataPointRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    check_student_scope(req.student_code, current_user)
+    result = update_target_behavior_data(uuid, req.date, req.value, req.memo)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.delete("/data/{uuid}")
+def remove_data_point(
+    uuid: str,
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    check_student_scope(student_code, current_user)
+    result = delete_target_behavior_data(uuid)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+class UpdateFidelityRequest(BaseModel):
+    student_code: str  # 스코프 확인용
+    date: Optional[str] = None
+    implemented: Optional[str] = None
+    memo: Optional[str] = None
+
+
+@router.patch("/fidelity/{uuid}")
+def edit_fidelity(
+    uuid: str,
+    req: UpdateFidelityRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    check_student_scope(req.student_code, current_user)
+    result = update_target_behavior_fidelity(uuid, req.date, req.implemented, req.memo)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.delete("/fidelity/{uuid}")
+def remove_fidelity(
+    uuid: str,
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    check_student_scope(student_code, current_user)
+    result = delete_target_behavior_fidelity(uuid)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
     return result
 
 

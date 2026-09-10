@@ -4138,6 +4138,15 @@ def ensure_target_behavior_sheet():
         return None
 
 
+def _ensure_uuid_header(ws):
+    """개별 행을 편집·삭제하려면 안정적인 식별자가 필요한데, 이 시트들은 만들어질 때
+    UUID 컬럼이 없었을 수 있다(신규 기능이라 기존 헤더가 고정됨). 헤더에 UUID가 없으면
+    마지막 열에 한 번만 추가한다 — MeetingNotes 시트가 이미 쓰는 패턴과 동일."""
+    headers = ws.row_values(1)
+    if "UUID" not in headers:
+        ws.update_cell(1, len(headers) + 1, "UUID")
+
+
 def ensure_target_behavior_data_sheet():
     """Ensure 'TargetBehaviorData' sheet exists (periodic measurement points)."""
     client = get_sheets_client()
@@ -4146,9 +4155,10 @@ def ensure_target_behavior_data_sheet():
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
             ws = sheet.worksheet("TargetBehaviorData")
+            _ensure_uuid_header(ws)
         except gspread.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="TargetBehaviorData", rows=2000, cols=5)
-            ws.append_row(["BehaviorID", "Date", "Value", "RecordedBy", "Memo"])
+            ws = sheet.add_worksheet(title="TargetBehaviorData", rows=2000, cols=6)
+            ws.append_row(["BehaviorID", "Date", "Value", "RecordedBy", "Memo", "UUID"])
         return ws
     except Exception as e:
         print(f"Error checking TargetBehaviorData sheet: {e}")
@@ -4163,9 +4173,10 @@ def ensure_target_behavior_fidelity_sheet():
         sheet = client.open_by_url(settings.SHEET_URL)
         try:
             ws = sheet.worksheet("TargetBehaviorFidelity")
+            _ensure_uuid_header(ws)
         except gspread.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="TargetBehaviorFidelity", rows=2000, cols=5)
-            ws.append_row(["BehaviorID", "Date", "Implemented", "Memo", "RecordedBy"])
+            ws = sheet.add_worksheet(title="TargetBehaviorFidelity", rows=2000, cols=6)
+            ws.append_row(["BehaviorID", "Date", "Implemented", "Memo", "RecordedBy", "UUID"])
         return ws
     except Exception as e:
         print(f"Error checking TargetBehaviorFidelity sheet: {e}")
@@ -4236,8 +4247,10 @@ def add_target_behavior_data(behavior_id: str, date_str: str, value: str, record
     ws = ensure_target_behavior_data_sheet()
     if not ws: return {"error": "Sheet access failed"}
     try:
-        ws.append_row([behavior_id, date_str, value, recorded_by, memo])
-        return {"message": "Data point recorded"}
+        import uuid
+        row_uuid = str(uuid.uuid4())
+        ws.append_row([behavior_id, date_str, value, recorded_by, memo, row_uuid])
+        return {"message": "Data point recorded", "uuid": row_uuid}
     except Exception as e:
         print(f"Error adding target behavior data: {e}")
         return {"error": str(e)}
@@ -4254,12 +4267,68 @@ def get_target_behavior_data(behavior_id: str) -> list:
         return []
 
 
+def _update_row_by_uuid(ws, row_uuid: str, updates: dict) -> dict:
+    """UUID로 행을 찾아 updates에 담긴 {헤더명: 값}만 갱신한다. 과거 행에 UUID가 없으면 못 찾는다."""
+    all_vals = ws.get_all_values()
+    if len(all_vals) < 2:
+        return {"error": "Not found"}
+    headers = all_vals[0]
+    try:
+        uuid_idx = headers.index("UUID")
+    except ValueError:
+        return {"error": "UUID column missing"}
+    for i, row in enumerate(all_vals[1:]):
+        if uuid_idx < len(row) and row[uuid_idx] == row_uuid:
+            cells = []
+            for header, value in updates.items():
+                if header in headers:
+                    cells.append(gspread.Cell(row=i + 2, col=headers.index(header) + 1, value=str(value)))
+            if cells:
+                ws.update_cells(cells)
+            return {"message": "Updated"}
+    return {"error": "UUID not found"}
+
+
+def _delete_row_by_uuid(ws, row_uuid: str) -> dict:
+    all_vals = ws.get_all_values()
+    if len(all_vals) < 2:
+        return {"error": "Not found"}
+    headers = all_vals[0]
+    try:
+        uuid_idx = headers.index("UUID")
+    except ValueError:
+        return {"error": "UUID column missing"}
+    for i, row in enumerate(all_vals[1:]):
+        if uuid_idx < len(row) and row[uuid_idx] == row_uuid:
+            ws.delete_rows(i + 2)
+            return {"message": "Deleted"}
+    return {"error": "UUID not found"}
+
+
+def update_target_behavior_data(row_uuid: str, date_str: str = None, value: str = None, memo: str = None) -> dict:
+    ws = ensure_target_behavior_data_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    updates = {}
+    if date_str is not None: updates["Date"] = date_str
+    if value is not None: updates["Value"] = value
+    if memo is not None: updates["Memo"] = memo
+    return _update_row_by_uuid(ws, row_uuid, updates)
+
+
+def delete_target_behavior_data(row_uuid: str) -> dict:
+    ws = ensure_target_behavior_data_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    return _delete_row_by_uuid(ws, row_uuid)
+
+
 def add_target_behavior_fidelity(behavior_id: str, date_str: str, implemented: str, memo: str = "", recorded_by: str = "") -> dict:
     ws = ensure_target_behavior_fidelity_sheet()
     if not ws: return {"error": "Sheet access failed"}
     try:
-        ws.append_row([behavior_id, date_str, implemented, memo, recorded_by])
-        return {"message": "Fidelity check-in recorded"}
+        import uuid
+        row_uuid = str(uuid.uuid4())
+        ws.append_row([behavior_id, date_str, implemented, memo, recorded_by, row_uuid])
+        return {"message": "Fidelity check-in recorded", "uuid": row_uuid}
     except Exception as e:
         print(f"Error adding target behavior fidelity: {e}")
         return {"error": str(e)}
@@ -4274,4 +4343,20 @@ def get_target_behavior_fidelity(behavior_id: str) -> list:
     except Exception as e:
         print(f"Error getting target behavior fidelity: {e}")
         return []
+
+
+def update_target_behavior_fidelity(row_uuid: str, date_str: str = None, implemented: str = None, memo: str = None) -> dict:
+    ws = ensure_target_behavior_fidelity_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    updates = {}
+    if date_str is not None: updates["Date"] = date_str
+    if implemented is not None: updates["Implemented"] = implemented
+    if memo is not None: updates["Memo"] = memo
+    return _update_row_by_uuid(ws, row_uuid, updates)
+
+
+def delete_target_behavior_fidelity(row_uuid: str) -> dict:
+    ws = ensure_target_behavior_fidelity_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    return _delete_row_by_uuid(ws, row_uuid)
 

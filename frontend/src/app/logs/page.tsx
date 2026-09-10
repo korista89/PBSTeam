@@ -2,14 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "../constants";
 import AppShell from "../components/AppShell";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useDateRange } from "../components/GlobalNav";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
-import CrisisDetailPanel from "../components/CrisisDetailPanel";
+import LogDetailPanel from "../components/LogDetailPanel";
 
 const STATUS_OPTIONS = ["전체", "Pending", "Approved", "Revision Requested"];
 
@@ -20,7 +19,6 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 };
 
 export default function LogsPage() {
-    const router = useRouter();
     const { isAdmin } = useAuth();
     const { startDate, endDate } = useDateRange();
 
@@ -79,11 +77,6 @@ export default function LogsPage() {
     useEffect(() => { void fetchLogs(); }, [fetchLogs]);
     useSheetLiveSync(() => fetchLogs(true));
 
-    const goToStudent = (log: any) => {
-        const code = log["학생코드"] || log["코드번호"];
-        if (code) router.push(`/student/${encodeURIComponent(code)}`);
-    };
-
     return (
         <AuthCheck>
             <AppShell
@@ -141,7 +134,10 @@ export default function LogsPage() {
                                     <thead>
                                         <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
                                             {["날짜/시간대", "학생", "학급", "입력교사", "행동유형", "강도", "장소", "제지", "상태"].map(h => (
-                                                <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontWeight: 700, color: "#475569", whiteSpace: "nowrap", width: h === "날짜/시간대" ? "110px" : undefined }}>{h}</th>
+                                                <th key={h} style={{
+                                                    textAlign: "left", padding: "10px 12px", fontWeight: 700, color: "#475569", whiteSpace: "nowrap",
+                                                    width: h === "날짜/시간대" ? "110px" : h === "행동유형" ? "180px" : h === "장소" ? "140px" : undefined,
+                                                }}>{h}</th>
                                             ))}
                                         </tr>
                                     </thead>
@@ -159,7 +155,7 @@ export default function LogsPage() {
                                             return (
                                                 <React.Fragment key={logId}>
                                                     <tr
-                                                        onClick={() => goToStudent(log)}
+                                                        onClick={() => setExpandedLogId(isExpanded ? null : logId)}
                                                         style={{ borderBottom: isExpanded ? "none" : "1px solid #f1f5f9", cursor: "pointer" }}
                                                         onMouseOver={(e) => (e.currentTarget.style.background = "#f8fafc")}
                                                         onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
@@ -171,21 +167,14 @@ export default function LogsPage() {
                                                         <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontWeight: 700, color: "#0f172a" }}>{maskName(log["학생명"])} <span style={{ color: "#94a3b8", fontWeight: 400 }}>({log["학생코드"] || log["코드번호"]})</span></td>
                                                         <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["학급"]}</td>
                                                         <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["입력교사명"]}</td>
-                                                        <td style={{ padding: "10px 12px" }}>{log["행동유형"]}</td>
+                                                        <td style={{ padding: "10px 12px", maxWidth: "180px", whiteSpace: "normal", wordBreak: "keep-all" }}>{log["행동유형"]}</td>
                                                         <td style={{ padding: "10px 12px", textAlign: "center" }}>{log["강도"]}</td>
-                                                        <td style={{ padding: "10px 12px" }}>{log["장소"]}</td>
+                                                        <td style={{ padding: "10px 12px", maxWidth: "140px", whiteSpace: "normal", wordBreak: "keep-all" }}>{log["장소"]}</td>
                                                         <td style={{ padding: "10px 12px", textAlign: "center" }}>
                                                             {isCrisis ? (
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); setExpandedLogId(isExpanded ? null : logId); }}
-                                                                    title={hasDetails ? "위기대응 상세 보기" : "상세 기록 없음"}
-                                                                    style={{
-                                                                        border: "none", cursor: hasDetails ? "pointer" : "default", background: "transparent",
-                                                                        fontSize: "1rem", position: "relative",
-                                                                    }}
-                                                                >
+                                                                <span title={missingLegal ? "법정 보고·알림 기록 누락" : "위기 대응 기록"} style={{ position: "relative" }}>
                                                                     🚨{missingLegal && <span style={{ position: "absolute", top: -4, right: -6, fontSize: "0.6rem" }}>⚠️</span>}
-                                                                </button>
+                                                                </span>
                                                             ) : "-"}
                                                         </td>
                                                         <td style={{ padding: "10px 12px" }}>
@@ -194,10 +183,10 @@ export default function LogsPage() {
                                                             </span>
                                                         </td>
                                                     </tr>
-                                                    {isExpanded && hasDetails && (
+                                                    {isExpanded && (
                                                         <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                                                            <td colSpan={9} style={{ padding: "0 12px 16px", background: "#f8fafc" }}>
-                                                                <CrisisDetailPanel crisisDetails={log.crisis_details} isCrisis={isCrisis} />
+                                                            <td colSpan={9} style={{ padding: "0 12px 16px", background: "#f8fafc" }} onClick={(e) => e.stopPropagation()}>
+                                                                <LogDetailPanel log={log} isCrisis={isCrisis} onSaved={() => void fetchLogs(true)} />
                                                             </td>
                                                         </tr>
                                                     )}

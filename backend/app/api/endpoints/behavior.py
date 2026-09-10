@@ -6,8 +6,25 @@ from app.api.deps import require_authenticated_user, require_admin, check_studen
 from app.adapters.sheets.tier_status import TierStatusAdapter
 import uuid
 import datetime
+import gspread
 
 router = APIRouter()
+
+# 짧은 키(프론트에서 쓰는 이름) -> 실제 구글폼 헤더 후보들(우선순위 순).
+# 폼이 개편될 때마다 문항 텍스트가 바뀌어 온 이력이 있어(fetch_all_records의 매핑과 동일한
+# 후보 목록), 시트의 실제 헤더 행에서 존재하는 첫 후보를 찾아 그 컬럼에 쓴다.
+FIELD_HEADER_CANDIDATES: Dict[str, List[str]] = {
+    "행동유형": ["행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)", "행동유형", "행동유형(핵심행동으로택1)", "(주요)행동유형", "주요행동유형"],
+    "강도": ["강도(1~5)", "강도(1~5점 척도)", "강도"],
+    "장소": ["행동 발생 장소(위기행동 시작 장소 기준)", "행동 발생 장소", "행동발생장소", "장소"],
+    "기능": ["추정기능(이번 행동을 통해 파악된 기능)", "기능(이번 행동을 통해 파악된 기능)", "기능", "추정기능"],
+    "발생횟수": ["발생횟수(한 에피소드 당 1회로 입력 권장)", "발생횟수", "발생빈도"],
+    "특기사항": ["특기사항(기타)", "특기사항", "비고", "기타"],
+    "배경사건": ["배경사건 - 오늘 평소와 다른 점이 있었나요? (복수 선택 가능)"],
+    "선행사건": ["선행사건 - 행동 직전에 무엇이 있었나요?   (복수 선택 가능)"],
+    "후속결과": ["후속결과 - 행동 직후 무엇이 달라졌나요?   (복수 선택 가능)"],
+    "시간대": ["시간대(위기행동 시작 시간 기준)", "시간대", "시간대 (복수)", "시간대(복수)"],
+}
 
 @router.post("")
 def submit_behavior_log(
@@ -171,6 +188,77 @@ def revise_behavior_log(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/{log_id}")
+def update_behavior_log(
+    log_id: str,
+    payload: dict = Body(...),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """
+    행동 로그의 데이터 필드를 수정한다 (전체 로그 페이지 인라인 편집용).
+    필드명은 짧은 키(FIELD_HEADER_CANDIDATES) 또는 crisis_details의 원본 헤더명을 그대로 받는다.
+    """
+    if not payload:
+        raise HTTPException(status_code=400, detail="수정할 필드가 없습니다")
+
+    client = get_sheets_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
+
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        log_main_ws = sheet.worksheet("Log_Main")
+
+        all_vals = log_main_ws.get_all_values()
+        if len(all_vals) < 2:
+            raise HTTPException(status_code=404, detail="No logs found")
+
+        headers = all_vals[0]
+        try:
+            log_id_idx = headers.index("Log_ID")
+        except ValueError:
+            raise HTTPException(status_code=500, detail="Schema error: Missing Log_ID column")
+        student_code_idx = headers.index("학생코드") if "학생코드" in headers else None
+
+        target_row_num = None
+        target_row = None
+        for i, row in enumerate(all_vals[1:]):
+            row_log_id = row[log_id_idx] if log_id_idx < len(row) else ""
+            if row_log_id == log_id:
+                target_row_num = i + 2
+                target_row = row
+                break
+
+        if target_row_num is None:
+            raise HTTPException(status_code=404, detail="Log ID not found")
+
+        student_code = target_row[student_code_idx] if student_code_idx is not None and student_code_idx < len(target_row) else ""
+        if student_code:
+            check_student_scope(student_code, current_user)
+
+        cells = []
+        for key, value in payload.items():
+            header_text = key if key in headers else next(
+                (c for c in FIELD_HEADER_CANDIDATES.get(key, []) if c in headers), None
+            )
+            if not header_text:
+                continue
+            col_idx = headers.index(header_text) + 1
+            cells.append(gspread.Cell(row=target_row_num, col=col_idx, value=str(value)))
+
+        if not cells:
+            raise HTTPException(status_code=400, detail="일치하는 필드를 찾을 수 없습니다")
+
+        log_main_ws.update_cells(cells)
+        clear_cache("records")
+
+        return {"success": True, "message": "Log updated", "updated_fields": len(cells)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/timeline/{student_id}")
 def get_student_timeline(

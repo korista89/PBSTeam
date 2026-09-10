@@ -67,6 +67,10 @@ export default function TargetBehaviorPage() {
     const [dataForm, setDataForm] = useState({ date: new Date().toISOString().split("T")[0], value: "", memo: "" });
     const [fidelityForm, setFidelityForm] = useState({ date: new Date().toISOString().split("T")[0], implemented: "O", memo: "" });
     const [decision, setDecision] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
+    const [editingDataUuid, setEditingDataUuid] = useState<string>("");
+    const [editDataDraft, setEditDataDraft] = useState({ date: "", value: "", memo: "" });
+    const [editingFidelityUuid, setEditingFidelityUuid] = useState<string>("");
+    const [editFidelityDraft, setEditFidelityDraft] = useState({ date: "", implemented: "O", memo: "" });
 
     const fetchBehaviors = useCallback(async () => {
         if (!studentCode) { setBehaviors([]); setSelectedId(""); return; }
@@ -138,6 +142,56 @@ export default function TargetBehaviorPage() {
             fetchChart();
         } catch (err: any) {
             alert("실행기록 실패: " + (err.response?.data?.detail || err.message));
+        }
+    };
+
+    const startEditData = (d: any) => {
+        setEditingDataUuid(d.UUID);
+        setEditDataDraft({ date: d.Date || "", value: String(d.Value ?? ""), memo: d.Memo || "" });
+    };
+
+    const saveEditData = async () => {
+        try {
+            await axios.patch(`${apiUrl}/api/v1/target-behaviors/data/${encodeURIComponent(editingDataUuid)}`, { student_code: studentCode, ...editDataDraft });
+            setEditingDataUuid("");
+            fetchChart();
+        } catch (err: any) {
+            alert("수정 실패: " + (err.response?.data?.detail || err.message));
+        }
+    };
+
+    const deleteDataPoint = async (uuid: string) => {
+        if (!uuid || !confirm("이 데이터 기록을 삭제하시겠습니까?")) return;
+        try {
+            await axios.delete(`${apiUrl}/api/v1/target-behaviors/data/${encodeURIComponent(uuid)}`, { params: { student_code: studentCode } });
+            fetchChart();
+        } catch (err: any) {
+            alert("삭제 실패: " + (err.response?.data?.detail || err.message));
+        }
+    };
+
+    const startEditFidelity = (f: any) => {
+        setEditingFidelityUuid(f.UUID);
+        setEditFidelityDraft({ date: f.Date || "", implemented: String(f.Implemented || "O").toUpperCase() === "O" ? "O" : "X", memo: f.Memo || "" });
+    };
+
+    const saveEditFidelity = async () => {
+        try {
+            await axios.patch(`${apiUrl}/api/v1/target-behaviors/fidelity/${encodeURIComponent(editingFidelityUuid)}`, { student_code: studentCode, ...editFidelityDraft });
+            setEditingFidelityUuid("");
+            fetchChart();
+        } catch (err: any) {
+            alert("수정 실패: " + (err.response?.data?.detail || err.message));
+        }
+    };
+
+    const deleteFidelityPoint = async (uuid: string) => {
+        if (!uuid || !confirm("이 실행기록을 삭제하시겠습니까?")) return;
+        try {
+            await axios.delete(`${apiUrl}/api/v1/target-behaviors/fidelity/${encodeURIComponent(uuid)}`, { params: { student_code: studentCode } });
+            fetchChart();
+        } catch (err: any) {
+            alert("삭제 실패: " + (err.response?.data?.detail || err.message));
         }
     };
 
@@ -344,6 +398,105 @@ export default function TargetBehaviorPage() {
                                                             <option value="X">X (실행 못함)</option>
                                                         </select>
                                                         <button onClick={handleSubmitFidelity} className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.72rem' }}>기록</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="responsive-grid-2">
+                                                <div>
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: 6 }}>📋 데이터 기록 ({(chart?.data_points || []).length}건)</div>
+                                                    <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                                                            <thead>
+                                                                <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
+                                                                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>날짜</th>
+                                                                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>측정값</th>
+                                                                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>메모</th>
+                                                                    <th style={{ padding: '6px 8px' }}></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {[...(chart?.data_points || [])].reverse().map((d: any, i: number) => (
+                                                                    <tr key={d.UUID || i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                                        {editingDataUuid === d.UUID ? (
+                                                                            <>
+                                                                                <td style={{ padding: '4px 6px' }}><input type="date" value={editDataDraft.date} onChange={e => setEditDataDraft({ ...editDataDraft, date: e.target.value })} style={{ width: '100%', fontSize: '0.74rem', padding: '3px' }} /></td>
+                                                                                <td style={{ padding: '4px 6px' }}><input type="text" value={editDataDraft.value} onChange={e => setEditDataDraft({ ...editDataDraft, value: e.target.value })} style={{ width: '100%', fontSize: '0.74rem', padding: '3px' }} /></td>
+                                                                                <td style={{ padding: '4px 6px' }}><input type="text" value={editDataDraft.memo} onChange={e => setEditDataDraft({ ...editDataDraft, memo: e.target.value })} style={{ width: '100%', fontSize: '0.74rem', padding: '3px' }} /></td>
+                                                                                <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                                                                                    <button onClick={saveEditData} style={{ border: 'none', background: 'none', cursor: 'pointer' }} title="저장">💾</button>
+                                                                                    <button onClick={() => setEditingDataUuid("")} style={{ border: 'none', background: 'none', cursor: 'pointer' }} title="취소">✕</button>
+                                                                                </td>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <td style={{ padding: '4px 8px' }}>{d.Date}</td>
+                                                                                <td style={{ padding: '4px 8px' }}>{d.Value}</td>
+                                                                                <td style={{ padding: '4px 8px', color: '#64748b' }}>{d.Memo}</td>
+                                                                                <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                                                                                    <button onClick={() => startEditData(d)} disabled={!d.UUID} title={d.UUID ? "편집" : "옛 기록 (편집 불가)"} style={{ border: 'none', background: 'none', cursor: d.UUID ? 'pointer' : 'default', opacity: d.UUID ? 1 : 0.3 }}>✏️</button>
+                                                                                    <button onClick={() => deleteDataPoint(d.UUID)} disabled={!d.UUID} title={d.UUID ? "삭제" : "옛 기록 (삭제 불가)"} style={{ border: 'none', background: 'none', cursor: d.UUID ? 'pointer' : 'default', opacity: d.UUID ? 1 : 0.3 }}>🗑️</button>
+                                                                                </td>
+                                                                            </>
+                                                                        )}
+                                                                    </tr>
+                                                                ))}
+                                                                {(chart?.data_points || []).length === 0 && (
+                                                                    <tr><td colSpan={4} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>기록 없음</td></tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: 6 }}>✅ 실행기록 ({(chart?.fidelity_points || []).length}건)</div>
+                                                    <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                                                            <thead>
+                                                                <tr style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
+                                                                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>날짜</th>
+                                                                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>실행</th>
+                                                                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>메모</th>
+                                                                    <th style={{ padding: '6px 8px' }}></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {[...(chart?.fidelity_points || [])].reverse().map((f: any, i: number) => (
+                                                                    <tr key={f.UUID || i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                                        {editingFidelityUuid === f.UUID ? (
+                                                                            <>
+                                                                                <td style={{ padding: '4px 6px' }}><input type="date" value={editFidelityDraft.date} onChange={e => setEditFidelityDraft({ ...editFidelityDraft, date: e.target.value })} style={{ width: '100%', fontSize: '0.74rem', padding: '3px' }} /></td>
+                                                                                <td style={{ padding: '4px 6px' }}>
+                                                                                    <select value={editFidelityDraft.implemented} onChange={e => setEditFidelityDraft({ ...editFidelityDraft, implemented: e.target.value })} style={{ width: '100%', fontSize: '0.74rem', padding: '3px' }}>
+                                                                                        <option value="O">O</option>
+                                                                                        <option value="X">X</option>
+                                                                                    </select>
+                                                                                </td>
+                                                                                <td style={{ padding: '4px 6px' }}><input type="text" value={editFidelityDraft.memo} onChange={e => setEditFidelityDraft({ ...editFidelityDraft, memo: e.target.value })} style={{ width: '100%', fontSize: '0.74rem', padding: '3px' }} /></td>
+                                                                                <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                                                                                    <button onClick={saveEditFidelity} style={{ border: 'none', background: 'none', cursor: 'pointer' }} title="저장">💾</button>
+                                                                                    <button onClick={() => setEditingFidelityUuid("")} style={{ border: 'none', background: 'none', cursor: 'pointer' }} title="취소">✕</button>
+                                                                                </td>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <td style={{ padding: '4px 8px' }}>{f.Date}</td>
+                                                                                <td style={{ padding: '4px 8px', fontWeight: 700, color: String(f.Implemented).toUpperCase() === 'O' ? '#166534' : '#b91c1c' }}>{f.Implemented}</td>
+                                                                                <td style={{ padding: '4px 8px', color: '#64748b' }}>{f.Memo}</td>
+                                                                                <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                                                                                    <button onClick={() => startEditFidelity(f)} disabled={!f.UUID} title={f.UUID ? "편집" : "옛 기록 (편집 불가)"} style={{ border: 'none', background: 'none', cursor: f.UUID ? 'pointer' : 'default', opacity: f.UUID ? 1 : 0.3 }}>✏️</button>
+                                                                                    <button onClick={() => deleteFidelityPoint(f.UUID)} disabled={!f.UUID} title={f.UUID ? "삭제" : "옛 기록 (삭제 불가)"} style={{ border: 'none', background: 'none', cursor: f.UUID ? 'pointer' : 'default', opacity: f.UUID ? 1 : 0.3 }}>🗑️</button>
+                                                                                </td>
+                                                                            </>
+                                                                        )}
+                                                                    </tr>
+                                                                ))}
+                                                                {(chart?.fidelity_points || []).length === 0 && (
+                                                                    <tr><td colSpan={4} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>기록 없음</td></tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
                                                     </div>
                                                 </div>
                                             </div>
