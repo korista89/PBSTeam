@@ -19,6 +19,9 @@ import ReadableAIResult from "../../components/ReadableAIResult";
 import CrisisDetailPanel from "../../components/CrisisDetailPanel";
 import { maskName } from "../../utils";
 
+// 대시보드(page.tsx)와 동일한 팔레트 — 화면마다 같은 지표가 다른 색으로 보이지 않게 통일.
+const PIE_COLORS_TYPE = ['#3b82f6', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#06b6d4', '#f97316'];
+
 export default function StudentDetail() {
   const params = useParams();
   const router = useRouter();
@@ -212,11 +215,11 @@ export default function StudentDetail() {
                 <ChartSection title="📍 ABC 패턴 맵 (장소 x 시간 x 강도)">
                   <ResponsiveContainer>
                     <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
-                      <XAxis type="category" dataKey="x" name="시간" />
-                      <YAxis type="category" dataKey="y" name="장소" width={100} tick={{fontSize: 10}} />
+                      <XAxis type="category" dataKey="x" name="시간" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <YAxis type="category" dataKey="y" name="장소" width={100} axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
                       <ZAxis type="number" dataKey="z" range={[100, 800]} />
                       <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                      <Scatter name="행동" data={abc_data} fill="#6366f1" opacity={0.6} />
+                      <Scatter name="행동" data={abc_data} fill={PIE_COLORS_TYPE[0]} opacity={0.6} />
                     </ScatterChart>
                   </ResponsiveContainer>
                 </ChartSection>
@@ -225,10 +228,10 @@ export default function StudentDetail() {
                   <ResponsiveContainer>
                     <PieChart>
                       <Pie data={functions} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
-                        {Array.isArray(functions) && functions.length > 0 && functions.map((_, i) => <Cell key={i} fill={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5]} />)}
+                        {Array.isArray(functions) && functions.length > 0 && functions.map((_, i) => <Cell key={i} fill={PIE_COLORS_TYPE[i % PIE_COLORS_TYPE.length]} />)}
                       </Pie>
-                      <Tooltip />
-                      <Legend />
+                      <Tooltip formatter={(v: any) => [`${v}건`, '']} />
+                      <Legend wrapperStyle={{ fontSize: '10px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </ChartSection>
@@ -242,7 +245,7 @@ export default function StudentDetail() {
                 <WeeklyAnalysisChart
                   data={data.weekly_trend || []}
                   title="주별 발생 추이"
-                  color="#6366f1"
+                  color={PIE_COLORS_TYPE[0]}
                 />
                 <ChartSection title="📉 일별 추이 (전체 기간)" height={340}>
                    <ResponsiveContainer>
@@ -251,8 +254,8 @@ export default function StudentDetail() {
                         <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                         <Tooltip />
-                        <Area type="monotone" dataKey="count" fill="#6366f110" stroke="#6366f1" strokeWidth={3} />
-                        <Bar dataKey="count" fill="#6366f1" barSize={10} radius={[5,5,0,0]} />
+                        <Area type="monotone" dataKey="count" fill={`${PIE_COLORS_TYPE[0]}10`} stroke={PIE_COLORS_TYPE[0]} strokeWidth={3} />
+                        <Bar dataKey="count" fill={PIE_COLORS_TYPE[0]} barSize={10} radius={[5,5,0,0]} />
                       </ComposedChart>
                    </ResponsiveContainer>
                 </ChartSection>
@@ -261,8 +264,8 @@ export default function StudentDetail() {
                       <BarChart data={data.weekday_dist || []}>
                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
                           <Tooltip />
-                          <Bar dataKey="value" fill="#f59e0b" radius={[10, 10, 10, 10]} barSize={20}>
-                              <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 800, fill: '#f59e0b' }} />
+                          <Bar dataKey="value" fill={PIE_COLORS_TYPE[1]} radius={[10, 10, 10, 10]} barSize={20}>
+                              <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 800, fill: PIE_COLORS_TYPE[1] }} />
                           </Bar>
                       </BarChart>
                   </ResponsiveContainer>
@@ -395,8 +398,8 @@ function FBAEvidencePanel({ evidence }: { evidence: any }) {
 
 function ChartSection({ title, children, height = 340 }: { title: string, children: React.ReactNode, height?: number }) {
   return (
-    <section style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '20px', borderRadius: '14px' }}>
-       <h3 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>{title}</h3>
+    <section style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '12px' }}>
+       <h3 style={{ margin: '0 0 16px 0', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>{title}</h3>
        <div style={{ height }}>
           {children}
        </div>

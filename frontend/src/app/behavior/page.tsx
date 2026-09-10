@@ -72,7 +72,7 @@ export default function BehaviorPage() {
     <AuthCheck>
       <AppShell
         currentPage="behavior"
-        title="🚨 위기행동 기록 및 타임라인"
+        title="🚨 위기행동기록 및 타임라인"
         subtitle="빠른 입력부터 상세 ABC 기록까지 한 화면에서 — 학생별 누적 타임라인 확인"
       >
         <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "20px", alignItems: "start" }}>

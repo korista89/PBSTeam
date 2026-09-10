@@ -87,7 +87,7 @@ export default function BoardPage() {
         <AuthCheck>
             <AppShell
                 currentPage="board"
-                title="💬 행동지원 게시판 & 전략 나눔"
+                title="💬 행동지원 자료 요청 및 공유 게시판"
                 subtitle="교내 PBS 지원 전략, 공지사항 및 우수 중재 사례 공유 공간"
                 hideDateFilter={true}
                 headerActions={
@@ -100,13 +100,21 @@ export default function BoardPage() {
                 }
             >
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                    {/* 안내 배너 */}
+                    <div style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%)', border: '1px solid #ddd6fe', borderRadius: '20px', padding: '18px 24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '1.6rem' }}>🎁</span>
+                        <span style={{ fontSize: '0.92rem', color: '#4c1d95', fontWeight: 600, lineHeight: 1.6 }}>
+                            공유할 행동지원 관련 자료에 대한 간단한 설명과 자료(캔바 등) 링크를 공유하면 작은 선물을 드립니다.
+                        </span>
+                    </div>
+
                     {/* Write Section */}
                     {isWriting && (
                         <div style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 20px 40px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)', marginBottom: '40px' }}>
-                            <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Post title..." style={{ width: '100%', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '1.1rem', fontWeight: 800, marginBottom: '16px', outline: 'none', boxSizing: 'border-box' }} onFocus={e=>e.currentTarget.style.borderColor='#6366f1'} />
-                            <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Details..." style={{ width: '100%', minHeight: '180px', padding: '20px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '1rem', outline: 'none', transition: 'all 0.2s', boxSizing: 'border-box' }} onFocus={e=>e.currentTarget.style.borderColor='#6366f1'} />
+                            <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="자료 제목을 입력하세요" style={{ width: '100%', padding: '16px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '1.1rem', fontWeight: 800, marginBottom: '16px', outline: 'none', boxSizing: 'border-box' }} onFocus={e=>e.currentTarget.style.borderColor='#6366f1'} />
+                            <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="자료에 대한 간단한 설명과 캔바 등 링크를 함께 적어주세요" style={{ width: '100%', minHeight: '180px', padding: '20px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '1rem', outline: 'none', transition: 'all 0.2s', boxSizing: 'border-box' }} onFocus={e=>e.currentTarget.style.borderColor='#6366f1'} />
                             <div style={{ textAlign: 'right', marginTop: '16px' }}>
-                                <button onClick={handleWrite} disabled={writeLoading} style={{ padding: '12px 32px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '14px', fontWeight: 800, cursor: 'pointer' }}>Publish</button>
+                                <button onClick={handleWrite} disabled={writeLoading} style={{ padding: '12px 32px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '14px', fontWeight: 800, cursor: 'pointer' }}>등록</button>
                             </div>
                         </div>
                     )}

@@ -8,18 +8,101 @@ import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { maskName } from "../../utils";
 
+// 조회수정 시점이 다른 지점(페이지 1/2/3 각각 안건 편집)에서 중복 코드 없이
+// "메모 있으면 수정, 없으면 새로 작성" 패턴을 공유하기 위한 섹션 컴포넌트.
+// 기존 PATCH/POST /meeting-notes API를 meeting_type만 바꿔 그대로 재사용한다.
+function AgendaSection({ sectionTitle, meetingType, notes, dateRange, user, onSaved, aiComment, placeholder }: {
+    sectionTitle: string; meetingType: string; notes: any[]; dateRange: { start: string; end: string };
+    user: any; onSaved: () => void; aiComment?: string; placeholder?: string;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState("");
+    const [saving, setSaving] = useState(false);
+    const latest = notes && notes.length > 0 ? notes[0] : null;
+
+    const startEdit = () => { setDraft(latest?.content || ""); setEditing(true); };
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            if (latest?.id) {
+                await axios.patch(`${apiUrl}/api/v1/meeting-notes/${latest.id}`, { content: draft });
+            } else {
+                await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+                    meeting_type: meetingType,
+                    date: new Date().toISOString().split('T')[0],
+                    content: draft,
+                    author: user?.name || user?.id || "",
+                    period_start: dateRange.start,
+                    period_end: dateRange.end,
+                });
+            }
+            setEditing(false);
+            onSaved();
+        } catch (e: any) {
+            alert("저장 실패: " + (e.response?.data?.detail || e.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <>
+            <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{sectionTitle}</span>
+                {!editing && (
+                    <button onClick={startEdit} className="no-print" style={{ padding: '4px 12px', fontSize: '12px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                        ✏️ 편집
+                    </button>
+                )}
+            </div>
+            {editing ? (
+                <div className="no-print">
+                    <textarea
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        style={{ width: '100%', minHeight: '200px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', lineHeight: 1.6, boxSizing: 'border-box' }}
+                        placeholder={placeholder || "안건 및 논의 사항을 입력하세요."}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                        <button onClick={save} disabled={saving} className="btn btn-primary" style={{ padding: '8px 16px' }}>
+                            {saving ? '저장 중...' : '💾 저장'}
+                        </button>
+                        <button onClick={() => setEditing(false)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>취소</button>
+                    </div>
+                </div>
+            ) : (
+                <div className="content-box" style={{ minHeight: '200px' }}>
+                    {aiComment && (
+                        <div>
+                            <strong>[AI 분석 요약]</strong>
+                            <br />
+                            {aiComment}
+                            <br /><br />
+                        </div>
+                    )}
+                    <strong>[주요 논의 기록]</strong>
+                    <br />
+                    {latest ? latest.content : "(기록된 회의록 없음 — 위 \"편집\" 버튼으로 작성하세요.)"}
+                </div>
+            )}
+        </>
+    );
+}
+
 export default function ConsultationReportPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isAdmin } = useAuth();
     const [loading, setLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ start: "", end: "" });
     const [reportData, setReportData] = useState<any>(null);
     const { startDate: globalStart, endDate: globalEnd } = useDateRange();
-    // "3. 안건 및 논의 사항" 편집 — 백엔드는 이미 PATCH/POST meeting-notes API를 갖고 있으므로
-    // 여기서는 편집 UI만 얹는다. 초안이 없으면 새로 만들고, 있으면 가장 최근 것을 고쳐 쓴다.
-    const [editingAgenda, setEditingAgenda] = useState(false);
-    const [agendaDraft, setAgendaDraft] = useState("");
-    const [savingAgenda, setSavingAgenda] = useState(false);
+
+    // 관리자는 학교 차원 하나의 공유 문서, 담임은 자기 학급 전용 문서로 안건이 섞이지
+    // 않게 meeting_type을 분리한다(스키마 변경 없이 문자열 값만 다르게 — meeting/page.tsx와 동일 규칙).
+    const scopeSuffix = isAdmin() ? "" : `_class_${user?.class_id || user?.id || "unknown"}`;
+    const meetingTypeFor = (tier: 'tier1' | 'tier2' | 'tier3') => `${tier}${scopeSuffix}`;
 
     // 상단 전역 날짜 필터에서 보고 있던 기간을 그대로 이어받는다 — 예전 "월별 정기회의록"
     // 페이지처럼 매번 기간을 다시 고를 필요 없게 하기 위함. 전역 필터가 없으면 이번 달로.
@@ -34,16 +117,29 @@ export default function ConsultationReportPage() {
         setDateRange({ start, end });
     }, [globalStart, globalEnd]);
 
+    const fetchNotes = async (tier: 'tier1' | 'tier2' | 'tier3') => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+        const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${meetingTypeFor(tier)}`);
+        return res.data.notes;
+    };
+
+    const refetchNotes = async (tier: 'tier1' | 'tier2' | 'tier3') => {
+        const notes = await fetchNotes(tier);
+        setReportData((prev: any) => ({ ...prev, notesByType: { ...prev.notesByType, [tier]: notes } }));
+    };
+
     const fetchReport = async () => {
         setLoading(true);
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-            const dashboardRes = await axios.get(`${apiUrl}/api/v1/analytics/dashboard?start_date=${dateRange.start}&end_date=${dateRange.end}`);
-            const notesRes = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=tier1`);
+            const [dashboardRes, tier1Notes, tier2Notes, tier3Notes] = await Promise.all([
+                axios.get(`${apiUrl}/api/v1/analytics/dashboard?start_date=${dateRange.start}&end_date=${dateRange.end}`),
+                fetchNotes('tier1'), fetchNotes('tier2'), fetchNotes('tier3'),
+            ]);
 
             setReportData({
                 dashboard: dashboardRes.data,
-                notes: notesRes.data.notes
+                notesByType: { tier1: tier1Notes, tier2: tier2Notes, tier3: tier3Notes }
             });
         } catch (e) {
             console.error(e);
@@ -58,7 +154,7 @@ export default function ConsultationReportPage() {
             <AuthCheck>
                 <AppShell
                     currentPage="consultation-report"
-                    title="📑 월별 정기회의록 / 공식 협의록 출력"
+                    title={isAdmin() ? "📑 학교행동중재지원팀 정기 협의록" : "📑 학급행동중재지원팀 정기 협의록"}
                     subtitle="학교장 결재 및 보관용 A4 표준 인쇄 양식 · 다른 페이지에서 보던 기간이 기본값으로 채워집니다"
                     hideDateFilter={true}
                 >
@@ -80,39 +176,27 @@ export default function ConsultationReportPage() {
 
     if (loading) return <div>로딩 중...</div>;
 
-    const { dashboard, notes } = reportData;
+    const { dashboard, notesByType } = reportData;
     const today = new Date().toLocaleDateString('ko-KR');
-    const latestAgendaNote = notes && notes.length > 0 ? notes[0] : null;
+    const reportTitle = isAdmin() ? "학교행동중재지원팀 정기 협의록" : `학급행동중재지원팀 정기 협의록 (${user?.class_id || user?.id || ""})`;
 
-    const startEditAgenda = () => {
-        setAgendaDraft(latestAgendaNote?.content || "");
-        setEditingAgenda(true);
-    };
-
-    const saveAgenda = async () => {
-        setSavingAgenda(true);
-        try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-            if (latestAgendaNote?.id) {
-                await axios.patch(`${apiUrl}/api/v1/meeting-notes/${latestAgendaNote.id}`, { content: agendaDraft });
-            } else {
-                await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
-                    meeting_type: "tier1",
-                    date: new Date().toISOString().split('T')[0],
-                    content: agendaDraft,
-                    author: user?.name || user?.id || "",
-                    period_start: dateRange.start,
-                    period_end: dateRange.end,
-                });
-            }
-            const notesRes = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=tier1`);
-            setReportData((prev: any) => ({ ...prev, notes: notesRes.data.notes }));
-            setEditingAgenda(false);
-        } catch (e: any) {
-            alert("저장 실패: " + (e.response?.data?.detail || e.message));
-        } finally {
-            setSavingAgenda(false);
-        }
+    const exportWord = () => {
+        const container = document.querySelector('.print-container');
+        if (!container) return;
+        const clone = container.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('.no-print').forEach(el => el.remove());
+        const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset='utf-8'><title>${reportTitle}</title></head>
+<body>${clone.innerHTML}</body></html>`;
+        const blob = new Blob(['﻿', html], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${reportTitle}_${dateRange.start}_${dateRange.end}.doc`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     return (
@@ -176,6 +260,9 @@ export default function ConsultationReportPage() {
                     <button onClick={() => window.print()} style={{ padding: '10px 20px', fontSize: '16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                         🖨️ 인쇄 / PDF 저장
                     </button>
+                    <button onClick={exportWord} style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px', backgroundColor: '#0f172a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                        📄 워드로 내보내기
+                    </button>
                     <button onClick={() => router.push('/meeting')} style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                         🤝 AI 초안 생성하러 가기
                     </button>
@@ -186,7 +273,7 @@ export default function ConsultationReportPage() {
 
                 {/* Page 1: Overview & Tier 1/2 */}
                 <div className="report-page">
-                    <h1 className="report-title">학교행동중재지원팀 정기 협의록</h1>
+                    <h1 className="report-title">{reportTitle}</h1>
 
                     <div className="info-grid">
                         <div><strong>📅 일시:</strong> {today}</div>
@@ -233,44 +320,16 @@ export default function ConsultationReportPage() {
                         </tbody>
                     </table>
 
-                    <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>3. 안건 및 논의 사항</span>
-                        {!editingAgenda && (
-                            <button onClick={startEditAgenda} className="no-print" style={{ padding: '4px 12px', fontSize: '12px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                                ✏️ 편집
-                            </button>
-                        )}
-                    </div>
-                    {editingAgenda ? (
-                        <div className="no-print">
-                            <textarea
-                                value={agendaDraft}
-                                onChange={e => setAgendaDraft(e.target.value)}
-                                style={{ width: '100%', minHeight: '260px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', lineHeight: 1.6, boxSizing: 'border-box' }}
-                                placeholder="이번 기간 안건 및 논의 사항을 입력하세요. /meeting에서 만든 AI 초안을 붙여넣어도 됩니다."
-                            />
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                                <button onClick={saveAgenda} disabled={savingAgenda} className="btn btn-primary" style={{ padding: '8px 16px' }}>
-                                    {savingAgenda ? '저장 중...' : '💾 저장'}
-                                </button>
-                                <button onClick={() => setEditingAgenda(false)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>취소</button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="content-box" style={{ minHeight: '300px' }}>
-                            {dashboard.ai_comment && (
-                                <div>
-                                    <strong>[AI 분석 요약]</strong>
-                                    <br />
-                                    {dashboard.ai_comment}
-                                    <br /><br />
-                                </div>
-                            )}
-                            <strong>[주요 논의 기록]</strong>
-                            <br />
-                            {latestAgendaNote ? latestAgendaNote.content : "(기록된 회의록 없음 — 위 \"편집\" 버튼으로 바로 작성하거나 \"AI 초안 생성하러 가기\"로 이동하세요.)"}
-                        </div>
-                    )}
+                    <AgendaSection
+                        sectionTitle="3. 안건 및 논의 사항"
+                        meetingType={meetingTypeFor('tier1')}
+                        notes={notesByType.tier1}
+                        dateRange={dateRange}
+                        user={user}
+                        onSaved={() => refetchNotes('tier1')}
+                        aiComment={dashboard.ai_comment}
+                        placeholder="이번 기간 안건 및 논의 사항을 입력하세요. /meeting에서 만든 AI 초안을 붙여넣어도 됩니다."
+                    />
                 </div>
 
                 <div className="page-break"></div>
@@ -296,6 +355,16 @@ export default function ConsultationReportPage() {
                         {/* Placeholder for SST students */}
                         (SST 대상자 명단 및 진행 상황 수기 기록)
                     </div>
+
+                    <AgendaSection
+                        sectionTitle="3. 안건 및 논의 사항"
+                        meetingType={meetingTypeFor('tier2')}
+                        notes={notesByType.tier2}
+                        dateRange={dateRange}
+                        user={user}
+                        onSaved={() => refetchNotes('tier2')}
+                        placeholder="Tier 2(CICO/SST) 관련 안건 및 논의 사항을 입력하세요."
+                    />
                 </div>
 
                 <div className="page-break"></div>
@@ -338,6 +407,16 @@ export default function ConsultationReportPage() {
                     <div className="content-box" style={{ minHeight: '300px' }}>
                         (외부 전문가 자문, 병원 연계, 학부모 상담 등 진행 사항 기록)
                     </div>
+
+                    <AgendaSection
+                        sectionTitle="3. 안건 및 논의 사항"
+                        meetingType={meetingTypeFor('tier3')}
+                        notes={notesByType.tier3}
+                        dateRange={dateRange}
+                        user={user}
+                        onSaved={() => refetchNotes('tier3')}
+                        placeholder="Tier 3(FBA/BIP) 관련 안건 및 논의 사항을 입력하세요."
+                    />
                 </div>
 
                 <div className="page-break"></div>

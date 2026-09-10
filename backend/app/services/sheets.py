@@ -46,6 +46,24 @@ def safe_get_all_records(ws) -> List[Dict[str, Any]]:
             records.append(record)
         return records
 
+def _with_retry(fn, retries: int = 3, delay: float = 1.0, stop_on: tuple = ()):
+    """일시적인 Google Sheets API 오류(429 등)에 견고하도록 짧게 재시도한다.
+    safe_get_all_values가 이미 쓰던 패턴을 시트/워크시트 열기 등 다른 호출에도 재사용.
+    stop_on에 넣은 예외(예: WorksheetNotFound)는 재시도 없이 즉시 다시 던진다 —
+    "없어서" 실패한 것과 "API가 일시적으로 응답 안 해서" 실패한 것을 구분하기 위함."""
+    last_err = None
+    for i in range(retries):
+        try:
+            return fn()
+        except stop_on:
+            raise
+        except Exception as e:
+            last_err = e
+            if i < retries - 1:
+                time.sleep(delay)
+    raise last_err
+
+
 def safe_get_all_values(ws) -> List[List[Any]]:
     """
     Safely fetch all values from a worksheet.
@@ -359,6 +377,8 @@ def fetch_all_records(force_refresh: bool = False):
                         "제지_방법": "[제지] 방어 및 보호를 위한 제지에 사용한 방법",
                         "제지_사후조치_특기사항": "[제지] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)",
                         "제지_법적의무_확인": "[제지]  법적 의무 실행 여부 확인",
+                        "개별학생교육지원_시간": "[개별학생교육지원] 개별학생교육지원 실시 시간",
+                        "개별학생교육지원_교사": "[개별학생교육지원] 담당 교사",
                         "개별학생교육지원_경위": "[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위",
                         "개별학생교육지원_장소_신규": "[개별학생교육지원] 개별학생교육지원 장소",
                         "개별학생교육지원_내용_회복과정": "[개별학생교육지원] 개별학생교육지원 내용 및 회복 과정",
@@ -1449,9 +1469,9 @@ def get_meeting_notes_worksheet():
         return None
 
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
+        sheet = _with_retry(lambda: client.open_by_url(settings.SHEET_URL))
         try:
-            return sheet.worksheet("MeetingNotes")
+            return _with_retry(lambda: sheet.worksheet("MeetingNotes"), stop_on=(gspread.WorksheetNotFound,))
         except gspread.WorksheetNotFound:
             print("Creating 'MeetingNotes' worksheet...")
             ws = sheet.add_worksheet(title="MeetingNotes", rows=500, cols=9)
@@ -3678,9 +3698,9 @@ def get_board_worksheet():
         return None
 
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
+        sheet = _with_retry(lambda: client.open_by_url(settings.SHEET_URL))
         try:
-            return sheet.worksheet("Board")
+            return _with_retry(lambda: sheet.worksheet("Board"), stop_on=(gspread.WorksheetNotFound,))
         except gspread.WorksheetNotFound:
             print("Creating 'Board' worksheet...")
             ws = sheet.add_worksheet(title="Board", rows=100, cols=6)
@@ -4126,9 +4146,9 @@ def ensure_target_behavior_sheet():
     client = get_sheets_client()
     if not client: return None
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
+        sheet = _with_retry(lambda: client.open_by_url(settings.SHEET_URL))
         try:
-            ws = sheet.worksheet("TargetBehaviors")
+            ws = _with_retry(lambda: sheet.worksheet("TargetBehaviors"), stop_on=(gspread.WorksheetNotFound,))
         except gspread.WorksheetNotFound:
             ws = sheet.add_worksheet(title="TargetBehaviors", rows=500, cols=11)
             ws.append_row(["BehaviorID", "StudentCode", "Type", "Definition", "MeasurementType", "Baseline", "BIPStartDate", "BIPEndDate", "Status", "Author", "CreatedAt"])
@@ -4152,9 +4172,9 @@ def ensure_target_behavior_data_sheet():
     client = get_sheets_client()
     if not client: return None
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
+        sheet = _with_retry(lambda: client.open_by_url(settings.SHEET_URL))
         try:
-            ws = sheet.worksheet("TargetBehaviorData")
+            ws = _with_retry(lambda: sheet.worksheet("TargetBehaviorData"), stop_on=(gspread.WorksheetNotFound,))
             _ensure_uuid_header(ws)
         except gspread.WorksheetNotFound:
             ws = sheet.add_worksheet(title="TargetBehaviorData", rows=2000, cols=6)
@@ -4170,9 +4190,9 @@ def ensure_target_behavior_fidelity_sheet():
     client = get_sheets_client()
     if not client: return None
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
+        sheet = _with_retry(lambda: client.open_by_url(settings.SHEET_URL))
         try:
-            ws = sheet.worksheet("TargetBehaviorFidelity")
+            ws = _with_retry(lambda: sheet.worksheet("TargetBehaviorFidelity"), stop_on=(gspread.WorksheetNotFound,))
             _ensure_uuid_header(ws)
         except gspread.WorksheetNotFound:
             ws = sheet.add_worksheet(title="TargetBehaviorFidelity", rows=2000, cols=6)
@@ -4359,4 +4379,31 @@ def delete_target_behavior_fidelity(row_uuid: str) -> dict:
     ws = ensure_target_behavior_fidelity_sheet()
     if not ws: return {"error": "Sheet access failed"}
     return _delete_row_by_uuid(ws, row_uuid)
+
+
+if __name__ == "__main__":
+    # _with_retry 자가 점검 — 재시도 후 성공, stop_on 즉시 재발생 두 경로만 확인.
+    calls = {"n": 0}
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise RuntimeError("transient")
+        return "ok"
+    assert _with_retry(flaky, retries=3, delay=0) == "ok"
+    assert calls["n"] == 2
+
+    class NotFound(Exception):
+        pass
+    stop_calls = {"n": 0}
+    def always_not_found():
+        stop_calls["n"] += 1
+        raise NotFound("missing")
+    try:
+        _with_retry(always_not_found, retries=3, delay=0, stop_on=(NotFound,))
+        raise AssertionError("expected NotFound to propagate")
+    except NotFound:
+        pass
+    assert stop_calls["n"] == 1, "stop_on 예외는 재시도 없이 즉시 다시 던져야 한다"
+
+    print("_with_retry self-check OK")
 

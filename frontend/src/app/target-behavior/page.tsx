@@ -10,9 +10,53 @@ import AppShell from "../components/AppShell";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import ReadableAIResult from "../components/ReadableAIResult";
+import DropdownTextarea from "../components/DropdownTextarea";
 import { maskName } from "../utils";
 
 const MEASUREMENT_TYPES = ["빈도", "지속시간", "강도", "퍼센트"];
+
+// 측정유형별 기저선/조작적 정의 작성 예시 — BehaviorForm의 DropdownTextarea 패턴 재사용.
+const EXAMPLE_DEFINITIONS: Record<string, string[]> = {
+    빈도: [
+        "직접 입력",
+        "교사의 지시 후 10초 이내에 착석하지 않고 자리를 이탈하는 행동",
+        "수업 중 허락 없이 큰 소리로 말하거나 소리를 지르는 행동",
+        "또래를 밀거나 때리는 등 신체적으로 접촉하는 행동",
+    ],
+    지속시간: [
+        "직접 입력",
+        "과제 지시 후 착석하여 과제에 참여하지 않고 멍하니 있는 시간",
+        "울음이나 짜증을 시작한 시점부터 스스로 진정할 때까지의 시간",
+    ],
+    강도: [
+        "직접 입력",
+        "행동의 격렬함을 1(경미)~5(심각, 신체적 상해 위험) 척도로 관찰자가 평정",
+    ],
+    퍼센트: [
+        "직접 입력",
+        "주어진 과제(전체 문항 수 대비) 중 스스로 완료한 문항의 비율",
+        "하루 일과 시간 중 자리 이탈 없이 참여한 시간의 비율",
+    ],
+};
+const EXAMPLE_BASELINES: Record<string, string[]> = {
+    빈도: [
+        "직접 입력",
+        "최근 2주간 관찰 결과 평균 주 5회 발생",
+        "하루 평균 3회, 등교 직후 및 전환 시간에 집중 발생",
+    ],
+    지속시간: [
+        "직접 입력",
+        "1회 발생 시 평균 8분 지속(최근 2주 관찰 평균)",
+    ],
+    강도: [
+        "직접 입력",
+        "최근 2주간 평균 강도 3(위기행동 수준)",
+    ],
+    퍼센트: [
+        "직접 입력",
+        "최근 2주간 평균 과제 완료율 40%",
+    ],
+};
 
 // 담임교사가 자유롭게 정의한 문제행동/목표행동을 BIP 적용기간 동안 추적하는 전용 탭.
 // 예전에는 BIP 페이지 안에 섹션으로 끼어 있었으나, FBA/BIP와는 별개의 "일상 데이터 관리"
@@ -329,9 +373,27 @@ export default function TargetBehaviorPage() {
                                                 <select value={newForm.measurement_type} onChange={e => setNewForm({ ...newForm, measurement_type: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}>
                                                     {MEASUREMENT_TYPES.map(m => <option key={m} value={m}>{m}</option>)}
                                                 </select>
-                                                <input type="text" placeholder="기저선(예: 주 5회)" value={newForm.baseline} onChange={e => setNewForm({ ...newForm, baseline: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', flex: 1, minWidth: 120 }} />
                                             </div>
-                                            <input type="text" placeholder="표적행동 조작적 정의 (관찰·측정 가능하게)" value={newForm.definition} onChange={e => setNewForm({ ...newForm, definition: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }} />
+                                            <div>
+                                                <label style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 4 }}>기저선</label>
+                                                <DropdownTextarea
+                                                    name="baseline"
+                                                    value={newForm.baseline}
+                                                    onChange={e => setNewForm({ ...newForm, baseline: e.target.value })}
+                                                    examples={EXAMPLE_BASELINES[newForm.measurement_type] || EXAMPLE_BASELINES.빈도}
+                                                    placeholder="예: 주 5회"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 4 }}>표적행동 조작적 정의</label>
+                                                <DropdownTextarea
+                                                    name="definition"
+                                                    value={newForm.definition}
+                                                    onChange={e => setNewForm({ ...newForm, definition: e.target.value })}
+                                                    examples={EXAMPLE_DEFINITIONS[newForm.measurement_type] || EXAMPLE_DEFINITIONS.빈도}
+                                                    placeholder="관찰·측정 가능하게 서술"
+                                                />
+                                            </div>
                                             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                                                 <label style={{ fontSize: '0.76rem', color: '#64748b' }}>BIP 적용기간</label>
                                                 <input type="date" value={newForm.bip_start_date} onChange={e => setNewForm({ ...newForm, bip_start_date: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }} />

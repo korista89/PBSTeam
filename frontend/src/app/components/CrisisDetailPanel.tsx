@@ -13,7 +13,12 @@ export default function CrisisDetailPanel({ crisisDetails, formReportDetails, is
 
     const f = formReportDetails || {};
     const hasRestraint = !!(f['제지_경위'] || f['제지_방법'] || f['제지_사후조치_특기사항'] || f['제지_법적의무_확인']);
-    const hasSupport = !!(f['개별학생교육지원_경위'] || f['개별학생교육지원_장소_신규'] || f['개별학생교육지원_내용_회복과정'] || f['개별학생교육지원_사후조치_특기사항'] || f['개별학생교육지원_법적의무_확인']);
+    const hasSupport = !!(f['개별학생교육지원_시간'] || f['개별학생교육지원_교사'] || f['개별학생교육지원_경위'] || f['개별학생교육지원_장소_신규'] || f['개별학생교육지원_내용_회복과정'] || f['개별학생교육지원_사후조치_특기사항'] || f['개별학생교육지원_법적의무_확인']);
+    const hasLegacySupport = !!(crisisDetails && (
+        crisisDetails['1차_개별학생교육지원_시간'] || crisisDetails['1차_개별학생교육지원_장소'] || crisisDetails['1차_개별학생교육지원_교사'] ||
+        crisisDetails['2차_개별학생교육지원_시간'] || crisisDetails['2차_개별학생교육지원_장소'] || crisisDetails['2차_개별학생교육지원_교사'] ||
+        crisisDetails['1차_경위'] || crisisDetails['1차_관찰기록'] || crisisDetails['2차_경위'] || crisisDetails['2차_관찰기록']
+    ));
     const hasInjury = !!(f['상해_대상자'] || f['상해_경위'] || f['상해_사후조치_특기사항'] || f['상해_후속조치_확인']);
 
     const missingReport = !!crisisDetails && !String(crisisDetails['관리자_보고_시간'] || '').trim();
@@ -40,31 +45,35 @@ export default function CrisisDetailPanel({ crisisDetails, formReportDetails, is
                         <li><strong>후속결과:</strong> {crisisDetails['C_후속결과']}</li>
                     </ul>
 
-                    <h5 style={{ margin: '15px 0 5px 0' }}>개별학생교육지원 현황</h5>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', marginBottom: '10px' }}>
-                        <tbody>
-                            <tr>
-                                <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>1차</td>
-                                <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {crisisDetails['1차_개별학생교육지원_시간']} | 장소: {crisisDetails['1차_개별학생교육지원_장소']} | 교사: {crisisDetails['1차_개별학생교육지원_교사']}</td>
-                            </tr>
-                            <tr>
-                                <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
-                                    <strong>경위:</strong> {crisisDetails['1차_경위']}<br />
-                                    <strong>관찰:</strong> {crisisDetails['1차_관찰기록']}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>2차</td>
-                                <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {crisisDetails['2차_개별학생교육지원_시간']} | 장소: {crisisDetails['2차_개별학생교육지원_장소']} | 교사: {crisisDetails['2차_개별학생교육지원_교사']}</td>
-                            </tr>
-                            <tr>
-                                <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
-                                    <strong>경위:</strong> {crisisDetails['2차_경위']}<br />
-                                    <strong>관찰:</strong> {crisisDetails['2차_관찰기록']}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    {hasLegacySupport && (
+                        <>
+                            <h5 style={{ margin: '15px 0 5px 0' }}>개별학생교육지원 현황 (구 양식 기록)</h5>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', marginBottom: '10px' }}>
+                                <tbody>
+                                    <tr>
+                                        <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>1차</td>
+                                        <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {crisisDetails['1차_개별학생교육지원_시간']} | 장소: {crisisDetails['1차_개별학생교육지원_장소']} | 교사: {crisisDetails['1차_개별학생교육지원_교사']}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
+                                            <strong>경위:</strong> {crisisDetails['1차_경위']}<br />
+                                            <strong>관찰:</strong> {crisisDetails['1차_관찰기록']}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>2차</td>
+                                        <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {crisisDetails['2차_개별학생교육지원_시간']} | 장소: {crisisDetails['2차_개별학생교육지원_장소']} | 교사: {crisisDetails['2차_개별학생교육지원_교사']}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
+                                            <strong>경위:</strong> {crisisDetails['2차_경위']}<br />
+                                            <strong>관찰:</strong> {crisisDetails['2차_관찰기록']}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </>
+                    )}
 
                     <h5 style={{ margin: '15px 0 5px 0' }}>발생 이후 조치사항</h5>
                     <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
@@ -98,6 +107,8 @@ export default function CrisisDetailPanel({ crisisDetails, formReportDetails, is
                 <>
                     <h5 style={{ margin: '15px 0 5px 0' }}>[개별학생교육지원] 보고서 상세</h5>
                     <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
+                        <li><strong>실시 시간:</strong> {f['개별학생교육지원_시간']}</li>
+                        <li><strong>담당 교사:</strong> {f['개별학생교육지원_교사']}</li>
                         <li><strong>경위:</strong> {f['개별학생교육지원_경위']}</li>
                         <li><strong>장소:</strong> {f['개별학생교육지원_장소_신규']}</li>
                         <li><strong>내용 및 회복 과정:</strong> {f['개별학생교육지원_내용_회복과정']}</li>

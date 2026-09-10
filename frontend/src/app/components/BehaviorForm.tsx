@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import { useAuth } from './AuthProvider';
+import DropdownTextarea from './DropdownTextarea';
 
 const TIME_SLOTS = [
   "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
@@ -135,46 +136,6 @@ function CheckboxGroup({ options, selected, onToggle }: { options: string[]; sel
   );
 }
 
-function DropdownTextarea({ name, value, onChange, examples, placeholder, required }: {
-  name: string, value: string, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void,
-  examples: string[], placeholder?: string, required?: boolean
-}) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const handleSelect = (example: string) => {
-    if (example === "직접 입력") {
-      onChange({ target: { name, value: '' } } as any);
-    } else {
-      onChange({ target: { name, value: example } } as any);
-    }
-    setShowDropdown(false);
-  };
-  return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
-        <button type="button" onClick={() => setShowDropdown(!showDropdown)}
-          style={{ padding: '4px 10px', fontSize: '0.8rem', border: '1px solid #94a3b8', borderRadius: '4px', backgroundColor: '#f1f5f9', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          📝 예시 선택 ▾
-        </button>
-      </div>
-      {showDropdown && (
-        <div style={{ position: 'absolute', zIndex: 10, backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxHeight: '200px', overflowY: 'auto', width: '100%' }}>
-          {examples.map((ex, i) => (
-            <div key={i} onClick={() => handleSelect(ex)}
-              style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: '0.85rem', backgroundColor: ex === "직접 입력" ? '#f0f4ff' : 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#e0e7ff')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = ex === "직접 입력" ? '#f0f4ff' : 'white')}>
-              {ex}
-            </div>
-          ))}
-        </div>
-      )}
-      <textarea name={name} value={value} onChange={onChange} required={required}
-        placeholder={placeholder || "예시를 선택하거나 직접 입력하세요"}
-        style={{ width: '100%', minHeight: '60px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '0.9rem' }} />
-    </div>
-  );
-}
-
 export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: 'quick' | 'detailed' }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -202,10 +163,15 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
   const [crisisData, setCrisisData] = useState({
     발생시지도교사: '',
-    지원1차_시간: '', 지원1차_장소: '', 지원1차_교사: '',
-    지원2차_시간: '', 지원2차_장소: '', 지원2차_교사: '',
     배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
-    경위1차: '', 경위2차: '', 관찰기록1차: '', 관찰기록2차: '',
+    // [방어 및 보호를 위한 제지 사용 학교장 보고서]
+    제지_경위: '', 제지_방법: '', 제지_사후조치_특기사항: '', 제지_법적의무_확인: '',
+    // [개별학생교육지원 실시 학교장 보고서] — 1·2차 구분 없이 1회성으로 기록
+    개별학생교육지원_시간: '', 개별학생교육지원_교사: '', 개별학생교육지원_경위: '',
+    개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '', 개별학생교육지원_법적의무_확인: '',
+    // [본인/타인 상해 발생 보고서]
+    상해_대상자: '', 상해_경위: '', 상해_사후조치_특기사항: '', 상해_후속조치_확인: '',
+    // 공통 발생 이후 조치사항
     부상자_치료_시간: '', 부상자_치료_내용: '',
     관리자_보고_시간: '', 관리자_보고_내용: '',
     학부모_알림_시간: '', 학부모_알림_내용: '',
@@ -264,19 +230,30 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
       if (isCrisis) {
         payload['발생 시 지도교사'] = crisisData.발생시지도교사;
-        payload['1차_개별학생교육지원_시간'] = crisisData.지원1차_시간;
-        payload['1차_개별학생교육지원_장소'] = crisisData.지원1차_장소;
-        payload['1차_개별학생교육지원_교사'] = crisisData.지원1차_교사;
-        payload['2차_개별학생교육지원_시간'] = crisisData.지원2차_시간;
-        payload['2차_개별학생교육지원_장소'] = crisisData.지원2차_장소;
-        payload['2차_개별학생교육지원_교사'] = crisisData.지원2차_교사;
         payload['A_배경_선행사건'] = crisisData.배경_선행사건;
         payload['B_나타난_위기행동'] = crisisData.나타난_위기행동;
         payload['C_후속결과'] = crisisData.후속결과;
-        payload['1차_경위'] = crisisData.경위1차;
-        payload['2차_경위'] = crisisData.경위2차;
-        payload['1차_관찰기록'] = crisisData.관찰기록1차;
-        payload['2차_관찰기록'] = crisisData.관찰기록2차;
+
+        if (formData.물리적제지여부 === '방어 및 보호를 위한 제지') {
+          payload['[제지] 방어 및 보호를 위한 제지를 사용하게 된 경위'] = crisisData.제지_경위;
+          payload['[제지] 방어 및 보호를 위한 제지에 사용한 방법'] = crisisData.제지_방법;
+          payload['[제지] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.제지_사후조치_특기사항;
+          payload['[제지]  법적 의무 실행 여부 확인'] = crisisData.제지_법적의무_확인;
+        } else if (formData.물리적제지여부 === '개별학생교육지원') {
+          payload['[개별학생교육지원] 개별학생교육지원 실시 시간'] = crisisData.개별학생교육지원_시간;
+          payload['[개별학생교육지원] 담당 교사'] = crisisData.개별학생교육지원_교사;
+          payload['[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위'] = crisisData.개별학생교육지원_경위;
+          payload['[개별학생교육지원] 개별학생교육지원 장소'] = crisisData.개별학생교육지원_장소_신규;
+          payload['[개별학생교육지원] 개별학생교육지원 내용 및 회복 과정'] = crisisData.개별학생교육지원_내용_회복과정;
+          payload['[개별학생교육지원] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.개별학생교육지원_사후조치_특기사항;
+          payload['[개별학생교육지원]  법적 의무 실행 여부 확인'] = crisisData.개별학생교육지원_법적의무_확인;
+        } else if (formData.물리적제지여부 === '본인/타인상해만 발생') {
+          payload['[상해] 상해를 입은 사람'] = crisisData.상해_대상자;
+          payload['[상해]  상해가 발생하게 된 경위'] = crisisData.상해_경위;
+          payload['[상해]  부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.상해_사후조치_특기사항;
+          payload['[상해]  후속 조치 여부 확인'] = crisisData.상해_후속조치_확인;
+        }
+
         payload['부상자_치료_시간'] = crisisData.부상자_치료_시간;
         payload['부상자_치료_내용'] = crisisData.부상자_치료_내용;
         payload['관리자_보고_시간'] = crisisData.관리자_보고_시간;
@@ -302,10 +279,11 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         });
         set배경사건([]); set선행사건([]); set후속결과([]);
         setCrisisData({
-          발생시지도교사: '', 지원1차_시간: '', 지원1차_장소: '', 지원1차_교사: '',
-          지원2차_시간: '', 지원2차_장소: '', 지원2차_교사: '',
-          배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
-          경위1차: '', 경위2차: '', 관찰기록1차: '', 관찰기록2차: '',
+          발생시지도교사: '', 배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
+          제지_경위: '', 제지_방법: '', 제지_사후조치_특기사항: '', 제지_법적의무_확인: '',
+          개별학생교육지원_시간: '', 개별학생교육지원_교사: '', 개별학생교육지원_경위: '',
+          개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '', 개별학생교육지원_법적의무_확인: '',
+          상해_대상자: '', 상해_경위: '', 상해_사후조치_특기사항: '', 상해_후속조치_확인: '',
           부상자_치료_시간: '', 부상자_치료_내용: '', 관리자_보고_시간: '', 관리자_보고_내용: '',
           학부모_알림_시간: '', 학부모_알림_내용: '', 학생_상담_시간: '', 학생_상담_내용: '',
           학부모_상담_시간: '', 학부모_상담_내용: '', 긴급회의_시간: '', 긴급회의_내용: ''
@@ -531,41 +509,99 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
               <input type="text" name="발생시지도교사" value={crisisData.발생시지도교사} onChange={handleCrisisChange} style={{ marginLeft: '10px', padding: '6px', border: '1px solid #ccc', borderRadius: '4px' }} required />
             </div>
 
-            {/* 1차/2차 개별학생교육지원 */}
-            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
-            <table style={{ width: '100%', minWidth: '520px', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-              <tbody>
-                <tr>
-                  <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', width: '15%', verticalAlign: 'top' }}>1차 개별학생<br/>교육지원</td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>시간: <input type="text" name="지원1차_시간" value={crisisData.지원1차_시간} onChange={handleCrisisChange} placeholder="예: 12:55~13:23" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>장소: <input type="text" name="지원1차_장소" value={crisisData.지원1차_장소} onChange={handleCrisisChange} placeholder="예: 심리안정실" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>교사: <input type="text" name="지원1차_교사" value={crisisData.지원1차_교사} onChange={handleCrisisChange} placeholder="교사명" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
-                </tr>
-                <tr>
-                  <td colSpan={3} style={{ border: '1px solid #ccc', padding: '8px' }}>
-                    <div style={{fontWeight: 'bold', marginBottom: '5px'}}>1차 지원 경위:</div>
-                    <DropdownTextarea name="경위1차" value={crisisData.경위1차} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
-                    <div style={{fontWeight: 'bold', marginTop: '10px', marginBottom: '5px'}}>1차 관찰기록:</div>
-                    <DropdownTextarea name="관찰기록1차" value={crisisData.관찰기록1차} onChange={handleCrisisChange} examples={EXAMPLE_OBSERVATIONS} />
-                  </td>
-                </tr>
-                <tr>
-                  <td rowSpan={2} style={{ border: '1px solid #ccc', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', verticalAlign: 'top' }}>2차 개별학생<br/>교육지원</td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>시간: <input type="text" name="지원2차_시간" value={crisisData.지원2차_시간} onChange={handleCrisisChange} placeholder="해당시 입력" style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>장소: <input type="text" name="지원2차_장소" value={crisisData.지원2차_장소} onChange={handleCrisisChange} style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
-                  <td style={{ border: '1px solid #ccc', padding: '8px' }}>교사: <input type="text" name="지원2차_교사" value={crisisData.지원2차_교사} onChange={handleCrisisChange} style={{width:'70%', marginLeft:'5px', padding:'4px', border:'1px solid #ccc', borderRadius:'3px'}} /></td>
-                </tr>
-                <tr>
-                  <td colSpan={3} style={{ border: '1px solid #ccc', padding: '8px' }}>
-                    <div style={{fontWeight: 'bold', marginBottom: '5px'}}>2차 지원 경위 (해당시):</div>
-                    <DropdownTextarea name="경위2차" value={crisisData.경위2차} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
-                    <div style={{fontWeight: 'bold', marginTop: '10px', marginBottom: '5px'}}>2차 관찰기록:</div>
-                    <DropdownTextarea name="관찰기록2차" value={crisisData.관찰기록2차} onChange={handleCrisisChange} examples={EXAMPLE_OBSERVATIONS} />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            </div>
+            {/* 조치유형(제지/개별학생교육지원/상해)에 따라 학교장 보고서 3종 중 하나만 노출 —
+                구글 폼도 동일하게 조치유형 답변에 따라 해당 섹션으로만 진입한다. */}
+            {formData.물리적제지여부 === '방어 및 보호를 위한 제지' && (
+              <div style={{ marginBottom: '20px', padding: '14px', border: '1px solid #fca5a5', borderRadius: '8px', backgroundColor: '#fef2f2' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[방어 및 보호를 위한 제지 사용 학교장 보고서]</h4>
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>제지를 사용하게 된 경위:</div>
+                  <DropdownTextarea name="제지_경위" value={crisisData.제지_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>제지에 사용한 방법:</label>
+                  <input type="text" name="제지_방법" value={crisisData.제지_방법} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>
+                  <input type="text" name="제지_사후조치_특기사항" value={crisisData.제지_사후조치_특기사항} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>법적 의무 실행 여부 확인:</label>
+                  {['예', '아니오'].map(v => (
+                    <label key={v} style={{ marginRight: '16px' }}>
+                      <input type="radio" name="제지_법적의무_확인" value={v} checked={crisisData.제지_법적의무_확인 === v} onChange={handleCrisisChange} /> {v}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {formData.물리적제지여부 === '개별학생교육지원' && (
+              <div style={{ marginBottom: '20px', padding: '14px', border: '1px solid #fca5a5', borderRadius: '8px', backgroundColor: '#fef2f2' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[개별학생교육지원 실시 학교장 보고서]</h4>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>실시 시간:</label>
+                    <input type="text" name="개별학생교육지원_시간" value={crisisData.개별학생교육지원_시간} onChange={handleCrisisChange} placeholder="예: 12:55~13:23" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>장소:</label>
+                    <input type="text" name="개별학생교육지원_장소_신규" value={crisisData.개별학생교육지원_장소_신규} onChange={handleCrisisChange} placeholder="예: 심리안정실" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>담당 교사:</label>
+                    <input type="text" name="개별학생교육지원_교사" value={crisisData.개별학생교육지원_교사} onChange={handleCrisisChange} placeholder="교사명" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원을 실시하게 된 경위:</div>
+                  <DropdownTextarea name="개별학생교육지원_경위" value={crisisData.개별학생교육지원_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원 내용 및 회복 과정:</div>
+                  <DropdownTextarea name="개별학생교육지원_내용_회복과정" value={crisisData.개별학생교육지원_내용_회복과정} onChange={handleCrisisChange} examples={EXAMPLE_OBSERVATIONS} />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>
+                  <input type="text" name="개별학생교육지원_사후조치_특기사항" value={crisisData.개별학생교육지원_사후조치_특기사항} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>법적 의무 실행 여부 확인:</label>
+                  {['예', '아니오'].map(v => (
+                    <label key={v} style={{ marginRight: '16px' }}>
+                      <input type="radio" name="개별학생교육지원_법적의무_확인" value={v} checked={crisisData.개별학생교육지원_법적의무_확인 === v} onChange={handleCrisisChange} /> {v}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {formData.물리적제지여부 === '본인/타인상해만 발생' && (
+              <div style={{ marginBottom: '20px', padding: '14px', border: '1px solid #fca5a5', borderRadius: '8px', backgroundColor: '#fef2f2' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[본인/타인 상해 발생 보고서]</h4>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>상해를 입은 사람:</label>
+                  <input type="text" name="상해_대상자" value={crisisData.상해_대상자} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>상해가 발생하게 된 경위:</div>
+                  <DropdownTextarea name="상해_경위" value={crisisData.상해_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>
+                  <input type="text" name="상해_사후조치_특기사항" value={crisisData.상해_사후조치_특기사항} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>후속 조치 여부 확인:</label>
+                  {['예', '아니오'].map(v => (
+                    <label key={v} style={{ marginRight: '16px' }}>
+                      <input type="radio" name="상해_후속조치_확인" value={v} checked={crisisData.상해_후속조치_확인 === v} onChange={handleCrisisChange} /> {v}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* A-B-C 행동 분석 */}
             <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>행동 분석 (A-B-C)</h4>

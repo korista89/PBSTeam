@@ -3,13 +3,19 @@
 import React, { useState } from 'react';
 import styles from './page.module.css';
 import axios from 'axios';
-import { AuthCheck } from "../components/AuthProvider";
+import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useDateRange } from "../components/GlobalNav";
 
 
 export default function MeetingPage() {
+    const { user, isAdmin } = useAuth();
     const { startDate, endDate } = useDateRange();
+    // 관리자는 학교 차원, 담임은 학급 차원 PBIS 팀 회의록으로 분기 — 데이터는 백엔드가
+    // 이미 역할 기준으로 스코프하므로(analytics.py의 ai-meeting-minutes), 여기서는
+    // 화면 라벨과 저장되는 meeting_type만 나눠 담임들의 안건 메모가 섞이지 않게 한다.
+    const scopeLabel = isAdmin() ? "학교 차원" : `학급 차원${user?.class_id ? ` (${user.class_id})` : ""}`;
+    const savedMeetingType = isAdmin() ? "tier1" : `tier1_class_${user?.class_id || user?.id || "unknown"}`;
     const [result, setResult] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -49,10 +55,10 @@ export default function MeetingPage() {
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
             await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
-                meeting_type: "tier1",
+                meeting_type: savedMeetingType,
                 date: new Date().toISOString().split('T')[0],
                 content: result,
-                author: "PBS Coordinator",
+                author: user?.name || user?.id || "PBS Coordinator",
                 period_start: startDate,
                 period_end: endDate
             });
@@ -79,8 +85,10 @@ export default function MeetingPage() {
         <AuthCheck>
             <AppShell
                 currentPage="meeting"
-                title="🤝 행동중재지원팀 정기 협의회 에이전트"
-                subtitle="학교 전체 행동 데이터(Log_Main, CICO, Tier 3)를 다차원 분석하여 학교장 보고용 표준 협의록을 자동 생성"
+                title={`🤝 ${scopeLabel} PBIS 팀 회의록 에이전트`}
+                subtitle={isAdmin()
+                    ? "학교 전체 행동 데이터(Log_Main, CICO, Tier 3)를 다차원 분석하여 학교장 보고용 표준 협의록을 자동 생성"
+                    : "우리 학급 행동 데이터를 분석하여 학급 차원 PBIS 팀 회의록을 자동 생성"}
             >
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     {/* Top Configuration Card */}

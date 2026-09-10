@@ -131,7 +131,7 @@ export default function CodeManagementPage() {
   };
 
   return (
-    <AuthCheck>
+    <AuthCheck requireAdmin>
       <AppShell
         currentPage="roster"
         title="🔐 학생 코드 배정 (개인정보 비식별화)"

@@ -298,6 +298,7 @@ def ai_meeting_minutes(
     risk_list.sort(key=lambda x: x.get("count", 0), reverse=True)
 
     meeting_data = {
+        "scope": f"학급 차원 PBIS 팀 회의 ({user_class})" if user_class else "학교 차원 PBIS 팀 회의",
         "start_date": req.start_date,
         "end_date": req.end_date,
         "summary": analytics.get("summary", {}),

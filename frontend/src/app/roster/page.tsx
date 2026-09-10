@@ -28,7 +28,7 @@ export default function RosterPage() {
   useSheetLiveSync(() => fetchRoster(true));
 
   return (
-    <AuthCheck>
+    <AuthCheck requireAdmin>
       <AppShell
         currentPage="roster"
         title="🏫 전교 학급 및 학생 명렬표 관리"
