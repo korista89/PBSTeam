@@ -350,6 +350,36 @@ def fetch_all_records(force_refresh: bool = False):
                     if has_crisis:
                         mapped_row["crisis_details"] = crisis_details
 
+                    # 2026.9.10 폼 개편으로 추가된 조치유형별(제지/개별학생교육지원/상해) 보고서
+                    # 섹션 — 질문 제목 앞에 [제지]/[개별학생교육지원]/[상해] 구분자를 붙여 시트
+                    # 컬럼이 서로 겹치지 않게 만든 것들만 읽는다(구분자 없는 중복 컬럼은 어느 값이
+                    # 맞는지 알 수 없어 일부러 읽지 않음 — 폼에서 정리되면 추가).
+                    form_report_headers = {
+                        "제지_경위": "[제지] 방어 및 보호를 위한 제지를 사용하게 된 경위",
+                        "제지_방법": "[제지] 방어 및 보호를 위한 제지에 사용한 방법",
+                        "제지_사후조치_특기사항": "[제지] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)",
+                        "제지_법적의무_확인": "[제지]  법적 의무 실행 여부 확인",
+                        "개별학생교육지원_경위": "[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위",
+                        "개별학생교육지원_장소_신규": "[개별학생교육지원] 개별학생교육지원 장소",
+                        "개별학생교육지원_내용_회복과정": "[개별학생교육지원] 개별학생교육지원 내용 및 회복 과정",
+                        "개별학생교육지원_사후조치_특기사항": "[개별학생교육지원] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)",
+                        "개별학생교육지원_법적의무_확인": "[개별학생교육지원]  법적 의무 실행 여부 확인",
+                        "상해_대상자": "[상해] 상해를 입은 사람",
+                        "상해_경위": "[상해]  상해가 발생하게 된 경위",
+                        "상해_사후조치_특기사항": "[상해]  부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)",
+                        "상해_후속조치_확인": "[상해]  후속 조치 여부 확인",
+                    }
+                    form_report_details = {}
+                    has_form_report = False
+                    for short_key, header_text in form_report_headers.items():
+                        val = str(row.get(header_text, "")).strip()
+                        form_report_details[short_key] = val
+                        if val:
+                            has_form_report = True
+
+                    if has_form_report:
+                        mapped_row["form_report_details"] = form_report_details
+
                     mapped_values.append(mapped_row)
             except Exception as ws_err:
                 print(f"Error reading records from worksheet '{ws.title}': {ws_err}")
