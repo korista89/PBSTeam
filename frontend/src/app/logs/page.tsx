@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "../constants";
@@ -28,36 +28,51 @@ export default function LogsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [query, setQuery] = useState("");
+    const [debouncedQuery, setDebouncedQuery] = useState("");
     const [status, setStatus] = useState("전체");
+    // 검색어를 매 키 입력마다 요청하면 네트워크 지연에 따라 응답이 요청 순서와 다르게
+    // 도착할 수 있다(예: "2" 요청이 "2421" 요청보다 늦게 도착해 더 넓은 결과로 화면을
+    // 덮어씀). 요청마다 증가하는 시퀀스 번호를 매겨, 가장 최근에 보낸 요청의 응답만
+    // 반영하도록 막는다.
+    const requestSeq = useRef(0);
 
     // 학생 프로파일 페이지의 "전체 로그에서 보기" 버튼이 ?q=학생코드 로 링크하므로,
     // 최초 진입 시 URL의 q 파라미터를 그대로 검색창에 반영한다.
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const q = params.get("q");
-        if (q) setQuery(q);
+        if (q) { setQuery(q); setDebouncedQuery(q); }
     }, []);
+
+    // 검색창 입력은 300ms 디바운스 — 타이핑 중간마다 전체 목록을 다시 요청하지 않는다.
+    useEffect(() => {
+        const t = window.setTimeout(() => setDebouncedQuery(query), 300);
+        return () => window.clearTimeout(t);
+    }, [query]);
 
     const fetchLogs = useCallback(async (silent = false) => {
         if (!silent) setLoading(true);
         setError("");
+        const mySeq = ++requestSeq.current;
         try {
             const params = new URLSearchParams();
-            if (query.trim()) params.append("q", query.trim());
+            if (debouncedQuery.trim()) params.append("q", debouncedQuery.trim());
             if (status && status !== "전체") params.append("status", status);
             if (startDate && endDate) {
                 params.append("start_date", startDate);
                 params.append("end_date", endDate);
             }
             const res = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/logs?${params.toString()}`);
+            if (mySeq !== requestSeq.current) return; // 이 응답이 오는 사이 더 최신 요청이 나감 — 폐기
             setLogs(res.data.logs || []);
             setTotal(res.data.total ?? (res.data.logs || []).length);
         } catch (err: any) {
+            if (mySeq !== requestSeq.current) return;
             setError(err.response?.data?.detail || err.message || "데이터를 불러오지 못했습니다.");
         } finally {
-            if (!silent) setLoading(false);
+            if (mySeq === requestSeq.current && !silent) setLoading(false);
         }
-    }, [query, status, startDate, endDate]);
+    }, [debouncedQuery, status, startDate, endDate]);
 
     useEffect(() => { void fetchLogs(); }, [fetchLogs]);
     useSheetLiveSync(() => fetchLogs(true));
