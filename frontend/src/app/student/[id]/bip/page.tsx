@@ -3,9 +3,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
-import {
-    ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from "recharts";
 import { AuthCheck } from "../../../components/AuthProvider";
 import AppShell from "../../../components/AppShell";
 import { useDateRange } from "../../../components/GlobalNav";
@@ -354,251 +351,6 @@ function AutoTextarea({ value, onChange, placeholder }: {
     );
 }
 
-// 표적행동(문제행동/목표행동) 데이터 관리 — 담임교사가 자유롭게 정의한 행동을 BIP 적용기간
-// 동안 추적한다. CICO 일일 카드와는 별개로, 학생 개별 표적행동 + 실행충실도(O/X) +
-// 같은 기간 위기행동 발생을 한 차트에 겹쳐 보여줘 데이터기반 의사결정의 근거로 쓴다.
-const MEASUREMENT_TYPES = ["빈도", "지속시간", "강도", "퍼센트"];
-
-function TargetBehaviorSection({ studentCode, apiUrl }: { studentCode: string; apiUrl: string }) {
-    const [behaviors, setBehaviors] = useState<any[]>([]);
-    const [selectedId, setSelectedId] = useState<string>("");
-    const [chart, setChart] = useState<any>(null);
-    const [showNewForm, setShowNewForm] = useState(false);
-    const [newForm, setNewForm] = useState({ type: "문제행동", definition: "", measurement_type: "빈도", baseline: "", bip_start_date: "", bip_end_date: "" });
-    const [dataForm, setDataForm] = useState({ date: new Date().toISOString().split("T")[0], value: "", memo: "" });
-    const [fidelityForm, setFidelityForm] = useState({ date: new Date().toISOString().split("T")[0], implemented: "O", memo: "" });
-    const [decision, setDecision] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
-
-    const fetchBehaviors = useCallback(async () => {
-        if (!studentCode) return;
-        try {
-            const res = await axios.get(`${apiUrl}/api/v1/target-behaviors/students/${encodeURIComponent(studentCode)}`);
-            const list = res.data.behaviors || [];
-            setBehaviors(list);
-            if (!selectedId && list.length > 0) setSelectedId(list[0].BehaviorID);
-        } catch (err) {
-            console.error(err);
-        }
-    }, [apiUrl, studentCode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => { void fetchBehaviors(); }, [fetchBehaviors]);
-
-    const fetchChart = useCallback(async () => {
-        if (!selectedId || !studentCode) { setChart(null); return; }
-        try {
-            const res = await axios.get(`${apiUrl}/api/v1/target-behaviors/${selectedId}/chart`, { params: { student_code: studentCode } });
-            setChart(res.data);
-        } catch (err) {
-            console.error(err);
-            setChart(null);
-        }
-    }, [apiUrl, selectedId, studentCode]);
-
-    useEffect(() => { void fetchChart(); }, [fetchChart]);
-
-    const selected = behaviors.find(b => b.BehaviorID === selectedId);
-
-    const handleCreate = async () => {
-        if (!newForm.definition.trim()) { alert("표적행동 정의를 입력하세요."); return; }
-        try {
-            await axios.post(`${apiUrl}/api/v1/target-behaviors/students/${encodeURIComponent(studentCode)}`, newForm);
-            setNewForm({ type: "문제행동", definition: "", measurement_type: "빈도", baseline: "", bip_start_date: "", bip_end_date: "" });
-            setShowNewForm(false);
-            fetchBehaviors();
-        } catch (err: any) {
-            alert("등록 실패: " + (err.response?.data?.detail || err.message));
-        }
-    };
-
-    const handleEnd = async (id: string) => {
-        if (!confirm("이 표적행동 추적을 종료 처리하시겠습니까?")) return;
-        try {
-            await axios.patch(`${apiUrl}/api/v1/target-behaviors/${id}`, { status: "종료", student_code: studentCode });
-            fetchBehaviors();
-        } catch (err: any) {
-            alert("처리 실패: " + (err.response?.data?.detail || err.message));
-        }
-    };
-
-    const handleSubmitData = async () => {
-        if (!selectedId || !dataForm.value.trim()) return;
-        try {
-            await axios.post(`${apiUrl}/api/v1/target-behaviors/${selectedId}/data`, { student_code: studentCode, ...dataForm });
-            setDataForm(prev => ({ ...prev, value: "", memo: "" }));
-            fetchChart();
-        } catch (err: any) {
-            alert("데이터 기록 실패: " + (err.response?.data?.detail || err.message));
-        }
-    };
-
-    const handleSubmitFidelity = async () => {
-        if (!selectedId) return;
-        try {
-            await axios.post(`${apiUrl}/api/v1/target-behaviors/${selectedId}/fidelity`, { student_code: studentCode, ...fidelityForm });
-            setFidelityForm(prev => ({ ...prev, memo: "" }));
-            fetchChart();
-        } catch (err: any) {
-            alert("실행기록 실패: " + (err.response?.data?.detail || err.message));
-        }
-    };
-
-    const handleDecisionAnalysis = async () => {
-        if (!selectedId) return;
-        setDecision({ loading: true, text: "" });
-        try {
-            const res = await axios.post(`${apiUrl}/api/v1/target-behaviors/${selectedId}/decision-analysis`, {
-                student_code: studentCode,
-                behavior_definition: selected?.Definition || "",
-            });
-            setDecision({ loading: false, text: res.data.analysis || "" });
-        } catch (err: any) {
-            setDecision({ loading: false, text: "분석 실패: " + (err.response?.data?.detail || err.message) });
-        }
-    };
-
-    // 표적행동 값·실행충실도(O/X→100/0)·위기행동 발생건수를 날짜 기준으로 한 배열로 합친다 —
-    // 한 화면에서 다각도로 겹쳐 볼 수 있어야 하기 때문.
-    const mergedChartData = (() => {
-        if (!chart) return [];
-        const byDate: Record<string, any> = {};
-        for (const d of chart.data_points || []) {
-            byDate[d.Date] = { ...(byDate[d.Date] || { date: d.Date }), value: Number(d.Value) || 0 };
-        }
-        for (const f of chart.fidelity_points || []) {
-            byDate[f.Date] = { ...(byDate[f.Date] || { date: f.Date }), fidelity: String(f.Implemented).toUpperCase() === "O" ? 100 : 0 };
-        }
-        for (const c of chart.crisis_by_date || []) {
-            byDate[c.date] = { ...(byDate[c.date] || { date: c.date }), crisis: c.count };
-        }
-        return Object.values(byDate).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
-    })();
-
-    return (
-        <div>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
-                📊 표적행동 데이터 관리
-            </h3>
-            <p style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#64748b' }}>
-                담임교사가 직접 정의한 문제행동/목표행동을 BIP 적용기간 동안 추적합니다. 위 필드1(표적행동)·필드8(평가계획)의 서술을 실제 데이터로 뒷받침하는 곳입니다.
-            </p>
-
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px', alignItems: 'center' }}>
-                {behaviors.map(b => (
-                    <button
-                        key={b.BehaviorID}
-                        onClick={() => setSelectedId(b.BehaviorID)}
-                        style={{
-                            padding: '6px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-                            border: selectedId === b.BehaviorID ? '2px solid #7c3aed' : '1px solid #cbd5e1',
-                            background: b.Type === '문제행동' ? '#fef2f2' : '#f0fdf4',
-                            color: b.Type === '문제행동' ? '#b91c1c' : '#166534',
-                            opacity: b.Status === '종료' ? 0.5 : 1,
-                        }}
-                    >
-                        {b.Type === '문제행동' ? '🚩' : '🎯'} {b.Definition.slice(0, 16)}{b.Definition.length > 16 ? '…' : ''} {b.Status === '종료' && '(종료)'}
-                    </button>
-                ))}
-                <button onClick={() => setShowNewForm(v => !v)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
-                    ＋ 새 표적행동
-                </button>
-            </div>
-
-            {showNewForm && (
-                <div style={{ background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <select value={newForm.type} onChange={e => setNewForm({ ...newForm, type: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}>
-                            <option value="문제행동">🚩 문제행동</option>
-                            <option value="목표행동">🎯 목표행동</option>
-                        </select>
-                        <select value={newForm.measurement_type} onChange={e => setNewForm({ ...newForm, measurement_type: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}>
-                            {MEASUREMENT_TYPES.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                        <input type="text" placeholder="기저선(예: 주 5회)" value={newForm.baseline} onChange={e => setNewForm({ ...newForm, baseline: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', flex: 1, minWidth: 120 }} />
-                    </div>
-                    <input type="text" placeholder="표적행동 조작적 정의 (관찰·측정 가능하게)" value={newForm.definition} onChange={e => setNewForm({ ...newForm, definition: e.target.value })} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }} />
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <label style={{ fontSize: '0.76rem', color: '#64748b' }}>BIP 적용기간</label>
-                        <input type="date" value={newForm.bip_start_date} onChange={e => setNewForm({ ...newForm, bip_start_date: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }} />
-                        <span>~</span>
-                        <input type="date" value={newForm.bip_end_date} onChange={e => setNewForm({ ...newForm, bip_end_date: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.78rem' }} />
-                        <button onClick={handleCreate} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem', marginLeft: 'auto' }}>등록</button>
-                    </div>
-                </div>
-            )}
-
-            {selected && (
-                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-                        <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{selected.Definition}</div>
-                            <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
-                                측정: {selected.MeasurementType} · 기저선: {selected.Baseline || '-'} · 기간: {selected.BIPStartDate || '?'} ~ {selected.BIPEndDate || '?'} · {selected.Status}
-                            </div>
-                        </div>
-                        {selected.Status !== '종료' && (
-                            <button onClick={() => handleEnd(selected.BehaviorID)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>종료 처리</button>
-                        )}
-                    </div>
-
-                    {/* 다각도 차트: 표적행동 값(line) + 실행충실도(bar) + 같은 기간 위기행동 발생(bar) */}
-                    <div style={{ height: 260 }}>
-                        <ResponsiveContainer>
-                            <ComposedChart data={mergedChartData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                                <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
-                                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} />
-                                <Tooltip />
-                                <Legend wrapperStyle={{ fontSize: '0.72rem' }} />
-                                <Line yAxisId="left" type="monotone" dataKey="value" name={`표적행동(${selected.MeasurementType})`} stroke="#6366f1" strokeWidth={2} connectNulls />
-                                <Bar yAxisId="right" dataKey="fidelity" name="중재 실행(O=100)" fill="#10b981" barSize={10} />
-                                <Bar yAxisId="left" dataKey="crisis" name="위기행동 발생(건)" fill="#ef4444" barSize={10} />
-                            </ComposedChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="responsive-grid-2">
-                        <div style={{ background: '#fafafa', borderRadius: '10px', padding: '10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div style={{ fontSize: '0.76rem', fontWeight: 700 }}>오늘 데이터 입력</div>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                                <input type="date" value={dataForm.date} onChange={e => setDataForm({ ...dataForm, date: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.76rem' }} />
-                                <input type="text" placeholder="측정값" value={dataForm.value} onChange={e => setDataForm({ ...dataForm, value: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.76rem', flex: 1 }} />
-                                <button onClick={handleSubmitData} className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.72rem' }}>기록</button>
-                            </div>
-                        </div>
-                        <div style={{ background: '#fafafa', borderRadius: '10px', padding: '10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div style={{ fontSize: '0.76rem', fontWeight: 700 }}>오늘 중재 실행기록 (O/X)</div>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                                <input type="date" value={fidelityForm.date} onChange={e => setFidelityForm({ ...fidelityForm, date: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.76rem' }} />
-                                <select value={fidelityForm.implemented} onChange={e => setFidelityForm({ ...fidelityForm, implemented: e.target.value })} style={{ padding: '5px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.76rem' }}>
-                                    <option value="O">O (실행함)</option>
-                                    <option value="X">X (실행 못함)</option>
-                                </select>
-                                <button onClick={handleSubmitFidelity} className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.72rem' }}>기록</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <button onClick={handleDecisionAnalysis} disabled={decision.loading} className="btn btn-ai" style={{ fontSize: '0.8rem' }}>
-                            {decision.loading ? "⏳ 분석 중..." : "🤖 이 표적행동 데이터로 의사결정 제안 받기"}
-                        </button>
-                        {decision.text && (
-                            <div style={{ marginTop: 10 }}>
-                                <ReadableAIResult text={decision.text} />
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {behaviors.length === 0 && !showNewForm && (
-                <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>등록된 표적행동이 없습니다. &ldquo;＋ 새 표적행동&rdquo;으로 추가하세요.</p>
-            )}
-        </div>
-    );
-}
-
 export default function BIPEditor() {
     const params = useParams();
     const router = useRouter();
@@ -864,8 +616,18 @@ export default function BIPEditor() {
                         </div>
                     </div>
 
-                    {/* 표적행동(문제행동/목표행동) 데이터 관리 */}
-                    {studentCode && <TargetBehaviorSection studentCode={studentCode} apiUrl={apiUrl} />}
+                    {/* 표적행동(문제행동/목표행동) 데이터 관리는 별도 탭(/target-behavior)으로 분리됨 */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                        <div style={{ fontSize: '0.85rem', color: '#475569' }}>
+                            📉 위 필드1(표적행동)·필드8(평가계획)을 실제 데이터로 뒷받침하려면 문제행동기록 탭에서 데이터를 등록·기록하세요.
+                        </div>
+                        <button
+                            onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(studentCode)}`)}
+                            className="btn btn-secondary"
+                        >
+                            📉 문제행동기록 데이터 보기
+                        </button>
+                    </div>
 
                     {/* 개별화교육지원팀 협의 (누적, 학생별) */}
                     <MeetingNotesSection apiUrl={apiUrl} meetingType="fba_bip_team" studentCode={studentCode} title="개별화교육지원팀 협의 기록" />
