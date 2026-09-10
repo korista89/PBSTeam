@@ -4064,3 +4064,164 @@ def get_token_log(class_id: str = None, student_code: str = None, limit: int = 5
         print(f"Error getting token log: {e}")
         return []
 
+
+# =============================
+# 표적행동(문제행동/목표행동) 데이터 관리
+# 담임교사가 직접 정의한 개별 학생의 표적행동을 BIP 적용기간 동안 추적한다.
+# CICODaily(Tier2 고정 카드형 목표행동)와는 별개 기능 — 여기는 Tier3 개별 학생이
+# 자유롭게 정의하는 행동을 다룬다.
+# =============================
+def ensure_target_behavior_sheet():
+    """Ensure 'TargetBehaviors' sheet exists (one row per defined target behavior)."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("TargetBehaviors")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="TargetBehaviors", rows=500, cols=11)
+            ws.append_row(["BehaviorID", "StudentCode", "Type", "Definition", "MeasurementType", "Baseline", "BIPStartDate", "BIPEndDate", "Status", "Author", "CreatedAt"])
+        return ws
+    except Exception as e:
+        print(f"Error checking TargetBehaviors sheet: {e}")
+        return None
+
+
+def ensure_target_behavior_data_sheet():
+    """Ensure 'TargetBehaviorData' sheet exists (periodic measurement points)."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("TargetBehaviorData")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="TargetBehaviorData", rows=2000, cols=5)
+            ws.append_row(["BehaviorID", "Date", "Value", "RecordedBy", "Memo"])
+        return ws
+    except Exception as e:
+        print(f"Error checking TargetBehaviorData sheet: {e}")
+        return None
+
+
+def ensure_target_behavior_fidelity_sheet():
+    """Ensure 'TargetBehaviorFidelity' sheet exists (periodic O/X intervention check-ins)."""
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            ws = sheet.worksheet("TargetBehaviorFidelity")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="TargetBehaviorFidelity", rows=2000, cols=5)
+            ws.append_row(["BehaviorID", "Date", "Implemented", "Memo", "RecordedBy"])
+        return ws
+    except Exception as e:
+        print(f"Error checking TargetBehaviorFidelity sheet: {e}")
+        return None
+
+
+def get_target_behaviors(student_code: str) -> list:
+    ws = ensure_target_behavior_sheet()
+    if not ws: return []
+    clean = str(student_code).strip()
+    try:
+        records = safe_get_all_records(ws)
+        return [r for r in records if str(r.get("StudentCode", "")).strip() == clean]
+    except Exception as e:
+        print(f"Error getting target behaviors: {e}")
+        return []
+
+
+def create_target_behavior(data: dict) -> dict:
+    ws = ensure_target_behavior_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    try:
+        import uuid
+        behavior_id = str(uuid.uuid4())[:8]
+        now = now_kst().strftime("%Y-%m-%d %H:%M")
+        row = [
+            behavior_id,
+            str(data.get("student_code", "")).strip(),
+            data.get("type", "문제행동"),
+            data.get("definition", ""),
+            data.get("measurement_type", "빈도"),
+            data.get("baseline", ""),
+            data.get("bip_start_date", ""),
+            data.get("bip_end_date", ""),
+            "진행중",
+            data.get("author", ""),
+            now,
+        ]
+        ws.append_row(row)
+        return {"behavior_id": behavior_id, "message": "Target behavior created"}
+    except Exception as e:
+        print(f"Error creating target behavior: {e}")
+        return {"error": str(e)}
+
+
+def update_target_behavior_status(behavior_id: str, status: str) -> dict:
+    """status: '진행중' | '종료'"""
+    ws = ensure_target_behavior_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    try:
+        all_vals = ws.get_all_values()
+        if len(all_vals) < 2:
+            return {"error": "Not found"}
+        headers = all_vals[0]
+        id_idx = headers.index("BehaviorID")
+        status_idx = headers.index("Status")
+        for i, row in enumerate(all_vals[1:]):
+            if row[id_idx] == behavior_id:
+                ws.update_cell(i + 2, status_idx + 1, status)
+                return {"message": "Status updated", "status": status}
+        return {"error": "Behavior ID not found"}
+    except Exception as e:
+        print(f"Error updating target behavior status: {e}")
+        return {"error": str(e)}
+
+
+def add_target_behavior_data(behavior_id: str, date_str: str, value: str, recorded_by: str = "", memo: str = "") -> dict:
+    ws = ensure_target_behavior_data_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    try:
+        ws.append_row([behavior_id, date_str, value, recorded_by, memo])
+        return {"message": "Data point recorded"}
+    except Exception as e:
+        print(f"Error adding target behavior data: {e}")
+        return {"error": str(e)}
+
+
+def get_target_behavior_data(behavior_id: str) -> list:
+    ws = ensure_target_behavior_data_sheet()
+    if not ws: return []
+    try:
+        records = safe_get_all_records(ws)
+        return [r for r in records if str(r.get("BehaviorID", "")).strip() == str(behavior_id).strip()]
+    except Exception as e:
+        print(f"Error getting target behavior data: {e}")
+        return []
+
+
+def add_target_behavior_fidelity(behavior_id: str, date_str: str, implemented: str, memo: str = "", recorded_by: str = "") -> dict:
+    ws = ensure_target_behavior_fidelity_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    try:
+        ws.append_row([behavior_id, date_str, implemented, memo, recorded_by])
+        return {"message": "Fidelity check-in recorded"}
+    except Exception as e:
+        print(f"Error adding target behavior fidelity: {e}")
+        return {"error": str(e)}
+
+
+def get_target_behavior_fidelity(behavior_id: str) -> list:
+    ws = ensure_target_behavior_fidelity_sheet()
+    if not ws: return []
+    try:
+        records = safe_get_all_records(ws)
+        return [r for r in records if str(r.get("BehaviorID", "")).strip() == str(behavior_id).strip()]
+    except Exception as e:
+        print(f"Error getting target behavior fidelity: {e}")
+        return []
+

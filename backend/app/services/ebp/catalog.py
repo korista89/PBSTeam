@@ -30,6 +30,8 @@ def load_ebp_catalog() -> List[EBPStrategy]:
             code=raw["code"],
             name=raw["name"],
             category=cat_enum,
+            official_no=raw.get("official_no"),
+            official_domain=raw.get("official_domain"),
             summary=raw["summary"],
             when_to_use=raw["when_to_use"],
             function_fits=fn_fits,

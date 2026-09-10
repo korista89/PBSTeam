@@ -128,6 +128,7 @@ from app.api.endpoints import behavior
 from app.api.endpoints import ebp
 from app.api.endpoints import workspace
 from app.api.endpoints import class_rules
+from app.api.endpoints import target_behavior
 
 app.include_router(bip.router, prefix="/api/v1/bip", tags=["bip"])
 app.include_router(picture_words.router, prefix="/api/v1/picture-words", tags=["picture-words"])
@@ -135,6 +136,7 @@ app.include_router(behavior.router, prefix="/api/v1/behavior-log", tags=["behavi
 app.include_router(ebp.router, prefix="/api/v1/ebp", tags=["ebp"])
 app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspace"])
 app.include_router(class_rules.router, prefix="/api/v1/class-rules", tags=["class-rules"])
+app.include_router(target_behavior.router, prefix="/api/v1/target-behaviors", tags=["target-behaviors"])
 
 @app.get("/")
 async def root():

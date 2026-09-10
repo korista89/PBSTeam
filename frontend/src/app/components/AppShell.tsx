@@ -95,6 +95,7 @@ export default function AppShell({
             items: [
                 { href: "/roster", label: "학생 명단", key: "roster", icon: "🏫" },
                 { href: "/behavior", label: "행동기록", key: "behavior", icon: "✍️" },
+                { href: "/behavior-log/quick", label: "빠른 위기 기록", key: "behavior-quick", icon: "🚨" },
                 { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" },
                 { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
                 { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },

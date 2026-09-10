@@ -107,12 +107,12 @@ def generate_ebp_recommendation_bundle(
             bundle["reinforce"].append(_make_rec(te_strat, "함께 고려", ["목표행동 수행에 대한 긍정적 토큰 보상"]))
 
     # 6. Response / Consequence layer (Guarded)
-    # Never auto-recommend EXT without teacher request. RIRD only for severe sensory.
+    # Never auto-recommend EXT without teacher request. RIR only for severe sensory.
     if fn_code == FunctionCode.AUTOMATIC_SENSORY:
-        rird_strat = next((s for s in catalog if s.code == "RIRD"), None)
-        if rird_strat:
-            excluded, flags, unmet = validate_ebp_guardrails(rird_strat, fn_code, sufficiency, selected_ebps)
-            bundle["respond"].append(_make_rec(rird_strat, "조건부", ["학습을 심각하게 방해하는 자동강화 행동에 한해 최소개입 적용"], guardrail_flags=flags))
+        rir_strat = next((s for s in catalog if s.code == "RIR"), None)
+        if rir_strat:
+            excluded, flags, unmet = validate_ebp_guardrails(rir_strat, fn_code, sufficiency, selected_ebps)
+            bundle["respond"].append(_make_rec(rir_strat, "조건부", ["학습을 심각하게 방해하는 자동강화 행동에 한해 최소개입 적용"], guardrail_flags=flags))
 
     return bundle
 
@@ -122,6 +122,8 @@ def _make_rec(strategy: EBPStrategy, level: str, reasons: List[str], guardrail_f
         "ebp_code": strategy.code,
         "name": strategy.name,
         "category": strategy.category.value,
+        "official_no": strategy.official_no,
+        "official_domain": strategy.official_domain,
         "recommendation_level": level,
         "reasons": reasons,
         "guardrail_flags": guardrail_flags or strategy.guardrails[:2],

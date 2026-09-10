@@ -9,6 +9,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useDateRange } from "../components/GlobalNav";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
+import CrisisDetailPanel from "../components/CrisisDetailPanel";
 
 const STATUS_OPTIONS = ["전체", "Pending", "Approved", "Revision Requested"];
 
@@ -30,6 +31,7 @@ export default function LogsPage() {
     const [query, setQuery] = useState("");
     const [debouncedQuery, setDebouncedQuery] = useState("");
     const [status, setStatus] = useState("전체");
+    const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
     // 검색어를 매 키 입력마다 요청하면 네트워크 지연에 따라 응답이 요청 순서와 다르게
     // 도착할 수 있다(예: "2" 요청이 "2421" 요청보다 늦게 도착해 더 넓은 결과로 화면을
     // 덮어씀). 요청마다 증가하는 시퀀스 번호를 매겨, 가장 최근에 보낸 요청의 응답만
@@ -146,28 +148,57 @@ export default function LogsPage() {
                                     <tbody>
                                         {logs.map((log, i) => {
                                             const st = STATUS_STYLE[log["Status"]] || { bg: "#f1f5f9", color: "#475569", label: log["Status"] || "-" };
+                                            const logId = log["Log_ID"] || String(i);
+                                            const isCrisis = String(log["물리적제지여부"] || "").startsWith("O");
+                                            const hasDetails = !!log.crisis_details;
+                                            const isExpanded = expandedLogId === logId;
+                                            const missingLegal = isCrisis && hasDetails && (
+                                                !String(log.crisis_details["관리자_보고_시간"] || "").trim() ||
+                                                !String(log.crisis_details["학부모_알림_시간"] || "").trim()
+                                            );
                                             return (
-                                                <tr
-                                                    key={log["Log_ID"] || i}
-                                                    onClick={() => goToStudent(log)}
-                                                    style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
-                                                    onMouseOver={(e) => (e.currentTarget.style.background = "#f8fafc")}
-                                                    onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
-                                                >
-                                                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["행동발생날짜"]} ({log["시간대"]})</td>
-                                                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontWeight: 700, color: "#0f172a" }}>{maskName(log["학생명"])} <span style={{ color: "#94a3b8", fontWeight: 400 }}>({log["학생코드"] || log["코드번호"]})</span></td>
-                                                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["학급"]}</td>
-                                                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["입력교사명"]}</td>
-                                                    <td style={{ padding: "10px 12px" }}>{log["행동유형"]}</td>
-                                                    <td style={{ padding: "10px 12px", textAlign: "center" }}>{log["강도"]}</td>
-                                                    <td style={{ padding: "10px 12px" }}>{log["장소"]}</td>
-                                                    <td style={{ padding: "10px 12px", textAlign: "center" }}>{String(log["물리적제지여부"] || "").startsWith("O") ? "🚨" : "-"}</td>
-                                                    <td style={{ padding: "10px 12px" }}>
-                                                        <span style={{ padding: "3px 9px", borderRadius: "999px", fontSize: "0.72rem", fontWeight: 700, background: st.bg, color: st.color, whiteSpace: "nowrap" }}>
-                                                            {st.label}
-                                                        </span>
-                                                    </td>
-                                                </tr>
+                                                <React.Fragment key={logId}>
+                                                    <tr
+                                                        onClick={() => goToStudent(log)}
+                                                        style={{ borderBottom: isExpanded ? "none" : "1px solid #f1f5f9", cursor: "pointer" }}
+                                                        onMouseOver={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                                                        onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+                                                    >
+                                                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["행동발생날짜"]} ({log["시간대"]})</td>
+                                                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontWeight: 700, color: "#0f172a" }}>{maskName(log["학생명"])} <span style={{ color: "#94a3b8", fontWeight: 400 }}>({log["학생코드"] || log["코드번호"]})</span></td>
+                                                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["학급"]}</td>
+                                                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["입력교사명"]}</td>
+                                                        <td style={{ padding: "10px 12px" }}>{log["행동유형"]}</td>
+                                                        <td style={{ padding: "10px 12px", textAlign: "center" }}>{log["강도"]}</td>
+                                                        <td style={{ padding: "10px 12px" }}>{log["장소"]}</td>
+                                                        <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                                                            {isCrisis ? (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); setExpandedLogId(isExpanded ? null : logId); }}
+                                                                    title={hasDetails ? "위기대응 상세 보기" : "상세 기록 없음"}
+                                                                    style={{
+                                                                        border: "none", cursor: hasDetails ? "pointer" : "default", background: "transparent",
+                                                                        fontSize: "1rem", position: "relative",
+                                                                    }}
+                                                                >
+                                                                    🚨{missingLegal && <span style={{ position: "absolute", top: -4, right: -6, fontSize: "0.6rem" }}>⚠️</span>}
+                                                                </button>
+                                                            ) : "-"}
+                                                        </td>
+                                                        <td style={{ padding: "10px 12px" }}>
+                                                            <span style={{ padding: "3px 9px", borderRadius: "999px", fontSize: "0.72rem", fontWeight: 700, background: st.bg, color: st.color, whiteSpace: "nowrap" }}>
+                                                                {st.label}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                    {isExpanded && hasDetails && (
+                                                        <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                                            <td colSpan={9} style={{ padding: "0 12px 16px", background: "#f8fafc" }}>
+                                                                <CrisisDetailPanel crisisDetails={log.crisis_details} isCrisis={isCrisis} />
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
                                             );
                                         })}
                                     </tbody>

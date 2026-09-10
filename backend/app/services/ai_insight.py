@@ -1692,6 +1692,30 @@ def generate_bip_hypothesis(
 
 
 # ------------------------------------------------------------------------------
+# 경기Be-Able 공식 EBP 39 카탈로그 인용 블록 — AI가 전략명을 자유롭게 지어내지 않고
+# 실제 39개 항목의 공식 번호·코드·이름 중에서 골라 인용하도록 프롬프트에 얹는다.
+# ------------------------------------------------------------------------------
+_EBP_CATALOG_REFERENCE_CACHE: Optional[str] = None
+
+
+def _ebp_catalog_reference_block() -> str:
+    global _EBP_CATALOG_REFERENCE_CACHE
+    if _EBP_CATALOG_REFERENCE_CACHE is not None:
+        return _EBP_CATALOG_REFERENCE_CACHE
+    try:
+        from app.services.ebp.catalog import load_ebp_catalog
+        catalog = sorted(load_ebp_catalog(), key=lambda s: s.official_no or 999)
+        lines = [
+            f"{(s.official_no or 0):02d}/39 {s.official_domain or ''} {s.code} {s.name}"
+            for s in catalog
+        ]
+        _EBP_CATALOG_REFERENCE_CACHE = "\n".join(lines)
+    except Exception:
+        _EBP_CATALOG_REFERENCE_CACHE = ""
+    return _EBP_CATALOG_REFERENCE_CACHE
+
+
+# ------------------------------------------------------------------------------
 # ⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)
 # ------------------------------------------------------------------------------
 def generate_bip_strategies(
@@ -1707,14 +1731,18 @@ def generate_bip_strategies(
 [표적행동 및 가설] {target_behavior} / {hypothesis_data}
 [추정 기능] {function_data}
 
+[경기Be-Able 공식 EBP 39 목록 — 번호/영역/코드/이름]
+{_ebp_catalog_reference_block()}
+
 [지시사항]
 1단계 예방(선행사건/배경사건 조절), 2단계 교수(대체행동 훈련), 3단계 강화(차별강화)의 3단계 중재 전략을 제안하라.
-1. **기능 1:1 매칭 검증**: 각 전략이 가설의 기능에 정확히 부합하는지 확인하라.
-2. **대체행동 기능적 등가성 3요건 확인 표**:
+1. **위 39개 목록에서만 전략을 고른다.** 목록에 없는 전략명을 새로 만들지 말고, 각 전략을 언급할 때 `코드(공식번호/39) 이름` 형식(예: `FCT(21/39) 기능적의사소통훈련`)으로 표기한다.
+2. **기능 1:1 매칭 검증**: 각 전략이 가설의 기능에 정확히 부합하는지 확인하라.
+3. **대체행동 기능적 등가성 3요건 확인 표**:
    - 동일 기능 수행 여부 / 표적행동 대비 적은 노력 / 더 빠르고 확실한 강화 여부를 표로 점검.
-3. **경은학교 기존 자원 연계**: 경은그림말 AAC, 경은마트 토큰경제, 심리안정실, 시각적 일과표 적극 활용.
-4. **소거 폭발(Extinction Burst) 주의**: 자해/공격행동에 대한 단독 소거 금지 및 안전 조건 명시.
-5. **우선순위 부여**: 전략별 [실행 난이도: 상/중/하] 및 [효과 발현 예상 시점] 표기.
+4. **경은학교 기존 자원 연계**: 경은그림말 AAC, 경은마트 토큰경제, 심리안정실, 시각적 일과표 적극 활용.
+5. **소거 폭발(Extinction Burst) 주의**: 자해/공격행동에 대한 단독 소거 금지 및 안전 조건 명시.
+6. **우선순위 부여**: 전략별 [실행 난이도: 상/중/하] 및 [효과 발현 예상 시점] 표기.
 
 [출력 형식]
 `1. 예방`, `2. 교수`, `3. 강화`, `확인 방법` 네 소제목만 사용한다. 각 단계는 실행문 3개 이하, 한 항목은 2문장 이하로 쓴다."""

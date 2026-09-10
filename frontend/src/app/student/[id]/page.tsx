@@ -16,6 +16,7 @@ import { useDateRange } from "../../components/GlobalNav";
 import { TIER_COLORS } from "../../constants";
 import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import ReadableAIResult from "../../components/ReadableAIResult";
+import CrisisDetailPanel from "../../components/CrisisDetailPanel";
 import { maskName } from "../../utils";
 
 export default function StudentDetail() {
@@ -29,6 +30,8 @@ export default function StudentDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [fbaEvidence, setFbaEvidence] = useState<any>(null);
+  const [crisisLogs, setCrisisLogs] = useState<any[]>([]);
+  const [expandedCrisisId, setExpandedCrisisId] = useState<string | null>(null);
 
   const fetchData = useCallback(async (silent = false) => {
     try {
@@ -65,6 +68,19 @@ export default function StudentDetail() {
     axios.get(`${apiUrl}/api/v1/bip/students/${studentCode}/fba-evidence`)
       .then(res => setFbaEvidence(res.data))
       .catch(() => setFbaEvidence(null));
+  }, [apiUrl, studentCode]);
+
+  // 위기대응 이력 — 결재 상태와 무관하게 크리스코드가 있는 로그만 모아
+  // "제지 등 법정기록"을 학생 단위로 언제든 다시 확인할 수 있게 한다.
+  useEffect(() => {
+    if (!studentCode) return;
+    axios.get(`${apiUrl}/api/v1/behavior-log/timeline/${encodeURIComponent(studentCode)}`)
+      .then(res => {
+        const logs = (res.data?.logs || []).filter((l: any) => l.crisis_details);
+        logs.sort((a: any, b: any) => String(b.타임스탬프 || "").localeCompare(String(a.타임스탬프 || "")));
+        setCrisisLogs(logs);
+      })
+      .catch(() => setCrisisLogs([]));
   }, [apiUrl, studentCode]);
 
   if (loading) return (
@@ -117,6 +133,13 @@ export default function StudentDetail() {
             >
               🗂️ 전체 로그에서 보기
             </button>
+            <button
+              onClick={() => router.push(`/behavior-log/quick`)}
+              className="btn btn-secondary"
+              style={{ color: '#b91c1c' }}
+            >
+              🚨 빠른 위기 기록
+            </button>
             <button onClick={() => router.back()} className="btn btn-secondary">
               ← 뒤로가기
             </button>
@@ -145,6 +168,45 @@ export default function StudentDetail() {
                 증거요약(정직하게 "미상"으로 표기)과 서로 다른 답을 보여주는 문제가 있었다.
                 하나로 합쳐 페이지 안에서 근거 없이 서로 다른 결론이 나오지 않게 한다. */}
             <FBAEvidencePanel evidence={fbaEvidence} />
+
+            {/* 위기대응 이력 — 결재함(Pending)에서만 보이던 위기대응 상세기록을 결재 여부와
+                무관하게 학생 단위로 상시 열람 가능하게 한다. 담임/IEP팀이 제지·개별학생교육지원
+                등 법정기록을 다시 찾아보려 할 때 결재함을 뒤질 필요가 없도록 하는 것이 목적. */}
+            {crisisLogs.length > 0 && (
+              <div>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 900, color: '#475569' }}>🚨 위기대응 이력 ({crisisLogs.length}건)</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {crisisLogs.map((log, i) => {
+                    const logId = log.Log_ID || String(i);
+                    const isExpanded = expandedCrisisId === logId;
+                    const isCrisis = String(log["물리적제지여부"] || "").startsWith("O");
+                    const missingLegal = isCrisis && (
+                      !String(log.crisis_details["관리자_보고_시간"] || "").trim() ||
+                      !String(log.crisis_details["학부모_알림_시간"] || "").trim()
+                    );
+                    return (
+                      <div key={logId} className="card" style={{ padding: '14px 18px', border: missingLegal ? '1px solid #f59e0b' : '1px solid var(--border-subtle)' }}>
+                        <div
+                          onClick={() => setExpandedCrisisId(isExpanded ? null : logId)}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                        >
+                          <div style={{ fontWeight: 700 }}>
+                            {log["행동발생날짜"]} ({log["시간대"]}) · {log["행동유형"]} · {log["장소"]}
+                            {missingLegal && <span style={{ marginLeft: '8px', color: '#b91c1c', fontSize: '0.8rem' }}>⚠️ 법정 보고/알림 미기록</span>}
+                          </div>
+                          <span style={{ color: '#94a3b8' }}>{isExpanded ? "▲ 접기" : "▼ 상세 보기"}</span>
+                        </div>
+                        {isExpanded && (
+                          <div style={{ marginTop: '12px' }}>
+                            <CrisisDetailPanel crisisDetails={log.crisis_details} isCrisis={isCrisis} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Charts Grid */}
             <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
@@ -544,6 +606,11 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
           </div>
           {bundle.prevent?.map((s: any) => (
             <div key={s.ebp_code} style={{ background: '#fff', padding: '14px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #e0f2fe' }}>
+              {s.official_no && (
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: '2px' }}>
+                  {String(s.official_no).padStart(2, '0')}/39 · {s.official_domain}
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{s.name}</span>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7' }}>{s.ebp_code}</span>
@@ -561,6 +628,11 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
           </div>
           {bundle.teach?.map((s: any) => (
             <div key={s.ebp_code} style={{ background: '#fff', padding: '14px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #dcfce7' }}>
+              {s.official_no && (
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: '2px' }}>
+                  {String(s.official_no).padStart(2, '0')}/39 · {s.official_domain}
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{s.name}</span>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a' }}>{s.ebp_code}</span>
@@ -578,6 +650,11 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
           </div>
           {bundle.reinforce?.map((s: any) => (
             <div key={s.ebp_code} style={{ background: '#fff', padding: '14px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #fef3c7' }}>
+              {s.official_no && (
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: '2px' }}>
+                  {String(s.official_no).padStart(2, '0')}/39 · {s.official_domain}
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{s.name}</span>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#d97706' }}>{s.ebp_code}</span>

@@ -250,6 +250,12 @@ class EBPStrategy(StrictModel):
     name: str
     category: EBPCategory
 
+    # 경기Be-Able 공식 EBP 39 자료(2026.9. 확인) 기준 번호·영역 — 표시 전용.
+    # 추천 로직은 여전히 category(EBPCategory)만 쓰고, 이 두 필드는 화면에
+    # "01/39 · 평가 · 기능적행동평가(FBA)"처럼 공식 자료와 같은 표기를 보여주는 데만 쓴다.
+    official_no: Optional[int] = None
+    official_domain: Optional[str] = None
+
     summary: str
     when_to_use: str
 

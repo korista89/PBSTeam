@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../../constants';
 import AppShell from '../../components/AppShell';
 import { AuthCheck, useAuth } from '../../components/AuthProvider';
 import { useSheetLiveSync } from '../../hooks/useSheetLiveSync';
+import CrisisDetailPanel from '../../components/CrisisDetailPanel';
 
 export default function AdminApprovalsPage() {
   const { user } = useAuth();
@@ -148,53 +149,12 @@ export default function AdminApprovalsPage() {
                 </div>
 
                 {log.crisis_details && (
-                  <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '4px', border: '1px solid #ccc' }}>
+                  <div>
                     <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #ccc', paddingBottom: '5px' }}>보고서 상세 내용</h4>
-
-                    <p><strong>발생 시 지도교사:</strong> {log.crisis_details['발생 시 지도교사']}</p>
-
-                    <h5 style={{ margin: '15px 0 5px 0' }}>행동 분석</h5>
-                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                      <li><strong>선행사건:</strong> {log.crisis_details['A_배경_선행사건']}</li>
-                      <li><strong>위기행동:</strong> {log.crisis_details['B_나타난_위기행동']}</li>
-                      <li><strong>후속결과:</strong> {log.crisis_details['C_후속결과']}</li>
-                    </ul>
-
-                    <h5 style={{ margin: '15px 0 5px 0' }}>개별학생교육지원 현황</h5>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', marginBottom: '10px' }}>
-                      <tbody>
-                        <tr>
-                          <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>1차</td>
-                          <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {log.crisis_details['1차_개별학생교육지원_시간']} | 장소: {log.crisis_details['1차_개별학생교육지원_장소']} | 교사: {log.crisis_details['1차_개별학생교육지원_교사']}</td>
-                        </tr>
-                        <tr>
-                          <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
-                            <strong>경위:</strong> {log.crisis_details['1차_경위']}<br/>
-                            <strong>관찰:</strong> {log.crisis_details['1차_관찰기록']}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style={{ border: '1px solid #ccc', padding: '5px', fontWeight: 'bold' }}>2차</td>
-                          <td style={{ border: '1px solid #ccc', padding: '5px' }}>시간: {log.crisis_details['2차_개별학생교육지원_시간']} | 장소: {log.crisis_details['2차_개별학생교육지원_장소']} | 교사: {log.crisis_details['2차_개별학생교육지원_교사']}</td>
-                        </tr>
-                        <tr>
-                          <td colSpan={2} style={{ border: '1px solid #ccc', padding: '5px' }}>
-                            <strong>경위:</strong> {log.crisis_details['2차_경위']}<br/>
-                            <strong>관찰:</strong> {log.crisis_details['2차_관찰기록']}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <h5 style={{ margin: '15px 0 5px 0' }}>발생 이후 조치사항</h5>
-                    <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
-                      <li><strong>부상자 치료:</strong> {log.crisis_details['부상자_치료_시간']} - {log.crisis_details['부상자_치료_내용']}</li>
-                      <li><strong>관리자 보고:</strong> {log.crisis_details['관리자_보고_시간']} - {log.crisis_details['관리자_보고_내용']}</li>
-                      <li><strong>학부모 알림:</strong> {log.crisis_details['학부모_알림_시간']} - {log.crisis_details['학부모_알림_내용']}</li>
-                      <li><strong>학생 상담:</strong> {log.crisis_details['학생_상담_시간']} - {log.crisis_details['학생_상담_내용']}</li>
-                      <li><strong>학부모 상담:</strong> {log.crisis_details['학부모_상담_시간']} - {log.crisis_details['학부모_상담_내용']}</li>
-                      <li><strong>긴급회의:</strong> {log.crisis_details['긴급회의_시간']} - {log.crisis_details['긴급회의_내용']}</li>
-                    </ul>
+                    <CrisisDetailPanel
+                      crisisDetails={log.crisis_details}
+                      isCrisis={String(log['물리적제지여부'] || '').startsWith('O')}
+                    />
                   </div>
                 )}
               </div>

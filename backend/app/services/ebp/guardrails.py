@@ -30,10 +30,10 @@ def validate_ebp_guardrails(
             unmet.append("대체행동 교수 계획")
         flags.append("소거 폭발(Extinction Burst) 및 안전 위험에 대한 팀 합의와 안전 계획 필수")
 
-    # 2. RIRD (Response Interruption and Redirection) Guardrail
-    elif code == "RIRD":
+    # 2. RIR (Response Interruption and Redirection) Guardrail
+    elif code == "RIR":
         if function_code != FunctionCode.AUTOMATIC_SENSORY:
-            flags.append("RIRD는 학습을 실질적으로 방해하는 자동강화 반복행동에만 제한적으로 검토합니다.")
+            flags.append("RIR는 학습을 실질적으로 방해하는 자동강화 반복행동에만 제한적으로 검토합니다.")
         flags.append("무해한 자기조절 및 신경다양성 행동은 표적으로 삼지 않으며, 최소침습적 절차만 허용됩니다.")
 
     # 3. DR-O (Differential Reinforcement of Other Behavior) Guardrail
