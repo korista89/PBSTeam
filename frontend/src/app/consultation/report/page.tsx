@@ -4,19 +4,27 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { AuthCheck } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
+import { useDateRange } from "../../components/GlobalNav";
 import { maskName } from "../../utils";
 
 export default function ConsultationReportPage() {
     const [loading, setLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ start: "", end: "" });
     const [reportData, setReportData] = useState<any>(null);
+    const { startDate: globalStart, endDate: globalEnd } = useDateRange();
 
+    // 상단 전역 날짜 필터에서 보고 있던 기간을 그대로 이어받는다 — 예전 "월별 정기회의록"
+    // 페이지처럼 매번 기간을 다시 고를 필요 없게 하기 위함. 전역 필터가 없으면 이번 달로.
     useEffect(() => {
+        if (globalStart && globalEnd) {
+            setDateRange({ start: globalStart, end: globalEnd });
+            return;
+        }
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
         setDateRange({ start, end });
-    }, []);
+    }, [globalStart, globalEnd]);
 
     const fetchReport = async () => {
         setLoading(true);
@@ -42,8 +50,8 @@ export default function ConsultationReportPage() {
             <AuthCheck>
                 <AppShell
                     currentPage="consultation-report"
-                    title="📑 학교행동중재지원팀 공식 협의록 출력"
-                    subtitle="학교장 결재 및 보관용 A4 표준 인쇄 양식"
+                    title="📑 월별 정기회의록 / 공식 협의록 출력"
+                    subtitle="학교장 결재 및 보관용 A4 표준 인쇄 양식 · 다른 페이지에서 보던 기간이 기본값으로 채워집니다"
                     hideDateFilter={true}
                 >
                     <div className="card" style={{ padding: '24px', maxWidth: '600px', margin: '0 auto' }}>

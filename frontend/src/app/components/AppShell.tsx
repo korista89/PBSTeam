@@ -112,9 +112,8 @@ export default function AppShell({
         {
             groupTitle: "회의 / 협의록",
             items: [
-                { href: "/meeting-minutes", label: "월별 정기회의록", key: "meeting-minutes", icon: "📋" },
                 { href: "/meeting", label: "협의회 에이전트", key: "meeting", icon: "🤝" },
-                { href: "/consultation/report", label: "공식 협의록 출력", key: "consultation-report", icon: "📑" }
+                { href: "/consultation/report", label: "월별/공식 회의록", key: "consultation-report", icon: "📑" }
             ]
         },
         {
