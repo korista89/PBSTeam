@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
-import styles from "../../../page.module.css";
 import { AuthCheck } from "../../../components/AuthProvider";
 import AppShell from "../../../components/AppShell";
 import { useDateRange } from "../../../components/GlobalNav";
@@ -27,6 +26,10 @@ interface BIPData {
     OtherConsiderations: string;
     UpdatedAt: string;
     Author: string;
+    PreventionEBP?: string;
+    TeachingEBP?: string;
+    ConsequenceEBP?: string;
+    CrisisEBP?: string;
 }
 
 // Field definitions with placeholders
@@ -56,8 +59,8 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
         placeholder: "예:\n• [DRA(대체행동 차별강화)] — 도움 요청 시 즉시 강화, 자리이탈 시 강화 차단\n• [토큰경제(Token Economy)] — 토큰 5개 = 선호활동 5분\n• [소거(Extinction)] — 자리이탈 행동 시 과제 면제 없이 복귀 유도\n• [행동계약(Behavioral Contracting)] — 주간 목표 달성 시 합의된 강화 제공"
     },
     {
-        key: "CrisisPlan", num: 7, title: "위기행동지원 전략", color: "#be123c",
-        placeholder: "🚨 위기행동지원절차\n• 전조: 관찰 가능한 초기 신호와 즉시 줄일 자극\n• 고조: 언어·요구 축소와 안전거리 확보\n• 알림: 연락 대상·방법·시점\n• 장소/이동방법: 지정 장소와 승인된 안전 이동 절차\n• 관찰 방법: 행동강도·안전·회복 신호 기록\n• 호명반응 확인 방법: 학생에게 맞는 반응 기준\n• 지시 목록: 짧은 1단계 지시\n• 회복대화 방법: 감정 확인 후 짧게\n• 복귀의사 방법: 말·그림·몸짓 등 학생 방식\n• 복귀 후 반응: 낮은 요구부터 성공 강화"
+        key: "CrisisPlan", num: 7, title: "위기행동지원 전략 (요약 서술)", color: "#be123c",
+        placeholder: "🚨 위기행동지원절차 요약\n• 아래 '위기행동지원절차' 구조화 편집기의 10단계를 참고해 핵심만 요약 서술하세요.\n• 전조·고조 신호, 안전거리 확보, 이동 장소, 회복 후 복귀 기준 등"
     },
     {
         key: "EvaluationPlan", num: 8, title: "평가 계획(Tier3 졸업 기준 포함)", color: "#64748b",
@@ -76,6 +79,236 @@ const BIP_FIELDS: { key: keyof BIPData; num: number; title: string; color: strin
         placeholder: "예:\n• 가정환경: 한부모 가정, 조부모와 동거\n• 감각 민감성: 큰 소리에 과도한 반응\n• 의사소통: 2~3어절 수준, AAC 기기 사용 중\n• 선호 활동: 블록 놀이, 음악 감상\n• 유의사항: 왼쪽 귀 청력 저하, 시각 자료 활용 필수"
     },
 ];
+
+// 39 Be-Able EBP catalog categories mapped to the 3 selectable EBP columns.
+// 위기행동지원절차(CrisisEBP)는 EBP 카탈로그가 아니라 학교 표준 위기대응 프로토콜이다.
+const EBP_CATEGORY_MAP: Record<string, string[]> = {
+    PreventionEBP: ["ANTECEDENT", "SETTING_EVENT"],
+    TeachingEBP: ["TEACHING"],
+    ConsequenceEBP: ["REINFORCEMENT", "CONSEQUENCE"],
+};
+const EBP_COLUMN_LABELS: Record<string, string> = {
+    PreventionEBP: "🛡️ 예방 전략",
+    TeachingEBP: "📚 교수 전략",
+    ConsequenceEBP: "🎁 후속결과 전략",
+};
+
+// 경은학교 위기행동지원절차 표준 프로토콜 기본값 — 학생별로 자유롭게 수정 가능.
+const CRISIS_PROTOCOL_FIELDS: { key: string; label: string; default: string }[] = [
+    { key: "precursor", label: "전조", default: "표정이 굳거나 목소리가 커짐, 자리 이탈 시도, 물건을 만지작거리는 등 평소와 다른 신호를 관찰한다. 이 단계에서 즉시 개입하여 고조를 예방한다." },
+    { key: "escalation", label: "고조", default: "언어적 자극과 지시·요구를 즉시 중단하고 안전거리를 확보한다. 시각적 지원 도구(감정카드, 진정카드 등)를 제시하여 자기조절을 유도한다." },
+    { key: "notification", label: "알림", default: "위기대응팀(또는 관리자·보건교사)에게 즉시 알린다. 학급 내 다른 학생의 안전 확보를 위해 보조인력을 요청한다." },
+    { key: "location", label: "장소/이동방법", default: "사전 지정된 안전공간(심리안정실 등)으로 이동한다. 최소 인원으로 측면에서 유도하며 신체 접촉은 최소화한다." },
+    { key: "observation", label: "관찰 방법", default: "10분 간격으로 행동강도와 안전상태를 관찰·기록한다. 자해·타해 위험이 지속되는지 우선 확인한다." },
+    { key: "response_check", label: "호명반응 확인 방법", default: "이름을 부드럽게 호명하여 반응 여부를 확인한다(눈맞춤, 고개 돌림 등). 반응이 없으면 관찰을 지속하고, 반응이 있으면 회복 단계 전환을 시도한다." },
+    { key: "instructions", label: "지시 목록", default: "짧고 단순한 1단계 지시만 사용한다(예: \"앉자\", \"숨 쉬자\"). 여러 지시를 한 번에 주거나 장황하게 설명하지 않으며, 선택형 지시는 지양한다." },
+    { key: "recovery_talk", label: "회복대화 방법", default: "행동이 진정된 후 감정을 먼저 인정한다(\"많이 힘들었구나\"). 상황 설명은 짧게 하고 비난·훈계는 하지 않는다." },
+    { key: "return_intent", label: "복귀의사 방법", default: "학생에게 교실 복귀 의사를 직접 묻고 스스로 결정할 시간을 준다(예: \"준비되면 알려줘\")." },
+    { key: "post_return", label: "복귀 후 반응", default: "복귀 후 15~20분간 참여도와 정서 상태를 관찰한다. 필요 시 과제량을 조정하고 성공 경험을 제공하여 안정을 강화한다." },
+];
+
+function withCrisisDefaults(value: Record<string, string>): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const f of CRISIS_PROTOCOL_FIELDS) result[f.key] = value?.[f.key] ?? f.default;
+    return result;
+}
+
+function safeParseCrisisProtocol(v: any): Record<string, string> {
+    if (!v) return withCrisisDefaults({});
+    try {
+        const parsed = JSON.parse(v);
+        return withCrisisDefaults(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {});
+    } catch { return withCrisisDefaults({}); }
+}
+
+interface EBPItem { code?: string; name: string; fidelity: string; }
+
+function safeParseEBP(v: any): EBPItem[] {
+    if (!v) return [];
+    try {
+        const parsed = JSON.parse(v);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+}
+
+// ====== EBP 선택/직접입력 + 충실도 체크포인트 1개 컬럼 ======
+function EBPColumnEditor({ fieldKey, items, onChange, catalog }: {
+    fieldKey: string; items: EBPItem[]; onChange: (items: EBPItem[]) => void; catalog: any[];
+}) {
+    const [pickCode, setPickCode] = useState("");
+    const [customName, setCustomName] = useState("");
+    const categories = EBP_CATEGORY_MAP[fieldKey] || [];
+    const options = categories.length > 0 ? catalog.filter(c => categories.includes(c.category)) : [];
+
+    const addFromCatalog = () => {
+        const strat = options.find(o => o.code === pickCode);
+        if (!strat) return;
+        if (items.some(i => i.code === strat.code)) { setPickCode(""); return; }
+        onChange([...items, { code: strat.code, name: strat.name, fidelity: "" }]);
+        setPickCode("");
+    };
+
+    const addCustom = () => {
+        if (!customName.trim()) return;
+        onChange([...items, { name: customName.trim(), fidelity: "" }]);
+        setCustomName("");
+    };
+
+    const removeItem = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+    const updateFidelity = (idx: number, val: string) => onChange(items.map((it, i) => i === idx ? { ...it, fidelity: val } : it));
+
+    return (
+        <div style={{ background: '#fafafa', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#0f172a' }}>{EBP_COLUMN_LABELS[fieldKey]}</div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {items.map((it, idx) => (
+                    <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0f172a' }}>
+                                {it.code && <span style={{ padding: '1px 5px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '0.65rem', marginRight: 5 }}>{it.code}</span>}
+                                {it.name}
+                            </span>
+                            <button onClick={() => removeItem(idx)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
+                        </div>
+                        <input
+                            type="text"
+                            value={it.fidelity}
+                            onChange={e => updateFidelity(idx, e.target.value)}
+                            placeholder="충실도 체크포인트 (예: 매 수업 시작 5분 내 실시 여부)"
+                            style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.72rem', boxSizing: 'border-box' }}
+                        />
+                    </div>
+                ))}
+                {items.length === 0 && <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: 0 }}>선택된 전략이 없습니다.</p>}
+            </div>
+
+            {options.length > 0 && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <select value={pickCode} onChange={e => setPickCode(e.target.value)} style={{ flex: 1, padding: '5px 6px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.72rem' }}>
+                        <option value="">EBP 카탈로그에서 선택...</option>
+                        {options.map(o => <option key={o.code} value={o.code}>{o.code} — {o.name}</option>)}
+                    </select>
+                    <button onClick={addFromCatalog} disabled={!pickCode} style={{ padding: '5px 10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}>추가</button>
+                </div>
+            )}
+            <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                    type="text"
+                    value={customName}
+                    onChange={e => setCustomName(e.target.value)}
+                    placeholder="직접 입력..."
+                    style={{ flex: 1, padding: '5px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.72rem' }}
+                    onKeyDown={e => { if (e.key === 'Enter') addCustom(); }}
+                />
+                <button onClick={addCustom} disabled={!customName.trim()} style={{ padding: '5px 10px', background: '#64748b', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}>추가</button>
+            </div>
+        </div>
+    );
+}
+
+// ====== 위기행동지원절차 편집기 (학교 표준 프로토콜 기본값, 학생별 수정 가능) ======
+function CrisisProtocolEditor({ value, onChange }: {
+    value: Record<string, string>; onChange: (v: Record<string, string>) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const update = (key: string, text: string) => onChange({ ...value, [key]: text });
+    const resetOne = (key: string, def: string) => onChange({ ...value, [key]: def });
+
+    return (
+        <div style={{ background: '#fff5f5', borderRadius: '12px', padding: '14px', border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#0f172a' }}>🚨 위기행동지원절차 (구조화)</div>
+                <span style={{ fontSize: '0.7rem', color: '#b91c1c', fontWeight: 700 }}>{expanded ? '▲ 접기' : `▼ ${CRISIS_PROTOCOL_FIELDS.length}단계 펼치기`}</span>
+            </div>
+            {!expanded && (
+                <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>학교 표준 프로토콜 기본값이 적용되어 있습니다. 펼쳐서 학생별로 수정할 수 있습니다.</p>
+            )}
+            {expanded && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {CRISIS_PROTOCOL_FIELDS.map(f => (
+                        <div key={f.key}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#b91c1c' }}>{f.label}</span>
+                                {value[f.key] !== f.default && (
+                                    <button onClick={() => resetOne(f.key, f.default)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.68rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                                        기본값으로
+                                    </button>
+                                )}
+                            </div>
+                            <textarea
+                                value={value[f.key] ?? f.default}
+                                onChange={e => update(f.key, e.target.value)}
+                                rows={2}
+                                style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #fecaca', fontSize: '0.72rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ====== 회의록/협의기록 섹션 (학생별, 누적기록) ======
+function MeetingNotesSection({ apiUrl, meetingType, title, studentCode }: { apiUrl: string, meetingType: string, title: string, studentCode?: string }) {
+    const [expanded, setExpanded] = useState(false);
+    const [content, setContent] = useState("");
+    const [notes, setNotes] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const fetchNotes = async () => {
+        try {
+            const params = new URLSearchParams({ meeting_type: meetingType });
+            if (studentCode) params.append("student_code", studentCode);
+            const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?${params.toString()}`);
+            setNotes(res.data.notes || []);
+        } catch (e) { }
+    };
+
+    useEffect(() => { if (expanded) fetchNotes(); }, [expanded]);
+
+    const saveNote = async () => {
+        if (!content.trim()) return;
+        setLoading(true);
+        try {
+            await axios.post(`${apiUrl}/api/v1/meeting-notes`, { meeting_type: meetingType, date: new Date().toISOString().split('T')[0], content, author: "Teacher", student_code: studentCode || "" });
+            setContent(""); fetchNotes(); alert("저장되었습니다.");
+        } catch { alert("저장 실패"); } finally { setLoading(false); }
+    };
+
+    return (
+        <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
+            <div onClick={() => setExpanded(!expanded)} style={{ padding: "14px 20px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", background: expanded ? "#0f172a" : "#f8fafc" }}>
+                <h3 style={{ margin: 0, fontSize: "0.95rem", color: expanded ? "#e2e8f0" : "#1e293b" }}>📝 {title}</h3>
+                <span style={{ color: expanded ? "#94a3b8" : "#64748b", fontSize: '0.85rem' }}>{expanded ? "▲ 접기" : "▼ 펼치기"}</span>
+            </div>
+            {expanded && (
+                <div style={{ padding: "20px", borderTop: "1px solid #e2e8f0" }}>
+                    <div style={{ marginBottom: "16px" }}>
+                        <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="협의 내용을 비식별화하여 입력하세요..."
+                            style={{ width: "100%", minHeight: "80px", padding: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", color: "#1e293b", marginBottom: "8px", fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                        <button onClick={saveNote} disabled={loading || !content.trim()}
+                            style={{ padding: "8px 16px", background: "#6366f1", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.85rem", opacity: loading ? 0.7 : 1 }}>
+                            {loading ? "저장 중..." : "협의 기록 저장 (누적)"}
+                        </button>
+                    </div>
+                    <h4 style={{ margin: "0 0 12px 0", fontSize: "0.85rem", color: "#64748b" }}>📋 누적 기록</h4>
+                    {notes.length === 0 ? <p style={{ color: "#94a3b8", fontSize: "0.85rem" }}>기록이 없습니다.</p> : (
+                        <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: "200px", overflowY: "auto" }}>
+                            {notes.map(n => (
+                                <li key={n.id} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px dashed #e2e8f0" }}>
+                                    <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "4px" }}>{n.date} | {n.author}</div>
+                                    <div style={{ fontSize: "0.9rem", color: "#1e293b", whiteSpace: "pre-wrap" }}>{n.content}</div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // Auto-growing textarea component
 function AutoTextarea({ value, onChange, placeholder }: {
@@ -120,6 +353,7 @@ export default function BIPEditor() {
     const [studentCode, setStudentCode] = useState("");
     const [loading, setLoading] = useState(true);
     const [aiLoading, setAiLoading] = useState(false);
+    const [aiMode, setAiMode] = useState<"compact" | "detailed">("detailed");
     const [aiResult, setAiResult] = useState("");
     const [bip, setBip] = useState<BIPData>({
         StudentCode: "", TargetBehavior: "", Hypothesis: "", Goals: "",
@@ -128,7 +362,11 @@ export default function BIPEditor() {
         MedicationStatus: "", ReinforcerInfo: "", OtherConsiderations: "",
         UpdatedAt: "", Author: ""
     });
+    const [ebp, setEbp] = useState<Record<string, EBPItem[]>>({ PreventionEBP: [], TeachingEBP: [], ConsequenceEBP: [] });
+    const [crisisProtocol, setCrisisProtocol] = useState<Record<string, string>>(withCrisisDefaults({}));
+    const [ebpCatalog, setEbpCatalog] = useState<any[]>([]);
     const [saving, setSaving] = useState(false);
+    const [aiDecision, setAiDecision] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -141,11 +379,18 @@ export default function BIPEditor() {
                 setStudentCode(code);
                 try {
                     const bipRes = await axios.get(`${apiUrl}/api/v1/bip/students/${code}/bip`);
-                    if (bipRes.data && bipRes.data.StudentCode) {
-                        if (bipRes.data.ConsequenceStrategies && !bipRes.data.ReinforcementStrategies) {
-                            bipRes.data.ReinforcementStrategies = bipRes.data.ConsequenceStrategies;
+                    const d = bipRes.data;
+                    if (d && d.StudentCode) {
+                        if (d.ConsequenceStrategies && !d.ReinforcementStrategies) {
+                            d.ReinforcementStrategies = d.ConsequenceStrategies;
                         }
-                        setBip(prev => ({ ...prev, ...bipRes.data }));
+                        setBip(prev => ({ ...prev, ...d }));
+                        setEbp({
+                            PreventionEBP: safeParseEBP(d.PreventionEBP),
+                            TeachingEBP: safeParseEBP(d.TeachingEBP),
+                            ConsequenceEBP: safeParseEBP(d.ConsequenceEBP),
+                        });
+                        setCrisisProtocol(safeParseCrisisProtocol(d.CrisisEBP));
                     } else {
                         setBip(prev => ({ ...prev, StudentCode: code }));
                     }
@@ -163,10 +408,16 @@ export default function BIPEditor() {
         fetchData();
     }, [studentName]);
 
+    useEffect(() => {
+        axios.get(`${apiUrl}/api/v1/ebp/catalog`).then(res => setEbpCatalog(res.data.strategies || [])).catch(() => {});
+    }, [apiUrl]);
+
     const handleChange = (field: keyof BIPData, value: string) => {
         setBip(prev => ({ ...prev, [field]: value }));
     };
 
+    // 11개 필드 + 구조화 EBP/위기절차를 한 번에 저장 — 두 편집기가 각자 저장 버튼을 갖던
+    // 이전 구조(중복 화면의 흔적)를 없애고 저장 지점을 하나로 통일한다.
     const handleSave = async () => {
         if (!studentCode) return;
         setSaving(true);
@@ -175,7 +426,11 @@ export default function BIPEditor() {
                 ...bip,
                 StudentCode: studentCode,
                 UpdatedAt: new Date().toISOString().split('T')[0],
-                Author: "Teacher"
+                Author: "Teacher",
+                PreventionEBP: JSON.stringify(ebp.PreventionEBP),
+                TeachingEBP: JSON.stringify(ebp.TeachingEBP),
+                ConsequenceEBP: JSON.stringify(ebp.ConsequenceEBP),
+                CrisisEBP: JSON.stringify(crisisProtocol),
             });
             alert("행동중재계획(BIP)이 저장되었습니다.");
         } catch {
@@ -185,39 +440,7 @@ export default function BIPEditor() {
         }
     };
 
-    const [showEBPModal, setShowEBPModal] = useState(false);
-    const [targetFieldForEBP, setTargetFieldForEBP] = useState<keyof BIPData>("PreventionStrategies");
-    const [ebpCatalog, setEbpCatalog] = useState<any[]>([]);
-    const [ebpSearch, setEbpSearch] = useState("");
-
-    const openEBPModalForField = async (fieldKey: keyof BIPData) => {
-        setTargetFieldForEBP(fieldKey);
-        setShowEBPModal(true);
-        if (ebpCatalog.length === 0) {
-            try {
-                const res = await axios.get(`${apiUrl}/api/v1/ebp/catalog`);
-                setEbpCatalog(res.data.strategies || []);
-            } catch (e) {
-                console.error(e);
-            }
-        }
-    };
-
-    const handleInsertEBP = (strategy: any) => {
-        const textToInsert = `\n\n[${strategy.name} (${strategy.code})]\n• 요약: ${strategy.summary}\n• 실행 절차:\n${strategy.implementation_steps.map((s: string, i: number) => `  ${i+1}) ${s}`).join('\n')}\n• 주의사항: ${strategy.guardrails?.join(', ') || '최소 침습적 원칙 준수'}`;
-
-        setBip(prev => {
-            const current = (prev[targetFieldForEBP] || "").trim();
-            return {
-                ...prev,
-                [targetFieldForEBP]: current ? `${current}${textToInsert}` : textToInsert.trim()
-            };
-        });
-        setShowEBPModal(false);
-    };
-
-    // AI BIP Full — comprehensive analysis. 개별 가설/전략 AI 버튼은 FBA/BIP관리(report/tier3) 페이지의
-    // "최초 FBA기반BIP작성 제안" 흐름으로 통합되어 이 페이지에서는 제거됨 (같은 생성을 두 곳에서 반복하지 않도록).
+    // AI BIP Full — comprehensive analysis. mode 토글로 간단(compact)/상세(detailed)를 선택한다.
     const handleAIBIPFull = async () => {
         if (!studentCode) return;
         setAiLoading(true);
@@ -229,7 +452,7 @@ export default function BIPEditor() {
                 medication_status: bip.MedicationStatus,
                 reinforcer_info: bip.ReinforcerInfo,
                 other_considerations: bip.OtherConsiderations,
-                mode: "detailed",
+                mode: aiMode,
             }, { timeout: 240000 });
             setAiResult(res.data.analysis || "분석 결과가 없습니다.");
         } catch (e: any) {
@@ -259,6 +482,21 @@ export default function BIPEditor() {
             return updated;
         });
         alert("AI 생성 내용이 각 필드에 추가되었습니다.");
+    };
+
+    // 데이터기반 의사결정(DBDM) 제안 — 기간 데이터 + 현재 BIP + EBP 실행충실도 + 협의 기록을 종합
+    const handleDecisionAI = async () => {
+        if (!studentCode) return;
+        setAiDecision({ loading: true, text: "" });
+        try {
+            const res = await axios.post(`${apiUrl}/api/v1/bip/students/${studentCode}/ai-decision-recommendation`, {
+                start_date: startDate || undefined,
+                end_date: endDate || undefined,
+            }, { timeout: 240000 });
+            setAiDecision({ loading: false, text: res.data.analysis || "분석 결과가 없습니다." });
+        } catch (e: any) {
+            setAiDecision({ loading: false, text: "⚠️ 요청 실패: " + (e?.response?.data?.detail || e?.message || "타임아웃") });
+        }
     };
 
     // Excel download
@@ -337,12 +575,6 @@ export default function BIPEditor() {
                 subtitle={`학번/코드: ${studentCode} · 작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`}
                 headerActions={
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button onClick={() => router.push('/report/tier3')} className="btn btn-ai" title="FBA 데이터 기반 최초 AI 초안 생성은 FBA/BIP관리에서 진행됩니다">
-                            🧩 FBA/BIP관리에서 AI 초안 생성
-                        </button>
-                        <button onClick={() => openEBPModalForField("PreventionStrategies")} className="btn btn-ai">
-                            📚 EBP 전략 삽입
-                        </button>
                         <button onClick={handleExcelDownload} className="btn btn-secondary">
                             📥 엑셀 다운로드
                         </button>
@@ -378,38 +610,41 @@ export default function BIPEditor() {
                                 <h3 style={{ margin: 0, color: field.color, fontSize: '1rem', fontWeight: '600' }}>
                                     {field.title}
                                 </h3>
-
-                                {["PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies"].includes(field.key) && (
-                                    <button
-                                        onClick={() => openEBPModalForField(field.key)}
-                                        style={{
-                                            padding: '4px 10px',
-                                            backgroundColor: '#eff6ff',
-                                            color: '#1d4ed8',
-                                            border: '1px solid #93c5fd',
-                                            borderRadius: '6px',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 700,
-                                            cursor: 'pointer',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px'
-                                        }}
-                                    >
-                                        📚 EBP 추가
-                                    </button>
-                                )}
-
                             </div>
                             <div style={{ padding: '12px 16px' }}>
                                 <AutoTextarea
-                                    value={bip[field.key]}
+                                    value={bip[field.key] as string}
                                     onChange={(v) => handleChange(field.key, v)}
                                     placeholder={field.placeholder}
                                 />
                             </div>
                         </div>
                     ))}
+
+                    {/* EBP 구조화 선택 & 위기행동지원절차 */}
+                    <div>
+                        <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                            📚 EBP 구조화 선택 &amp; 위기행동지원절차
+                        </h3>
+                        <p style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#64748b' }}>
+                            39 경기 Be-Able EBP 카탈로그에서 선택하거나 직접 입력할 수 있습니다. 각 전략 옆 충실도 체크포인트에 실제 실행 여부를 기록하면 아래 AI 제안의 근거가 됩니다. 여기서의 변경사항은 상단 &ldquo;💾 저장하기&rdquo;를 눌러야 저장됩니다.
+                        </p>
+                        <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, alignItems: 'start' }}>
+                            {(["PreventionEBP", "TeachingEBP", "ConsequenceEBP"] as const).map(fieldKey => (
+                                <EBPColumnEditor
+                                    key={fieldKey}
+                                    fieldKey={fieldKey}
+                                    items={ebp[fieldKey]}
+                                    onChange={(items) => setEbp(prev => ({ ...prev, [fieldKey]: items }))}
+                                    catalog={ebpCatalog}
+                                />
+                            ))}
+                            <CrisisProtocolEditor value={crisisProtocol} onChange={setCrisisProtocol} />
+                        </div>
+                    </div>
+
+                    {/* 개별화교육지원팀 협의 (누적, 학생별) */}
+                    <MeetingNotesSection apiUrl={apiUrl} meetingType="fba_bip_team" studentCode={studentCode} title="개별화교육지원팀 협의 기록" />
 
                     {/* Field 12: AI BIP 제안 */}
                     <div style={{
@@ -437,7 +672,22 @@ export default function BIPEditor() {
                                     🤖 AI BIP 제안
                                 </h3>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', border: '1px solid #ddd5f5', borderRadius: '8px', overflow: 'hidden' }}>
+                                    {(["compact", "detailed"] as const).map(m => (
+                                        <button
+                                            key={m}
+                                            onClick={() => setAiMode(m)}
+                                            style={{
+                                                padding: '6px 12px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer',
+                                                background: aiMode === m ? '#7c3aed' : '#fff',
+                                                color: aiMode === m ? '#fff' : '#7c3aed',
+                                            }}
+                                        >
+                                            {m === "compact" ? "짧게" : "상세"}
+                                        </button>
+                                    ))}
+                                </div>
                                 <button
                                     onClick={handleAIBIPFull}
                                     disabled={aiLoading}
@@ -445,7 +695,7 @@ export default function BIPEditor() {
                                         padding: '8px 20px',
                                         background: aiLoading ? '#a78bfa' : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
                                         color: 'white',
-                                        border: '2.5px solid #2563eb', /* 파란색 외곽선 (기존 버튼) */
+                                        border: '2.5px solid #2563eb',
                                         borderRadius: '8px',
                                         cursor: aiLoading ? 'wait' : 'pointer',
                                         fontSize: '0.85rem', fontWeight: 700,
@@ -453,7 +703,7 @@ export default function BIPEditor() {
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    {aiLoading ? "⏳ AI 분석 중... (약 15~30초)" : "🤖 AI BIP 제안 받기"}
+                                    {aiLoading ? "⏳ AI 분석 중..." : "🤖 AI BIP 제안 받기"}
                                 </button>
                                 <button
                                     onClick={handleAppendAIContent}
@@ -475,7 +725,7 @@ export default function BIPEditor() {
                         <div style={{ padding: '16px' }}>
                             {!aiResult && !aiLoading && (
                                 <div style={{ color: '#9ca3af', fontSize: '0.85rem', lineHeight: '1.6' }}>
-                                     💡 3건 이상의 위기행동 자료가 있으면 아래 데이터를 교차분석하여 1~11번 전체 양식의 쉽고 상세한 BIP 제안을 만듭니다:
+                                     💡 3건 이상의 위기행동 자료가 있으면 아래 데이터를 교차분석하여 &ldquo;짧게&rdquo;는 핵심만, &ldquo;상세&rdquo;는 1~11번 전체 양식의 자세한 BIP 제안을 만듭니다:
                                      <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
                                          <li>추정기능·행동유형·강도·횟수·시간대·장소·안전사건</li>
                                          <li>특기사항(기타)의 서술식 기록에서 확인되는 맥락 단서</li>
@@ -512,6 +762,33 @@ export default function BIPEditor() {
                         </div>
                     </div>
 
+                    {/* 종합 데이터기반 의사결정 제안 (DBDM) */}
+                    <div style={{ background: 'linear-gradient(135deg, #eff6ff, #fff)', borderRadius: '14px', border: '1px solid #bfdbfe', padding: '16px 18px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1e3a8a' }}>📊 데이터기반 의사결정을 위한 제안 (DBDM)</div>
+                            <button
+                                onClick={handleDecisionAI}
+                                disabled={aiDecision.loading}
+                                style={{
+                                    padding: '8px 18px', background: aiDecision.loading ? '#93c5fd' : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                                    color: 'white', border: '2px solid #1e3a8a', borderRadius: '8px',
+                                    cursor: aiDecision.loading ? 'wait' : 'pointer', fontSize: '0.82rem', fontWeight: 700
+                                }}
+                            >
+                                {aiDecision.loading ? "⏳ 종합 분석 중..." : "🤖 데이터기반 의사결정 제안 받기"}
+                            </button>
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: aiDecision.text ? 10 : 0 }}>
+                            현재 설정 기간 데이터 + 현재 BIP + 위 EBP 실행충실도 + 개별화교육지원팀 협의 기록을 종합 분석합니다. (실행 전 상단 &ldquo;💾 저장하기&rdquo;로 EBP·협의 내용을 먼저 저장하세요)
+                        </div>
+                        {aiDecision.loading && <div style={{ textAlign: 'center', padding: '20px', color: '#2563eb', fontWeight: 700, fontSize: '0.82rem' }}>⏳ 종합 분석 중입니다...</div>}
+                        {aiDecision.text && !aiDecision.loading && (
+                            <div style={{ fontSize: '0.85rem', lineHeight: 1.75, color: '#1e293b', background: '#fff', padding: '14px', borderRadius: '8px', border: '1px solid #dbeafe' }}>
+                                <ReadableAIResult text={aiDecision.text} />
+                            </div>
+                        )}
+                    </div>
+
                     {/* Footer info */}
                     <div style={{
                         marginTop: '10px', marginBottom: '30px', padding: '12px 16px',
@@ -527,90 +804,6 @@ export default function BIPEditor() {
                             {saving ? "저장 중..." : "💾 저장"}
                         </button>
                     </div>
-
-                    {/* EBP Selection Modal */}
-                    {showEBPModal && (
-                        <div
-                            style={{
-                                position: 'fixed',
-                                top: 0, left: 0, right: 0, bottom: 0,
-                                background: 'rgba(15, 23, 42, 0.6)',
-                                backdropFilter: 'blur(4px)',
-                                zIndex: 2000,
-                                display: 'flex', justifyContent: 'center', alignItems: 'center',
-                                padding: '20px'
-                            }}
-                            onClick={() => setShowEBPModal(false)}
-                        >
-                            <div
-                                style={{
-                                    background: 'white', borderRadius: '16px',
-                                    maxWidth: '800px', width: '100%',
-                                    maxHeight: '85vh', overflowY: 'auto',
-                                    padding: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
-                                        📚 경기 Be-Able 39 EBP 전략 선택 ({targetFieldForEBP === "PreventionStrategies" ? "4. 예방 전략" : targetFieldForEBP === "TeachingStrategies" ? "5. 교수 전략" : "6. 강화 전략"})
-                                    </h3>
-                                    <button onClick={() => setShowEBPModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
-                                </div>
-
-                                <input
-                                    type="text"
-                                    placeholder="EBP 전략명, 코드(FCT, DRA 등), 키워드 검색..."
-                                    value={ebpSearch}
-                                    onChange={(e) => setEbpSearch(e.target.value)}
-                                    style={{
-                                        width: '100%', padding: '10px 14px', borderRadius: '8px',
-                                        border: '1px solid #cbd5e1', marginBottom: '16px', fontSize: '0.9rem'
-                                    }}
-                                />
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '55vh', overflowY: 'auto' }}>
-                                    {ebpCatalog
-                                        .filter(s => !ebpSearch.trim() || s.name.includes(ebpSearch) || s.code.includes(ebpSearch) || s.summary.includes(ebpSearch))
-                                        .map((strat: any) => (
-                                            <div
-                                                key={strat.id}
-                                                style={{
-                                                    background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px',
-                                                    padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                                                    gap: '16px'
-                                                }}
-                                            >
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                                        <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
-                                                            {strat.code}
-                                                        </span>
-                                                        <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{strat.name}</strong>
-                                                    </div>
-                                                    <p style={{ fontSize: '0.82rem', color: '#475569', margin: '4px 0 8px 0', lineHeight: 1.5 }}>
-                                                        {strat.summary}
-                                                    </p>
-                                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                                        <strong>실행 1단계:</strong> {strat.implementation_steps?.[0]}
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleInsertEBP(strat)}
-                                                    style={{
-                                                        padding: '8px 14px', background: '#2563eb', color: 'white',
-                                                        border: 'none', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 700,
-                                                        cursor: 'pointer', flexShrink: 0
-                                                    }}
-                                                >
-                                                    선택 및 추가 ➔
-                                                </button>
-                                            </div>
-                                        ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </AppShell>
         </AuthCheck>

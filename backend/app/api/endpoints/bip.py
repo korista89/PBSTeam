@@ -45,7 +45,7 @@ def _filter_student_logs(records: list, student_code: str, beable_code: str = ""
     codes = {student_code.strip()}
     if beable_code:
         codes.add(beable_code.strip())
-    
+
     filtered = []
     for r in records:
         sc = str(r.get("student_code", r.get("학생코드", r.get("코드번호", "")))).strip()
@@ -55,8 +55,20 @@ def _filter_student_logs(records: list, student_code: str, beable_code: str = ""
     return filtered
 
 
+def _build_student_info(student_code: str, status_records: list) -> Dict[str, Any]:
+    for s in status_records:
+        if str(s.get("학생코드", "")).strip() == student_code:
+            return {
+                "code": student_code,
+                "name": s.get("학생명", student_code),
+                "class": s.get("학급", ""),
+                "tier": s.get("Tier", s.get("지원단계", 1)),
+            }
+    return {"code": student_code, "name": student_code, "class": "", "tier": 1}
+
+
 @router.get("/students/{student_code}/bip")
-async def get_student_bip(
+def get_student_bip(
     student_code: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -71,7 +83,7 @@ async def get_student_bip(
 
 
 @router.post("/students/{student_code}/bip")
-async def save_student_bip(
+def save_student_bip(
     student_code: str,
     data: BIPData,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -87,12 +99,37 @@ async def save_student_bip(
     return result
 
 
+@router.get("/students/{student_code}/fba-evidence")
+def get_student_fba_evidence(
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """Deterministic FBA evidence summary for the profile dashboard — no LLM call.
+
+    Reuses the same evidence packet (build_fba_evidence_summary) that the
+    ai-hypothesis/ai-strategies/ai-bip-full/ai-decision-recommendation
+    endpoints already compute internally for prompts, so the profile page can
+    render frequency/intensity/location/function distributions, ABC-narrative
+    coverage, and representative incidents instantly instead of waiting on an
+    AI call just to see the underlying numbers.
+    """
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import fetch_all_records, fetch_student_status
+
+    beable_code = _resolve_beable_code(student_code)
+    raw_logs = _filter_student_logs(fetch_all_records(), student_code, beable_code)
+    student_info = _build_student_info(student_code, fetch_student_status())
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+
+    return build_fba_evidence_summary(student_info, norm_logs)
+
+
 # ============================================================
 # AI BIP Endpoints
 # ============================================================
 
 @router.post("/students/{student_code}/ai-hypothesis")
-async def ai_bip_hypothesis(
+def ai_bip_hypothesis(
     student_code: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -154,7 +191,7 @@ class AIStrategiesRequest(BaseModel):
     goals: str = ""
 
 @router.post("/students/{student_code}/ai-strategies")
-async def ai_bip_strategies(
+def ai_bip_strategies(
     student_code: str,
     req: AIStrategiesRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -210,7 +247,7 @@ class AIBIPFullRequest(BaseModel):
     mode: Literal["compact", "detailed"] = "detailed"
 
 @router.post("/students/{student_code}/ai-bip-full")
-async def ai_bip_full(
+def ai_bip_full(
     student_code: str,
     req: AIBIPFullRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -277,7 +314,7 @@ class AIDecisionRecommendationRequest(BaseModel):
     end_date: Optional[str] = None
 
 @router.post("/students/{student_code}/ai-decision-recommendation")
-async def ai_decision_recommendation(
+def ai_decision_recommendation(
     student_code: str,
     req: AIDecisionRecommendationRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)

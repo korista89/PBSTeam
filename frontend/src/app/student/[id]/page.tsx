@@ -28,6 +28,7 @@ export default function StudentDetail() {
   const [data, setData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [fbaEvidence, setFbaEvidence] = useState<any>(null);
 
   const fetchData = useCallback(async (silent = false) => {
     try {
@@ -55,6 +56,16 @@ export default function StudentDetail() {
     if (studentName) fetchData();
   }, [fetchData, studentName]);
   useSheetLiveSync(() => fetchData(true), { enabled: Boolean(studentName) });
+
+  // FBA 증거 요약 — build_fba_evidence_summary()를 그대로 노출하는 결정론적(비-LLM) 엔드포인트.
+  // 화면 렌더링과 EBP 추천 근거로 함께 쓴다.
+  const studentCode = data?.profile?.student_code;
+  useEffect(() => {
+    if (!studentCode) return;
+    axios.get(`${apiUrl}/api/v1/bip/students/${studentCode}/fba-evidence`)
+      .then(res => setFbaEvidence(res.data))
+      .catch(() => setFbaEvidence(null));
+  }, [apiUrl, studentCode]);
 
   if (loading) return (
     <AuthCheck>
@@ -141,6 +152,9 @@ export default function StudentDetail() {
                </div>
             </section>
 
+            {/* FBA Evidence Summary */}
+            <FBAEvidencePanel evidence={fbaEvidence} />
+
             {/* Charts Grid */}
             <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                 <ChartSection title="📍 ABC 패턴 맵 (장소 x 시간 x 강도)">
@@ -207,15 +221,109 @@ export default function StudentDetail() {
                </div>
             </div>
 
-            {/* Be-Able 39 EBP Matched Recommendations */}
+            {/* Be-Able 39 EBP Matched Recommendations — grounded in the real FBA evidence packet
+                (teacher_inferred_function_distribution / setting_event_cue_distribution) instead of
+                a naive string match on the chart's top function label. */}
             <EBPRecommendationSection
                 studentCode={profile.student_code}
-                topFunction={(data.functions || [])?.[0]?.name || "도피/회피"}
+                functionCode={mapFunctionLabelToCode((fbaEvidence?.deterministic_metrics?.teacher_inferred_function_distribution || [])[0]?.item || "")}
+                settingEvents={(fbaEvidence?.deterministic_metrics?.setting_event_cue_distribution || []).map((s: any) => s.item)}
+                currentTier={profile.tier || "Tier 1"}
                 apiUrl={apiUrl}
             />
         </div>
       </AppShell>
     </AuthCheck>
+  );
+}
+
+// normalize.py의 한국어 기능 라벨("과제회피"/"불편해소"/"관심끌기"/"감각추구"/"물건·활동획득")을
+// EBP 카탈로그의 FunctionCode enum으로 매핑한다. build_fba_evidence_summary의 실제 증거에서
+// 상위 기능을 뽑아 쓰므로, 화면에 표시되는 기능 추정과 EBP 추천 근거가 항상 일치한다.
+function mapFunctionLabelToCode(label: string): string {
+  if (!label) return "UNKNOWN";
+  if (label.includes("과제") || label.includes("회피")) return "ESCAPE_DEMAND";
+  if (label.includes("불편")) return "DISCOMFORT_RELIEF";
+  if (label.includes("관심")) return "ATTENTION";
+  if (label.includes("감각")) return "AUTOMATIC_SENSORY";
+  if (label.includes("물건") || label.includes("활동")) return "TANGIBLE_ACTIVITY";
+  return "UNKNOWN";
+}
+
+function FBAEvidencePanel({ evidence }: { evidence: any }) {
+  if (!evidence) return null;
+  const dq = evidence.data_quality_and_guards || {};
+  const dm = evidence.deterministic_metrics || {};
+  const nc = evidence.narrative_and_abc_coverage || {};
+  const samples = evidence.representative_evidence_samples || [];
+  const insufficient = dq.is_insufficient_sample;
+
+  return (
+    <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 4px 25px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: 10 }}>
+        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '1.5rem' }}>🔬</span> FBA 증거 요약
+        </h3>
+        <span style={{
+          padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 800,
+          background: insufficient ? '#fef3c7' : '#dcfce7', color: insufficient ? '#b45309' : '#166534'
+        }}>
+          {insufficient ? `⚠️ 데이터 부족 (${dq.sample_size_n ?? 0}/${dq.minimum_required_n ?? 3}건)` : `✅ 분석 가능 (${dq.sample_size_n ?? 0}건)`}
+        </span>
+      </div>
+
+      <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+        {[
+          { label: '누적 사건', value: `${dm.total_episodes_n ?? 0}건` },
+          { label: '평균 강도', value: `${dm.average_intensity_1_to_5 ?? 0}/5` },
+          { label: '고강도(4~5) 건수', value: `${dm.high_intensity_4_5_count ?? 0}건` },
+          { label: '물리적 제지/안전사건', value: `${dm.physical_restraint_or_safety_event_count ?? 0}건` },
+        ].map((c, i) => (
+          <div key={i} style={{ background: '#f8fafc', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700 }}>{c.label}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a' }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        <div style={{ background: '#eff6ff', borderRadius: 14, padding: '16px' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1d4ed8', marginBottom: 8 }}>ABC 서술 커버리지 (선행사건·행동·후속결과가 실제 기록된 건수)</div>
+          <div style={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.7 }}>
+            <div>선행사건 기록: {nc.explicit_antecedent_present_count ?? 0}건</div>
+            <div>행동 서술 기록: {nc.explicit_behavior_description_present_count ?? 0}건</div>
+            <div>후속결과 기록: {nc.explicit_consequence_present_count ?? 0}건</div>
+            <div>완전한 ABC 기록: {nc.explicit_abc_complete_count ?? 0}건</div>
+          </div>
+        </div>
+        <div style={{ background: '#fdf4ff', borderRadius: 14, padding: '16px' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#7c3aed', marginBottom: 8 }}>교사 추정 기능 분포</div>
+          <div style={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.7 }}>
+            {(dm.teacher_inferred_function_distribution || []).slice(0, 4).map((f: any, i: number) => (
+              <div key={i}>{f.item}: {f.count}건 ({f.pct}%)</div>
+            ))}
+            {(!dm.teacher_inferred_function_distribution || dm.teacher_inferred_function_distribution.length === 0) && <div style={{ color: '#94a3b8' }}>기록 없음</div>}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', marginBottom: 10 }}>대표 사건 {samples.length}건</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {samples.map((ev: any, i: number) => (
+            <div key={i} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px', fontSize: '0.78rem', color: '#334155' }}>
+              <div style={{ fontWeight: 700, color: '#475569', marginBottom: 2 }}>{ev.selection_reason} · {ev.date}</div>
+              <div>{ev.location} / {ev.time_slot} / 강도 {ev.intensity} / {ev.behavior_type}</div>
+              {ev.narrative_notes && <div style={{ color: '#64748b', marginTop: 2 }}>&ldquo;{ev.narrative_notes}&rdquo;</div>}
+            </div>
+          ))}
+          {samples.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>대표 사건이 없습니다.</div>}
+        </div>
+      </div>
+      {dq.interpretation_limit && (
+        <p style={{ marginTop: 16, marginBottom: 0, fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.6 }}>{dq.interpretation_limit}</p>
+      )}
+    </section>
   );
 }
 
@@ -371,22 +479,21 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   );
 }
 
-function EBPRecommendationSection({ studentCode, topFunction, apiUrl }: { studentCode: string; topFunction: string; apiUrl: string }) {
+function EBPRecommendationSection({ studentCode, functionCode, settingEvents, currentTier, apiUrl }: {
+  studentCode: string; functionCode: string; settingEvents: string[]; currentTier: string; apiUrl: string;
+}) {
   const [bundle, setBundle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const settingEventsKey = settingEvents.join(",");
 
   useEffect(() => {
-    let fnCode = "ESCAPE_DEMAND";
-    if (topFunction.includes("관심")) fnCode = "ATTENTION";
-    else if (topFunction.includes("물질") || topFunction.includes("활동")) fnCode = "TANGIBLE_ACTIVITY";
-    else if (topFunction.includes("감각")) fnCode = "AUTOMATIC_SENSORY";
-
     const fetchBundle = async () => {
       try {
         setLoading(true);
         const res = await axios.post(`${apiUrl}/api/v1/ebp/recommend`, {
-          function_code: fnCode,
-          student_code: studentCode
+          function_code: functionCode,
+          setting_events: settingEvents,
+          current_tier: currentTier,
         });
         setBundle(res.data);
       } catch (e) {
@@ -396,7 +503,8 @@ function EBPRecommendationSection({ studentCode, topFunction, apiUrl }: { studen
       }
     };
     fetchBundle();
-  }, [studentCode, topFunction, apiUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentCode, functionCode, settingEventsKey, currentTier, apiUrl]);
 
   if (loading) return null;
   if (!bundle) return null;
@@ -409,7 +517,7 @@ function EBPRecommendationSection({ studentCode, topFunction, apiUrl }: { studen
             <span>📚</span> 경기 Be-Able 39 EBP 맞춤 추천 번들
           </h3>
           <p style={{ margin: '6px 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
-            학생의 기능 추정({topFunction})에 부합하는 근거기반 3단계(예방-교수-강화) 중재 후보군
+            FBA 증거 요약의 기능 추정({functionCode})에 부합하는 근거기반 3단계(예방-교수-강화) 중재 후보군
           </p>
         </div>
       </div>
