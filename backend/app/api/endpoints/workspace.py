@@ -27,7 +27,7 @@ def _active_cico_months(as_of_date: date) -> List[int]:
     return list(range(3, min(as_of_date.month, 12) + 1))
 
 @router.get("/today")
-async def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """
     Returns today's decision cockpit (scoped to teacher class or school-wide for admin):
     - Urgent Safety Signals (Restraints / Injuries within 14d)
@@ -98,7 +98,7 @@ async def get_today_decision_center(current_user: Dict[str, Any] = Depends(requi
 
 
 @router.get("/student/{student_code}")
-async def get_student_workspace(
+def get_student_workspace(
     student_code: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):

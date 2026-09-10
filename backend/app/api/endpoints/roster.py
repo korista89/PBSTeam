@@ -6,7 +6,7 @@ from app.api.deps import require_authenticated_user, require_admin, get_student_
 router = APIRouter()
 
 @router.get("")
-async def get_roster(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_roster(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     from app.services.sheets import fetch_student_status
 
     status_records = fetch_student_status()
@@ -48,7 +48,7 @@ async def get_roster(current_user: Dict[str, Any] = Depends(require_authenticate
     return result
 
 @router.get("/codes")
-async def get_codes(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_codes(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     mapping = fetch_student_codes()
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"]:
@@ -61,7 +61,7 @@ async def get_codes(current_user: Dict[str, Any] = Depends(require_authenticated
     return mapping
 
 @router.post("/codes")
-async def save_codes(
+def save_codes(
     codes: list[dict[str, str]],
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):

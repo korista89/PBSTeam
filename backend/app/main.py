@@ -10,6 +10,7 @@ if _backend_dir not in sys.path:
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
@@ -82,10 +83,15 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
 
     if wants_fresh_sheet:
         from app.services.sheets import clear_cache
-        clear_cache()
+        # clear_cache() and clear_pw_cache() are synchronous (plain dict/module
+        # state), but this middleware runs on the event loop for every GET. On
+        # a Vercel warm instance shared across concurrent requests, doing this
+        # inline briefly holds up every other in-flight request; run it off
+        # the event loop like the rest of the (also-synchronous) request path.
+        await run_in_threadpool(clear_cache)
         try:
             from app.services.picture_words import clear_pw_cache
-            clear_pw_cache()
+            await run_in_threadpool(clear_pw_cache)
         except Exception:
             # Picture-word sheets are optional to the core PBST data contract.
             pass

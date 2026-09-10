@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import Request, HTTPException, status, Depends
 from app.core.config import settings
 from app.core.security import decode_access_token
-from app.services.sheets import get_user_by_id, fetch_student_status
+from app.services.sheets import get_user_by_id
 from app.adapters.sheets.tier_status import TierStatusAdapter
 
 # Canonical class normalization mapping
@@ -74,7 +74,7 @@ def normalize_role(role_val: Optional[str]) -> str:
     return r
 
 
-async def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
+def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
     """
     Extracts session token from HttpOnly cookie and resolves current active user.
     Returns user context or None if unauthenticated.
@@ -116,7 +116,7 @@ async def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]
         return None
 
 
-async def get_current_user(request: Request) -> Dict[str, Any]:
+def get_current_user(request: Request) -> Dict[str, Any]:
     """
     Strict authentication and live user revalidation dependency.
     1. Extracts signed session token from HttpOnly cookie.
@@ -171,12 +171,12 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
     }
 
 
-async def require_authenticated_user(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+def require_authenticated_user(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Requires an authenticated and active user session."""
     return current_user
 
 
-async def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Requires ADMIN role. Returns HTTP 403 if user is not admin."""
     if current_user.get("role") not in ["admin", "superadmin"]:
         raise HTTPException(
@@ -186,7 +186,7 @@ async def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)
     return current_user
 
 
-async def require_teacher_or_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+def require_teacher_or_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Requires TEACHER or ADMIN role. Returns HTTP 403 for unauthorized roles."""
     if current_user.get("role") not in ["admin", "teacher", "class_teacher", "superadmin"]:
         raise HTTPException(
@@ -197,23 +197,22 @@ async def require_teacher_or_admin(current_user: Dict[str, Any] = Depends(get_cu
 
 
 def get_student_class_code(student_code: str) -> Optional[str]:
-    """Look up a student's canonical class code strictly by student_code from TierStatus roster."""
+    """Look up a student's canonical class code strictly by student_code from TierStatus roster.
+
+    TierStatusAdapter.fetch_students() and fetch_student_status() both read the
+    same "TierStatus" worksheet through two independent caches, so calling both
+    doubled the Google Sheets round-trips on every scope check. This check runs
+    on nearly every authenticated mutation, so the extra live Sheets call was a
+    meaningful contributor to request latency under concurrent load.
+    """
     if not student_code:
         return None
     s_clean = str(student_code).strip()
 
-    # 1. Check TierStatusAdapter (strictly by student_code)
     students = TierStatusAdapter.fetch_students()
     for s in students:
         if s.student_code.strip() == s_clean:
             return normalize_class_identifier(s.class_name)
-
-    # 2. Check fetch_student_status (strictly by student_code fields)
-    raw_statuses = fetch_student_status()
-    for row in raw_statuses:
-        rc = str(row.get("학생코드") or row.get("Code") or row.get("학번") or "").strip()
-        if rc == s_clean:
-            return normalize_class_identifier(row.get("학급") or row.get("Class") or "")
 
     return None
 

@@ -35,13 +35,13 @@ def _check_class_scope(class_id: str, current_user: Dict[str, Any]) -> str:
 
 
 @router.get("/catalog")
-async def get_expected_behaviors_catalog(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_expected_behaviors_catalog(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """학교 기대행동 15개 (스스로/바르게/안전하게 각 5개)"""
     return _load_catalog()
 
 
 @router.get("/{class_id}")
-async def get_rules(class_id: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_rules(class_id: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     clean = _check_class_scope(class_id, current_user)
     from app.services.sheets import get_class_rules
     return {"class_id": clean, "rules": get_class_rules(clean)}
@@ -58,7 +58,7 @@ class SaveClassRulesRequest(BaseModel):
 
 
 @router.post("/{class_id}")
-async def save_rules(
+def save_rules(
     class_id: str,
     req: SaveClassRulesRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -82,7 +82,7 @@ async def save_rules(
 
 
 @router.get("/{class_id}/tokens")
-async def get_tokens(class_id: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_tokens(class_id: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     clean = _check_class_scope(class_id, current_user)
     from app.services.sheets import get_token_board, fetch_student_status
 
@@ -111,7 +111,7 @@ class AwardTokenRequest(BaseModel):
 
 
 @router.post("/{class_id}/tokens/award")
-async def award(
+def award(
     class_id: str,
     req: AwardTokenRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -126,7 +126,7 @@ async def award(
 
 
 @router.get("/{class_id}/tokens/log")
-async def get_tokens_log(
+def get_tokens_log(
     class_id: str,
     student_code: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)

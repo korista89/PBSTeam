@@ -9,7 +9,7 @@ import datetime
 router = APIRouter()
 
 @router.post("")
-async def submit_behavior_log(
+def submit_behavior_log(
     payload: dict = Body(...),
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -80,7 +80,7 @@ async def submit_behavior_log(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/approve")
-async def approve_behavior_log(
+def approve_behavior_log(
     payload: dict = Body(...),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
@@ -134,7 +134,7 @@ async def approve_behavior_log(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/revise")
-async def revise_behavior_log(
+def revise_behavior_log(
     payload: dict = Body(...),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
@@ -189,7 +189,7 @@ async def revise_behavior_log(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/timeline/{student_id}")
-async def get_student_timeline(
+def get_student_timeline(
     student_id: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -207,7 +207,7 @@ async def get_student_timeline(
     return {"student_id": student_id, "logs": student_logs}
 
 @router.get("/pending")
-async def get_pending_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
+def get_pending_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
     """
     Fetch all pending logs requiring admin approval (Admin only).
     """

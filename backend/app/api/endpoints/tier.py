@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from app.services.sheets import (
     fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
     update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
@@ -47,7 +47,7 @@ class BeAbleCodeUpdateRequest(BaseModel):
     beable_code: str
 
 @router.get("/status")
-async def get_all_status(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_all_status(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """Get students' tier status scoped by user role and class"""
     status = fetch_student_status()
     role = str(current_user.get("role", "")).lower()
@@ -70,7 +70,7 @@ async def get_all_status(current_user: Dict[str, Any] = Depends(require_authenti
     }
 
 @router.put("/status")
-async def update_tier(request: TierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def update_tier(request: TierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Update a student's tier status (5 separate O/X columns - Admin only)"""
     tier_values = {}
     if request.tier1 is not None:
@@ -90,14 +90,9 @@ async def update_tier(request: TierUpdateRequest, current_admin: Dict[str, Any] 
     return result
 
 @router.put("/status/unified")
-async def update_tier_unified(request: Request, current_admin: Dict[str, Any] = Depends(require_admin)):
+def update_tier_unified(req_data: UnifiedTierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Unified update: tier + enrollment + beable in single API call (Admin only)"""
     try:
-        body = await request.json()
-
-        # Manual validation
-        req_data = UnifiedTierUpdateRequest(**body)
-
         # Ensure code is string
         str_code = str(req_data.code)
 
@@ -128,7 +123,7 @@ async def update_tier_unified(request: Request, current_admin: Dict[str, Any] = 
         raise HTTPException(status_code=422, detail=f"Validation Error: {str(e)}")
 
 @router.put("/enrollment")
-async def update_enrollment(request: EnrollmentUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def update_enrollment(request: EnrollmentUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Update a student's enrollment status (O/X - Admin only)"""
     if request.enrolled not in ["O", "X"]:
         raise HTTPException(status_code=400, detail="Enrolled must be O or X")
@@ -138,7 +133,7 @@ async def update_enrollment(request: EnrollmentUpdateRequest, current_admin: Dic
     return result
 
 @router.put("/beable")
-async def update_beable(request: BeAbleCodeUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def update_beable(request: BeAbleCodeUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Update a student's BeAble code for data linking (Admin only)"""
     result = update_student_beable_code(str(request.code), request.beable_code)
     if "error" in result:
@@ -146,13 +141,13 @@ async def update_beable(request: BeAbleCodeUpdateRequest, current_admin: Dict[st
     return result
 
 @router.get("/beable-mapping")
-async def get_beable_mapping(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_beable_mapping(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """Get BeAble code to student code mapping for data analysis"""
     mapping = get_beable_code_mapping()
     return mapping
 
 @router.post("/reset-sheet")
-async def reset_sheet(current_admin: Dict[str, Any] = Depends(require_admin)):
+def reset_sheet(current_admin: Dict[str, Any] = Depends(require_admin)):
     """Reset TierStatus sheet with all 210 students (Admin only & DEV only)"""
     from app.core.config import settings
     if settings.ENVIRONMENT.lower() != "development":
@@ -180,7 +175,7 @@ class CICODailyInput(BaseModel):
     entered_by: Optional[str] = ""
 
 @router.get("/cico")
-async def get_cico_records(
+def get_cico_records(
     student_code: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -202,7 +197,7 @@ async def get_cico_records(
     return records
 
 @router.post("/cico")
-async def add_cico_record(data: CICODailyInput, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def add_cico_record(data: CICODailyInput, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """Add a new CICO daily record with write scope verification"""
     check_student_scope(str(data.student_code), current_user)
 

@@ -71,7 +71,7 @@ def _get_normalized_records(start_date: str = None, end_date: str = None) -> Lis
 # §2 Data Quality Endpoint
 # ============================================================
 @router.get("/data-quality")
-async def get_data_quality(
+def get_data_quality(
     start_date: str = None,
     end_date: str = None,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -89,7 +89,7 @@ async def get_data_quality(
 # §4 Peer Contagion Endpoint
 # ============================================================
 @router.get("/peer-contagion")
-async def get_peer_contagion(
+def get_peer_contagion(
     start_date: str = None,
     end_date: str = None,
     with_ai: bool = False,
@@ -163,7 +163,7 @@ class MeetingMinutesRequest(BaseModel):
 
 
 @router.post("/ai-comprehensive-analysis")
-async def ai_comprehensive_analysis(
+def ai_comprehensive_analysis(
     req: ComprehensiveAnalysisRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -194,7 +194,7 @@ async def ai_comprehensive_analysis(
 
 
 @router.post("/ai-section-analysis")
-async def ai_section_analysis(
+def ai_section_analysis(
     req: SectionAnalysisRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -231,7 +231,7 @@ async def ai_section_analysis(
 
 
 @router.post("/ai-cico-analysis")
-async def ai_cico_analysis(
+def ai_cico_analysis(
     req: CICOAnalysisRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -283,7 +283,7 @@ async def ai_cico_analysis(
 
 
 @router.post("/ai-meeting-minutes")
-async def ai_meeting_minutes(
+def ai_meeting_minutes(
     req: MeetingMinutesRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -313,7 +313,7 @@ async def ai_meeting_minutes(
 
 
 @router.post("/ai-tier3-analysis")
-async def ai_tier3_analysis(
+def ai_tier3_analysis(
     req: Tier3AnalysisRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -352,7 +352,7 @@ async def ai_tier3_analysis(
 
 
 @router.post("/ai-student-analysis")
-async def ai_student_analysis(
+def ai_student_analysis(
     req: StudentAnalysisRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -415,7 +415,7 @@ async def ai_student_analysis(
 
 
 @router.get("/debug-sheets")
-async def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
+def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
     """Debug endpoint to inspect sheets connectivity (Admin only)."""
     from app.core.config import settings
     from app.services.sheets import get_sheets_client, safe_get_all_records
@@ -441,7 +441,7 @@ async def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
     return {"sheets": worksheets_info}
 
 @router.get("/dashboard")
-async def get_dashboard_summary(
+def get_dashboard_summary(
     start_date: str = None,
     end_date: str = None,
     class_id: str = None,
@@ -454,7 +454,7 @@ async def get_dashboard_summary(
     return get_analytics_data(start_date, end_date, class_id)
 
 @router.get("/meeting")
-async def get_meeting_analysis(
+def get_meeting_analysis(
     target_date: str = None,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -474,7 +474,7 @@ async def get_meeting_analysis(
     return result
 
 @router.get("/tier3-report")
-async def get_tier3_report(
+def get_tier3_report(
     start_date: str = None,
     end_date: str = None,
     class_id: str = None,
@@ -498,7 +498,7 @@ async def get_tier3_report(
         raise HTTPException(status_code=500, detail=err_msg)
 
 @router.post("/dashboard/refresh")
-async def refresh_dashboard(current_admin: Dict[str, Any] = Depends(require_admin)):
+def refresh_dashboard(current_admin: Dict[str, Any] = Depends(require_admin)):
     from app.services.sheets import initialize_monthly_sheets
     result = initialize_monthly_sheets()
     if "error" in result:
@@ -507,7 +507,7 @@ async def refresh_dashboard(current_admin: Dict[str, Any] = Depends(require_admi
 
 
 @router.get("/debug-ai")
-async def debug_ai_keys(current_admin: Dict[str, Any] = Depends(require_admin)):
+def debug_ai_keys(current_admin: Dict[str, Any] = Depends(require_admin)):
     """AI API 키 및 로컬 LLM 터널 상태 실시간 진단 (Admin only)"""
     import os, requests as req
     results = {}

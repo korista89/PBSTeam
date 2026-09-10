@@ -11,7 +11,7 @@ from app.api.deps import require_authenticated_user
 router = APIRouter()
 
 @router.get("/catalog")
-async def get_catalog(
+def get_catalog(
     category: Optional[str] = Query(None, description="Filter by EBP category"),
     function_code: Optional[str] = Query(None, description="Filter by function code"),
     query: Optional[str] = Query(None, description="Search keyword"),
@@ -35,7 +35,7 @@ async def get_catalog(
 
 
 @router.get("/catalog/{code}")
-async def get_strategy_detail(
+def get_strategy_detail(
     code: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -54,7 +54,7 @@ class EBPRecommendationRequest(BaseModel):
     selected_ebps: List[str] = []
 
 @router.post("/recommend")
-async def recommend_ebp_bundle(
+def recommend_ebp_bundle(
     req: EBPRecommendationRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):

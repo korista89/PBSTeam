@@ -24,12 +24,12 @@ class PostResponse(BaseModel):
     views: int
 
 @router.get("/", response_model=List[dict])
-async def get_posts(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_posts(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     posts = fetch_board_posts()
     return posts
 
 @router.post("/")
-async def create_post(
+def create_post(
     post: PostCreate,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -40,7 +40,7 @@ async def create_post(
     return result
 
 @router.delete("/{post_id}")
-async def delete_post(
+def delete_post(
     post_id: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -66,7 +66,7 @@ async def delete_post(
     return result
 
 @router.put("/{post_id}")
-async def update_existing_post(
+def update_existing_post(
     post_id: str,
     request: PostUpdate,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)

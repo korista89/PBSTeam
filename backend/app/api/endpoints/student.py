@@ -11,7 +11,7 @@ class TierUpdateRequest(BaseModel):
     tier: str
 
 @router.post("/tier-update")
-async def update_tier(req: TierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def update_tier(req: TierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     from app.services.sheets import update_student_tier
     result = update_student_tier(req.student_code, req.tier)
     if "error" in result:
@@ -19,7 +19,7 @@ async def update_tier(req: TierUpdateRequest, current_admin: Dict[str, Any] = De
     return result
 
 @router.get("/{student_name}")
-async def get_student_detail(
+def get_student_detail(
     student_name: str,
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
@@ -34,7 +34,7 @@ async def get_student_detail(
     return data
 
 @router.get("/{student_code}/analysis")
-async def get_student_dashboard_analysis_api(
+def get_student_dashboard_analysis_api(
     student_code: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):

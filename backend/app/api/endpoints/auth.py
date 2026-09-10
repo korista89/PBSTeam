@@ -19,7 +19,7 @@ class PasswordUpdateRequest(BaseModel):
     new_password: str
 
 @router.post("/login")
-async def login(request: LoginRequest, response: Response):
+def login(request: LoginRequest, response: Response):
     user = get_user_by_id(request.user_id) if request.user_id else None
 
     stored_pw = str(user.get("Password", "")) if user else ""
@@ -71,7 +71,7 @@ async def login(request: LoginRequest, response: Response):
     }
 
 @router.get("/me")
-async def get_current_user_profile(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_current_user_profile(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """Returns the authenticated user's profile resolved from backend store using validated session."""
     user_id = current_user.get("sub", "")
     user = get_user_by_id(user_id) if user_id else None
@@ -86,7 +86,7 @@ async def get_current_user_profile(current_user: Dict[str, Any] = Depends(requir
     }
 
 @router.post("/logout")
-async def logout(response: Response):
+def logout(response: Response):
     """Clears the session cookie."""
     delete_session_cookie(response)
     return {"message": "Logged out successfully"}
@@ -94,13 +94,13 @@ async def logout(response: Response):
 from app.api.deps import require_authenticated_user, require_admin
 
 @router.get("/users")
-async def list_users(current_admin: Dict[str, Any] = Depends(require_admin)):
+def list_users(current_admin: Dict[str, Any] = Depends(require_admin)):
     """Admin only: Get all users (without passwords)"""
     users = get_all_users()
     return users
 
 @router.put("/users/{user_id}/password")
-async def change_password(user_id: str, request: PasswordUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def change_password(user_id: str, request: PasswordUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Admin only: Update password for a user"""
     result = update_user_password(user_id, request.new_password)
     if "error" in result:
@@ -112,12 +112,12 @@ class HolidayRequest(BaseModel):
     name: str
 
 @router.get("/holidays")
-async def get_holidays_api(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_holidays_api(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     from app.services.sheets import get_holidays_from_config
     return get_holidays_from_config()
 
 @router.post("/holidays")
-async def add_holiday_api(req: HolidayRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def add_holiday_api(req: HolidayRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     from app.services.sheets import add_holiday
     result = add_holiday(req.date, req.name)
     if "error" in result:
@@ -125,7 +125,7 @@ async def add_holiday_api(req: HolidayRequest, current_admin: Dict[str, Any] = D
     return result
 
 @router.delete("/holidays/{date}")
-async def delete_holiday_api(date: str, current_admin: Dict[str, Any] = Depends(require_admin)):
+def delete_holiday_api(date: str, current_admin: Dict[str, Any] = Depends(require_admin)):
     from app.services.sheets import delete_holiday
     result = delete_holiday(date)
     if "error" in result:
@@ -151,7 +151,7 @@ class CreateUserRequest(BaseModel):
     memo: Optional[str] = ""
 
 @router.post("/users")
-async def create_new_user(request: CreateUserRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def create_new_user(request: CreateUserRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Admin only: Create a new user"""
     from app.services.sheets import create_user
 
@@ -173,7 +173,7 @@ async def create_new_user(request: CreateUserRequest, current_admin: Dict[str, A
     return result
 
 @router.delete("/users/{user_id}")
-async def delete_existing_user(user_id: str, current_admin: Dict[str, Any] = Depends(require_admin)):
+def delete_existing_user(user_id: str, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Admin only: Delete a user"""
     from app.services.sheets import delete_user
 
@@ -183,7 +183,7 @@ async def delete_existing_user(user_id: str, current_admin: Dict[str, Any] = Dep
     return result
 
 @router.put("/users/{user_id}/role")
-async def update_role(user_id: str, request: UserRoleUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def update_role(user_id: str, request: UserRoleUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Admin only: Update user role, class, name, and memo"""
     from app.services.sheets import update_user_role
     result = update_user_role(user_id, request.new_role, request.new_class, request.name, request.memo)
@@ -192,7 +192,7 @@ async def update_role(user_id: str, request: UserRoleUpdateRequest, current_admi
     return result
 
 @router.post("/reset-users")
-async def reset_users_db(current_admin: Dict[str, Any] = Depends(require_admin)):
+def reset_users_db(current_admin: Dict[str, Any] = Depends(require_admin)):
     """DEV ONLY: Reset Users sheet to default Admin + 34 Class Teachers"""
     from app.core.config import settings
     if settings.ENVIRONMENT.lower() != "development":

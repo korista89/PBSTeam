@@ -33,7 +33,7 @@ class MeetingNoteResponse(BaseModel):
 
 
 @router.post("")
-async def save_meeting_note(
+def save_meeting_note(
     request: MeetingNoteRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -60,7 +60,7 @@ async def save_meeting_note(
 
 
 @router.get("")
-async def get_meeting_notes(
+def get_meeting_notes(
     meeting_type: Optional[str] = None,
     student_code: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -84,7 +84,7 @@ async def get_meeting_notes(
 
 
 @router.get("/latest")
-async def get_latest_notes(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+def get_latest_notes(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """Get the latest note for each meeting type (scoped by teacher class or school-wide for admin)"""
     all_notes = fetch_meeting_notes()
     role = str(current_user.get("role", "")).lower()
@@ -105,7 +105,7 @@ async def get_latest_notes(current_user: Dict[str, Any] = Depends(require_authen
     return {"notes": latest}
 
 @router.patch("/{note_id}")
-async def update_note(
+def update_note(
     note_id: str,
     request: UpdateMeetingNoteRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -138,7 +138,7 @@ async def update_note(
     return {"message": "회의록이 수정되었습니다."}
 
 @router.delete("/{note_id}")
-async def delete_note(
+def delete_note(
     note_id: str,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):

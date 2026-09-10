@@ -20,7 +20,7 @@ class GenerateSheetRequest(BaseModel):
     month: int
 
 @router.post("/generate")
-async def generate_cico_sheet(req: GenerateSheetRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+def generate_cico_sheet(req: GenerateSheetRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Generate a monthly CICO sheet with dropdowns for students marked as Tier2(CICO) - Admin only."""
     if req.month < 1 or req.month > 12:
         raise HTTPException(status_code=400, detail="Month must be 1-12")
@@ -32,7 +32,7 @@ async def generate_cico_sheet(req: GenerateSheetRequest, current_admin: Dict[str
 
 
 @router.get("/business-days")
-async def get_cico_business_days(
+def get_cico_business_days(
     month: int = 3,
     year: int = 2025,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
@@ -46,7 +46,7 @@ async def get_cico_business_days(
 
 
 @router.get("/report")
-async def get_cico_report(
+def get_cico_report(
     month: int = 3,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -84,7 +84,7 @@ async def get_cico_report(
     return data
 
 @router.get("/monthly")
-async def get_cico_monthly(
+def get_cico_monthly(
     month: int = 3,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -146,7 +146,7 @@ def _is_valid_daily_value(scale: str, value: str) -> bool:
 
 
 @router.post("/monthly/update")
-async def update_cico_cells(
+def update_cico_cells(
     req: BatchUpdateRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -193,7 +193,7 @@ class SettingsUpdateRequest(BaseModel):
 
 
 @router.post("/settings")
-async def update_settings(
+def update_settings(
     req: SettingsUpdateRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
@@ -212,7 +212,7 @@ class Tier2ToggleRequest(BaseModel):
 
 
 @router.post("/tier2-toggle")
-async def tier2_toggle(
+def tier2_toggle(
     req: Tier2ToggleRequest,
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
