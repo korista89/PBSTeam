@@ -145,6 +145,9 @@ export default function AppShell({
 
     return (
         <div className="app-layout">
+            {mobileMenuOpen && (
+                <div className="mobile-sidebar-backdrop" onClick={() => setMobileMenuOpen(false)} />
+            )}
             {/* Desktop Left Sidebar */}
             <aside className={`app-sidebar ${mobileMenuOpen ? "mobile-open" : ""}`}>
                 <div style={{ padding: "18px 20px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -320,6 +323,12 @@ export default function AppShell({
                 @media (max-width: 1024px) {
                     .mobile-hamburger {
                         display: block !important;
+                    }
+                    .mobile-sidebar-backdrop {
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0, 0, 0, 0.4);
+                        z-index: 90;
                     }
                     .app-sidebar {
                         position: fixed;

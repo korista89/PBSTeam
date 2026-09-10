@@ -78,7 +78,7 @@ export default function ProtocolPage() {
                                 </div>
 
                                 {/* Step 2: Severity Split */}
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                                     {/* Emergency Track */}
                                     <div style={{ background: "#fef2f2", border: "2px dashed #f87171", borderRadius: "10px", padding: "12px" }}>
                                         <div style={{ color: "#b91c1c", fontWeight: 800, fontSize: "0.82rem" }}>🚨 [긴급 트랙]</div>
@@ -120,7 +120,7 @@ export default function ProtocolPage() {
                                         </div>
                                         <span className="badge badge-tier2">4~6주 적용</span>
                                     </div>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "10px" }}>
+                                    <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "10px" }}>
                                         <div style={{ background: "#ecfdf5", padding: "8px 10px", borderRadius: "6px", border: "1px solid #a7f3d0", fontSize: "0.75rem" }}>
                                             <strong style={{ color: "#047857" }}>✓ 목표 달성 (수행률 80%+)</strong>
                                             <div style={{ color: "var(--text-secondary)", marginTop: "2px" }}>2주 유지 후 Tier 1 복귀</div>
@@ -137,7 +137,7 @@ export default function ProtocolPage() {
                                 </div>
 
                                 {/* Step 4: Tier 3 & Tier 3+ */}
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                                     <div style={{ background: "var(--tier3-bg)", border: "1.5px solid #fecaca", borderRadius: "10px", padding: "12px" }}>
                                         <span className="badge badge-tier3">Tier 3 개별지원</span>
                                         <div style={{ fontWeight: 800, fontSize: "0.82rem", color: "var(--tier3-text)", marginTop: "4px" }}>

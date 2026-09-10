@@ -124,7 +124,7 @@ const EXAMPLE_PROCESS = [
 
 function CheckboxGroup({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (opt: string) => void }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
       {options.map(opt => (
         <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
           <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
@@ -407,7 +407,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         <>
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>시간대 *</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
             {TIME_SLOTS.map(t => (
               <label key={t} style={radioStyle}>
                 <input type="checkbox" value={t} checked={formData.시간대.includes(t)} onChange={(e) => handleCheckboxChange(e, '시간대')} />

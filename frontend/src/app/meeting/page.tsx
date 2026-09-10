@@ -105,7 +105,7 @@ export default function MeetingPage() {
                             </button>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", background: "var(--bg-subtle)", padding: "14px 16px", borderRadius: "10px", border: "1px solid var(--border-subtle)" }}>
+                        <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", background: "var(--bg-subtle)", padding: "14px 16px", borderRadius: "10px", border: "1px solid var(--border-subtle)" }}>
                             <div>
                                 <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-secondary)", marginBottom: "4px" }}>
                                     📅 집중 분석 기간 (TopBar 기준)

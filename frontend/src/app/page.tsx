@@ -278,7 +278,7 @@ function TierUpgradeList({
                       {cd && !cd.error && (
                         <div>
                           {/* 1행: 주간 보고빈도 + 주간 발생빈도 */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                             <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
                               <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 보고빈도 추이</div>
                               {(cd.weekly_trend || []).length > 0 ? (
@@ -309,7 +309,7 @@ function TierUpgradeList({
                             </div>
                           </div>
                           {/* 2행: 행동유형 + 행동기능 + 행동강도 (3분할) */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+                          <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                             <div style={{ background: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
                               <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '10px', color: '#0f172a' }}>🎭 행동 유형 분포</div>
                               {(cd.behavior_types || []).length > 0 ? (
