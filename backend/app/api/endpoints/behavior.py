@@ -29,32 +29,13 @@ def submit_behavior_log(
     
     try:
         log_id = str(uuid.uuid4())
-        is_crisis = str(payload.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", "")).startswith("O")
+        is_crisis = (
+            str(payload.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부", "")).strip()
+            not in ("", "X - 보고서 작성 불필요")
+        ) or str(payload.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", "")).startswith("O")
         status = "Pending" if is_crisis else "Approved"
         source = "Vercel"
-        
-        # Hardcode headers to match exact Google Form fields
-        headers = [
-            "타임스탬프", "학생명", "입력교사명", "행동발생날짜", "시간대", 
-            "행동 발생 장소", "행동유형(핵심행동으로택1)", "강도(1~5점 척도)",
-            "기능(이번 행동을 통해 파악된 기능)", "물리적제지, 3/4호분리지도,본인/타인상해 발생 여부",
-            "발생횟수(한 에피소드 당 1회로 입력 권장)", "특기사항(기타)",
-            "학생코드", "Log_ID", "Status", "Source", "Approval_Meta",
-            "발생 시 지도교사", 
-            "1차_개별학생교육지원_시간", "1차_개별학생교육지원_장소", "1차_개별학생교육지원_교사",
-            "2차_개별학생교육지원_시간", "2차_개별학생교육지원_장소", "2차_개별학생교육지원_교사",
-            "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
-            "1차_경위", "2차_경위", "1차_관찰기록", "2차_관찰기록",
-            "부상자_치료_시간", "부상자_치료_내용",
-            "관리자_보고_시간", "관리자_보고_내용",
-            "학부모_알림_시간", "학부모_알림_내용",
-            "학생_상담_시간", "학생_상담_내용",
-            "학부모_상담_시간", "학부모_상담_내용",
-            "긴급회의_시간", "긴급회의_내용"
-        ]
-        
-        row_data = []
-        
+
         payload["Log_ID"] = log_id
         payload["Status"] = status
         payload["Source"] = source
@@ -62,17 +43,19 @@ def submit_behavior_log(
         ampm = "오후" if now.hour >= 12 else "오전"
         hour12 = now.hour % 12 or 12
         payload["타임스탬프"] = f"{now.year}. {now.month}. {now.day} {ampm} {hour12}:{now.minute:02d}:{now.second:02d}"
-        
+
         try:
             if "행동발생날짜" in payload and "-" in payload["행동발생날짜"]:
                 dt = datetime.datetime.strptime(payload["행동발생날짜"], "%Y-%m-%d")
                 payload["행동발생날짜"] = f"{dt.year}. {dt.month}. {dt.day}"
         except Exception:
             pass
-        
-        for h in headers:
-            row_data.append(str(payload.get(h, "")))
-            
+
+        # 컬럼 순서를 코드에 하드코딩해서 구글 폼이 바뀔 때마다 밀리는 사고를 막기 위해,
+        # 매번 시트의 실제 헤더 행을 읽어 그 순서·이름 그대로 채운다(위치 하드코딩 금지).
+        real_headers = log_main_ws.row_values(1)
+        row_data = [str(payload.get(h, "")) for h in real_headers]
+
         log_main_ws.append_row(row_data, table_range='A1')
         clear_cache("records")
             

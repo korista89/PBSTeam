@@ -10,7 +10,32 @@ const TIME_SLOTS = [
   "5구간: 초등점심/중등4교시", "6구간: 초등4교시/중등점심", "7구간: 5교시",
   "8구간: 6교시", "9구간: 7교시", "10구간: 하교시간"
 ];
-const PLACES = ["교실", "화장실", "급식실", "복도/계단", "운동장", "통학버스", "기타"];
+// 2026.9.10 구글 폼 개편과 동일한 24개 장소 목록 — 두 입력 경로(구글 폼/사이트)가
+// 같은 어휘를 쓰도록 맞춘다(분석 시 장소가 갈라지지 않게 하기 위함).
+const PLACES = [
+  "교실", "다른 학급 교실", "화장실", "복도/계단/엘리베이터", "급식실", "1층 로비",
+  "시청각실", "회의실", "운동장/놀이터", "주차장", "통학버스", "경은마루", "강당",
+  "컴퓨터실", "식품조리실", "가정생활실", "미래교육실", "세탁교육실", "진로준비실",
+  "워크스테이션", "VR1실", "VR2실", "집", "기타"
+];
+const ACTION_TYPES = [
+  "방어 및 보호를 위한 제지", "개별학생교육지원", "본인/타인상해만 발생", "X - 보고서 작성 불필요"
+];
+const BG_OPTIONS = [
+  "수면 부족", "늦은 등교", "식사 못함", "약물 변화", "신체 불편", "컨디션 저하",
+  "건강 특이사항", "가정 등에서의 정서적 사건", "일과 변경", "낯선 환경", "특이사항 없음"
+];
+const ANT_OPTIONS = [
+  "과제나 활동 지시", "어렵거나 새로운 과제", "활동 전환", "선호활동 종료나 제한",
+  "원하는 것 제공 안 됨", "원하는 방식 제한", "일과나 장소 변경", "기다림이나 차례 지키기",
+  "타인과 가까워짐", "타인의 접근", "소음, 혼잡, 접촉", "상호작용이나 말걸기", "관심이 적은 상황"
+];
+const CON_OPTIONS = [
+  "과제나 활동 중단", "과제나 요구의 변경", "교사 관심 증가", "재지시 또는 안내", "또래 반응",
+  "물건이나 간식 제공", "선호활동 제공", "원하는 방식으로 변경", "교실 내 안정공간",
+  "교실 밖 공간 이동", "차단, 보호, 제지", "대체행동 안내", "변화 없이 활동 지속",
+  "보호자 연락", "조기귀가"
+];
 const BEHAVIOR_TYPES = [
   "자해행동: 본인 신체 가해 및 위해",
   "신체적공격행동: 타인 밀치기, 때리기 등 신체 접촉",
@@ -97,6 +122,19 @@ const EXAMPLE_PROCESS = [
   "쉬는 시간에 또래와 다툼 후 흥분하여 책상을 엎으려 시도하여 즉각 개입 및 분리"
 ];
 
+function CheckboxGroup({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (opt: string) => void }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+      {options.map(opt => (
+        <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+          <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
+          {opt}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function DropdownTextarea({ name, value, onChange, examples, placeholder, required }: {
   name: string, value: string, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void,
   examples: string[], placeholder?: string, required?: boolean
@@ -148,10 +186,16 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
     행동유형: '',
     강도: '',
     기능: '', 기능기타: '',
-    물리적제지여부: 'X(보고서 작성 불필요)',
+    물리적제지여부: 'X - 보고서 작성 불필요',
     발생횟수: '', 발생횟수기타: '',
     특기사항: ''
   });
+  const [배경사건, set배경사건] = useState<string[]>([]);
+  const [선행사건, set선행사건] = useState<string[]>([]);
+  const [후속결과, set후속결과] = useState<string[]>([]);
+  const toggleIn = (list: string[], setList: (v: string[]) => void, opt: string) => {
+    setList(list.includes(opt) ? list.filter(o => o !== opt) : [...list, opt]);
+  };
 
   const [crisisData, setCrisisData] = useState({
     발생시지도교사: '',
@@ -168,7 +212,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
   });
 
   const [message, setMessage] = useState('');
-  const isCrisis = formData.물리적제지여부.startsWith("O");
+  const isCrisis = formData.물리적제지여부 !== 'X - 보고서 작성 불필요' && formData.물리적제지여부 !== '';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -202,14 +246,17 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
         학생명: studentName,
         입력교사명: user?.name || user?.id || '알수없음',
         행동발생날짜: formData.행동발생날짜,
-        시간대: formData.시간대.join(', '),
-        '행동 발생 장소': 장소값,
-        '행동유형(핵심행동으로택1)': formData.행동유형,
+        '시간대(위기행동 시작 시간 기준)': formData.시간대.join(', '),
+        '행동 발생 장소(위기행동 시작 장소 기준)': 장소값,
+        '행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)': formData.행동유형,
         '강도(1~5점 척도)': formData.강도,
         '기능(이번 행동을 통해 파악된 기능)': 기능값,
-        '물리적제지, 3/4호분리지도,본인/타인상해 발생 여부': formData.물리적제지여부,
+        '방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부': formData.물리적제지여부,
         '발생횟수(한 에피소드 당 1회로 입력 권장)': 발생횟수값,
         '특기사항(기타)': formData.특기사항,
+        '배경사건 - 오늘 평소와 다른 점이 있었나요? (복수 선택 가능)': 배경사건.join(', '),
+        '선행사건 - 행동 직전에 무엇이 있었나요?   (복수 선택 가능)': 선행사건.join(', '),
+        '후속결과 - 행동 직후 무엇이 달라졌나요?   (복수 선택 가능)': 후속결과.join(', '),
       };
 
       if (isCrisis) {
@@ -247,9 +294,10 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
         setMessage(res.data.status === 'Pending' ? '✅ 행동기록 및 보고서가 제출되었습니다 (관리자 승인 대기중).' : '✅ 행동이 기록되었습니다.');
         setFormData({
           행동발생날짜: new Date().toISOString().split('T')[0], 시간대: [], 장소: '', 장소기타: '',
-          행동유형: '', 강도: '', 기능: '', 기능기타: '', 물리적제지여부: 'X(보고서 작성 불필요)',
+          행동유형: '', 강도: '', 기능: '', 기능기타: '', 물리적제지여부: 'X - 보고서 작성 불필요',
           발생횟수: '', 발생횟수기타: '', 특기사항: ''
         });
+        set배경사건([]); set선행사건([]); set후속결과([]);
         setCrisisData({
           발생시지도교사: '', 지원1차_시간: '', 지원1차_장소: '', 지원1차_교사: '',
           지원2차_시간: '', 지원2차_장소: '', 지원2차_교사: '',
@@ -365,15 +413,28 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
         </div>
 
         <div style={{ ...groupStyle, backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px', color: '#b91c1c' }}>물리적제지, 3/4호분리지도,본인/타인상해 발생 여부 *</label>
-          <label style={radioStyle}>
-            <input type="radio" name="물리적제지여부" value="O(보고서 작성 필요)" checked={formData.물리적제지여부 === "O(보고서 작성 필요)"} onChange={handleChange} required />
-            O(보고서 작성 필요)
-          </label>
-          <label style={radioStyle}>
-            <input type="radio" name="물리적제지여부" value="X(보고서 작성 불필요)" checked={formData.물리적제지여부 === "X(보고서 작성 불필요)"} onChange={handleChange} required />
-            X(보고서 작성 불필요)
-          </label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px', color: '#b91c1c' }}>방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부 *</label>
+          {ACTION_TYPES.map(a => (
+            <label key={a} style={radioStyle}>
+              <input type="radio" name="물리적제지여부" value={a} checked={formData.물리적제지여부 === a} onChange={handleChange} required />
+              {a}
+            </label>
+          ))}
+        </div>
+
+        <div style={groupStyle}>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>배경사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(오늘 평소와 다른 점 — 복수 선택 가능)</span></label>
+          <CheckboxGroup options={BG_OPTIONS} selected={배경사건} onToggle={(o) => toggleIn(배경사건, set배경사건, o)} />
+        </div>
+
+        <div style={groupStyle}>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>선행사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직전에 있었던 일 — 복수 선택 가능)</span></label>
+          <CheckboxGroup options={ANT_OPTIONS} selected={선행사건} onToggle={(o) => toggleIn(선행사건, set선행사건, o)} />
+        </div>
+
+        <div style={groupStyle}>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>후속결과 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직후 달라진 것 — 복수 선택 가능)</span></label>
+          <CheckboxGroup options={CON_OPTIONS} selected={후속결과} onToggle={(o) => toggleIn(후속결과, set후속결과, o)} />
         </div>
 
         <div style={groupStyle}>
