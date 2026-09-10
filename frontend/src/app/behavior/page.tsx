@@ -11,6 +11,19 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
 export default function BehaviorPage() {
   const { user, isAdmin } = useAuth();
+  // 학생 프로파일의 "빠른 위기 기록" 버튼 등에서 ?mode=quick&student=코드 로 들어오면
+  // 해당 학생을 바로 선택하고 빠른 입력 모드로 열어준다 — 예전 별도 페이지(behavior-log/quick)를
+  // 여기 하나로 합쳤기 때문에 진입 경로만 쿼리스트링으로 이어준다.
+  // useSearchParams()는 App Router에서 Suspense 경계를 요구해 정적 빌드가 실패하므로
+  // (/logs 페이지와 동일하게) window.location.search를 직접 읽는다.
+  const [requestedMode, setRequestedMode] = useState<'quick' | 'detailed'>('detailed');
+  const [requestedStudentCode, setRequestedStudentCode] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "quick") setRequestedMode("quick");
+    const student = params.get("student");
+    if (student) setRequestedStudentCode(student);
+  }, []);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -35,12 +48,12 @@ export default function BehaviorPage() {
         );
         setStudents(unique);
         setSelectedStudent((current: any) => (
-          unique.find((student: any) => student.학생코드 === current?.학생코드) || unique[0] || null
+          unique.find((student: any) => student.학생코드 === (current?.학생코드 || requestedStudentCode)) || unique[0] || null
         ));
     } catch (err) {
       console.error("Failed to load students", err);
     }
-  }, []);
+  }, [requestedStudentCode]);
 
   useEffect(() => { void fetchStudents(); }, [fetchStudents, user?.id]);
   useSheetLiveSync(fetchStudents);
@@ -59,8 +72,8 @@ export default function BehaviorPage() {
     <AuthCheck>
       <AppShell
         currentPage="behavior"
-        title="✍️ 스마트 행동 기록 및 타임라인"
-        subtitle="30초 이내 신속한 ABC 행동기록 입력 및 학생별 누적 타임라인 확인"
+        title="🚨 위기행동 기록 및 타임라인"
+        subtitle="빠른 입력부터 상세 ABC 기록까지 한 화면에서 — 학생별 누적 타임라인 확인"
       >
         <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "20px", alignItems: "start" }}>
           {/* Left Column: Student Selector List */}
@@ -179,6 +192,7 @@ export default function BehaviorPage() {
                       studentId={selectedStudent.학생코드}
                       studentName={selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명}
                       onLogSubmitted={handleLogSubmitted}
+                      defaultMode={requestedMode}
                     />
                   </div>
                   <div className="card" style={{ padding: "20px" }}>

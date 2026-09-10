@@ -134,7 +134,7 @@ export default function StudentDetail() {
               🗂️ 전체 로그에서 보기
             </button>
             <button
-              onClick={() => router.push(`/behavior-log/quick`)}
+              onClick={() => router.push(`/behavior?mode=quick&student=${encodeURIComponent(profile.student_code || studentName)}`)}
               className="btn btn-secondary"
               style={{ color: '#b91c1c' }}
             >

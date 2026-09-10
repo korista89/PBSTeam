@@ -175,9 +175,12 @@ function DropdownTextarea({ name, value, onChange, examples, placeholder, requir
   );
 }
 
-export default function BehaviorForm({ studentId, studentName, onLogSubmitted }: { studentId: string, studentName: string, onLogSubmitted: () => void }) {
+export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: 'quick' | 'detailed' }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  // 위기행동 발생 직후 그 자리에서 바로 끝낼 수 있는 최소 입력 경로 — 구글 폼의
+  // "간단히 먼저 기록" 분기와 같은 역할을 사이트 안에서 한 페이지로 제공한다.
+  const [mode, setMode] = useState<'quick' | 'detailed'>(defaultMode || 'detailed');
 
   const [formData, setFormData] = useState({
     행동발생날짜: new Date().toISOString().split('T')[0],
@@ -322,8 +325,32 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
   const groupStyle: React.CSSProperties = { padding: '15px', border: '1px solid #eaeaea', borderRadius: '8px', marginBottom: '15px', backgroundColor: '#fff' };
 
   return (
-    <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fcfcfc' }}>
-      <h3 style={{ borderBottom: '2px solid #0070f3', paddingBottom: '10px' }}>새 행동 데이터 입력: {studentName}</h3>
+    <div style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fff' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0070f3', paddingBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+        <h3 style={{ margin: 0 }}>새 위기행동 데이터 입력: {studentName}</h3>
+        <div style={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden' }}>
+          {(['quick', 'detailed'] as const).map(m => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              style={{
+                padding: '7px 14px', fontSize: '0.8rem', fontWeight: 700, border: 'none', cursor: 'pointer',
+                background: mode === m ? '#0f172a' : '#fff', color: mode === m ? '#fff' : '#0f172a',
+              }}
+            >
+              {m === 'quick' ? '⚡ 빠른 입력' : '📝 상세 입력'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === 'quick' && (
+        <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '10px 0 0' }}>
+          위기행동 발생 직후 핵심만 먼저 남기는 경로입니다. 나머지 상세 항목(행동유형·강도·ABC 등)은 나중에 결재함/전체 로그에서 보완하거나, 위에서 &ldquo;상세 입력&rdquo;으로 전환해 바로 채울 수 있습니다.
+        </p>
+      )}
+
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '20px' }}>
 
         <div style={groupStyle}>
@@ -331,6 +358,53 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
           <input type="date" name="행동발생날짜" value={formData.행동발생날짜} onChange={handleChange} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
         </div>
 
+        {mode === 'quick' ? (
+          <>
+            <div style={groupStyle}>
+              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>행동 발생 장소</label>
+              <select name="장소" value={formData.장소} onChange={handleChange} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', width: '100%' }}>
+                <option value="">선택</option>
+                {PLACES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+
+            <div style={{ ...groupStyle, backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px', color: '#b91c1c' }}>조치유형 *</label>
+              {ACTION_TYPES.map(a => (
+                <label key={a} style={radioStyle}>
+                  <input type="radio" name="물리적제지여부" value={a} checked={formData.물리적제지여부 === a} onChange={handleChange} required />
+                  {a}
+                </label>
+              ))}
+            </div>
+
+            <div style={groupStyle}>
+              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>경위 (한 줄로 간단히)</label>
+              <input type="text" name="특기사항" value={formData.특기사항} onChange={handleChange}
+                placeholder="예: 과제 지시 후 소리를 지르며 책상을 넘어뜨려 분리지도함"
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+            </div>
+
+            {isCrisis && (
+              <div style={{ ...groupStyle, display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px', color: !crisisData.관리자_보고_시간.trim() ? '#b91c1c' : undefined }}>학교장(관리자) 보고 시각</label>
+                  <input type="text" name="관리자_보고_시간" value={crisisData.관리자_보고_시간} onChange={handleCrisisChange} placeholder="예: 14:05" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px', color: !crisisData.학부모_알림_시간.trim() ? '#b91c1c' : undefined }}>보호자 알림 시각</label>
+                  <input type="text" name="학부모_알림_시간" value={crisisData.학부모_알림_시간} onChange={handleCrisisChange} placeholder="예: 14:10" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                </div>
+                {(!crisisData.관리자_보고_시간.trim() || !crisisData.학부모_알림_시간.trim()) && (
+                  <div style={{ width: '100%', fontSize: '0.76rem', color: '#92400e' }}>
+                    ⚠️ 비워두면 나중에 결재함/전체 로그에서 꼭 보완하세요 — 법정 보고·알림 의무는 플랫폼 입력만으로 대신할 수 없습니다.
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+        <>
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>시간대 *</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
@@ -441,9 +515,11 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted }:
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>특기사항(기타)</label>
           <textarea name="특기사항" value={formData.특기사항} onChange={handleChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }} />
         </div>
+        </>
+        )}
 
-        {/* ── CRISIS REPORT BRANCHING ── */}
-        {isCrisis && (
+        {/* ── CRISIS REPORT BRANCHING (상세 입력 모드에서만) ── */}
+        {isCrisis && mode === 'detailed' && (
           <div style={{ marginTop: '20px', padding: '20px', border: '2px solid #b91c1c', borderRadius: '12px', backgroundColor: '#fff' }}>
             <h3 style={{ color: '#b91c1c', textAlign: 'center', marginBottom: '5px' }}>🚨 위기행동 지원 및 개별학생교육지원 보고서</h3>
             <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', marginBottom: '20px' }}>
