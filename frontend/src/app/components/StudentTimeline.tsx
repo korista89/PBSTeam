@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import { useSheetLiveSync } from '../hooks/useSheetLiveSync';
+import CrisisDetailPanel from './CrisisDetailPanel';
 
 export default function StudentTimeline({ studentId, refreshTrigger }: { studentId: string, refreshTrigger: number }) {
   const [logs, setLogs] = useState<any[]>([]);
@@ -64,13 +65,10 @@ export default function StudentTimeline({ studentId, refreshTrigger }: { student
               <p><strong>설명:</strong> {log['특기사항'] || '-'}</p>
               <p><strong>입력교사:</strong> {log['입력교사명'] || '-'}</p>
 
-              {isCrisis && log.crisis_details && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(0,0,0,0.2)', fontSize: '0.9em' }}>
-                  <strong>위기행동 지원 보고서 요약</strong>
-                  <p>발생 시 지도교사: {log.crisis_details['발생 시 지도교사']}</p>
-                  <p>나타난 위기행동: {log.crisis_details['B_나타난_위기행동']}</p>
-                  <p>관리자 보고: {log.crisis_details['관리자_보고_시간']} {log.crisis_details['관리자_보고_내용']}</p>
-                  <p>학부모 알림: {log.crisis_details['학부모_알림_시간']} {log.crisis_details['학부모_알림_내용']}</p>
+              {(log.crisis_details || log.form_report_details) && (
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(0,0,0,0.2)' }}>
+                  <strong style={{ display: 'block', marginBottom: '8px' }}>위기행동 지원 보고서 상세</strong>
+                  <CrisisDetailPanel crisisDetails={log.crisis_details} formReportDetails={log.form_report_details} isCrisis={isCrisis} />
                 </div>
               )}
             </div>
