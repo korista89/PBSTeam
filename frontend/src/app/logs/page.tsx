@@ -141,7 +141,7 @@ export default function LogsPage() {
                                     <thead>
                                         <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
                                             {["날짜/시간대", "학생", "학급", "입력교사", "행동유형", "강도", "장소", "제지", "상태"].map(h => (
-                                                <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontWeight: 700, color: "#475569", whiteSpace: "nowrap" }}>{h}</th>
+                                                <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontWeight: 700, color: "#475569", whiteSpace: "nowrap", width: h === "날짜/시간대" ? "110px" : undefined }}>{h}</th>
                                             ))}
                                         </tr>
                                     </thead>
@@ -164,7 +164,10 @@ export default function LogsPage() {
                                                         onMouseOver={(e) => (e.currentTarget.style.background = "#f8fafc")}
                                                         onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
                                                     >
-                                                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["행동발생날짜"]} ({log["시간대"]})</td>
+                                                        <td style={{ padding: "10px 12px", color: "#64748b", width: "110px", maxWidth: "110px" }}>
+                                                            <div style={{ whiteSpace: "nowrap" }}>{log["행동발생날짜"]}</div>
+                                                            <div style={{ fontSize: "0.74rem", color: "#94a3b8", whiteSpace: "normal", lineHeight: 1.3 }}>{log["시간대"]}</div>
+                                                        </td>
                                                         <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontWeight: 700, color: "#0f172a" }}>{maskName(log["학생명"])} <span style={{ color: "#94a3b8", fontWeight: 400 }}>({log["학생코드"] || log["코드번호"]})</span></td>
                                                         <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["학급"]}</td>
                                                         <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{log["입력교사명"]}</td>
