@@ -31,3 +31,4 @@ Thumbs.db
 .claude/worktrees/
 .serena/project.local.yml
 .serena/cache/
+dev.sh
