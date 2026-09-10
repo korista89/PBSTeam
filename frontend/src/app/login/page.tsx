@@ -273,6 +273,9 @@ export default function LoginPage() {
                         <p style={{ fontSize: '0.82rem', color: '#94a338b', margin: 0 }}>
                             Designed by <b style={{ color: '#64748b' }}>경은PBST Team</b>
                         </p>
+                        <a href="/privacy" style={{ fontSize: '0.78rem', color: '#94a3b8', textDecoration: 'underline', marginTop: '6px', display: 'inline-block' }}>
+                            개인정보처리방침 (AI 분석 기능)
+                        </a>
                     </div>
                 </div>
             </div>

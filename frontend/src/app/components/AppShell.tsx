@@ -189,6 +189,13 @@ export default function AppShell({
                     ))}
                 </nav>
 
+                {/* Privacy Policy Link */}
+                <div style={{ padding: "0 16px 8px" }}>
+                    <a href="/privacy" className="sidebar-link-text" style={{ fontSize: "0.7rem", color: "#64748b", textDecoration: "underline" }}>
+                        개인정보처리방침 (AI 분석 기능)
+                    </a>
+                </div>
+
                 {/* Sidebar Bottom User Info */}
                 <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", background: "rgba(0,0,0,0.2)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
