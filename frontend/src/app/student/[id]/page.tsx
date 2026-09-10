@@ -69,7 +69,7 @@ export default function StudentDetail() {
 
   if (loading) return (
     <AuthCheck>
-      <AppShell currentPage="roster" title="👤 학생 행동 프로파일 분석">
+      <AppShell currentPage="roster" title="🔬 학생 FBA 프로파일">
         <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
            <div style={{ fontSize: '2.5rem', animation: 'spin 2s linear infinite', marginBottom: '12px' }}>💿</div>
            <p style={{ fontWeight: 800 }}>{maskName(studentName)} 학생의 행동 데이터를 심층 분석하고 있습니다...</p>
@@ -80,7 +80,7 @@ export default function StudentDetail() {
 
   if (error || !data) return (
     <AuthCheck>
-      <AppShell currentPage="roster" title="👤 학생 행동 프로파일 분석">
+      <AppShell currentPage="roster" title="🔬 학생 FBA 프로파일">
         <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⚠️</div>
           <p style={{ fontWeight: 800, color: 'var(--tier3)' }}>{error || "데이터가 없습니다."}</p>
@@ -101,15 +101,15 @@ export default function StudentDetail() {
     <AuthCheck>
       <AppShell
         currentPage="roster"
-        title={`👤 ${maskName(profile.name)} 학생 행동 프로파일`}
-        subtitle={`${profile.class} (${profile.student_code}) · ${profile.tier || "Tier 1"} 중재 대상자`}
+        title={`🔬 ${maskName(profile.name)} 학생 FBA 프로파일`}
+        subtitle={`${profile.class} (${profile.student_code}) · ${profile.tier || "Tier 1"} 중재 대상자 · 기능적행동평가(FBA) — 행동중재계획(BIP) 작성은 별도 페이지`}
         headerActions={
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               onClick={() => router.push(`/student/${encodeURIComponent(studentName)}/bip`)}
               className="btn btn-ai"
             >
-              📝 개별화행동지원계획 (BIP)
+              📝 BIP 작성/수정
             </button>
             <button
               onClick={() => router.push(`/logs?q=${encodeURIComponent(profile.student_code || studentName)}`)}
@@ -139,26 +139,11 @@ export default function StudentDetail() {
                ))}
             </div>
 
-            {/* FBA Summary */}
-            <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', boxShadow: '0 4px 25px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.02)' }}>
-               <h3 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>🧠</span> 행동 가설 요약 (FBA Summary)
-               </h3>
-               <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
-                  {[
-                    { title: "Antecedent (배경)", value: `${(data.location_stats || [])?.[0]?.name || '-'} / ${(data.time_stats || [])?.[0]?.name || '-'}`, bg: '#eff6ff', color: '#1d4ed8' },
-                    { title: "Behavior (행동)", value: (data.behavior_types || [])?.[0]?.name || '-', bg: '#fff1f2', color: '#be123c' },
-                    { title: "Function (기능)", value: (data.functions || [])?.[0]?.name || '-', bg: '#f0fdf4', color: '#15803d' }
-                  ].map((f, i) => (
-                    <div key={i} style={{ padding: '24px', borderRadius: '20px', background: f.bg }}>
-                       <div style={{ fontSize: '0.8rem', fontWeight: 800, color: f.color, marginBottom: '8px', opacity: 0.7 }}>{f.title}</div>
-                       <div style={{ fontSize: '1.2rem', fontWeight: 900, color: f.color }}>{f.value}</div>
-                    </div>
-                  ))}
-               </div>
-            </section>
-
-            {/* FBA Evidence Summary */}
+            {/* FBA Evidence Summary — 이 페이지에서 "행동/배경/기능"을 요약하는 유일한 섹션.
+                예전엔 이 위에 별도로 그럴듯하게 기능을 추측해 보여주는 "FBA Summary" 3박스가
+                있었는데, 실제 기능 데이터가 없는 학생에서도 그럴듯한 값을 채워 보여줘 아래
+                증거요약(정직하게 "미상"으로 표기)과 서로 다른 답을 보여주는 문제가 있었다.
+                하나로 합쳐 페이지 안에서 근거 없이 서로 다른 결론이 나오지 않게 한다. */}
             <FBAEvidencePanel evidence={fbaEvidence} />
 
             {/* Charts Grid */}
@@ -188,43 +173,46 @@ export default function StudentDetail() {
                 </ChartSection>
             </div>
 
-            <div className="grid-responsive">
-              <WeeklyAnalysisChart
-                data={data.weekly_trend || []}
-                title={`${maskName(profile.name)} 학생 주별 행동 발생 추이`}
-                color="#6366f1"
-              />
-              <ChartSection title="📉 행동 발생 일별 추이 (전체 기간)" height={400}>
-                 <ResponsiveContainer>
-                    <ComposedChart data={cico_trend}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="count" fill="#6366f110" stroke="#6366f1" strokeWidth={3} />
-                      <Bar dataKey="count" fill="#6366f1" barSize={10} radius={[5,5,0,0]} />
-                    </ComposedChart>
-                 </ResponsiveContainer>
-              </ChartSection>
+            {/* 발생 추이 — 주별/일별/요일별을 흩어 놓지 않고 한 클러스터로 모아 "언제 발생하는가"를
+                한 번에 훑어볼 수 있게 한다. */}
+            <div>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', fontWeight: 900, color: '#475569' }}>📈 발생 추이</h3>
+              <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' }}>
+                <WeeklyAnalysisChart
+                  data={data.weekly_trend || []}
+                  title="주별 발생 추이"
+                  color="#6366f1"
+                />
+                <ChartSection title="📉 일별 추이 (전체 기간)" height={340}>
+                   <ResponsiveContainer>
+                      <ComposedChart data={cico_trend}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="count" fill="#6366f110" stroke="#6366f1" strokeWidth={3} />
+                        <Bar dataKey="count" fill="#6366f1" barSize={10} radius={[5,5,0,0]} />
+                      </ComposedChart>
+                   </ResponsiveContainer>
+                </ChartSection>
+                <ChartSection title="📅 요일별 패턴" height={340}>
+                  <ResponsiveContainer>
+                      <BarChart data={data.weekday_dist || []}>
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#f59e0b" radius={[10, 10, 10, 10]} barSize={20}>
+                              <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 800, fill: '#f59e0b' }} />
+                          </Bar>
+                      </BarChart>
+                  </ResponsiveContainer>
+                </ChartSection>
+              </div>
             </div>
 
-            {/* AI Insights and Logs */}
+            {/* 지원 도구 — 상담/관찰 기록과 AI 종합 분석 */}
             <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
                <ConsultationLog studentCode={profile.student_code} />
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
-                  <ChartSection title="📅 요일별 발생 패턴" height={300}>
-                    <ResponsiveContainer>
-                        <BarChart data={data.weekday_dist || []}>
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
-                            <Tooltip />
-                            <Bar dataKey="value" fill="#f59e0b" radius={[10, 10, 10, 10]} barSize={20}>
-                                <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 800, fill: '#f59e0b' }} />
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                  </ChartSection>
-               </div>
+               <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
             </div>
 
             {/* Be-Able 39 EBP Matched Recommendations — grounded in the real FBA evidence packet
@@ -255,6 +243,17 @@ function mapFunctionLabelToCode(label: string): string {
   if (label.includes("물건") || label.includes("활동")) return "TANGIBLE_ACTIVITY";
   return "UNKNOWN";
 }
+
+// EBP 추천 섹션 부제목에 FunctionCode 원본값("UNKNOWN" 등)을 그대로 노출하면 교사가
+// 읽기 어렵다 — 사람이 읽는 한글 라벨로 바꿔서 보여준다.
+const FUNCTION_CODE_LABELS: Record<string, string> = {
+  ESCAPE_DEMAND: "과제/요구 회피",
+  DISCOMFORT_RELIEF: "불편 해소",
+  ATTENTION: "관심 끌기",
+  AUTOMATIC_SENSORY: "감각 추구",
+  TANGIBLE_ACTIVITY: "물건/활동 획득",
+  UNKNOWN: "미상 (기능 데이터 부족)",
+};
 
 function FBAEvidencePanel({ evidence }: { evidence: any }) {
   if (!evidence) return null;
@@ -515,6 +514,9 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
   if (loading) return null;
   if (!bundle) return null;
 
+  const functionLabel = FUNCTION_CODE_LABELS[functionCode] || functionCode;
+  const isUnknown = functionCode === "UNKNOWN";
+
   return (
     <section style={{ background: '#fff', padding: '32px', borderRadius: '28px', border: '1px solid #e2e8f0', boxShadow: '0 4px 25px rgba(0,0,0,0.03)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -523,10 +525,16 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
             <span>📚</span> 경기 Be-Able 39 EBP 맞춤 추천 번들
           </h3>
           <p style={{ margin: '6px 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
-            FBA 증거 요약의 기능 추정({functionCode})에 부합하는 근거기반 3단계(예방-교수-강화) 중재 후보군
+            FBA 증거 요약의 기능 추정({functionLabel})에 부합하는 근거기반 3단계(예방-교수-강화) 중재 후보군
           </p>
         </div>
       </div>
+
+      {isUnknown && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '14px 18px', marginBottom: '20px', fontSize: '0.85rem', color: '#92400e' }}>
+          ⚠️ 이 학생은 행동기록에 추정기능이 입력된 건이 없어 기능을 특정할 수 없습니다. 아래는 기능과 무관한 일반 후보군입니다 — 행동기록 입력 시 &ldquo;추정기능&rdquo; 항목을 채우면 이 추천이 더 정확해집니다.
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         {/* Prevent */}

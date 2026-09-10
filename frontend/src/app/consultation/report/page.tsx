@@ -41,7 +41,7 @@ export default function ConsultationReportPage() {
         return (
             <AuthCheck>
                 <AppShell
-                    currentPage="meeting"
+                    currentPage="consultation-report"
                     title="📑 학교행동중재지원팀 공식 협의록 출력"
                     subtitle="학교장 결재 및 보관용 A4 표준 인쇄 양식"
                     hideDateFilter={true}

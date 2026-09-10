@@ -93,6 +93,7 @@ export default function AppShell({
         {
             groupTitle: "기록 / 학생",
             items: [
+                { href: "/roster", label: "학생 명단", key: "roster", icon: "🏫" },
                 { href: "/behavior", label: "행동기록", key: "behavior", icon: "✍️" },
                 { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" },
                 { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
@@ -108,8 +109,17 @@ export default function AppShell({
             ]
         },
         {
+            groupTitle: "회의 / 협의록",
+            items: [
+                { href: "/meeting-minutes", label: "월별 정기회의록", key: "meeting-minutes", icon: "📋" },
+                { href: "/meeting", label: "협의회 에이전트", key: "meeting", icon: "🤝" },
+                { href: "/consultation/report", label: "공식 협의록 출력", key: "consultation-report", icon: "📑" }
+            ]
+        },
+        {
             groupTitle: "협업 / 도구",
             items: [
+                { href: "/board", label: "게시판", key: "board", icon: "💬" },
                 { href: "/picture-word", label: "경은그림말", key: "picture-word", icon: "🎨" }
             ]
         },

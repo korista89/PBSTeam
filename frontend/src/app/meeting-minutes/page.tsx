@@ -66,7 +66,7 @@ export default function MeetingMinutesPage() {
     return (
         <AuthCheck>
             <AppShell
-                currentPage="meeting"
+                currentPage="meeting-minutes"
                 title="📋 학교행동중재지원팀 월별 정기회의록"
                 subtitle={`데이터 기반 지원 협의 및 의사결정 보고서 (${startDate} ~ ${endDate})`}
                 headerActions={
