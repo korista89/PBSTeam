@@ -174,7 +174,8 @@ class LogMainAdapter:
 
         # 9. Safety Flags (Based on explicit safety fields and crisis records)
         raw_safety = str(
-            row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부")
+            row.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부")
+            or row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부")
             or row.get("물리적제지")
             or row.get("위기행동여부")
             or ""

@@ -297,7 +297,7 @@ def fetch_all_records(force_refresh: bool = False):
                         "입력교사명": str(row.get("입력교사명", row.get("교사명", row.get("입력자", "")))).strip(),
                         "타임스탬프": ts_val,
                         "특기사항": str(row.get("특기사항(기타)", row.get("특기사항", row.get("비고", row.get("기타", ""))))).strip(),
-                        "물리적제지여부": str(row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", row.get("물리적제지여부", row.get("분리지도 여부", row.get("물리적제지", ""))))).strip(),
+                        "물리적제지여부": str(row.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부", row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", row.get("물리적제지여부", row.get("분리지도 여부", row.get("물리적제지", "")))))).strip(),
                         "발생횟수": row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", row.get("발생횟수", row.get("발생빈도", 1))),
                         "Log_ID": log_id,
                         "Status": str(row.get("Status", "Approved")),
