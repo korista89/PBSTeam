@@ -187,8 +187,8 @@ class LogMainAdapter:
             self_injury="자해" in raw_safety or "본인상해" in raw_safety,
             injury_to_others="타인상해" in raw_safety,
             staff_injury="교사상해" in raw_safety or "지도사상해" in raw_safety or bool(injury_treatment),
-            physical_restraint="제지" in raw_safety or raw_safety.startswith("O") or "물리적제지(O)" in raw_safety,
-            separation_support="분리지도" in raw_safety or "3호" in raw_safety or "4호" in raw_safety,
+            physical_restraint=raw_safety == "방어 및 보호를 위한 제지" or "제지" in raw_safety or raw_safety.startswith("O") or "물리적제지(O)" in raw_safety,
+            separation_support=raw_safety == "개별학생교육지원" or "분리지도" in raw_safety or "3호" in raw_safety or "4호" in raw_safety,
             emergency_response="긴급" in raw_safety or "위기" in raw_safety or bool(admin_report)
         )
 

@@ -256,10 +256,26 @@ def fetch_all_records(force_refresh: bool = False):
                     name = str(row.get("학생명", row.get("이름", row.get("학생", "")))).strip()
                     code = str(row.get("학생코드", row.get("코드번호", row.get("코드", "")))).strip()
                     date_val = str(row.get("발생날짜", row.get("행동발생날짜", row.get("행동발생 날짜", row.get("날짜", ""))))).strip()
-                    time_val = str(row.get("시간대", row.get("시간대 (복수)", row.get("시간대(복수)", "")))).strip()
-                    behavior_type = str(row.get("행동유형", row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("주요행동유형", ""))))).strip()
+                    time_val = str(row.get("시간대(위기행동 시작 시간 기준)", row.get("시간대", row.get("시간대 (복수)", row.get("시간대(복수)", ""))))).strip()
+                    behavior_type = str(row.get("행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)", row.get("행동유형", row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("주요행동유형", "")))))).strip()
                     ts_val = str(row.get("타임스탬프", row.get("Timestamp", row.get("입력일", "")))).strip()
                     log_id = str(row.get("Log_ID", "")).strip()
+
+                    # 2026.9.10 폼 개편: O/X 2지선다이던 위기조치 문항이 4지선다(제지/개별학생교육지원/
+                    # 상해만발생/X)로 바뀌었다. 기존 코드 전체가 "O"로 시작하는지로 위기여부를 판단하므로,
+                    # 새 문항의 값을 여기서 그 컨벤션으로 정규화해 다른 파일을 일일이 고치지 않게 한다.
+                    _raw_action = str(row.get(
+                        "방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부",
+                        row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부",
+                                row.get("물리적제지여부", row.get("분리지도 여부", row.get("물리적제지", ""))))
+                    )).strip()
+                    _ACTION_TYPE_TO_OX = {
+                        "방어 및 보호를 위한 제지": "O(제지)",
+                        "개별학생교육지원": "O(개별학생교육지원)",
+                        "본인/타인상해만 발생": "O(상해발생)",
+                        "X - 보고서 작성 불필요": "X(보고서 작성 불필요)",
+                    }
+                    restraint_val = _ACTION_TYPE_TO_OX.get(_raw_action, _raw_action)
 
                     # Deduplicate across multiple worksheets
                     if log_id:
@@ -286,7 +302,7 @@ def fetch_all_records(force_refresh: bool = False):
                     mapped_row = {
                         "행동발생날짜": normalize_date_string(date_val),
                         "시간대": time_val,
-                        "장소": str(row.get("행동 발생 장소", row.get("행동발생장소", row.get("장소", "")))).strip(),
+                        "장소": str(row.get("행동 발생 장소(위기행동 시작 장소 기준)", row.get("행동 발생 장소", row.get("행동발생장소", row.get("장소", ""))))).strip(),
                         "강도": str(row.get("강도(1~5)", row.get("강도(1~5점 척도)", row.get("강도", "")))).strip(),
                         "행동유형": behavior_type,
                         "기능": str(row.get("추정기능(이번 행동을 통해 파악된 기능)", row.get("기능(이번 행동을 통해 파악된 기능)", row.get("기능", row.get("추정기능", ""))))).strip(),
@@ -297,7 +313,11 @@ def fetch_all_records(force_refresh: bool = False):
                         "입력교사명": str(row.get("입력교사명", row.get("교사명", row.get("입력자", "")))).strip(),
                         "타임스탬프": ts_val,
                         "특기사항": str(row.get("특기사항(기타)", row.get("특기사항", row.get("비고", row.get("기타", ""))))).strip(),
-                        "물리적제지여부": str(row.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부", row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", row.get("물리적제지여부", row.get("분리지도 여부", row.get("물리적제지", "")))))).strip(),
+                        "물리적제지여부": restraint_val,
+                        "제지유형_원문": _raw_action,
+                        "배경사건": str(row.get("배경사건 - 오늘 평소와 다른 점이 있었나요? (복수 선택 가능)", "")).strip(),
+                        "선행사건": str(row.get("선행사건 - 행동 직전에 무엇이 있었나요?   (복수 선택 가능)", "")).strip(),
+                        "후속결과": str(row.get("후속결과 - 행동 직후 무엇이 달라졌나요?   (복수 선택 가능)", "")).strip(),
                         "발생횟수": row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", row.get("발생횟수", row.get("발생빈도", 1))),
                         "Log_ID": log_id,
                         "Status": str(row.get("Status", "Approved")),

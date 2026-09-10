@@ -184,22 +184,32 @@ def normalize_location(raw: str) -> Dict[str, Any]:
     
     if "급식실" in cleaned or "식당" in cleaned:
         found_codes.append("급식실")
-    if "교실" in cleaned or "반" in cleaned:
+    if ("교실" in cleaned or "반" in cleaned) and "화장실" not in cleaned:
         found_codes.append("교실")
-    if "복도" in cleaned or "계단" in cleaned or "엘리베이터" in cleaned:
+    if "화장실" in cleaned:
+        found_codes.append("화장실")
+    if "복도" in cleaned or "계단" in cleaned or "엘리베이터" in cleaned or "로비" in cleaned:
         found_codes.append("복도·계단")
     if "강당" in cleaned or "체육관" in cleaned:
         found_codes.append("강당")
-    if "특별실" in cleaned or "음악실" in cleaned or "미술실" in cleaned or "과학실" in cleaned or "도서관" in cleaned or "컴퓨터실" in cleaned:
+    # 2026.9.10 폼 개편으로 늘어난 특별실 목록(시청각실/회의실/식품조리실/가정생활실/미래교육실/
+    # 세탁교육실/진로준비실/워크스테이션/VR실/경은마루 등)을 광범위 "특별실" 버킷에 포함.
+    if any(k in cleaned for k in [
+        "특별실", "음악실", "미술실", "과학실", "도서관", "컴퓨터실", "시청각실", "회의실",
+        "식품조리실", "가정생활실", "미래교육실", "세탁교육실", "진로준비실", "워크스테이션",
+        "VR1실", "VR2실", "경은마루"
+    ]):
         found_codes.append("특별실")
     if "심리안정실" in cleaned or "안정실" in cleaned:
         found_codes.append("심리안정실")
-    if "운동장" in cleaned or "놀이터" in cleaned:
+    if "운동장" in cleaned or "놀이터" in cleaned or "주차장" in cleaned:
         found_codes.append("운동장")
-    if "통학로" in cleaned or "오르막길" in cleaned or "교문" in cleaned or "등교" in cleaned or "스쿨버스" in cleaned:
+    if "통학로" in cleaned or "오르막길" in cleaned or "교문" in cleaned or "등교" in cleaned or "스쿨버스" in cleaned or "통학버스" in cleaned:
         found_codes.append("통학로")
     if "방과후" in cleaned or "늘봄" in cleaned:
         found_codes.append("방과후")
+    if cleaned.strip() == "집" or "가정" in cleaned:
+        found_codes.append("가정")
         
     if not found_codes:
         primary_code = "기타"
@@ -369,18 +379,24 @@ def compute_entry_lag(ts_str: str, occurred_date_str: str) -> Optional[int]:
 # 7. 임상 신호(교직원 상해, 배경사건, 심리안정실) 정밀 추출
 # ==============================================================================
 
-def extract_clinical_signals(text: str, restraint_val: str = "") -> Dict[str, Any]:
+def extract_clinical_signals(text: str, restraint_val: str = "", setting_event_categories: str = "") -> Dict[str, Any]:
     """
-    특기사항 텍스트 및 물리적 제지 필드에서 임상 핵심 신호 추출
+    특기사항 텍스트 및 물리적 제지 필드에서 임상 핵심 신호 추출.
+    setting_event_categories: 2026.9.10 폼 개편으로 추가된 "배경사건" 복수선택 문항의 원문
+    (예: "수면 부족, 늦은 등교") — 있으면 키워드 추정보다 우선하는 명시적 신호로 합친다.
     """
     t = str(text or "")
     r = str(restraint_val or "").strip().upper()
-    
+
     injury_keywords = ["깨물음", "물기", "물음", "발로 참", "발차기", "밀침", "할큄", "꼬집", "때림", "타격", "쇄골", "어깨 깨물"]
     has_staff_injury = any(k in t for k in injury_keywords)
-    
+
     setting_keywords = ["약을 안먹음", "약 안먹", "투약", "수면", "잠을 못", "배고픔", "식사 거부", "컨디션", "날씨", "가정사"]
     setting_events = [k for k in setting_keywords if k in t]
+    explicit_settings = [s.strip() for s in str(setting_event_categories or "").split(",") if s.strip() and s.strip() != "특이사항 없음"]
+    for s in explicit_settings:
+        if s not in setting_events:
+            setting_events.append(s)
     
     used_sensory_room = any(k in t for k in ["심리안정실", "안정실", "감각안정실"])
     sensory_room_success = used_sensory_room and any(s in t for s in ["진정", "웃으며", "복귀", "안정", "회복"])
@@ -414,7 +430,7 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     type_val = str(raw_row.get("behavior_type", raw_row.get("행동유형(핵심행동으로택1)", raw_row.get("행동유형", "")))).strip()
     int_val = str(raw_row.get("intensity", raw_row.get("강도(1~5)", raw_row.get("강도(1~5점 척도)", "1")))).strip()
     func_val = str(raw_row.get("function", raw_row.get("추정기능(이번 행동을 통해 파악된 기능)", raw_row.get("추정기능", "")))).strip()
-    restr_val = str(raw_row.get("restraint_report", raw_row.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부", raw_row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", raw_row.get("물리적제지", "X"))))).strip()
+    restr_val = str(raw_row.get("restraint_report", raw_row.get("물리적제지여부", raw_row.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부", raw_row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", raw_row.get("물리적제지", "X")))))).strip()
     freq_val = str(raw_row.get("frequency", raw_row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", raw_row.get("발생횟수", "1")))).strip()
     notes_val = str(raw_row.get("notes", raw_row.get("특기사항(기타)", raw_row.get("특기사항", "")))).strip()
     # The ordinary behavior form uses narrative ``특기사항(기타)`` rather than
@@ -455,7 +471,8 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     occ_norm = parse_occurrence(freq_val)
     beh_norm = normalize_behavior_type(type_val)
     lag_days = compute_entry_lag(ts_val, date_val)
-    signals = extract_clinical_signals(notes_val, restr_val)
+    setting_event_categories_val = str(raw_row.get("배경사건", "")).strip()
+    signals = extract_clinical_signals(notes_val, restr_val, setting_event_categories_val)
     
     try:
         intensity_num = int(re.search(r'\d+', int_val).group(1)) if re.search(r'\d+', int_val) else 1
