@@ -2,16 +2,24 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { AuthCheck } from "../../components/AuthProvider";
+import { useRouter } from "next/navigation";
+import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { maskName } from "../../utils";
 
 export default function ConsultationReportPage() {
+    const router = useRouter();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [dateRange, setDateRange] = useState({ start: "", end: "" });
     const [reportData, setReportData] = useState<any>(null);
     const { startDate: globalStart, endDate: globalEnd } = useDateRange();
+    // "3. 안건 및 논의 사항" 편집 — 백엔드는 이미 PATCH/POST meeting-notes API를 갖고 있으므로
+    // 여기서는 편집 UI만 얹는다. 초안이 없으면 새로 만들고, 있으면 가장 최근 것을 고쳐 쓴다.
+    const [editingAgenda, setEditingAgenda] = useState(false);
+    const [agendaDraft, setAgendaDraft] = useState("");
+    const [savingAgenda, setSavingAgenda] = useState(false);
 
     // 상단 전역 날짜 필터에서 보고 있던 기간을 그대로 이어받는다 — 예전 "월별 정기회의록"
     // 페이지처럼 매번 기간을 다시 고를 필요 없게 하기 위함. 전역 필터가 없으면 이번 달로.
@@ -74,6 +82,38 @@ export default function ConsultationReportPage() {
 
     const { dashboard, notes } = reportData;
     const today = new Date().toLocaleDateString('ko-KR');
+    const latestAgendaNote = notes && notes.length > 0 ? notes[0] : null;
+
+    const startEditAgenda = () => {
+        setAgendaDraft(latestAgendaNote?.content || "");
+        setEditingAgenda(true);
+    };
+
+    const saveAgenda = async () => {
+        setSavingAgenda(true);
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            if (latestAgendaNote?.id) {
+                await axios.patch(`${apiUrl}/api/v1/meeting-notes/${latestAgendaNote.id}`, { content: agendaDraft });
+            } else {
+                await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
+                    meeting_type: "tier1",
+                    date: new Date().toISOString().split('T')[0],
+                    content: agendaDraft,
+                    author: user?.name || user?.id || "",
+                    period_start: dateRange.start,
+                    period_end: dateRange.end,
+                });
+            }
+            const notesRes = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=tier1`);
+            setReportData((prev: any) => ({ ...prev, notes: notesRes.data.notes }));
+            setEditingAgenda(false);
+        } catch (e: any) {
+            alert("저장 실패: " + (e.response?.data?.detail || e.message));
+        } finally {
+            setSavingAgenda(false);
+        }
+    };
 
     return (
         <AuthCheck>
@@ -136,6 +176,9 @@ export default function ConsultationReportPage() {
                     <button onClick={() => window.print()} style={{ padding: '10px 20px', fontSize: '16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                         🖨️ 인쇄 / PDF 저장
                     </button>
+                    <button onClick={() => router.push('/meeting')} style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                        🤝 AI 초안 생성하러 가기
+                    </button>
                     <button onClick={() => setReportData(null)} style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px', backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                         뒤로 가기
                     </button>
@@ -190,22 +233,44 @@ export default function ConsultationReportPage() {
                         </tbody>
                     </table>
 
-                    <div className="section-title">3. 안건 및 논의 사항</div>
-                    <div className="content-box" style={{ minHeight: '300px' }}>
-                        {/* Auto-fill from meeting notes or AI summary if available */}
-                        {dashboard.ai_comment ? (
-                            <div>
-                                <strong>[AI 분석 요약]</strong>
-                                <br />
-                                {dashboard.ai_comment}
-                                <br /><br />
-                            </div>
-                        ) : "회의 내용이 없습니다."}
-
-                        <strong>[주요 논의 기록]</strong>
-                        <br />
-                        {notes && notes.length > 0 ? notes.map((n: any) => `[${n.date}] ${n.content}`).join('\n\n') : "(기록된 회의록 없음)"}
+                    <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>3. 안건 및 논의 사항</span>
+                        {!editingAgenda && (
+                            <button onClick={startEditAgenda} className="no-print" style={{ padding: '4px 12px', fontSize: '12px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                                ✏️ 편집
+                            </button>
+                        )}
                     </div>
+                    {editingAgenda ? (
+                        <div className="no-print">
+                            <textarea
+                                value={agendaDraft}
+                                onChange={e => setAgendaDraft(e.target.value)}
+                                style={{ width: '100%', minHeight: '260px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', lineHeight: 1.6, boxSizing: 'border-box' }}
+                                placeholder="이번 기간 안건 및 논의 사항을 입력하세요. /meeting에서 만든 AI 초안을 붙여넣어도 됩니다."
+                            />
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                <button onClick={saveAgenda} disabled={savingAgenda} className="btn btn-primary" style={{ padding: '8px 16px' }}>
+                                    {savingAgenda ? '저장 중...' : '💾 저장'}
+                                </button>
+                                <button onClick={() => setEditingAgenda(false)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>취소</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="content-box" style={{ minHeight: '300px' }}>
+                            {dashboard.ai_comment && (
+                                <div>
+                                    <strong>[AI 분석 요약]</strong>
+                                    <br />
+                                    {dashboard.ai_comment}
+                                    <br /><br />
+                                </div>
+                            )}
+                            <strong>[주요 논의 기록]</strong>
+                            <br />
+                            {latestAgendaNote ? latestAgendaNote.content : "(기록된 회의록 없음 — 위 \"편집\" 버튼으로 바로 작성하거나 \"AI 초안 생성하러 가기\"로 이동하세요.)"}
+                        </div>
+                    )}
                 </div>
 
                 <div className="page-break"></div>
