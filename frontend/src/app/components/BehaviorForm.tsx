@@ -168,7 +168,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     제지_경위: '', 제지_방법: '', 제지_사후조치_특기사항: '', 제지_법적의무_확인: '',
     // [개별학생교육지원 실시 학교장 보고서] — 1·2차 구분 없이 1회성으로 기록
     개별학생교육지원_시간: '', 개별학생교육지원_교사: '', 개별학생교육지원_경위: '',
-    개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '', 개별학생교육지원_법적의무_확인: '',
+    개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '',
+    개별학생교육지원_법적의무_확인: [] as string[],
     // [본인/타인 상해 발생 보고서]
     상해_대상자: '', 상해_경위: '', 상해_사후조치_특기사항: '', 상해_후속조치_확인: '',
     // 공통 발생 이후 조치사항
@@ -198,6 +199,17 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
   const handleCrisisChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setCrisisData({ ...crisisData, [e.target.name]: e.target.value });
+  };
+
+  // 개별학생교육지원 법적의무 확인 — 실제 구글폼이 "당일 학교장 보고 여부"/"당일 학부모
+  // 알림 여부" 두 항목을 체크박스(복수선택)로 받고 있어, 사이트도 같은 형식으로 맞춘다.
+  const toggleSupportLegalCheck = (opt: string) => {
+    setCrisisData(prev => ({
+      ...prev,
+      개별학생교육지원_법적의무_확인: prev.개별학생교육지원_법적의무_확인.includes(opt)
+        ? prev.개별학생교육지원_법적의무_확인.filter(o => o !== opt)
+        : [...prev.개별학생교육지원_법적의무_확인, opt]
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -240,13 +252,13 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           payload['[제지] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.제지_사후조치_특기사항;
           payload['[제지]  법적 의무 실행 여부 확인'] = crisisData.제지_법적의무_확인;
         } else if (formData.물리적제지여부 === '개별학생교육지원') {
-          payload['[개별학생교육지원] 개별학생교육지원 실시 시간'] = crisisData.개별학생교육지원_시간;
-          payload['[개별학생교육지원] 담당 교사'] = crisisData.개별학생교육지원_교사;
+          payload['[개별학생교육지원] 개별학생교육지원을 실시한 시간 (24시간대기준) - 예: 11:30~12:10 (30분)'] = crisisData.개별학생교육지원_시간;
+          payload['[개별학생교육지원] 개별학생교육지원을 담당한 교사'] = crisisData.개별학생교육지원_교사;
           payload['[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위'] = crisisData.개별학생교육지원_경위;
           payload['[개별학생교육지원] 개별학생교육지원 장소'] = crisisData.개별학생교육지원_장소_신규;
           payload['[개별학생교육지원] 개별학생교육지원 내용 및 회복 과정'] = crisisData.개별학생교육지원_내용_회복과정;
-          payload['[개별학생교육지원] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.개별학생교육지원_사후조치_특기사항;
-          payload['[개별학생교육지원]  법적 의무 실행 여부 확인'] = crisisData.개별학생교육지원_법적의무_확인;
+          payload['[개별학생교육지원] 부상자 치료, 가정학습 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.개별학생교육지원_사후조치_특기사항;
+          payload['[개별학생교육지원]  법적 의무 실행 여부 확인'] = crisisData.개별학생교육지원_법적의무_확인.join(', ');
         } else if (formData.물리적제지여부 === '본인/타인상해만 발생') {
           payload['[상해] 상해를 입은 사람'] = crisisData.상해_대상자;
           payload['[상해]  상해가 발생하게 된 경위'] = crisisData.상해_경위;
@@ -282,7 +294,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           발생시지도교사: '', 배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
           제지_경위: '', 제지_방법: '', 제지_사후조치_특기사항: '', 제지_법적의무_확인: '',
           개별학생교육지원_시간: '', 개별학생교육지원_교사: '', 개별학생교육지원_경위: '',
-          개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '', 개별학생교육지원_법적의무_확인: '',
+          개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '',
+          개별학생교육지원_법적의무_확인: [] as string[],
           상해_대상자: '', 상해_경위: '', 상해_사후조치_특기사항: '', 상해_후속조치_확인: '',
           부상자_치료_시간: '', 부상자_치료_내용: '', 관리자_보고_시간: '', 관리자_보고_내용: '',
           학부모_알림_시간: '', 학부모_알림_내용: '', 학생_상담_시간: '', 학생_상담_내용: '',
@@ -542,8 +555,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[개별학생교육지원 실시 학교장 보고서]</h4>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
-                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>실시 시간:</label>
-                    <input type="text" name="개별학생교육지원_시간" value={crisisData.개별학생교육지원_시간} onChange={handleCrisisChange} placeholder="예: 12:55~13:23" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
+                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>실시 시간 (24시간대기준):</label>
+                    <input type="text" name="개별학생교육지원_시간" value={crisisData.개별학생교육지원_시간} onChange={handleCrisisChange} placeholder="예: 11:30~12:10 (30분)" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 180 }}>
                     <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>장소:</label>
@@ -568,9 +581,9 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 </div>
                 <div>
                   <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>법적 의무 실행 여부 확인:</label>
-                  {['예', '아니오'].map(v => (
-                    <label key={v} style={{ marginRight: '16px' }}>
-                      <input type="radio" name="개별학생교육지원_법적의무_확인" value={v} checked={crisisData.개별학생교육지원_법적의무_확인 === v} onChange={handleCrisisChange} /> {v}
+                  {['당일 학교장 보고 여부 (법적 의무)', '당일 학부모 알림 여부 (법적 의무)'].map(opt => (
+                    <label key={opt} style={{ display: 'block', marginBottom: '4px' }}>
+                      <input type="checkbox" checked={crisisData.개별학생교육지원_법적의무_확인.includes(opt)} onChange={() => toggleSupportLegalCheck(opt)} /> {opt}
                     </label>
                   ))}
                 </div>
