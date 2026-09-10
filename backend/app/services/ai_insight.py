@@ -36,6 +36,108 @@ def _bounded_request_timeout(deadline: float, cap_seconds: float) -> Optional[tu
     return (connect_timeout, read_timeout)
 
 # ==============================================================================
+# PII 마스킹 — LLM(Gemini/Groq/로컬) 프롬프트 경계에서 학생 실명을 코드로 치환
+# ==============================================================================
+# 화면(교사용 UI)에는 실명이 남아도 되지만, 이 경계를 넘어 외부 LLM API로 나가는
+# 페이로드에는 학생 실명이 포함되면 안 된다 — Gemini 무료(AI Studio) 티어와 자체
+# 데이터 검토 정책, 그리고 국외 서버로의 민감정보(장애/행동 기록) 전송이라는
+# 개인정보보호법상 리스크 때문이다. 각 generate_* 함수가 프롬프트를 조립하기
+# 직전에 아래 헬퍼를 거치도록 한다. 화면 표시는 프론트의 maskName()이 이미 담당하므로
+# 여기서는 "외부로 나가는 페이로드에서 실명을 완전히 제거"만 책임진다.
+
+_NAME_KEYS = ("name", "student_name", "학생명", "이름")
+
+
+def _redact_dict_name(d: dict) -> dict:
+    """학생 1명을 나타내는 dict에서 실명 키를 학생코드로 치환한 얕은 복사본을 반환."""
+    if not isinstance(d, dict):
+        return d
+    code = d.get("code") or d.get("student_code") or d.get("학생코드") or d.get("StudentCode") or "UNKNOWN"
+    redacted = dict(d)
+    for key in _NAME_KEYS:
+        if key in redacted:
+            redacted[key] = code
+    return redacted
+
+
+def _redact_list_names(items) -> list:
+    """학생 dict 리스트에 _redact_dict_name을 일괄 적용."""
+    if not isinstance(items, list):
+        return items
+    return [_redact_dict_name(it) if isinstance(it, dict) else it for it in items]
+
+
+def _redact_log_names(logs) -> list:
+    """정규화된 행동로그 리스트에서 실명 필드(및 raw_* 원본 실명 컬럼)를 코드로 치환."""
+    if not isinstance(logs, list):
+        return logs
+    cleaned = []
+    for log in logs:
+        if not isinstance(log, dict):
+            cleaned.append(log)
+            continue
+        item = dict(log)
+        code = item.get("student_code") or item.get("학생코드") or "UNKNOWN"
+        for key in list(item.keys()):
+            if key in _NAME_KEYS or (key.startswith("raw_") and "명" in key):
+                item[key] = code
+        cleaned.append(item)
+    return cleaned
+
+
+def _redact_contagion_names(contagion_data: dict) -> dict:
+    """또래 전염 그래프(nodes/edges/co_occurrence_clusters)는 학생 실명을 키/값으로
+    쓰므로(analyze_peer_contagion이 name을 1차 식별자로 사용) 전용 로직으로
+    이름→코드 매핑을 만들어 치환한다."""
+    if not isinstance(contagion_data, dict):
+        return contagion_data
+
+    nodes = contagion_data.get("nodes") or []
+    name_to_code = {}
+    redacted_nodes = []
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        code = n.get("code") or n.get("name") or "UNKNOWN"
+        name_to_code[n.get("name")] = code
+        nn = dict(n)
+        nn["name"] = code
+        redacted_nodes.append(nn)
+
+    redacted_edges = []
+    for e in contagion_data.get("edges") or []:
+        if not isinstance(e, dict):
+            continue
+        ee = dict(e)
+        ee["source"] = name_to_code.get(ee.get("source"), ee.get("source"))
+        ee["reactor"] = name_to_code.get(ee.get("reactor"), ee.get("reactor"))
+        redacted_edges.append(ee)
+
+    redacted = dict(contagion_data)
+    redacted["nodes"] = redacted_nodes
+    redacted["edges"] = redacted_edges
+    if "co_occurrence_clusters" in contagion_data:
+        redacted_clusters = []
+        for c in contagion_data.get("co_occurrence_clusters") or []:
+            if not isinstance(c, dict):
+                continue
+            cc = dict(c)
+            cc["students"] = [name_to_code.get(s, s) for s in (c.get("students") or [])]
+            redacted_clusters.append(cc)
+        redacted["co_occurrence_clusters"] = redacted_clusters
+    return redacted
+
+
+# section_type 값이 "학생별" 데이터를 나르는 경우만 골라 redact한다. time/location/type/
+# intensity/function 같은 집계 차트는 "name"이 학생이 아니라 차트 카테고리 라벨이므로
+# 여기서 건드리면 안 된다(예: "신체적공격" 같은 행동유형 이름).
+_STUDENT_KEYED_SECTIONS = {
+    "tier_upgrade_candidates", "cico_performance",
+    "tier3_student_freq", "tier3_decision_dist", "tier3_intensity_compare",
+}
+
+
+# ==============================================================================
 # §1. 모든 AI 버튼 공통 BCBA 임상 시스템 프롬프트 (Common System Prompt)
 # ==============================================================================
 
@@ -171,13 +273,15 @@ def _ensure_bip_output_contract(
 
 def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> Optional[str]:
     """Call Local LLM endpoint (LM Studio on :1234 or Cloudflare Tunnel or Ollama) with Gemma 4 E4B."""
-    # The user explicitly prefers waiting up to three minutes for the local
-    # model. The deployed function is configured for a five-minute ceiling so
-    # the cloud fallback still has time after this local-model window.
-    deadline = time.monotonic() + 180
+    is_serverless = _is_serverless_runtime()
+    # On a real local dev machine, the user explicitly prefers waiting up to
+    # three minutes for the local model. On the deployed serverless function
+    # we only ever get here when a tunnel URL was explicitly configured, and
+    # a dead tunnel must fail fast rather than hold the request/thread open.
+    deadline = time.monotonic() + (20 if is_serverless else 180)
     raw_url = os.getenv("LOCAL_LLM_URL", "").strip()
     configured_model = os.getenv("LOCAL_LLM_MODEL", "").strip()
-    
+
     # URL 후보 목록 구성 (반드시 /v1 경로로 정규화)
     v1_urls = []
     if raw_url:
@@ -185,14 +289,16 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
         if not clean.endswith("/v1"):
             clean = f"{clean}/v1"
         v1_urls.append(clean)
-            
-    # 로컬 기본 URL 추가
-    v1_urls.extend([
-        "http://localhost:1234/v1",
-        "http://127.0.0.1:1234/v1",
-        "http://localhost:11434/v1",
-        "http://127.0.0.1:11434/v1"
-    ])
+
+    # localhost/127.0.0.1 fallbacks only make sense when this code is
+    # actually running on the same machine as the local model.
+    if not is_serverless:
+        v1_urls.extend([
+            "http://localhost:1234/v1",
+            "http://127.0.0.1:1234/v1",
+            "http://localhost:11434/v1",
+            "http://127.0.0.1:11434/v1"
+        ])
     
     # 중복 제거
     seen = set()
@@ -261,8 +367,8 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
         except Exception:
             continue
             
-    # 2. Ollama 네이티브 API (:11434/api/chat)
-    ollama_candidates = ["http://localhost:11434", "http://127.0.0.1:11434"]
+    # 2. Ollama 네이티브 API (:11434/api/chat) — localhost only reachable off-serverless
+    ollama_candidates = [] if is_serverless else ["http://localhost:11434", "http://127.0.0.1:11434"]
     for o_url in ollama_candidates:
         if _remaining_seconds(deadline) < 2:
             break
@@ -444,10 +550,26 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> str:
-    """Primary LLM dispatcher: tries Local Ollama/LM Studio first, falls back to Gemini API."""
-    ollama_result = _call_ollama(system_prompt, user_prompt, max_tokens)
-    if ollama_result:
-        return ollama_result
+    """Primary LLM dispatcher: tries Local Ollama/LM Studio first, falls back to Gemini API.
+
+    On the deployed serverless function, 'localhost' never reaches the
+    teacher's PC, and an offline Cloudflare Tunnel makes every candidate URL
+    hang until its connect/read timeout. That previously blocked AI-insight
+    requests for up to ~3 minutes before falling back to Gemini. In
+    production we only attempt the local/tunnel model when an explicit,
+    non-localhost LOCAL_LLM_URL is configured (i.e. a tunnel the operator
+    deliberately turned on), and we cap that attempt tightly so a dead
+    tunnel fails fast instead of eating the request budget.
+    """
+    should_try_local = True
+    if _is_serverless_runtime():
+        raw_url = os.getenv("LOCAL_LLM_URL", "").strip().lower()
+        should_try_local = bool(raw_url) and "localhost" not in raw_url and "127.0.0.1" not in raw_url
+
+    if should_try_local:
+        ollama_result = _call_ollama(system_prompt, user_prompt, max_tokens)
+        if ollama_result:
+            return ollama_result
     return _call_gemini(system_prompt, user_prompt, max_tokens)
 
 
@@ -479,12 +601,11 @@ def generate_bcba_comprehensive_analysis(
     
     risk_lines = []
     for r in risk_list[:5]:
-        name = r.get('name', r.get('학생명', 'N/A'))
         code = r.get('code', r.get('학생코드', 'N/A'))
         cnt = r.get('count', 0)
         avg_int = r.get('avg_intensity', 0.0)
         restr_cnt = r.get('restraint_count', 0)
-        risk_lines.append(f"- 학생 {code}({name}): 총 {cnt}건(전체 {total_incidents}건 중 {round(cnt/total_incidents*100,1) if total_incidents else 0}%), 평균강도 {avg_int}/5, 물리적제지(O) {restr_cnt}회")
+        risk_lines.append(f"- 학생 {code}: 총 {cnt}건(전체 {total_incidents}건 중 {round(cnt/total_incidents*100,1) if total_incidents else 0}%), 평균강도 {avg_int}/5, 물리적제지(O) {restr_cnt}회")
     risk_text = "\n".join(risk_lines) if risk_lines else "고위험군 학생 없음"
 
     prompt = f"""[분석 대상 데이터: 경은학교 SW-PBIS 전교 현황]
@@ -563,7 +684,10 @@ def generate_bcba_section_analysis(
     """
     raw_summary = raw_summary or {}
     quality_report = quality_report or {}
-    data_str = json.dumps(chart_data, ensure_ascii=False, indent=2)
+    chart_data_for_prompt = (
+        _redact_list_names(chart_data) if section_type in _STUDENT_KEYED_SECTIONS else chart_data
+    )
+    data_str = json.dumps(chart_data_for_prompt, ensure_ascii=False, indent=2)
 
     # 차트 자체에 표시할 데이터가 없는 상태(빈 배열 또는 전부 0건)에서는 LLM에 일반론적인
     # 조언을 지어내게 하지 말고, 데이터가 없다는 사실만 명확히 안내한다.
@@ -673,7 +797,7 @@ def generate_bcba_section_analysis(
                 rc = str(r.get("학생코드", r.get("코드번호", ""))).strip()
                 if rc in codes:
                     full_logs.append(normalize_behavior_log(r, tier_info_map))
-        logs_str = json.dumps(full_logs[-150:], ensure_ascii=False, indent=2)
+        logs_str = json.dumps(_redact_log_names(full_logs[-150:]), ensure_ascii=False, indent=2)
 
         prompt = f"""[분석 영역: {target_tier} 상향 검토 대상자 선정 근거 분석]
 [검토 대상자 요약]
@@ -830,7 +954,6 @@ def _build_cico_summary_payload(
 
     for s in students_data:
         code = str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()
-        name = str(s.get("name") or s.get("student_name") or "").strip()
         class_name = str(s.get("class") or s.get("class_name") or "").strip()
         target_behavior = str(s.get("target_behavior") or s.get("목표행동") or "").strip()
         goal_str = str(s.get("goal") or s.get("목표달성기준") or "80% 이상").strip()
@@ -935,7 +1058,6 @@ def _build_cico_summary_payload(
 
         student_summaries.append({
             "code": code,
-            "name": name,
             "class": class_name,
             "target": target_behavior,
             "goal": goal_str,
@@ -1177,7 +1299,7 @@ def _build_student_summary_payload(
     all_notes: list = None,
 ) -> dict:
     """Build the current narrative-first FBA evidence payload."""
-    return build_fba_evidence_summary(student_info, student_logs, all_notes)
+    return build_fba_evidence_summary(_redact_dict_name(student_info), student_logs, all_notes)
 
 
 def _build_tier3_summary_payload(
@@ -1326,7 +1448,6 @@ def _build_tier3_summary_payload(
     for s in tier3_students:
         t3_roster_summary.append({
             "code": s.get("code") or s.get("학생코드") or "",
-            "name": s.get("name") or s.get("학생명") or "",
             "class": s.get("class") or s.get("학급") or "",
             "crisis_count": s.get("total_crisis_count", s.get("위기행동건수", 0)),
             "avg_intensity": s.get("avg_intensity", s.get("평균강도", 0.0)),
@@ -1415,7 +1536,7 @@ def generate_bcba_meeting_minutes(
     SST 회의록: 공문서 규격 개조식 + 4단 안건 구조 + 다학제 역할 분담 + 보호자 지원 분리
     """
     m_info = json.dumps(meeting_data, ensure_ascii=False, separators=(',', ':'))
-    r_info = json.dumps(risk_students, ensure_ascii=False, separators=(',', ':'))
+    r_info = json.dumps(_redact_list_names(risk_students), ensure_ascii=False, separators=(',', ':'))
 
     prompt = f"""[회의 기본 정보]
 {m_info}
@@ -1552,7 +1673,7 @@ def generate_bip_hypothesis(
     if not gate["eligible"]:
         return gate["notice"]
 
-    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
 [표적행동] {target_behavior}
 [시간대·장소 등 맥락 데이터] {antecedent_data}
 [교사 추정기능 및 특기사항(기타) 서술] {function_data} / {notes_summary}
@@ -1582,7 +1703,7 @@ def generate_bip_strategies(
     """
     BIP Step 6 전략 제안: 3단계 구조 + 기능 1:1 매칭 + 대체행동 3요건 표 + 교내 자원(AAC/마트/안정실) 연계
     """
-    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
 [표적행동 및 가설] {target_behavior} / {hypothesis_data}
 [추정 기능] {function_data}
 
@@ -1630,8 +1751,13 @@ def generate_full_bip(
 
     mode = "compact" if mode == "compact" else "detailed"
     evidence_summary = evidence_summary or build_fba_evidence_summary(
-        student_info, behavior_logs
+        _redact_dict_name(student_info), behavior_logs
     )
+    # evidence_summary may arrive pre-built by a caller that used an
+    # un-redacted student_info (e.g. bip.py endpoints) — strip its embedded
+    # student_profile.name too, regardless of where it came from.
+    if isinstance(evidence_summary, dict) and isinstance(evidence_summary.get("student_profile"), dict):
+        evidence_summary = {**evidence_summary, "student_profile": _redact_dict_name(evidence_summary["student_profile"])}
     evidence_json = json.dumps(evidence_summary, ensure_ascii=False, separators=(",", ":"))
 
     if mode == "compact":
@@ -1647,7 +1773,7 @@ def generate_full_bip(
 - 전문용어는 쉬운 뜻을 함께 쓰며 전체 분량은 약 3,200자 이내로 제한한다."""
 
     prompt = f"""[출력 목적] {"FBA/BIP관리의 짧은 AI 초안" if mode == "compact" else "AI BIP 제안 받기의 쉽고 상세한 제안"}
-[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
 [위기행동 전체 근거 요약] {evidence_json}
 [기존 표적행동 요약] {target_behavior}
 [기존 잠정 기능가설] {hypothesis_data}
@@ -1745,7 +1871,7 @@ def generate_data_based_decision_recommendation(
     설정 기간 데이터 + 현재 BIP + 개별화교육지원팀 협의 내용(충실도 포함)을 종합하여
     데이터기반 의사결정(DBDM) 제안을 생성한다.
     """
-    prompt = f"""[학생 정보] {json.dumps(student_info, ensure_ascii=False)}
+    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
 
 [현재 설정 기간 행동 데이터 요약]
 {period_data}
@@ -1786,7 +1912,7 @@ def generate_peer_contagion_analysis(contagion_data: dict) -> str:
     """
     학급 또래 행동 전염 분석: 촉발원-반응자 관계, 청각 자극 매개, 학급 환경 중재안
     """
-    c_str = json.dumps(contagion_data, ensure_ascii=False, indent=2)
+    c_str = json.dumps(_redact_contagion_names(contagion_data), ensure_ascii=False, indent=2)
     
     prompt = f"""[학급 또래 행동 전염 및 상호작용 데이터]
 {c_str}
