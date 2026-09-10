@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from typing import Optional, List, Dict, Any
-from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records
+from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records, clear_cache, normalize_date_string
 from app.core.config import settings
-from app.api.deps import require_authenticated_user, require_admin, check_student_scope
+from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
+from app.adapters.sheets.tier_status import TierStatusAdapter
 import uuid
 import datetime
 
@@ -21,7 +22,7 @@ def submit_behavior_log(
     if student_identifier:
         check_student_scope(student_identifier, current_user)
 
-    from app.services.sheets import get_main_worksheet, clear_cache
+    from app.services.sheets import get_main_worksheet
     log_main_ws = get_main_worksheet()
     if not log_main_ws:
         raise HTTPException(status_code=500, detail="Cannot access Google Sheets behavior worksheet")
@@ -213,5 +214,62 @@ def get_pending_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
     """
     records = fetch_all_records(force_refresh=False)
     pending_logs = [r for r in records if r.get("Status") == "Pending"]
-        
+
     return {"success": True, "logs": pending_logs}
+
+
+@router.get("/logs")
+def get_all_logs(
+    q: Optional[str] = Query(None, description="학생명/코드/교사명/행동유형/특기사항 검색어"),
+    status: Optional[str] = Query(None, description="Status 필터 (Pending/Approved/Revision Requested)"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """
+    전체 행동기록 원자료 조회/검색. 관리자는 전교 전체, 교사는 담임 학급 학생만 반환한다.
+    """
+    records = fetch_all_records(force_refresh=False)
+
+    # 코드→학급 매핑을 한 번만 만들어 재사용 (레코드마다 전체 명단을 다시 스캔하지 않도록)
+    students = TierStatusAdapter.fetch_students()
+    code_to_class = {s.student_code.strip(): normalize_class_identifier(s.class_name) for s in students}
+
+    role = str(current_user.get("role", "")).lower()
+    if role not in ["admin", "superadmin"]:
+        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        records = [
+            r for r in records
+            if code_to_class.get(str(r.get("학생코드") or r.get("코드번호") or "").strip()) == user_class
+        ]
+
+    if status and status != "전체":
+        records = [r for r in records if str(r.get("Status", "")) == status]
+
+    if start_date and end_date:
+        sd = normalize_date_string(start_date)
+        ed = normalize_date_string(end_date)
+        records = [
+            r for r in records
+            if sd <= normalize_date_string(r.get("행동발생날짜", "")) <= ed
+        ]
+
+    if q:
+        q_lower = q.strip().lower()
+
+        def _matches(r: dict) -> bool:
+            fields = [
+                r.get("학생명", ""), r.get("학생코드", ""), r.get("코드번호", ""),
+                r.get("입력교사명", ""), r.get("행동유형", ""), r.get("특기사항", ""),
+            ]
+            return any(q_lower in str(f).lower() for f in fields)
+
+        records = [r for r in records if _matches(r)]
+
+    for r in records:
+        code = str(r.get("학생코드") or r.get("코드번호") or "").strip()
+        r["학급"] = code_to_class.get(code, "")
+
+    records = sorted(records, key=lambda r: str(r.get("타임스탬프", "")), reverse=True)
+
+    return {"logs": records, "total": len(records)}

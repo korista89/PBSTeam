@@ -111,6 +111,12 @@ export default function StudentDetail() {
             >
               📝 개별화행동지원계획 (BIP)
             </button>
+            <button
+              onClick={() => router.push(`/logs?q=${encodeURIComponent(profile.student_code || studentName)}`)}
+              className="btn btn-secondary"
+            >
+              🗂️ 전체 로그에서 보기
+            </button>
             <button onClick={() => router.back()} className="btn btn-secondary">
               ← 뒤로가기
             </button>

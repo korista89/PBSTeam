@@ -588,39 +588,6 @@ export default function BIPEditor() {
                 }
             >
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                    {/* BIP Fields 1-11 */}
-                    {BIP_FIELDS.map((field) => (
-                        <div key={field.key} style={{
-                            marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px',
-                            border: '1px solid #e2e8f0', overflow: 'hidden',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
-                        }}>
-                            <div style={{
-                                padding: '10px 16px', backgroundColor: field.color + '10',
-                                borderBottom: `2px solid ${field.color}`,
-                                display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
-                            }}>
-                                <span style={{
-                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                    width: '24px', height: '24px', backgroundColor: field.color,
-                                    color: 'white', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold'
-                                }}>
-                                    {field.num}
-                                </span>
-                                <h3 style={{ margin: 0, color: field.color, fontSize: '1rem', fontWeight: '600' }}>
-                                    {field.title}
-                                </h3>
-                            </div>
-                            <div style={{ padding: '12px 16px' }}>
-                                <AutoTextarea
-                                    value={bip[field.key] as string}
-                                    onChange={(v) => handleChange(field.key, v)}
-                                    placeholder={field.placeholder}
-                                />
-                            </div>
-                        </div>
-                    ))}
-
                     {/* EBP 구조화 선택 & 위기행동지원절차 */}
                     <div>
                         <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
@@ -788,6 +755,39 @@ export default function BIPEditor() {
                             </div>
                         )}
                     </div>
+
+                    {/* BIP Fields 1-11 */}
+                    {BIP_FIELDS.map((field) => (
+                        <div key={field.key} style={{
+                            marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px',
+                            border: '1px solid #e2e8f0', overflow: 'hidden',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+                        }}>
+                            <div style={{
+                                padding: '10px 16px', backgroundColor: field.color + '10',
+                                borderBottom: `2px solid ${field.color}`,
+                                display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
+                            }}>
+                                <span style={{
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    width: '24px', height: '24px', backgroundColor: field.color,
+                                    color: 'white', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold'
+                                }}>
+                                    {field.num}
+                                </span>
+                                <h3 style={{ margin: 0, color: field.color, fontSize: '1rem', fontWeight: '600' }}>
+                                    {field.title}
+                                </h3>
+                            </div>
+                            <div style={{ padding: '12px 16px' }}>
+                                <AutoTextarea
+                                    value={bip[field.key] as string}
+                                    onChange={(v) => handleChange(field.key, v)}
+                                    placeholder={field.placeholder}
+                                />
+                            </div>
+                        </div>
+                    ))}
 
                     {/* Footer info */}
                     <div style={{

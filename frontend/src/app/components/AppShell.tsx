@@ -94,6 +94,7 @@ export default function AppShell({
             groupTitle: "기록 / 학생",
             items: [
                 { href: "/behavior", label: "행동기록", key: "behavior", icon: "✍️" },
+                { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" },
                 { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
                 { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },
                 { href: "/cico", label: "CICO 관리", key: "cico", icon: "📝" }
@@ -214,10 +215,9 @@ export default function AppShell({
                         </div>
                         <button
                             onClick={logout}
-                            title="로그아웃"
-                            style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.9rem", padding: "4px" }}
+                            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0", cursor: "pointer", fontSize: "0.72rem", fontWeight: 700, padding: "6px 10px", borderRadius: "6px", flexShrink: 0 }}
                         >
-                            🚪
+                            로그아웃
                         </button>
                     </div>
                 </div>

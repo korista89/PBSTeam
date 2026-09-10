@@ -82,9 +82,14 @@ export default function AdminApprovalsPage() {
         subtitle={`대기 중인 위기행동 보고서: ${logs.length}건`}
         hideDateFilter={true}
         headerActions={
-          <button onClick={() => void fetchPendingLogs()} className="btn btn-secondary">
-            🔄 새로고침
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <a href="/logs" className="btn btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              🗂️ 전체 로그 보기
+            </a>
+            <button onClick={() => void fetchPendingLogs()} className="btn btn-secondary">
+              🔄 새로고침
+            </button>
+          </div>
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
