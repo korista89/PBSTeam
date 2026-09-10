@@ -123,9 +123,9 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
                 ))}
             </div>
 
-            {log.crisis_details && (
+            {(log.crisis_details || log.form_report_details) && (
                 <div style={{ marginTop: "16px" }}>
-                    <CrisisDetailPanel crisisDetails={log.crisis_details} isCrisis={isCrisis} />
+                    <CrisisDetailPanel crisisDetails={log.crisis_details} formReportDetails={log.form_report_details} isCrisis={isCrisis} />
                 </div>
             )}
         </div>

@@ -148,11 +148,12 @@ export default function AdminApprovalsPage() {
                   <strong>특기사항: </strong> {log['특기사항']}
                 </div>
 
-                {log.crisis_details && (
+                {(log.crisis_details || log.form_report_details) && (
                   <div>
                     <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #ccc', paddingBottom: '5px' }}>보고서 상세 내용</h4>
                     <CrisisDetailPanel
                       crisisDetails={log.crisis_details}
+                      formReportDetails={log.form_report_details}
                       isCrisis={String(log['물리적제지여부'] || '').startsWith('O')}
                     />
                   </div>

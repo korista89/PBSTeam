@@ -76,7 +76,7 @@ export default function StudentDetail() {
     if (!studentCode) return;
     axios.get(`${apiUrl}/api/v1/behavior-log/timeline/${encodeURIComponent(studentCode)}`)
       .then(res => {
-        const logs = (res.data?.logs || []).filter((l: any) => l.crisis_details);
+        const logs = (res.data?.logs || []).filter((l: any) => l.crisis_details || l.form_report_details);
         logs.sort((a: any, b: any) => String(b.타임스탬프 || "").localeCompare(String(a.타임스탬프 || "")));
         setCrisisLogs(logs);
       })
@@ -179,7 +179,7 @@ export default function StudentDetail() {
                     const logId = log.Log_ID || String(i);
                     const isExpanded = expandedCrisisId === logId;
                     const isCrisis = String(log["물리적제지여부"] || "").startsWith("O");
-                    const missingLegal = isCrisis && (
+                    const missingLegal = isCrisis && !!log.crisis_details && (
                       !String(log.crisis_details["관리자_보고_시간"] || "").trim() ||
                       !String(log.crisis_details["학부모_알림_시간"] || "").trim()
                     );
@@ -197,7 +197,7 @@ export default function StudentDetail() {
                         </div>
                         {isExpanded && (
                           <div style={{ marginTop: '12px' }}>
-                            <CrisisDetailPanel crisisDetails={log.crisis_details} isCrisis={isCrisis} />
+                            <CrisisDetailPanel crisisDetails={log.crisis_details} formReportDetails={log.form_report_details} isCrisis={isCrisis} />
                           </div>
                         )}
                       </div>
