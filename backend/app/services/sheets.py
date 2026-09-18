@@ -3534,27 +3534,34 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
         if not s_df.empty and 'date_obj' in s_df.columns:
             s_copy = s_df.copy().dropna(subset=['date_obj'])
             if not s_copy.empty:
-                s_copy['week'] = s_copy['date_obj'].dt.isocalendar().week.astype(int)
-                s_copy['year'] = s_copy['date_obj'].dt.year
+                # ISO 연도를 써야 all_weeks_in_range(isocalendar 기준) 키와 연말·연초에도 일치한다
+                iso_cal = s_copy['date_obj'].dt.isocalendar()
+                s_copy['week'] = iso_cal.week.astype(int)
+                s_copy['year'] = iso_cal.year.astype(int)
                 # Row count per week (보고빈도)
                 w_counts = s_copy.groupby(['year', 'week']).size().reset_index(name='count')
                 w_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['count']) for _, r in w_counts.iterrows()}
 
                 # Sum of 발생빈도 per week
+                # fetch_all_records()는 폼 문항을 '발생횟수' 키로 정규화한다. 예전엔 여기서 존재하지 않는
+                # '발생빈도' 컬럼을 찾아 주별 합계가 항상 비어 차트가 0으로만 그려졌다.
                 f_counts_dict = {}
-                if '발생빈도' in s_copy.columns:
-                    def _extract_val(v):
-                        if pd.isna(v) or v == '': return 1
-                        try:
-                            match = re.search(r'(\d+)', str(v))
-                            return int(match.group(1)) if match else 1
-                        except SheetUnavailable:
-                            raise
-                        except Exception:
-                            return 1
-                    s_copy['발생빈도_num'] = s_copy['발생빈도'].apply(_extract_val)
-                    f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
-                    f_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['freq']) for _, r in f_counts.iterrows()}
+                freq_col = next((c for c in ('발생횟수', '발생빈도') if c in s_copy.columns), None)
+                if freq_col is None:
+                    s_copy['발생횟수'] = 1
+                    freq_col = '발생횟수'
+                def _extract_val(v):
+                    if pd.isna(v) or v == '': return 1
+                    try:
+                        match = re.search(r'(\d+)', str(v))
+                        return int(match.group(1)) if match else 1
+                    except SheetUnavailable:
+                        raise
+                    except Exception:
+                        return 1
+                s_copy['발생빈도_num'] = s_copy[freq_col].apply(_extract_val)
+                f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
+                f_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['freq']) for _, r in f_counts.iterrows()}
 
                 if all_weeks_in_range and w_counts_dict:
                     # X축 시작: 기간 내 해당 학생의 최초 행동 발생 주차
