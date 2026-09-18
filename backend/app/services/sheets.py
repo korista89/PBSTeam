@@ -4211,7 +4211,7 @@ def delete_holiday(date_str):
 # Class Rules & School-wide Token Economy
 # =============================
 def ensure_class_rules_sheet():
-    """Ensure 'ClassRules' sheet exists (3 rows per class: 스스로/바르게/안전하게)."""
+    """Ensure 'ClassRules' sheet exists (학급당 기대행동 1행)."""
     client = get_sheets_client()
     if not client: return None
     try:
@@ -4242,7 +4242,7 @@ def get_class_rules(class_id: str) -> list:
         return []
 
 def save_class_rules(class_id: str, rules: list, author: str = ""):
-    """rules: list of up to 3 {category, text, source_id} dicts. Replaces all existing rows for this class."""
+    """rules: [{category, text, source_id}] (학급 기대행동 1개). Replaces all existing rows for this class."""
     ws = ensure_class_rules_sheet()
     if not ws: return {"error": "Sheet access failed"}
     clean = str(class_id).strip()
@@ -4262,8 +4262,18 @@ def save_class_rules(class_id: str, rules: list, author: str = ""):
         return {"error": str(e)}
 
 
+TOKEN_BOARD_HEADERS = ["StudentCode", "ClassID", "TokenCount", "ExchangedCount", "UpdatedAt", "Bills", "UsedCount", "Wish"]
+TOKENS_PER_BILL = 10   # 100원 토큰 10개 = 1000원 1장
+MAX_BILLS = 5          # 학생이 보관할 수 있는 1000원 최대 장수
+_token_board_header_ok = False  # 헤더 확인은 프로세스당 한 번만(읽기 할당량 절약)
+
+
 def ensure_token_board_sheet():
-    """Ensure 'TokenBoard' sheet exists (one row per student, running token tally)."""
+    """Ensure 'TokenBoard' sheet exists (one row per student, running token tally).
+
+    Bills = 보관 중인 1000원권의 발행월 목록("2026-09,2026-10"), UsedCount = 누적 사용 장수.
+    예전 5열 시트는 헤더만 뒤에 덧붙여 확장한다(기존 행은 그대로 둔다).
+    """
     client = get_sheets_client()
     if not client: return None
     try:
@@ -4271,14 +4281,52 @@ def ensure_token_board_sheet():
         try:
             ws = sheet.worksheet("TokenBoard")
         except gspread.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="TokenBoard", rows=300, cols=5)
-            ws.append_row(["StudentCode", "ClassID", "TokenCount", "ExchangedCount", "UpdatedAt"])
+            ws = sheet.add_worksheet(title="TokenBoard", rows=300, cols=len(TOKEN_BOARD_HEADERS))
+            ws.append_row(TOKEN_BOARD_HEADERS)
+            return ws
+        global _token_board_header_ok
+        if _token_board_header_ok:
+            return ws
+        header = ws.row_values(1)
+        if header[:len(TOKEN_BOARD_HEADERS)] != TOKEN_BOARD_HEADERS:
+            if ws.col_count < len(TOKEN_BOARD_HEADERS):
+                ws.add_cols(len(TOKEN_BOARD_HEADERS) - ws.col_count)
+            ws.update(range_name="A1", values=[TOKEN_BOARD_HEADERS])
+        _token_board_header_ok = True
         return ws
     except SheetUnavailable:
         raise
     except Exception as e:
         print(f"Error checking TokenBoard sheet: {e}")
         return None
+
+
+def parse_token_board_row(r: dict) -> dict:
+    """시트 한 행 → 토큰판 상태. UsedCount가 빈 행은 확장 전 기록이므로
+    누적 교환 장수(최대 5장)를 마지막 수정월 발행분으로 보관 중인 것으로 본다."""
+    def _int(v):
+        try:
+            return int(v or 0)
+        except (TypeError, ValueError):
+            return 0
+    token_count = _int(r.get("TokenCount"))
+    exchanged = _int(r.get("ExchangedCount"))
+    used_raw = str(r.get("UsedCount", "")).strip()
+    if used_raw == "":
+        month = str(r.get("UpdatedAt", ""))[:7] or now_kst().strftime("%Y-%m")
+        bills = [month] * min(exchanged, MAX_BILLS)
+        used = 0
+    else:
+        bills = [b.strip() for b in str(r.get("Bills", "")).split(",") if b.strip()][:MAX_BILLS]
+        used = _int(used_raw)
+    return {
+        "token_count": min(max(token_count, 0), TOKENS_PER_BILL),
+        "exchanged_count": exchanged,
+        "bills": bills,
+        "used_count": used,
+        "wish": str(r.get("Wish", "") or ""),
+    }
+
 
 def get_token_board(class_id: str) -> list:
     ws = ensure_token_board_sheet()
@@ -4293,46 +4341,88 @@ def get_token_board(class_id: str) -> list:
         print(f"Error getting token board: {e}")
         return []
 
-def award_token(student_code: str, class_id: str, category: str, delta: int, author: str = ""):
-    """
-    Adds `delta` tokens to a student's board (토큰 1개 = 100원).
-    Every 10 tokens (=1000원) auto-converts into ExchangedCount and TokenCount wraps around.
-    """
+
+def _update_token_board(student_code: str, class_id: str, mutate):
+    """학생 한 명의 토큰판 행을 읽어 mutate(state)로 바꾼 뒤 그 행만 덮어쓴다."""
     ws = ensure_token_board_sheet()
     if not ws: return {"error": "Sheet access failed"}
     clean_code = str(student_code).strip()
     clean_class = str(class_id).strip()
     try:
         records = safe_get_all_records(ws)
-        row_idx = None
-        cur_count, cur_exchanged = 0, 0
+        row_idx, state = None, parse_token_board_row({})
         for i, r in enumerate(records):
             if str(r.get("StudentCode", "")).strip() == clean_code:
-                row_idx = i + 2
-                cur_count = int(r.get("TokenCount", 0) or 0)
-                cur_exchanged = int(r.get("ExchangedCount", 0) or 0)
+                row_idx, state = i + 2, parse_token_board_row(r)
                 break
 
-        cur_count = max(0, cur_count + delta)
-        exchanged_now = cur_count // 10
-        cur_exchanged += exchanged_now
-        cur_count = cur_count % 10
-        now = now_kst().strftime("%Y-%m-%d %H:%M")
-        row = [clean_code, clean_class, cur_count, cur_exchanged, now]
-
+        extra = mutate(state) or {}
+        if "error" in extra:
+            return extra
+        row = [
+            clean_code, clean_class, state["token_count"], state["exchanged_count"],
+            now_kst().strftime("%Y-%m-%d %H:%M"), ",".join(state["bills"]), state["used_count"], state["wish"],
+        ]
         if row_idx:
-            ws.delete_rows(row_idx)
-            ws.insert_row(row, index=row_idx)
+            ws.update(range_name=f"A{row_idx}", values=[row])
         else:
             ws.append_row(row)
-
-        log_token_award(clean_code, clean_class, category, delta, author)
-        return {"student_code": clean_code, "token_count": cur_count, "exchanged_count": cur_exchanged, "exchanged_now": exchanged_now}
+        return {"student_code": clean_code, **state, **extra}
     except SheetUnavailable:
         raise
     except Exception as e:
-        print(f"Error awarding token: {e}")
+        print(f"Error updating token board: {e}")
         return {"error": str(e)}
+
+
+def _convert_full_board(state: dict) -> int:
+    """토큰 10개가 찼고 지갑(최대 5장)에 자리가 있으면 1000원 1장으로 바꾼다."""
+    if state["token_count"] >= TOKENS_PER_BILL and len(state["bills"]) < MAX_BILLS:
+        state["token_count"] = 0
+        state["bills"].append(now_kst().strftime("%Y-%m"))
+        state["exchanged_count"] += 1
+        return 1
+    return 0
+
+
+def award_token(student_code: str, class_id: str, category: str, delta: int, author: str = ""):
+    """
+    100원 토큰을 delta개 지급(음수면 정정)한다. 10개가 모이면 1000원 1장으로 자동 교환하되,
+    1000원을 이미 5장 보관 중이면 토큰판을 10개 찬 상태로 두고 사용할 때 교환한다.
+    """
+    def mutate(state):
+        if delta > 0 and state["token_count"] >= TOKENS_PER_BILL:
+            return {"error": "토큰판이 가득 찼습니다. 1000원을 먼저 사용해 주세요.", "status": 409}
+        state["token_count"] = min(max(0, state["token_count"] + delta), TOKENS_PER_BILL)
+        exchanged_now = _convert_full_board(state)
+        return {"exchanged_now": exchanged_now, "wallet_full": state["token_count"] >= TOKENS_PER_BILL}
+
+    result = _update_token_board(student_code, class_id, mutate)
+    if "error" not in result:
+        log_token_award(str(student_code).strip(), str(class_id).strip(), category, delta, author)
+    return result
+
+
+def use_bill(student_code: str, class_id: str, author: str = "", index: int = 0):
+    """보관 중인 1000원 1장(index번째, 범위 밖이면 가장 먼저 발행된 것)을 사용 처리하고 누적 사용 장수를 올린다."""
+    def mutate(state):
+        if not state["bills"]:
+            return {"error": "사용할 1000원이 없습니다.", "status": 409}
+        state["bills"].pop(index if 0 <= index < len(state["bills"]) else 0)
+        state["used_count"] += 1
+        return {"exchanged_now": _convert_full_board(state)}
+
+    result = _update_token_board(student_code, class_id, mutate)
+    if "error" not in result:
+        log_token_award(str(student_code).strip(), str(class_id).strip(), "1000원 사용", -TOKENS_PER_BILL, author)
+    return result
+
+
+def set_token_wish(student_code: str, class_id: str, wish: str):
+    """토큰판의 '내가 원하는 것은' 칸(학생이 고른 강화제)을 저장한다."""
+    def mutate(state):
+        state["wish"] = str(wish or "").strip()[:40]
+    return _update_token_board(student_code, class_id, mutate)
 
 
 def ensure_token_log_sheet():

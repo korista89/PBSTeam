@@ -95,7 +95,7 @@ export default function TodayPage() {
   useEffect(() => {
     if (isAdmin() || !user?.class_id) { setClassRulesSet(null); return; }
     axios.get(`${apiUrl}/api/v1/class-rules/${encodeURIComponent(user.class_id)}`).then(res => {
-      setClassRulesSet((res.data.rules || []).length >= 3);
+      setClassRulesSet(Boolean(res.data.rule));
     }).catch(() => setClassRulesSet(null));
   }, [apiUrl, user?.class_id, isAdmin]);
 
@@ -186,10 +186,10 @@ export default function TodayPage() {
 
             {/* 4. 학급 규칙 & 토큰 */}
             {classRulesSet !== null && (
-              <TodoSection title="🪙 학급 규칙 & 토큰 강화" subtitle={classRulesSet ? "학급 규칙이 설정되어 있습니다" : "아직 학급 규칙이 설정되지 않았습니다"} tone={classRulesSet ? "done" : "warn"}>
+              <TodoSection title="🪙 학급 기대행동 & 토큰 강화" subtitle={classRulesSet ? "학급 기대행동이 설정되어 있습니다" : "아직 학급 기대행동이 설정되지 않았습니다"} tone={classRulesSet ? "done" : "warn"}>
                 <div style={{ padding: "4px 4px 14px" }}>
                   <button onClick={() => router.push("/class-rules")} style={{ padding: "8px 16px", background: classRulesSet ? "#f1f5f9" : "#fff7ed", border: `1px solid ${classRulesSet ? "#e2e8f0" : "#fed7aa"}`, borderRadius: 8, color: classRulesSet ? "#475569" : "#9a3412", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>
-                    {classRulesSet ? "🪙 오늘 토큰 지급하러 가기 →" : "📐 학급 규칙 설정하러 가기 →"}
+                    {classRulesSet ? "🪙 오늘 토큰 지급하러 가기 →" : "📐 학급 기대행동 설정하러 가기 →"}
                   </button>
                 </div>
               </TodoSection>
