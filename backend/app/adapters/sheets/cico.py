@@ -1,6 +1,7 @@
 # backend/app/adapters/sheets/cico.py
 
 from datetime import date
+from app.adapters.sheets.resilience import SheetUnavailable
 from typing import List, Dict, Any, Optional
 import re
 import pandas as pd
@@ -18,6 +19,8 @@ class CicoMonthAdapter:
             sheet = client.open_by_url(settings.SHEET_URL)
             month_name = f"{month}월"
             return sheet.worksheet(month_name)
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error opening CICO worksheet for month {month}: {e}")
             return None
@@ -115,6 +118,8 @@ class CicoMonthAdapter:
                 else:
                     try:
                         numeric_val = float(re.sub(r"[^\d.]+", "", val))
+                    except SheetUnavailable:
+                        raise
                     except Exception:
                         pass
 

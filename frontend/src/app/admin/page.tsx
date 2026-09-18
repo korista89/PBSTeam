@@ -5,6 +5,7 @@ import axios from "axios";
 import styles from "../page.module.css";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../components/AuthProvider";
+import { API_BASE_URL } from "@/app/lib/api";
 
 // 34 Classes Definition
 const ALL_CLASSES = [
@@ -55,7 +56,7 @@ export default function AdminPage() {
 
     const fetchHolidays = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const response = await axios.get(`${apiUrl}/api/v1/auth/holidays`);
             setHolidays(response.data);
         } catch (err) {
@@ -69,7 +70,7 @@ export default function AdminPage() {
             return;
         }
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.post(`${apiUrl}/api/v1/auth/holidays`, {
                 date: newHolidayDate,
                 name: newHolidayName
@@ -87,7 +88,7 @@ export default function AdminPage() {
     const handleDeleteHoliday = async (date: string) => {
         if (!confirm(`${date} 휴일을 삭제하시겠습니까?`)) return;
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.delete(`${apiUrl}/api/v1/auth/holidays/${date}`);
             fetchHolidays();
         } catch (e) {
@@ -99,7 +100,7 @@ export default function AdminPage() {
 
     const fetchUsers = async () => {
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const response = await axios.get(`${apiUrl}/api/v1/auth/users`);
             setUsers(response.data);
         } catch (err) {
@@ -112,7 +113,7 @@ export default function AdminPage() {
     const handleDeleteUser = async (userId: string) => {
         if (!confirm(`사용자 '${userId}'를 삭제하시겠습니까?`)) return;
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.delete(`${apiUrl}/api/v1/auth/users/${userId}`);
             setMessage("사용자가 삭제되었습니다.");
             fetchUsers();
@@ -145,7 +146,7 @@ export default function AdminPage() {
                     onClick={async () => {
                         if (!confirm("모든 월별 시트를 초기화/갱신하시겠습니까? 시간이 걸릴 수 있습니다.")) return;
                         try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+                            const apiUrl = API_BASE_URL;
                             await axios.post(`${apiUrl}/api/v1/analytics/dashboard/refresh`);
                             alert("데이터 갱신 완료!");
                         } catch (e) {
@@ -332,7 +333,7 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
     const handleSave = async () => {
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             // Update Role/Info
             await axios.put(`${apiUrl}/api/v1/auth/users/${user.ID}/role`, {
                 user_id: user.ID,
@@ -444,7 +445,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
 
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.post(`${apiUrl}/api/v1/auth/users`, {
                 id: formData.id,
                 password: formData.password,

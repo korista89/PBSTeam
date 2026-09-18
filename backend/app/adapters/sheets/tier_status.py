@@ -1,6 +1,7 @@
 # backend/app/adapters/sheets/tier_status.py
 
 from typing import List, Dict, Any, Optional
+from app.adapters.sheets.resilience import SheetUnavailable
 import gspread
 from app.core.config import settings
 from app.domain.models import StudentProfile, TierSnapshot, TierCode
@@ -17,6 +18,8 @@ class TierStatusAdapter:
         try:
             sheet = client.open_by_url(settings.SHEET_URL)
             return sheet.worksheet("TierStatus")
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error opening TierStatus worksheet: {e}")
             return None

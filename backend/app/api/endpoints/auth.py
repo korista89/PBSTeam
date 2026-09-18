@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Response, Depends, status
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
-from app.services.sheets import get_user_by_id, update_user_password, update_user_password_cas, get_all_users
+from app.services.sheets import get_user_by_id, UserStoreUnavailable, update_user_password, update_user_password_cas, get_all_users
 from app.core.security import (
     verify_password_compat, create_access_token, set_session_cookie,
     delete_session_cookie, hash_password
@@ -20,7 +20,14 @@ class PasswordUpdateRequest(BaseModel):
 
 @router.post("/login")
 def login(request: LoginRequest, response: Response):
-    user = get_user_by_id(request.user_id) if request.user_id else None
+    try:
+        user = get_user_by_id(request.user_id, strict=True) if request.user_id else None
+    except UserStoreUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="사용자 정보를 일시적으로 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.",
+            headers={"Retry-After": "5"},
+        )
 
     stored_pw = str(user.get("Password", "")) if user else ""
     ver_res = verify_password_compat(request.password, stored_pw)
@@ -73,16 +80,13 @@ def login(request: LoginRequest, response: Response):
 @router.get("/me")
 def get_current_user_profile(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """Returns the authenticated user's profile resolved from backend store using validated session."""
-    user_id = current_user.get("sub", "")
-    user = get_user_by_id(user_id) if user_id else None
-    name = user.get("Name", "") if user else ""
-    class_name = user.get("ClassName", "") if user else ""
+    # current_user is already revalidated against the Users store; no second lookup.
     return {
-        "id": user_id,
+        "id": current_user.get("sub", ""),
         "role": current_user.get("role"),
         "class_id": current_user.get("class_id", ""),
-        "class_name": class_name,
-        "name": name
+        "class_name": current_user.get("class_name", ""),
+        "name": current_user.get("name", "")
     }
 
 @router.post("/logout")

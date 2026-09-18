@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from fastapi import Request, HTTPException, status, Depends
 from app.core.config import settings
 from app.core.security import decode_access_token
-from app.services.sheets import get_user_by_id
+from app.services.sheets import get_user_by_id, UserStoreUnavailable
 from app.adapters.sheets.tier_status import TierStatusAdapter
 
 # Canonical class normalization mapping
@@ -74,101 +74,69 @@ def normalize_role(role_val: Optional[str]) -> str:
     return r
 
 
-def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
+_INACTIVE_FLAGS = ["false", "0", "inactive", "x", "no"]
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+
+
+def resolve_session_user(request: Request) -> Dict[str, Any]:
     """
-    Extracts session token from HttpOnly cookie and resolves current active user.
-    Returns user context or None if unauthenticated.
-    """
-    token: Optional[str] = request.cookies.get(settings.AUTH_COOKIE_NAME)
-    if not token:
-        return None
-
-    try:
-        payload = decode_access_token(token)
-        user_id = payload.get("sub")
-        if not user_id:
-            return None
-
-        # Revalidate with current user store
-        user = get_user_by_id(user_id)
-        if not user:
-            return None
-
-        is_active = str(user.get("Active", "true")).strip().lower()
-        if is_active in ["false", "0", "inactive", "x", "no"]:
-            return None
-
-        current_role = normalize_role(user.get("Role", "teacher"))
-        current_class_id = str(user.get("ClassID", "")).strip()
-        current_class_name = str(user.get("ClassName", "")).strip()
-        current_name = str(user.get("Name", "")).strip()
-
-        return {
-            "id": str(user_id),
-            "sub": str(user_id),
-            "role": current_role,
-            "class_id": current_class_id,
-            "class_name": current_class_name,
-            "name": current_name,
-            "active": True
-        }
-    except Exception:
-        return None
-
-
-def get_current_user(request: Request) -> Dict[str, Any]:
-    """
-    Strict authentication and live user revalidation dependency.
+    Single source of truth for session authentication, shared by every endpoint.
     1. Extracts signed session token from HttpOnly cookie.
     2. Validates JWT signature and expiration.
     3. Revalidates user against current Users store (prevents stale role/class privilege escalation).
     4. Rejects inactive or deleted users with HTTP 401.
+    5. If the Users store itself cannot be read (Sheets quota/outage), answers 503 —
+       an infrastructure failure must never be reported as "not logged in".
     """
     token: Optional[str] = request.cookies.get(settings.AUTH_COOKIE_NAME)
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication session required. Please log in."
-        )
+        raise _unauthorized("Authentication session required. Please log in.")
 
     payload = decode_access_token(token)
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session token."
-        )
+        raise _unauthorized("Invalid session token.")
 
-    # Live / cached Users lookup to prevent stale privileges and check active state
-    user = get_user_by_id(user_id)
+    try:
+        user = get_user_by_id(user_id, strict=True)
+    except UserStoreUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="User store temporarily unavailable. Please retry shortly.",
+            headers={"Retry-After": "5"},
+        )
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account no longer active or not found."
-        )
+        raise _unauthorized("User account no longer active or not found.")
 
-    # Check Active flag
     is_active = str(user.get("Active", "true")).strip().lower()
-    if is_active in ["false", "0", "inactive", "x", "no"]:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is deactivated."
-        )
-
-    current_role = normalize_role(user.get("Role", "teacher"))
-    current_class_id = str(user.get("ClassID", "")).strip()
-    current_class_name = str(user.get("ClassName", "")).strip()
-    current_name = str(user.get("Name", "")).strip()
+    if is_active in _INACTIVE_FLAGS:
+        raise _unauthorized("User account is deactivated.")
 
     return {
         "id": str(user_id),
         "sub": str(user_id),
-        "role": current_role,
-        "class_id": current_class_id,
-        "class_name": current_class_name,
-        "name": current_name,
+        "role": normalize_role(user.get("Role", "teacher")),
+        "class_id": str(user.get("ClassID", "")).strip(),
+        "class_name": str(user.get("ClassName", "")).strip(),
+        "name": str(user.get("Name", "")).strip(),
         "active": True
     }
+
+
+def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
+    """Returns the resolved session user, or None if unauthenticated or unresolvable."""
+    try:
+        return resolve_session_user(request)
+    except HTTPException:
+        return None
+
+
+def get_current_user(request: Request) -> Dict[str, Any]:
+    """Strict authentication dependency (401 unauthenticated, 503 user store unavailable)."""
+    return resolve_session_user(request)
 
 
 def require_authenticated_user(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:

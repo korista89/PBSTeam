@@ -1,4 +1,5 @@
 from typing import Optional
+from app.adapters.sheets.resilience import SheetUnavailable
 import gspread
 from app.services.sheets import (
     get_sheets_client, settings, fetch_student_status,
@@ -39,6 +40,8 @@ def get_pw_spreadsheet():
         return None
     try:
         return client.open_by_url(settings.SHEET_URL)
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"[PW] 시트 접근 오류: {e}")
         return None
@@ -92,6 +95,8 @@ def fetch_global_vocab_records():
         records = get_all_records_with_row_index(ws)
         _pw_cache["vocab"]["GLOBAL"] = {"data": records, "timestamp": now}
         return records
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"[PW] Error fetching global vocab: {e}")
         return []
@@ -505,6 +510,8 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
             clear_pw_cache()
             return {"message": "업데이트 완료", "row": target_row}
             
+        except SheetUnavailable:
+            raise
         except Exception as e:
             last_error = e
             if settings.ENVIRONMENT.lower() != "production":

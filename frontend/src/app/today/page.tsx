@@ -8,6 +8,7 @@ import AppShell from "../components/AppShell";
 import type { DecisionSignal } from "../../types/domain";
 import { maskName } from "../utils";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
+import { API_BASE_URL } from "@/app/lib/api";
 
 interface TodayData {
   date: string;
@@ -42,7 +43,7 @@ export default function TodayPage() {
   const [cicoItems, setCicoItems] = useState<CicoCheckinItem[] | null>(null);
   const [classRulesSet, setClassRulesSet] = useState<boolean | null>(null);
 
-  const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
+  const apiUrl = API_BASE_URL;
 
   const fetchToday = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);

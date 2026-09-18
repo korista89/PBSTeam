@@ -10,6 +10,7 @@ import { requestSheetLiveRefresh, useSheetLiveSync } from "../hooks/useSheetLive
 import {
   ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { API_BASE_URL } from "@/app/lib/api";
 
 // ====== 일일 입력용(그리드) 데이터 ======
 interface DayValue { [day: string]: string; }
@@ -184,7 +185,7 @@ export default function CICOPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { isAdmin } = useAuth();
-  const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
+  const apiUrl = API_BASE_URL;
   const studentParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("student") : null;
 
   const fetchData = useCallback(async (silent = false) => {
@@ -193,14 +194,14 @@ export default function CICOPage() {
     setIs404(false);
     setAiState({ loading: false, text: "" });
     try {
-      const [monthlyRes, bizDaysRes, reportRes] = await Promise.all([
-        axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`),
-        axios.get(`${apiUrl}/api/v1/cico/business-days?month=${month}&year=${new Date().getFullYear()}`),
-        axios.get(`${apiUrl}/api/v1/cico/report?month=${month}`).catch(() => ({ data: { month: String(month), students: [] } })),
-      ]);
+      // One request (monthly + business days + report) so a poll costs one auth check
+      // and hits one backend instance's cache instead of three.
+      const { data: overview } = await axios.get(
+        `${apiUrl}/api/v1/cico/overview?month=${month}&year=${new Date().getFullYear()}`
+      );
 
-      const monthlyData: GridData = monthlyRes.data;
-      const businessDays: string[] = bizDaysRes.data.business_days || [];
+      const monthlyData: GridData = overview.monthly;
+      const businessDays: string[] = overview.business_days?.business_days || [];
       const businessDayMap: { [key: number]: string } = {};
       businessDays.forEach(d => {
         const parts = d.split('-');
@@ -232,7 +233,7 @@ export default function CICOPage() {
       if (filteredCols.length > 0) monthlyData.day_columns = filteredCols;
 
       setGridData(monthlyData);
-      setReportData(reportRes.data);
+      setReportData(overview.report);
       setSelectedCode(prev => {
         const wanted = prev || studentParam;
         if (wanted && monthlyData.students.some(s => s.학생코드 === wanted)) return wanted;

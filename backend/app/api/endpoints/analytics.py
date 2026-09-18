@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.adapters.sheets.resilience import SheetUnavailable
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -434,6 +435,8 @@ def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
                 "row_count": len(records),
                 "columns": sample_keys[:10]
             })
+        except SheetUnavailable:
+            raise
         except Exception as e:
             worksheets_info.append({
                 "title": ws.title,
@@ -491,6 +494,8 @@ def get_tier3_report(
         if isinstance(data, dict) and "error" in data:
             raise HTTPException(status_code=500, detail=data["error"])
         return data
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if isinstance(e, HTTPException):
             raise
@@ -536,6 +541,8 @@ def debug_ai_keys(current_admin: Dict[str, Any] = Depends(require_admin)):
                 results["local_llm"] = {"status": "✅ 정상 연결", "models": models[:3]}
             else:
                 results["local_llm"] = {"status": f"⚠️ HTTP {r0.status_code}", "body": r0.text[:100]}
+        except SheetUnavailable:
+            raise
         except Exception as e:
             results["local_llm"] = {"status": "❌ 연결 실패", "error": str(e)[:150]}
     else:
@@ -553,6 +560,8 @@ def debug_ai_keys(current_admin: Dict[str, Any] = Depends(require_admin)):
                 results["gemini_2.5_flash"] = {"status": "✅ 정상", "http": 200, "response": txt.strip()[:50]}
             else:
                 results["gemini_2.5_flash"] = {"status": "❌ 실패", "http": r.status_code, "body": r.text[:200]}
+        except SheetUnavailable:
+            raise
         except Exception as e:
             results["gemini_2.5_flash"] = {"status": "❌ 예외 발생", "error": str(e)[:150]}
     else:
@@ -571,6 +580,8 @@ def debug_ai_keys(current_admin: Dict[str, Any] = Depends(require_admin)):
                 results["groq_gpt_oss_120b"] = {"status": "✅ 정상", "http": 200, "response": txt2.strip()[:50]}
             else:
                 results["groq_gpt_oss_120b"] = {"status": "❌ 실패", "http": r2.status_code, "body": r2.text[:200]}
+        except SheetUnavailable:
+            raise
         except Exception as e:
             results["groq_gpt_oss_120b"] = {"status": "❌ 예외 발생", "error": str(e)[:150]}
     else:

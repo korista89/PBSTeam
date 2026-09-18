@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from app.core.config import settings
+from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable
 
 _sheets_client = None
 _cache: Dict[str, Dict[str, Any]] = {}
@@ -29,8 +30,10 @@ def get_sheets_client() -> Optional[gspread.Client]:
         try:
             creds_dict = json.loads(env_creds)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            _sheets_client = gspread.authorize(creds)
+            _sheets_client = ResilientClient(gspread.authorize(creds))
             return _sheets_client
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error loading credentials from env: {e}")
             return None
@@ -39,8 +42,10 @@ def get_sheets_client() -> Optional[gspread.Client]:
     if os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
         try:
             creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
-            _sheets_client = gspread.authorize(creds)
+            _sheets_client = ResilientClient(gspread.authorize(creds))
             return _sheets_client
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error loading credentials file: {e}")
             return None
@@ -55,6 +60,8 @@ def get_cached(key: str, ttl: int = CACHE_TTL) -> Optional[Any]:
         entry = _cache.get(key)
         if entry and (now - float(entry.get("timestamp", 0)) < ttl):
             return entry.get("data")
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"get_cached error: {e}")
     return None
@@ -66,6 +73,8 @@ def set_cached(key: str, data: Any):
             "data": data,
             "timestamp": time.time()
         }
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"set_cached error: {e}")
 
@@ -79,6 +88,8 @@ def invalidate_cache(key_prefix: str = ""):
             keys_to_remove = [k for k in _cache if k.startswith(key_prefix)]
             for k in keys_to_remove:
                 _cache.pop(k, None)
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"invalidate_cache error: {e}")
 
@@ -90,6 +101,8 @@ def safe_get_all_records(ws) -> List[Dict[str, Any]]:
     """
     try:
         return ws.get_all_records()
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"safe_get_all_records fallback: {e}")
         all_vals = ws.get_all_values()
@@ -113,6 +126,8 @@ def safe_get_all_values(ws, retries: int = 3) -> List[List[Any]]:
     for i in range(retries):
         try:
             return ws.get_all_values()
+        except SheetUnavailable:
+            raise
         except Exception as e:
             if i == retries - 1:
                 print(f"safe_get_all_values failed after {retries} retries: {e}")

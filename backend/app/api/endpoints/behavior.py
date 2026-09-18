@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
+from app.adapters.sheets.resilience import SheetUnavailable
 from typing import Optional, List, Dict, Any
 from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records, clear_cache, normalize_date_string
 from app.core.config import settings
@@ -65,6 +66,8 @@ def submit_behavior_log(
             if "행동발생날짜" in payload and "-" in payload["행동발생날짜"]:
                 dt = datetime.datetime.strptime(payload["행동발생날짜"], "%Y-%m-%d")
                 payload["행동발생날짜"] = f"{dt.year}. {dt.month}. {dt.day}"
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
 
@@ -77,6 +80,8 @@ def submit_behavior_log(
         clear_cache("records")
             
         return {"success": True, "message": "Log submitted", "log_id": log_id, "status": status}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -131,6 +136,8 @@ def approve_behavior_log(
                 
         raise HTTPException(status_code=404, detail="Log ID not found")
         
+    except SheetUnavailable:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -186,6 +193,8 @@ def revise_behavior_log(
                 
         raise HTTPException(status_code=404, detail="Log ID not found")
         
+    except SheetUnavailable:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -255,6 +264,8 @@ def update_behavior_log(
 
         return {"success": True, "message": "Log updated", "updated_fields": len(cells)}
     except HTTPException:
+        raise
+    except SheetUnavailable:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

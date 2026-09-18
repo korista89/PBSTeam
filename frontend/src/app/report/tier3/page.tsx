@@ -10,6 +10,7 @@ import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import { maskName, formatWeek } from "../../utils";
+import { API_BASE_URL } from "@/app/lib/api";
 
 interface BehaviorType { name: string; value: number; }
 interface WeeklyTrend { week: string; count: number; }
@@ -63,7 +64,7 @@ export default function Tier3Report() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const apiUrl = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
+  const apiUrl = API_BASE_URL;
 
   const fetchData = useCallback(async () => {
     setLoading(true);

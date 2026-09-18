@@ -9,6 +9,7 @@ import datetime
 import time
 from typing import Optional, List, Dict, Any, Union
 from app.adapters.sheets.client import get_cached, set_cached, invalidate_cache
+from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable, invalidate_worksheet_lookups
 from app.core.time import now_kst
 
 # Simple in-memory cache
@@ -24,6 +25,15 @@ _cache = {
 }
 CACHE_TTL = 60  # Increased to 60 seconds to mitigate API limits in Vercel containers
 
+# Last successfully loaded Users rows. Kept outside _cache on purpose: clear_cache()
+# resets _cache entries, but a Sheets outage (e.g. 429 read quota) must not make every
+# signed-in user look "not found" and turn into a spurious 401.
+_users_last_good: Optional[List[Dict[str, Any]]] = None
+
+
+class UserStoreUnavailable(Exception):
+    """The Users worksheet could not be read and no previously loaded copy exists."""
+
 def safe_get_all_records(ws) -> List[Dict[str, Any]]:
     """
     Safely fetch all records from a worksheet.
@@ -31,6 +41,8 @@ def safe_get_all_records(ws) -> List[Dict[str, Any]]:
     """
     try:
         return ws.get_all_records()
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"safe_get_all_records: get_all_records failed, falling back to get_all_values: {e}")
         all_vals = ws.get_all_values()
@@ -57,6 +69,8 @@ def _with_retry(fn, retries: int = 3, delay: float = 1.0, stop_on: tuple = ()):
             return fn()
         except stop_on:
             raise
+        except SheetUnavailable:
+            raise
         except Exception as e:
             last_err = e
             if i < retries - 1:
@@ -74,10 +88,17 @@ def safe_get_all_values(ws) -> List[List[Any]]:
         for i in range(retries):
             try:
                 return ws.get_all_values()
+            except SheetUnavailable:
+                raise
             except Exception as e:
                 if i == retries - 1: raise e
                 time.sleep(1)
         return [] # Fallback
+    except SheetUnavailable:
+        # Surface as 503 (or let the caller decide) instead of looking like an empty sheet.
+        raise
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"safe_get_all_values failed: {e}")
         return []
@@ -103,8 +124,10 @@ def get_sheets_client():
         try:
             creds_dict = json.loads(env_creds)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            _sheets_client = gspread.authorize(creds)
+            _sheets_client = ResilientClient(gspread.authorize(creds))
             return _sheets_client
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error loading credentials from env: {e}")
             return None
@@ -112,7 +135,7 @@ def get_sheets_client():
     # 2. Try Local File (Development)
     if os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
         creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
-        _sheets_client = gspread.authorize(creds)
+        _sheets_client = ResilientClient(gspread.authorize(creds))
         return _sheets_client
 
     print(f"Warning: Credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
@@ -134,6 +157,8 @@ def get_main_worksheet():
 
         print("CRITICAL_DATA_CONTRACT_ERROR: 'Log_Main' sheet not found in spreadsheet")
         return None
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error connecting to sheet: {e}")
         return None
@@ -154,11 +179,23 @@ def fetch_evaluation_sentences():
         records = safe_get_all_records(ws)
         _cache["evaluation_sentences"] = {"data": records, "timestamp": float(now)}
         return records
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching evaluation sentences: {e}")
         return []
 
-def clear_cache(key: Optional[str] = None):
+def clear_cache(key: Optional[str] = None, keep: tuple = (), max_age: Optional[float] = None):
+    """Invalidate cached Sheet reads.
+
+    key=None clears everything except the keys listed in ``keep`` (and their
+    adapter-cache counterparts), so a live-refresh can drop screen data without
+    also forcing an extra Users read on every request.
+
+    max_age (seconds, key=None only) limits the clear to entries older than that,
+    for periodic polls that only need "recent enough" data. A clear without
+    max_age also drops cached worksheet lookups so newly created sheets appear.
+    """
     global _cache
     try:
         if key:
@@ -192,9 +229,27 @@ def clear_cache(key: Optional[str] = None):
             else:
                 invalidate_cache(key)
         else:
+            cutoff = time.time() - max_age if max_age is not None else None
+
+            def _expired(entry) -> bool:
+                return cutoff is None or float((entry or {}).get("timestamp", 0) or 0) < cutoff
+
             for k in _cache:
+                if k in keep or not _expired(_cache[k]):
+                    continue
                 _cache[k] = {"data": [], "timestamp": 0.0}
-            invalidate_cache()
+            if keep or cutoff is not None:
+                from app.adapters.sheets.client import _cache as _adapter_cache
+                kept_prefixes = tuple(keep) + tuple(f"sheet:{k}" for k in keep)
+                for k in [k for k in _adapter_cache
+                          if not (kept_prefixes and k.startswith(kept_prefixes)) and _expired(_adapter_cache.get(k))]:
+                    _adapter_cache.pop(k, None)
+            else:
+                invalidate_cache()
+            if cutoff is None:
+                invalidate_worksheet_lookups()
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"clear_cache error: {e}")
 
@@ -403,11 +458,15 @@ def fetch_all_records(force_refresh: bool = False):
                         mapped_row["form_report_details"] = form_report_details
 
                     mapped_values.append(mapped_row)
+            except SheetUnavailable:
+                raise
             except Exception as ws_err:
                 print(f"Error reading records from worksheet '{ws.title}': {ws_err}")
 
         _cache["records"] = {"data": mapped_values, "timestamp": now}
         return mapped_values
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching records: {e}")
         return []
@@ -429,6 +488,8 @@ def get_student_codes_worksheet():
             ws = sheet.add_worksheet(title="StudentCodes", rows=500, cols=10)
             ws.append_row(["Code", "Name", "Memo"])
             return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error accessing StudentCodes worksheet: {e}")
         return None
@@ -449,6 +510,8 @@ def fetch_student_codes():
             if name and code:
                 code_map[name] = code
         return code_map
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching codes: {e}")
         return {}
@@ -474,6 +537,8 @@ def update_student_codes(new_codes: list):
         # Updated for gspread 6.x: specify range explicitly
         ws.update(range_name='A1', values=data, value_input_option='RAW')
         return {"message": "Codes updated successfully"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error updating codes: {e}")
         return {"error": str(e)}
@@ -509,12 +574,20 @@ def get_users_worksheet():
             for i in range(11, 101):
                 ws.append_row([str(i), "teacher123", "teacher", "", "", f"Teacher {i}", "", "", "", ""])
             return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error accessing Users worksheet: {e}")
         return None
 
-def fetch_all_users():
-    global _cache
+def fetch_all_users(strict: bool = False):
+    """Return Users rows.
+
+    On a Sheets read failure the last successfully loaded copy is served. With
+    strict=True and no copy available, raises UserStoreUnavailable instead of
+    returning [] so callers can tell "store down" apart from "user not found".
+    """
+    global _cache, _users_last_good
     now = time.time()
 
     # Check cache
@@ -522,17 +595,25 @@ def fetch_all_users():
     if cached_users and cached_users.get("data") and (now - float(cached_users.get("timestamp", 0)) < CACHE_TTL):
         return cached_users["data"]
 
-    ws = get_users_worksheet()
-    if not ws:
-        return []
-
+    records = None
     try:
-        records = safe_get_all_records(ws)
-        _cache["users"] = {"data": records, "timestamp": float(now)}
-        return records
-    except Exception as e:
+        ws = get_users_worksheet()
+        if ws:
+            records = safe_get_all_records(ws)
+    except Exception as e:  # includes SheetUnavailable: fall back below
         print(f"Error fetching users: {e}")
-        return []
+
+    if records:
+        _cache["users"] = {"data": records, "timestamp": float(now)}
+        _users_last_good = records
+        return records
+
+    if _users_last_good:
+        print("Users worksheet unavailable; serving last known Users rows")
+        return _users_last_good
+    if strict:
+        raise UserStoreUnavailable("Users worksheet is temporarily unavailable")
+    return []
 
 def create_user(user_data: dict):
     """
@@ -576,6 +657,8 @@ def create_user(user_data: dict):
         clear_cache("users")
         return {"message": f"User {user_data.get('ID')} created successfully"}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error creating user: {e}")
@@ -604,6 +687,8 @@ def delete_user(user_id: str):
         clear_cache("users")
         return {"message": f"User {user_id} deleted successfully"}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error deleting user: {e}")
@@ -611,8 +696,8 @@ def delete_user(user_id: str):
             print("Error deleting user")
         return {"error": str(e)}
 
-def get_user_by_id(user_id: str):
-    users = fetch_all_users()
+def get_user_by_id(user_id: str, strict: bool = False):
+    users = fetch_all_users(strict=strict)
     for r in users:
         if str(r.get('ID')) == str(user_id):
             return r
@@ -642,6 +727,8 @@ def update_user_password(user_id: str, new_password: str):
                 if str(h).strip().lower() == "password":
                     pw_col = h_idx + 1
                     break
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
 
@@ -652,6 +739,8 @@ def update_user_password(user_id: str, new_password: str):
                 clear_cache("users")
                 return {"message": "비밀번호가 성공적으로 변경되었습니다."}
         return {"error": "User not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error updating password: {e}")
@@ -683,6 +772,8 @@ def update_user_password_cas(user_id: str, expected_stored_password: str, new_pl
                 if str(h).strip().lower() == "password":
                     pw_col = h_idx + 1
                     break
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
 
@@ -712,6 +803,8 @@ def update_user_password_cas(user_id: str, expected_stored_password: str, new_pl
             # 6. Mismatch -> password was updated concurrently; skip silent migration
             return False
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Password migration write skipped: {e}")
@@ -737,6 +830,8 @@ def update_tierstatus_certification(student_code_or_name: str, cert_count: int):
                 ws.update_cell(row_num, 7, cert_count)
                 return {"message": f"Updated certification count to {cert_count} for {student_code_or_name}"}
         return {"error": "Student not found in TierStatus"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error updating certification: {e}")
         return {"error": str(e)}
@@ -758,6 +853,8 @@ def get_all_users():
             "Name": r.get("Name"),
             "Memo": r.get("Memo")
         } for r in records]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching users: {e}")
         return []
@@ -923,6 +1020,8 @@ def reset_users_sheet():
         ws.update(all_rows, 'A2')
         clear_cache("users")
         return {"message": f"Users sheet reset. {len(all_rows)} users created. (Admin: 'admin', Teachers: '초1-1관리자' style)"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error resetting Users sheet: {e}")
         return {"error": str(e)}
@@ -948,6 +1047,8 @@ def get_student_status_worksheet():
                 all_data.append([idx + 1, class_name, code, code, "O", "", 0, "O", "X", "X", "X", "X", "", ""])
             ws.update(all_data, 'A1')
             return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error accessing TierStatus worksheet: {e}")
         return None
@@ -986,6 +1087,8 @@ def reset_tier_status_sheet():
         ws.update(all_data, 'A1')
 
         return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students", "count": len(STUDENT_CODES)}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error resetting TierStatus sheet: {e}")
         return {"error": str(e)}
@@ -1016,6 +1119,8 @@ def fetch_student_status():
 
         _cache["tierstatus"] = {"data": records, "timestamp": now}
         return records
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching status: {e}")
         return []
@@ -1079,6 +1184,8 @@ def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""
                 return {"message": f"Tier updated for {code}", "code": code, "tiers": tier_values}
 
         return {"error": f"Student code {code} not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error updating tier: {e}")
         return {"error": str(e)}
@@ -1162,6 +1269,8 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
                 return {"message": f"Student {code} updated successfully", "code": code}
 
         return {"error": f"Student code {code} not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error in unified update: {e}")
         return {"error": str(e)}
@@ -1181,6 +1290,8 @@ def update_student_enrollment(code: str, enrolled: str):
                 ws.update_cell(row_num, 5, enrolled)  # Column 5: 재학여부
                 return {"message": f"Enrollment updated to {enrolled}"}
         return {"error": f"Student code {code} not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         return {"error": str(e)}
 
@@ -1199,6 +1310,8 @@ def update_student_beable_code(code: str, beable_code: str):
                 ws.update_cell(row_num, 6, beable_code)  # Column 6: BeAble코드
                 return {"message": f"BeAble code updated to {beable_code}"}
         return {"error": f"Student code {code} not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         return {"error": str(e)}
 
@@ -1241,6 +1354,8 @@ def get_beable_code_mapping():
                     'tier3_plus': r.get('Tier3+', 'X')
                 }
         return mapping
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting BeAble mapping: {e}")
         return {}
@@ -1251,6 +1366,8 @@ def get_enrolled_student_count():
     try:
         records = fetch_student_status()
         return sum(1 for r in records if str(r.get('재학여부', 'O')).strip() == 'O')
+    except SheetUnavailable:
+        raise
     except Exception as e:
         return 0
 
@@ -1272,6 +1389,8 @@ def get_cico_daily_worksheet():
             ws = sheet.add_worksheet(title="CICODaily", rows=1000, cols=8)
             ws.append_row(["Date", "StudentCode", "TargetBehavior1", "TargetBehavior2", "AchievementRate", "TeacherMemo", "EnteredBy"])
             return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error accessing CICODaily worksheet: {e}")
         return None
@@ -1293,6 +1412,8 @@ def fetch_cico_daily(student_code: str = None, start_date: str = None, end_date:
         try:
             records = safe_get_all_records(ws)
             _cache["daily_cico"] = {"data": records, "timestamp": now}
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error fetching CICO daily: {e}")
             return []
@@ -1336,6 +1457,8 @@ def add_cico_daily(data: dict):
             )
             if settings.ENVIRONMENT.lower() != "production":
                 print(f"DEBUG: Sync result: {sync_result}")
+        except SheetUnavailable:
+            raise
         except Exception as e:
             if settings.ENVIRONMENT.lower() != "production":
                 print(f"Error syncing CICO daily to monthly (continuing): {e}")
@@ -1345,6 +1468,8 @@ def add_cico_daily(data: dict):
         clear_cache("daily_cico")
 
         return {"message": "CICO daily record added"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error adding CICO daily: {e}")
@@ -1391,6 +1516,8 @@ def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, 
             print("Syncing CICO daily to monthly sheet")
         return update_monthly_cico_cells(month, updates, student_code_override=student_code)
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"DEBUG: Sync Error: {e}")
@@ -1453,6 +1580,8 @@ def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str
 
         clear_cache("users")
         return {"message": f"User {user_id} updated"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error updating user: {e}")
@@ -1480,6 +1609,8 @@ def get_meeting_notes_worksheet():
             # Headers including StudentCode and UUID
             ws.append_row(["Date", "MeetingType", "Content", "Author", "CreatedAt", "StudentCode", "PeriodStart", "PeriodEnd", "UUID"])
             return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error accessing MeetingNotes worksheet: {e}")
         return None
@@ -1496,6 +1627,8 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
             records = safe_get_all_records(ws)
             if records is not None:
                 set_cached(raw_cache_key, records)
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Error fetching meeting notes: {e}")
             return []
@@ -1539,6 +1672,8 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
         except:
             pass
         return valid_records
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error filtering meeting notes: {e}")
         return []
@@ -1574,6 +1709,8 @@ def add_meeting_note(data: dict):
         ws.append_row(row)
         clear_cache("meeting_notes") # Invalidate cache
         return {"message": "Meeting note added", "created_at": created_at, "uuid": note_uuid}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error adding meeting note: {e}")
@@ -1607,6 +1744,8 @@ def update_meeting_note(note_id: str, content: str):
         ws.update_cell(row_idx, 3, content)
         clear_cache("meeting_notes")
         return {"message": "Note updated"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error updating meeting note: {e}")
@@ -1637,6 +1776,8 @@ def delete_meeting_note(note_id: str):
         ws.delete_rows(row_idx)
         clear_cache("meeting_notes")
         return {"message": "Note deleted"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error deleting meeting note: {e}")
         return {"error": str(e)}
@@ -1705,6 +1846,8 @@ def get_holidays_from_config():
                 ])
                 print("Created '날짜 관리' sheet")
                 set_default_holidays(config_ws) # Populate defaults
+            except SheetUnavailable:
+                raise
             except Exception as create_err:
                 print(f"Error creating 날짜 관리 sheet: {create_err}")
                 # Fallback to 설정(Config)
@@ -1728,6 +1871,8 @@ def get_holidays_from_config():
         if holidays:
             set_cached("config:holidays", holidays)
         return holidays
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting holidays: {e}")
         return []
@@ -1984,6 +2129,8 @@ def create_monthly_cico_sheet(year: int, month: int):
             # 차월대상 (last column)
             ws.add_validation(f'{last_col_letter}{start_row}:{last_col_letter}{end_row}', ValidationConditionType.one_of_list, ['유지', '종료', '상향', '하향'], showCustomUi=True)
 
+        except SheetUnavailable:
+            raise
         except Exception as e:
             print(f"Warning: Failed to set data validation: {e}")
             import traceback
@@ -1991,6 +2138,8 @@ def create_monthly_cico_sheet(year: int, month: int):
 
         return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         return {"error": str(e)}
 
@@ -2092,6 +2241,8 @@ def get_cico_raw_sheet_values(month: int) -> List[List[Any]]:
         if all_values:
             set_cached(cache_key, all_values)
         return all_values
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching raw CICO values for {month}월: {e}")
         return []
@@ -2131,6 +2282,8 @@ def get_monthly_cico_data(month: int):
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
+        except SheetUnavailable:
+            raise
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         return {"error": "Empty sheet"}
@@ -2295,6 +2448,8 @@ def get_monthly_cico_data(month: int):
         set_cached(cache_key, result)
         return result
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting monthly CICO data: {e}")
         return {"error": str(e)}
@@ -2319,6 +2474,8 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
+        except SheetUnavailable:
+            raise
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
 
@@ -2501,6 +2658,8 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
                     if settings.ENVIRONMENT.lower() != "production":
                         print(f"DEBUG: Row {r_idx} Calculated - Rate: {final_rate_str}, Achieved: {is_achieved}")
 
+        except SheetUnavailable:
+            raise
         except Exception as e:
             if settings.ENVIRONMENT.lower() != "production":
                 print(f"DEBUG: Error in recalculation loop: {e}")
@@ -2522,6 +2681,8 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
 
         return {"message": f"{len(cells_to_update)} cells updated"}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error updating monthly CICO cells: {e}")
         return {"error": str(e)}
@@ -2598,6 +2759,8 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
 
         return {"message": f"Settings updated for {student_code} at row {target_row}"}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error updating CICO settings: {e}")
         return {"error": str(e)}
@@ -2647,6 +2810,8 @@ def toggle_tier2_status(month: int, student_code: str, status: str):
 
         return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error toggling Tier2: {e}")
         return {"error": str(e)}
@@ -2735,6 +2900,8 @@ def get_student_dashboard_analysis(student_code: str):
             "team_talk": team_talk
         }
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching dashboard analysis: {e}")
         return {"error": str(e)}
@@ -2771,6 +2938,8 @@ def get_cico_report_data(month: int):
             ws = get_worksheet_fuzzy(sheet, month_name)
             if not ws:
                 return {"error": f"'{month_name}' 시트가 없습니다."}
+        except SheetUnavailable:
+            raise
         except Exception:
             return {"error": f"'{month_name}' 시트를 찾는 중 오류 발생"}
         return {"students": [], "summary": {}}
@@ -2837,6 +3006,8 @@ def get_cico_report_data(month: int):
                                     if code not in prev_rates:
                                         prev_rates[code] = []
                                     prev_rates[code].append({"month": m_name, "rate": rate})
+                except SheetUnavailable:
+                    raise
                 except Exception:
                     continue
 
@@ -2909,6 +3080,8 @@ def get_cico_report_data(month: int):
                             outer = pcode[:pcode.index("(")].strip()
                             if outer:
                                 prev_daily[outer] = day_entries
+            except SheetUnavailable:
+                raise
             except Exception as e:
                 print(f"prev_daily load error: {e}")
                 pass
@@ -2918,6 +3091,8 @@ def get_cico_report_data(month: int):
         try:
             beable_mapping = get_beable_code_mapping() or {}
             code_to_name = {info['student_code']: info['student_name'] for info in beable_mapping.values()}
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
 
@@ -2929,6 +3104,8 @@ def get_cico_report_data(month: int):
                 sc = str(sr.get("학생코드", "")).strip()
                 if sc:
                     tier_status_records[sc] = sr
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
 
@@ -2996,6 +3173,8 @@ def get_cico_report_data(month: int):
                             m = _re2.search(r"0~(\d+)", scale_val)
                             if m:
                                 max_scale = float(m.group(1))
+                        except SheetUnavailable:
+                            raise
                         except Exception:
                             pass
                     if behavior_type_val == "감소 목표행동":
@@ -3050,6 +3229,8 @@ def get_cico_report_data(month: int):
                 gm = _re.search(r"(\d+(?:\.\d+)?)", goal_str)
                 if gm:
                     goal_num = float(gm.group(1))
+            except SheetUnavailable:
+                raise
             except Exception:
                 pass
 
@@ -3145,6 +3326,8 @@ def get_cico_report_data(month: int):
         try:
             all_status = fetch_student_status() or []
             total_roster = len([r for r in all_status if str(r.get("학생코드","")).strip()])
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
 
@@ -3163,6 +3346,8 @@ def get_cico_report_data(month: int):
         set_cached(report_cache_key, result)
         return result
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting CICO report data: {e}")
         return {"error": str(e)}
@@ -3217,6 +3402,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 s for s in tier3_students
                 if str(s["code"]).startswith(str(class_id)) or normalize_class_identifier(s.get("class")) == target_canonical
             ]
+        except SheetUnavailable:
+            raise
         except Exception:
             tier3_students = [s for s in tier3_students if str(s["code"]).startswith(str(class_id))]
 
@@ -3262,6 +3449,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                 # Handle cases like "3 (중)"
                 match_val = re.match(r'^(\d+)', str(v).strip())
                 return int(match_val.group(1)) if match_val else 0
+            except SheetUnavailable:
+                raise
             except Exception:
                 return 0
         df['강도'] = df['강도'].apply(_extract_intensity).fillna(0).astype(int)
@@ -3335,6 +3524,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                     week_key = f"{iso[0]}-W{iso[1]:02d}"
                     all_weeks_in_range.append(week_key)
                     cur += _dt.timedelta(weeks=1)
+            except SheetUnavailable:
+                raise
             except Exception:
                 all_weeks_in_range = []
 
@@ -3355,6 +3546,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                         try:
                             match = re.search(r'(\d+)', str(v))
                             return int(match.group(1)) if match else 1
+                        except SheetUnavailable:
+                            raise
                         except Exception:
                             return 1
                     s_copy['발생빈도_num'] = s_copy['발생빈도'].apply(_extract_val)
@@ -3518,6 +3711,8 @@ def initialize_dashboard_if_missing():
 
         return {"message": "Dashboard created and populated"}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error initializing dashboard: {e}")
         return {"error": str(e)}
@@ -3686,6 +3881,8 @@ def initialize_monthly_sheets():
         clear_cache() # Invalidate all caches after refresh
         return {"message": "Monthly sheets initialized"}
 
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error initializing monthly sheets: {e}")
         return {"error": str(e)}
@@ -3708,6 +3905,8 @@ def get_board_worksheet():
             ws = sheet.add_worksheet(title="Board", rows=100, cols=6)
             ws.append_row(["ID", "Title", "Content", "Author", "CreatedAt", "Views"])
             return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error accessing Board worksheet: {e}")
         return None
@@ -3758,6 +3957,8 @@ def fetch_board_posts():
         valid_records.sort(key=parse_date, reverse=True)
         _cache["board"] = {"data": valid_records, "timestamp": now}
         return valid_records
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error fetching board posts: {e}")
         return []
@@ -3785,6 +3986,8 @@ def add_board_post(title: str, content: str, author: str):
         ws.append_row(row)
         clear_cache("board") # Invalidate cache
         return {"message": "Post added", "post_id": post_id}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error adding board post: {e}")
@@ -3808,6 +4011,8 @@ def update_board_post(post_id: str, title: str, content: str):
         ws.update_cell(cell.row, 3, content)
         clear_cache("board")
         return {"message": "Post updated"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error updating board post: {e}")
@@ -3827,6 +4032,8 @@ def delete_board_post(post_id: str):
             clear_cache("board") # Invalidate cache
             return {"message": "Post deleted"}
         return {"error": "Post not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         if settings.ENVIRONMENT.lower() != "production":
             print(f"Error deleting board post: {e}")
@@ -3867,6 +4074,8 @@ def ensure_bip_sheet():
             ws = sheet.add_worksheet(title="BIP", rows=300, cols=20)
             ws.append_row(BIP_REQUIRED_HEADERS)
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking BIP sheet: {e}")
         return None
@@ -3889,6 +4098,8 @@ def get_bip(student_code: str):
                 set_cached(cache_key, r)
                 return r
         return None
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting BIP: {e}")
         return None
@@ -3924,6 +4135,8 @@ def save_bip(bip_data: dict):
         invalidate_cache(f"bip:{clean_code}")
         invalidate_cache("bip:")
         return {"message": "BIP saved successfully"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error saving BIP: {e}")
         return {"error": str(e)}
@@ -3953,6 +4166,8 @@ def add_holiday(date_str, name):
         clear_cache("holidays") # Clear holidays cache only
         invalidate_cache("config:holidays")  # get_holidays_from_config's actual cache key
         return {"message": f"Holiday {name} ({date_str}) added"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error adding holiday: {e}")
         return {"error": str(e)}
@@ -3976,6 +4191,8 @@ def delete_holiday(date_str):
                 return {"message": f"Holiday {date_str} deleted"}
 
         return {"error": "Holiday not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error deleting holiday: {e}")
         return {"error": str(e)}
@@ -3996,6 +4213,8 @@ def ensure_class_rules_sheet():
             ws = sheet.add_worksheet(title="ClassRules", rows=200, cols=6)
             ws.append_row(["ClassID", "Category", "RuleText", "SourceId", "UpdatedAt", "Author"])
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking ClassRules sheet: {e}")
         return None
@@ -4007,6 +4226,8 @@ def get_class_rules(class_id: str) -> list:
     try:
         records = safe_get_all_records(ws)
         return [r for r in records if str(r.get("ClassID", "")).strip() == clean]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting class rules: {e}")
         return []
@@ -4025,6 +4246,8 @@ def save_class_rules(class_id: str, rules: list, author: str = ""):
         for r in rules:
             ws.append_row([clean, r.get("category", ""), r.get("text", ""), str(r.get("source_id", "") or ""), now, author])
         return {"message": "Class rules saved"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error saving class rules: {e}")
         return {"error": str(e)}
@@ -4042,6 +4265,8 @@ def ensure_token_board_sheet():
             ws = sheet.add_worksheet(title="TokenBoard", rows=300, cols=5)
             ws.append_row(["StudentCode", "ClassID", "TokenCount", "ExchangedCount", "UpdatedAt"])
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking TokenBoard sheet: {e}")
         return None
@@ -4053,6 +4278,8 @@ def get_token_board(class_id: str) -> list:
     try:
         records = safe_get_all_records(ws)
         return [r for r in records if str(r.get("ClassID", "")).strip() == clean]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting token board: {e}")
         return []
@@ -4092,6 +4319,8 @@ def award_token(student_code: str, class_id: str, category: str, delta: int, aut
 
         log_token_award(clean_code, clean_class, category, delta, author)
         return {"student_code": clean_code, "token_count": cur_count, "exchanged_count": cur_exchanged, "exchanged_now": exchanged_now}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error awarding token: {e}")
         return {"error": str(e)}
@@ -4109,6 +4338,8 @@ def ensure_token_log_sheet():
             ws = sheet.add_worksheet(title="TokenLog", rows=1000, cols=7)
             ws.append_row(["Date", "StudentCode", "ClassID", "Category", "Delta", "Author", "CreatedAt"])
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking TokenLog sheet: {e}")
         return None
@@ -4119,6 +4350,8 @@ def log_token_award(student_code: str, class_id: str, category: str, delta: int,
     try:
         now = now_kst()
         ws.append_row([now.strftime("%Y-%m-%d"), str(student_code).strip(), str(class_id).strip(), category, delta, author, now.strftime("%Y-%m-%d %H:%M:%S")])
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error logging token award: {e}")
 
@@ -4132,6 +4365,8 @@ def get_token_log(class_id: str = None, student_code: str = None, limit: int = 5
         if student_code:
             records = [r for r in records if str(r.get("StudentCode", "")).strip() == str(student_code).strip()]
         return records[-limit:][::-1]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting token log: {e}")
         return []
@@ -4155,6 +4390,8 @@ def ensure_target_behavior_sheet():
             ws = sheet.add_worksheet(title="TargetBehaviors", rows=500, cols=11)
             ws.append_row(["BehaviorID", "StudentCode", "Type", "Definition", "MeasurementType", "Baseline", "BIPStartDate", "BIPEndDate", "Status", "Author", "CreatedAt"])
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking TargetBehaviors sheet: {e}")
         return None
@@ -4182,6 +4419,8 @@ def ensure_target_behavior_data_sheet():
             ws = sheet.add_worksheet(title="TargetBehaviorData", rows=2000, cols=6)
             ws.append_row(["BehaviorID", "Date", "Value", "RecordedBy", "Memo", "UUID"])
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking TargetBehaviorData sheet: {e}")
         return None
@@ -4200,6 +4439,8 @@ def ensure_target_behavior_fidelity_sheet():
             ws = sheet.add_worksheet(title="TargetBehaviorFidelity", rows=2000, cols=6)
             ws.append_row(["BehaviorID", "Date", "Implemented", "Memo", "RecordedBy", "UUID"])
         return ws
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error checking TargetBehaviorFidelity sheet: {e}")
         return None
@@ -4212,6 +4453,8 @@ def get_target_behaviors(student_code: str) -> list:
     try:
         records = safe_get_all_records(ws)
         return [r for r in records if str(r.get("StudentCode", "")).strip() == clean]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting target behaviors: {e}")
         return []
@@ -4239,6 +4482,8 @@ def create_target_behavior(data: dict) -> dict:
         ]
         ws.append_row(row)
         return {"behavior_id": behavior_id, "message": "Target behavior created"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error creating target behavior: {e}")
         return {"error": str(e)}
@@ -4260,6 +4505,8 @@ def update_target_behavior_status(behavior_id: str, status: str) -> dict:
                 ws.update_cell(i + 2, status_idx + 1, status)
                 return {"message": "Status updated", "status": status}
         return {"error": "Behavior ID not found"}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error updating target behavior status: {e}")
         return {"error": str(e)}
@@ -4273,6 +4520,8 @@ def add_target_behavior_data(behavior_id: str, date_str: str, value: str, record
         row_uuid = str(uuid.uuid4())
         ws.append_row([behavior_id, date_str, value, recorded_by, memo, row_uuid])
         return {"message": "Data point recorded", "uuid": row_uuid}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error adding target behavior data: {e}")
         return {"error": str(e)}
@@ -4284,6 +4533,8 @@ def get_target_behavior_data(behavior_id: str) -> list:
     try:
         records = safe_get_all_records(ws)
         return [r for r in records if str(r.get("BehaviorID", "")).strip() == str(behavior_id).strip()]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting target behavior data: {e}")
         return []
@@ -4351,6 +4602,8 @@ def add_target_behavior_fidelity(behavior_id: str, date_str: str, implemented: s
         row_uuid = str(uuid.uuid4())
         ws.append_row([behavior_id, date_str, implemented, memo, recorded_by, row_uuid])
         return {"message": "Fidelity check-in recorded", "uuid": row_uuid}
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error adding target behavior fidelity: {e}")
         return {"error": str(e)}
@@ -4362,6 +4615,8 @@ def get_target_behavior_fidelity(behavior_id: str) -> list:
     try:
         records = safe_get_all_records(ws)
         return [r for r in records if str(r.get("BehaviorID", "")).strip() == str(behavior_id).strip()]
+    except SheetUnavailable:
+        raise
     except Exception as e:
         print(f"Error getting target behavior fidelity: {e}")
         return []

@@ -8,6 +8,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
+import { API_BASE_URL } from "@/app/lib/api";
 
 interface StudentStatus {
     번호: number;
@@ -57,7 +58,7 @@ export default function TierStatusPage() {
         try {
             if (!silent) setLoading(true);
             setErrorMsg(null);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
 
             const fetchedStudents = response.data.students || response.data || [];
@@ -104,7 +105,7 @@ export default function TierStatusPage() {
 
         setSaving(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
 
             await axios.put(`${apiUrl}/api/v1/tier/status/unified`, {
                 code: editingCode,

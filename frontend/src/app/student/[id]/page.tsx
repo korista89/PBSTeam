@@ -18,6 +18,7 @@ import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import ReadableAIResult from "../../components/ReadableAIResult";
 import CrisisDetailPanel from "../../components/CrisisDetailPanel";
 import { maskName } from "../../utils";
+import { API_BASE_URL } from "@/app/lib/api";
 
 // 대시보드(page.tsx)와 동일한 팔레트 — 화면마다 같은 지표가 다른 색으로 보이지 않게 통일.
 const PIE_COLORS_TYPE = ['#3b82f6', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#06b6d4', '#f97316'];
@@ -27,7 +28,7 @@ export default function StudentDetail() {
   const router = useRouter();
   const studentName = decodeURIComponent(params.id as string);
   const { startDate, endDate } = useDateRange();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+  const apiUrl = API_BASE_URL;
 
   const [data, setData] = useState<StudentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -414,7 +415,7 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const { user, isAdmin } = useAuth();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+  const apiUrl = API_BASE_URL;
 
   const fetchNotes = useCallback(async () => {
     try {

@@ -6,6 +6,7 @@ import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useRouter } from "next/navigation";
 import { EBPStrategy, EBPCategory, FunctionCode } from "../../types/domain";
+import { API_BASE_URL } from "@/app/lib/api";
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: string; color: string }> = {
     ALL: { label: "전체 (39종)", icon: "🌐", color: "#3b82f6" },
@@ -45,7 +46,7 @@ export default function EBPLibraryPage() {
         try {
             setLoading(true);
             setError(null);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const res = await axios.get(`${apiUrl}/api/v1/ebp/catalog`);
             setStrategies(res.data.strategies || []);
         } catch (err: any) {

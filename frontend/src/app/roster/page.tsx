@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
+import { API_BASE_URL } from "@/app/lib/api";
 
 export default function RosterPage() {
   const [roster, setRoster] = useState<any[]>([]);
@@ -14,7 +15,7 @@ export default function RosterPage() {
   const fetchRoster = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const apiUrl = API_BASE_URL;
       const response = await axios.get(`${apiUrl}/api/v1/roster`);
       setRoster(response.data);
     } catch (err) {

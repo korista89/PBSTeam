@@ -16,8 +16,9 @@ import SectionAIButton from "./components/SectionAIButton";
 import ReadableAIResult from "./components/ReadableAIResult";
 import { maskName, formatWeek } from "./utils";
 import { useSheetLiveSync } from "./hooks/useSheetLiveSync";
+import { API_BASE_URL } from "@/app/lib/api";
 
-const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
+const apiUrl = API_BASE_URL;
 
 const TIER_COLORS: Record<string, string> = {
   "Tier 1 (보편)": "#10b981",

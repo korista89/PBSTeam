@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from app.adapters.sheets.resilience import SheetUnavailable
 from app.services.sheets import (
     fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
     update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
@@ -119,6 +120,8 @@ def update_tier_unified(req_data: UnifiedTierUpdateRequest, current_admin: Dict[
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
         return result
+    except SheetUnavailable:
+        raise
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Validation Error: {str(e)}")
 

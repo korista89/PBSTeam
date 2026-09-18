@@ -3,8 +3,9 @@
 import React, { useState } from "react";
 import axios from "axios";
 import ReadableAIResult from "./ReadableAIResult";
+import { API_BASE_URL } from "@/app/lib/api";
 
-const apiUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL || "") : "";
+const apiUrl = API_BASE_URL;
 
 // ====== 차트별 AI 해석 버튼 (모달 기본, onResult 전달 시 도킹 패널로 출력) ======
 export default function SectionAIButton({

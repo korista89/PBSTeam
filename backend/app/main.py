@@ -11,7 +11,9 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
+from urllib.parse import quote
 from app.core.config import settings
+from app.adapters.sheets.resilience import SheetUnavailable, begin_request, end_request
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
 
@@ -41,6 +43,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-PBST-Data-Stale", "Retry-After"],
 )
 
 @app.middleware("http")
@@ -65,6 +68,18 @@ async def verify_origin_header(request: Request, call_next):
     return await call_next(request)
 
 
+POLL_MAX_AGE_SECONDS = 20
+
+
+@app.exception_handler(SheetUnavailable)
+async def sheet_unavailable_handler(request: Request, exc: SheetUnavailable):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "구글 시트 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "source": exc.source},
+        headers={"Retry-After": "10"},
+    )
+
+
 @app.middleware("http")
 async def sheet_sync_and_api_cache_control(request: Request, call_next):
     """Provide an explicit fresh-read path for live Google Sheets screens.
@@ -75,20 +90,26 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
     of whichever instance receives the GET before the endpoint reads Sheets.
     """
     is_api = request.url.path.startswith("/api/")
-    wants_fresh_sheet = (
-        request.method == "GET"
-        and request.url.path.startswith("/api/v1/")
-        and request.headers.get("x-pbst-sheet-refresh", "").strip() == "1"
-    )
+    refresh_mode = request.headers.get("x-pbst-sheet-refresh", "").strip()
+    is_sheet_get = request.method == "GET" and request.url.path.startswith("/api/v1/")
 
-    if wants_fresh_sheet:
+    if is_sheet_get and refresh_mode == "poll":
+        # Periodic/focus polls only need "recent enough" data: re-read entries
+        # older than POLL_MAX_AGE_SECONDS instead of wiping the whole cache on
+        # every tick of every open tab (the main driver of Sheets 429s).
+        from app.services.sheets import clear_cache
+        await run_in_threadpool(clear_cache, None, ("users",), POLL_MAX_AGE_SECONDS)
+    elif is_sheet_get and refresh_mode == "1":
+        # Sent right after this client's own write: must see it, so clear fully.
         from app.services.sheets import clear_cache
         # clear_cache() and clear_pw_cache() are synchronous (plain dict/module
         # state), but this middleware runs on the event loop for every GET. On
         # a Vercel warm instance shared across concurrent requests, doing this
         # inline briefly holds up every other in-flight request; run it off
         # the event loop like the rest of the (also-synchronous) request path.
-        await run_in_threadpool(clear_cache)
+        # Keep the Users cache: it is auth data, not screen data. Wiping it here made
+        # every 30s live-refresh re-read Users, and a 429 on that read became a 401.
+        await run_in_threadpool(clear_cache, None, ("users",))
         try:
             from app.services.picture_words import clear_pw_cache
             await run_in_threadpool(clear_pw_cache)
@@ -96,7 +117,14 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
             # Picture-word sheets are optional to the core PBST data contract.
             pass
 
-    response = await call_next(request)
+    # Reads may fall back to the last good copy only for GETs; see resilience.py.
+    sheet_ctx = begin_request(allow_stale=request.method == "GET")
+    try:
+        response = await call_next(request)
+    finally:
+        stale_sources = end_request(sheet_ctx)
+    if stale_sources:
+        response.headers["X-PBST-Data-Stale"] = ",".join(quote(s) for s in sorted(stale_sources))
     if is_api:
         # Prevent browser/CDN reuse on authenticated, mutable Sheet-backed APIs.
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"

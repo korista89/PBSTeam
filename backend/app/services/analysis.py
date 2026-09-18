@@ -1,4 +1,5 @@
 from app.services.sheets import fetch_all_records, fetch_student_codes, get_beable_code_mapping, fetch_student_status, get_enrolled_student_count
+from app.adapters.sheets.resilience import SheetUnavailable
 from app.schemas import BehaviorRecord
 import pandas as pd
 import re
@@ -192,6 +193,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
                 resolved = get_student_class_code(sc_str)
                 return resolved == target_canonical
             df = df[df['student_code'].apply(_matches_class)]
+        except SheetUnavailable:
+            raise
         except Exception:
             df = df[df['student_code'].str.startswith(str(class_id), na=False)]
     
@@ -303,6 +306,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             raw_int_val = row.get('강도', 5)
             try:
                 alert_int = int(raw_int_val) if pd.notna(raw_int_val) else 5
+            except SheetUnavailable:
+                raise
             except Exception:
                 alert_int = 5
             safety_alerts.append({
@@ -334,6 +339,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             days = (d2 - d1).days + 1
             if days > 0:
                 daily_avg = round(total_incidents / days, 1)
+        except SheetUnavailable:
+            raise
         except Exception:
             pass
     elif not df.empty and 'date_obj' in df.columns:
@@ -385,6 +392,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
                     if str(s.get('학생코드', '')).strip().startswith(str(class_id))
                     or normalize_class_identifier(s.get('학급', '')) == target_canonical
                 ]
+            except SheetUnavailable:
+                raise
             except Exception:
                 all_status = [s for s in all_status if str(s.get('학생코드', '')).strip().startswith(str(class_id))]
         enrolled_count = len([s for s in all_status if s.get('재학여부') == 'O']) if class_id else get_enrolled_student_count()
@@ -407,6 +416,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             "tier3": {"count": t3_count, "pct": pct(t3_count)},
             "tier3_plus": {"count": t3p_count, "pct": pct(t3p_count)},
         }
+    except SheetUnavailable:
+        raise
     except Exception:
         tier_stats = None
 
@@ -572,6 +583,8 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
         matched_status = status_by_code.get(str(resolved_code).strip()) or status_by_name.get(str(resolved_name).strip())
         if matched_status:
             student_class = matched_status.get('학급', matched_status.get('Class', '-'))
+    except SheetUnavailable:
+        raise
     except Exception:
         pass
     

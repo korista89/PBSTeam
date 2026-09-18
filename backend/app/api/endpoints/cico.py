@@ -61,6 +61,9 @@ def get_cico_report(
 
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"] and isinstance(data, dict) and "students" in data:
+        # data is the shared cached object; scope a copy so other users' next
+        # request doesn't receive this teacher's filtered list/summary.
+        data = dict(data)
         user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
         scoped_students = [
             s for s in data.get("students", [])
@@ -100,6 +103,7 @@ def get_cico_monthly(
 
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"] and isinstance(data, dict) and "students" in data:
+        data = dict(data)  # scope a copy, never the shared cached object
         user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
         scoped_students = []
         for s in data.get("students", []):
@@ -109,6 +113,27 @@ def get_cico_monthly(
         data["students"] = scoped_students
 
     return data
+
+
+@router.get("/overview")
+def get_cico_overview(
+    month: int = 3,
+    year: int = 2025,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """monthly + business-days + report in one request for the CICO tab.
+
+    One auth check and one instance's cache instead of three parallel requests
+    that could each land on a different cold instance and re-read the same sheets.
+    A report failure doesn't fail the page (same as the tab's previous behaviour).
+    """
+    monthly = get_cico_monthly(month=month, current_user=current_user)
+    business = get_cico_business_days(month=month, year=year, current_user=current_user)
+    try:
+        report = get_cico_report(month=month, current_user=current_user)
+    except HTTPException:
+        report = {"month": str(month), "students": []}
+    return {"monthly": monthly, "business_days": business, "report": report}
 
 
 class CellUpdate(BaseModel):

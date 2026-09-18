@@ -5,6 +5,7 @@ import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
+import { API_BASE_URL } from "@/app/lib/api";
 
 interface Post {
     id: string;
@@ -34,7 +35,7 @@ export default function BoardPage() {
     const fetchPosts = useCallback(async (silent = false) => {
         try {
             if (!silent) setLoading(true);
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const res = await axios.get(`${apiUrl}/api/v1/board`);
             setPosts(res.data);
         } catch (err) {
@@ -51,7 +52,7 @@ export default function BoardPage() {
         if (!title.trim() || !content.trim()) return;
         setWriteLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.post(`${apiUrl}/api/v1/board`, {
                 title, content, author: user?.id || "Teacher"
             });
@@ -63,7 +64,7 @@ export default function BoardPage() {
     const handleDelete = async (postId: string) => {
         if (!confirm("삭제하시겠습니까?")) return;
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.delete(`${apiUrl}/api/v1/board/${postId}`, {
                 params: { user_id: user?.id || "", role: isAdmin() ? "admin" : "teacher" }
             });
@@ -74,7 +75,7 @@ export default function BoardPage() {
     const handleUpdate = async (postId: string) => {
         if (!editTitle.trim() || !editContent.trim()) return;
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.put(`${apiUrl}/api/v1/board/${postId}`, {
                 title: editTitle, content: editContent,
                 user_id: user?.id || "", role: isAdmin() ? "admin" : "teacher"

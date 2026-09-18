@@ -4,12 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, Rea
 import { useRouter, usePathname } from "next/navigation";
 import axios from "axios";
 import { User } from "../types";
-import { API_BASE_URL } from "../constants";
-
-// Global axios configuration to ensure session cookies are sent on all requests
-if (typeof window !== "undefined") {
-    axios.defaults.withCredentials = true;
-}
+import { API_BASE_URL, setSessionLostHandler } from "../lib/api";
 
 interface AuthContextType {
     user: User | null;
@@ -63,6 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         fetchCurrentUser();
     }, [fetchCurrentUser]);
+
+    // A genuine 401 from any tab means the session cookie expired or was revoked.
+    // Clearing the user lets AuthCheck redirect to /login instead of each page
+    // showing "Request failed with status code 401".
+    useEffect(() => {
+        setSessionLostHandler(() => setUser(null));
+        return () => setSessionLostHandler(null);
+    }, []);
 
     const login = useCallback((userData: User) => {
         // Update in-memory state only (HttpOnly session cookie is already set by backend /auth/login)

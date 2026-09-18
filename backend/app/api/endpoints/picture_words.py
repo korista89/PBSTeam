@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
+from app.adapters.sheets.resilience import SheetUnavailable
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from app.services.picture_words import (
@@ -167,6 +168,8 @@ def patch_minute(req: MinuteUpdateRequest, current_user: Dict[str, Any] = Depend
         return result
     except HTTPException:
         raise
+    except SheetUnavailable:
+        raise
     except Exception as e:
         import traceback
         raise HTTPException(status_code=500, detail={"error": "API Error", "message": str(e), "trace": traceback.format_exc()})
@@ -193,6 +196,8 @@ def remove_minute(source_type: str, row_index: int, current_user: Dict[str, Any]
             raise HTTPException(status_code=500, detail=result)
         return result
     except HTTPException:
+        raise
+    except SheetUnavailable:
         raise
     except Exception as e:
         import traceback

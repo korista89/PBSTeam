@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "./AuthProvider";
+import SheetStatusBanner from "./SheetStatusBanner";
 
 interface AppShellProps {
     currentPage: string;
@@ -311,6 +312,7 @@ export default function AppShell({
 
                 {/* Page Main Content Area */}
                 <main className="app-content">
+                    <SheetStatusBanner />
                     {children}
                 </main>
             </div>

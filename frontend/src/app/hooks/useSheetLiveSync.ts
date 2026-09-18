@@ -4,7 +4,12 @@ import { useEffect, useRef } from "react";
 import axios from "axios";
 
 const SHEET_MUTATION_EVENT = "pbsteam:sheet-mutation";
-const DEFAULT_INTERVAL_MS = 30_000;
+// 60s: every open tab polls, and each poll costs Google Sheets read quota.
+const DEFAULT_INTERVAL_MS = 60_000;
+
+// "1"    = right after this client's own write: backend clears its cache fully.
+// "poll" = periodic/focus refresh: backend only re-reads data older than ~20s.
+type RefreshMode = "1" | "poll";
 
 let forceFreshReadDepth = 0;
 let axiosInterceptorInstalled = false;
@@ -36,9 +41,12 @@ export function requestSheetLiveRefresh() {
   }
 }
 
-async function withFreshSheetReads(callback: () => void | Promise<void>) {
+async function withFreshSheetReads(callback: () => void | Promise<void>, mode: RefreshMode) {
   forceFreshReadDepth += 1;
-  axios.defaults.headers.common["X-PBST-Sheet-Refresh"] = "1";
+  // A concurrent post-write refresh must not be downgraded to a poll.
+  if (mode === "1" || axios.defaults.headers.common["X-PBST-Sheet-Refresh"] !== "1") {
+    axios.defaults.headers.common["X-PBST-Sheet-Refresh"] = mode;
+  }
   try {
     await callback();
   } finally {
@@ -78,11 +86,11 @@ export function useSheetLiveSync(
     installMutationInterceptor();
     if (!enabled || typeof window === "undefined") return;
 
-    const runRefresh = async () => {
+    const runRefresh = async (mode: RefreshMode = "poll") => {
       if (document.visibilityState !== "visible" || inFlightRef.current) return;
       inFlightRef.current = true;
       try {
-        await withFreshSheetReads(() => refreshRef.current());
+        await withFreshSheetReads(() => refreshRef.current(), mode);
       } finally {
         inFlightRef.current = false;
       }
@@ -92,7 +100,7 @@ export function useSheetLiveSync(
       if (document.visibilityState === "visible") void runRefresh();
     };
     const onFocus = () => void runRefresh();
-    const onMutation = () => void runRefresh();
+    const onMutation = () => void runRefresh("1");
     const timer = window.setInterval(() => void runRefresh(), intervalMs);
 
     if (refreshOnFocus) {

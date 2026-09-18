@@ -5,6 +5,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../components/AuthProvider";
 import { CLASS_LIST } from "../constants";
+import { API_BASE_URL } from "@/app/lib/api";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -50,7 +51,7 @@ export default function LoginPage() {
                 userId = "admin";
             }
 
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const response = await axios.post(`${apiUrl}/api/v1/auth/login`, {
                 user_id: userId,
                 password: password

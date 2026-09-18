@@ -7,6 +7,7 @@ import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { maskName } from "../../utils";
+import { API_BASE_URL } from "@/app/lib/api";
 
 // 조회수정 시점이 다른 지점(페이지 1/2/3 각각 안건 편집)에서 중복 코드 없이
 // "메모 있으면 수정, 없으면 새로 작성" 패턴을 공유하기 위한 섹션 컴포넌트.
@@ -25,7 +26,7 @@ function AgendaSection({ sectionTitle, meetingType, notes, dateRange, user, onSa
     const save = async () => {
         setSaving(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             if (latest?.id) {
                 await axios.patch(`${apiUrl}/api/v1/meeting-notes/${latest.id}`, { content: draft });
             } else {
@@ -118,7 +119,7 @@ export default function ConsultationReportPage() {
     }, [globalStart, globalEnd]);
 
     const fetchNotes = async (tier: 'tier1' | 'tier2' | 'tier3') => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+        const apiUrl = API_BASE_URL;
         const res = await axios.get(`${apiUrl}/api/v1/meeting-notes?meeting_type=${meetingTypeFor(tier)}`);
         return res.data.notes;
     };
@@ -131,7 +132,7 @@ export default function ConsultationReportPage() {
     const fetchReport = async () => {
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const [dashboardRes, tier1Notes, tier2Notes, tier3Notes] = await Promise.all([
                 axios.get(`${apiUrl}/api/v1/analytics/dashboard?start_date=${dateRange.start}&end_date=${dateRange.end}`),
                 fetchNotes('tier1'), fetchNotes('tier2'), fetchNotes('tier3'),

@@ -6,6 +6,7 @@ import axios from 'axios';
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useDateRange } from "../components/GlobalNav";
+import { API_BASE_URL } from "@/app/lib/api";
 
 
 export default function MeetingPage() {
@@ -31,7 +32,7 @@ export default function MeetingPage() {
         }
         setLoading(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-meeting-minutes`, {
                 start_date: startDate,
                 end_date: endDate,
@@ -53,7 +54,7 @@ export default function MeetingPage() {
         if (!result) return;
         setSaving(true);
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiUrl = API_BASE_URL;
             await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
                 meeting_type: savedMeetingType,
                 date: new Date().toISOString().split('T')[0],

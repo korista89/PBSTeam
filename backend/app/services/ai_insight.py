@@ -1,4 +1,5 @@
 import os
+from app.adapters.sheets.resilience import SheetUnavailable
 import json
 import re
 import time
@@ -323,6 +324,8 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                     m_data = m_resp.json().get("data", [])
                     if m_data and isinstance(m_data, list):
                         model_to_use = m_data[0].get("id", model_to_use)
+            except SheetUnavailable:
+                raise
             except Exception:
                 pass
 
@@ -364,6 +367,8 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                     if cleaned and len(cleaned) > 100:
                         location_tag = "Cloudflare Tunnel" if "trycloudflare" in endpoint else "Local"
                         return cleaned + f"\n\n---\n> 🖥️ **로컬 AI 모델**: {actual_model} ({location_tag})"
+        except SheetUnavailable:
+            raise
         except Exception:
             continue
             
@@ -395,6 +400,8 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                 cleaned = _clean_llm_output(msg)
                 if cleaned and len(cleaned) > 100:
                     return cleaned + f"\n\n---\n> 🖥️ **로컬 모델**: {configured_model or 'gemma-4-e4b'} (Ollama)"
+        except SheetUnavailable:
+            raise
         except Exception:
             continue
             
@@ -496,6 +503,8 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                         break
                     else:
                         last_error = f"{g_model} HTTP {resp.status_code}"
+                except SheetUnavailable:
+                    raise
                 except Exception as e:
                     last_error = f"{g_model} 예외: {str(e)[:100]}"
                     continue
@@ -539,6 +548,8 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                         return "⏳ AI 분석 요청이 너무 많아 잠시 대기 중입니다. 1분 후 다시 [Refresh]를 눌러주세요. (Groq 무료 한도 초과)"
                     break
                 last_error = f"Groq {g_model} HTTP {resp.status_code}"
+            except SheetUnavailable:
+                raise
             except Exception as e:
                 last_error = f"Groq {g_model}: {str(e)}"
                 continue
@@ -660,6 +671,8 @@ def generate_meeting_agent_report(*args, **kwargs) -> dict:
             "text": text,
             "summary": summary
         }
+    except SheetUnavailable:
+        raise
     except Exception as e:
         return {"briefing_text": "대시보드 브리핑 요약 준비 완료", "text": "", "error": str(e)}
 
@@ -1711,6 +1724,8 @@ def _ebp_catalog_reference_block() -> str:
             for s in catalog
         ]
         _EBP_CATALOG_REFERENCE_CACHE = "\n".join(lines)
+    except SheetUnavailable:
+        raise
     except Exception:
         _EBP_CATALOG_REFERENCE_CACHE = ""
     return _EBP_CATALOG_REFERENCE_CACHE

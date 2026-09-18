@@ -1,4 +1,5 @@
 import re
+from app.adapters.sheets.resilience import SheetUnavailable
 import datetime
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -371,6 +372,8 @@ def compute_entry_lag(ts_str: str, occurred_date_str: str) -> Optional[int]:
             
         lag = (ts_dt - occ_dt).days
         return max(0, lag)
+    except SheetUnavailable:
+        raise
     except Exception:
         return None
 
@@ -476,6 +479,8 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     
     try:
         intensity_num = int(re.search(r'\d+', int_val).group(1)) if re.search(r'\d+', int_val) else 1
+    except SheetUnavailable:
+        raise
     except Exception:
         intensity_num = 1
         

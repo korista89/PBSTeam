@@ -9,6 +9,7 @@ import { useDateRange } from "../../../components/GlobalNav";
 import { parseBIPAIResult } from "../../../utils";
 import ReadableAIResult from "../../../components/ReadableAIResult";
 import * as XLSX from "xlsx";
+import { API_BASE_URL } from "@/app/lib/api";
 
 
 interface BIPData {
@@ -374,7 +375,7 @@ export default function BIPEditor() {
     const [saving, setSaving] = useState(false);
     const [aiDecision, setAiDecision] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    const apiUrl = API_BASE_URL;
 
     useEffect(() => {
         if (!studentName) return;

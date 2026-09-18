@@ -6,6 +6,7 @@ import axios from "axios";
 import AppShell from "../components/AppShell";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { DOMAINS, VBS } from "./constants";
+import { API_BASE_URL } from "@/app/lib/api";
 
 // ── 타입 정의 ─────────────────────────────────────────────────
 interface Student {
@@ -88,7 +89,7 @@ const domainColor = (idx: number) => {
 };
 
 export default function PictureWordPage() {
-  const API = (process.env.NEXT_PUBLIC_API_URL || "") + "/api/v1/picture-words";
+  const API = API_BASE_URL + "/api/v1/picture-words";
 
   // ── 탭 & 전역 상태 ───────────────────────────────────────
   const [tab, setTab] = useState<

@@ -5,6 +5,7 @@ import axios from "axios";
 import Link from "next/link";
 import { AuthCheck } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
+import { API_BASE_URL } from "@/app/lib/api";
 
 export default function CodeManagementPage() {
   interface StudentCode {
@@ -23,7 +24,7 @@ export default function CodeManagementPage() {
 
   const fetchCodes = async () => {
       try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+          const apiUrl = API_BASE_URL;
           const res = await axios.get(`${apiUrl}/api/v1/roster/codes`);
 
           let fetchedData: StudentCode[] = [];
@@ -101,7 +102,7 @@ export default function CodeManagementPage() {
   const handleSave = async () => {
       setSaving(true);
       try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+          const apiUrl = API_BASE_URL;
           const payload = codes.filter(c => c.name.trim() !== "").map(c => ({
               Code: c.code,
               Name: c.name,
