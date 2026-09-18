@@ -185,7 +185,8 @@ def fetch_evaluation_sentences():
         print(f"Error fetching evaluation sentences: {e}")
         return []
 
-def clear_cache(key: Optional[str] = None, keep: tuple = (), max_age: Optional[float] = None):
+def clear_cache(key: Optional[str] = None, keep: tuple = (), max_age: Optional[float] = None,
+                lookups: bool = True):
     """Invalidate cached Sheet reads.
 
     key=None clears everything except the keys listed in ``keep`` (and their
@@ -194,7 +195,8 @@ def clear_cache(key: Optional[str] = None, keep: tuple = (), max_age: Optional[f
 
     max_age (seconds, key=None only) limits the clear to entries older than that,
     for periodic polls that only need "recent enough" data. A clear without
-    max_age also drops cached worksheet lookups so newly created sheets appear.
+    max_age also drops cached worksheet lookups (unless lookups=False) so newly
+    created sheets appear; worksheets created on this instance invalidate them anyway.
     """
     global _cache
     try:
@@ -246,7 +248,7 @@ def clear_cache(key: Optional[str] = None, keep: tuple = (), max_age: Optional[f
                     _adapter_cache.pop(k, None)
             else:
                 invalidate_cache()
-            if cutoff is None:
+            if cutoff is None and lookups:
                 invalidate_worksheet_lookups()
     except SheetUnavailable:
         raise

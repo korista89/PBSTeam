@@ -29,16 +29,24 @@ function installMutationInterceptor() {
   axiosInterceptorInstalled = true;
   axios.interceptors.response.use((response) => {
     if (isSheetBackedMutation(response.config.method, response.config.url)) {
-      window.setTimeout(requestSheetLiveRefresh, 200);
+      requestSheetLiveRefresh();
     }
     return response;
   });
 }
 
+// Every post-write refresh makes the backend drop its cache and re-read the sheets.
+// Coalesce bursts (several cell saves / settings changes in a row) into one refresh
+// so a teacher editing quickly doesn't exhaust the Sheets read quota by themselves.
+const MUTATION_REFRESH_DEBOUNCE_MS = 1_200;
+let mutationRefreshTimer: number | undefined;
+
 export function requestSheetLiveRefresh() {
-  if (typeof window !== "undefined") {
+  if (typeof window === "undefined") return;
+  window.clearTimeout(mutationRefreshTimer);
+  mutationRefreshTimer = window.setTimeout(() => {
     window.dispatchEvent(new Event(SHEET_MUTATION_EVENT));
-  }
+  }, MUTATION_REFRESH_DEBOUNCE_MS);
 }
 
 async function withFreshSheetReads(callback: () => void | Promise<void>, mode: RefreshMode) {

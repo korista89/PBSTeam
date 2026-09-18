@@ -109,7 +109,10 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
         # the event loop like the rest of the (also-synchronous) request path.
         # Keep the Users cache: it is auth data, not screen data. Wiping it here made
         # every 30s live-refresh re-read Users, and a 429 on that read became a 401.
-        await run_in_threadpool(clear_cache, None, ("users",))
+        # Worksheet lookups are kept: re-fetching spreadsheet metadata after every
+        # write burned read quota (lookup cache TTL is 5 min; new sheets by exact
+        # title are never negatively cached).
+        await run_in_threadpool(clear_cache, None, ("users",), None, False)
         try:
             from app.services.picture_words import clear_pw_cache
             await run_in_threadpool(clear_pw_cache)

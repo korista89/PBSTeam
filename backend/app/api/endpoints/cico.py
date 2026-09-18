@@ -190,23 +190,40 @@ def update_cico_cells(
     }
     role = str(current_user.get("role", "")).lower()
 
-    # Pre-validate the complete batch before any Sheet write is attempted.
+    # Validate every cell before writing. Authorization failures reject the whole
+    # batch; data problems (e.g. a value entered before the row's 척도 was changed)
+    # are reported per cell so the client can drop just those and keep the rest.
+    # Previously the first bad cell failed the batch, and because the client kept
+    # re-sending it, every later save on that screen failed too.
+    valid, rejected = [], []
     for u in req.updates:
+        cell = {"row": u.row, "col": u.col, "value": u.value}
         target_student = row_to_student.get(u.row)
         if not target_student:
-            raise HTTPException(status_code=404, detail=f"Row {u.row} does not map to a known student record.")
+            rejected.append({**cell, "reason": "학생 행을 찾을 수 없습니다. 화면을 새로고침해 주세요."})
+            continue
         if role not in ["admin", "superadmin"]:
             st_code = target_student.get("학생코드") or ""
             check_student_scope(str(st_code), current_user)
+        scale = target_student.get("척도", "")
         if u.col not in allowed_daily_columns:
-            raise HTTPException(status_code=400, detail=f"Column {u.col} is not a daily CICO input column.")
-        if not _is_valid_daily_value(target_student.get("척도", ""), u.value):
-            raise HTTPException(status_code=400, detail=f"'{u.value}' is not valid for scale '{target_student.get('척도', '')}'.")
+            rejected.append({**cell, "reason": "일일 입력 칸이 아닙니다. 화면을 새로고침해 주세요."})
+        elif not _is_valid_daily_value(scale, u.value):
+            rejected.append({**cell, "reason": f"'{u.value}'은(는) 척도 '{scale}'에 맞지 않는 값입니다."})
+        else:
+            valid.append(cell)
 
-    updates = [{"row": u.row, "col": u.col, "value": u.value} for u in req.updates]
-    result = update_monthly_cico_cells(req.month, updates)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
+    result: Dict[str, Any] = {"updated": 0}
+    if valid:
+        result = update_monthly_cico_cells(req.month, valid)
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+    if rejected:
+        raise HTTPException(status_code=422, detail={
+            "message": f"{len(rejected)}칸은 저장하지 못했습니다" + (f" ({len(valid)}칸은 저장됨)." if valid else "."),
+            "rejected": rejected,
+            "saved": valid,
+        })
     return result
 
 

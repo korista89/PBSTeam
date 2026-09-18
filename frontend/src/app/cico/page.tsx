@@ -272,18 +272,41 @@ export default function CICOPage() {
     if (pendingUpdates.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     const batchToSave = pendingUpdates;
+    type Cell = { row: number; col: number; value: string };
+    const sameCell = (a: Cell, b: Cell) => a.row === b.row && a.col === b.col && a.value === b.value;
+    const dropFromPending = (done: Cell[]) =>
+      setPendingUpdates(current => current.filter(item => !done.some(d => sameCell(d, item))));
+
     saveTimerRef.current = setTimeout(async () => {
       setSaveStatus("저장 중...");
       try {
         await axios.post(`${apiUrl}/api/v1/cico/monthly/update`, { month, updates: batchToSave });
-        setPendingUpdates(current => current.filter(item => !batchToSave.some(saved => (
-          saved.row === item.row && saved.col === item.col && saved.value === item.value
-        ))));
+        dropFromPending(batchToSave);
         setSaveStatus("✓ 저장 완료");
+        // After the render that empties the queue re-enables live sync.
         window.setTimeout(requestSheetLiveRefresh, 300);
         setTimeout(() => setSaveStatus(""), 2000);
-      } catch {
-        setSaveStatus("⚠ 저장 실패");
+      } catch (err: any) {
+        const status = err?.response?.status;
+        const detail = err?.response?.data?.detail;
+        if (!err?.response || status === 503) {
+          // Sheets busy/quota: the cells are still valid, keep them and retry.
+          setSaveStatus("⏳ 구글 시트 응답 지연 — 10초 후 자동으로 다시 저장합니다");
+          saveTimerRef.current = setTimeout(() => setPendingUpdates(current => [...current]), 10_000);
+          return;
+        }
+        // Rejected cells must leave the queue; otherwise they are re-sent with every
+        // later edit and every save on this screen keeps failing until a reload.
+        if (status === 422 && Array.isArray(detail?.rejected)) {
+          dropFromPending([...(detail.saved || []), ...detail.rejected]);
+          const reason = detail.rejected[0]?.reason ? ` — ${detail.rejected[0].reason}` : "";
+          setSaveStatus(`⚠ ${detail.message || "일부 칸을 저장하지 못했습니다."}${reason}`);
+        } else {
+          dropFromPending(batchToSave);
+          const msg = typeof detail === "string" ? detail : "";
+          setSaveStatus(`⚠ 저장 실패${msg ? ` — ${msg}` : ""} (입력 내용을 서버 값으로 되돌렸습니다)`);
+        }
+        window.setTimeout(requestSheetLiveRefresh, 300);
       }
     }, 1500);
     return () => {

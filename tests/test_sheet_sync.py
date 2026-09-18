@@ -41,7 +41,7 @@ class SheetSyncTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 401)
-        clear_cache.assert_called_once_with(None, ("users",))
+        clear_cache.assert_called_once_with(None, ("users",), None, False)
         clear_pw_cache.assert_called_once_with()
         self.assertIn("no-store", response.headers.get("cache-control", ""))
 
