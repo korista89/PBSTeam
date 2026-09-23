@@ -641,7 +641,7 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
                       ) : (
                         <input autoFocus type="number" defaultValue={val} onBlur={e => { onCellChange(gridStudent, day.label, e.target.value); setEditingCell(null); }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} style={{ width: "100%", textAlign: "center", fontSize: "0.65rem" }} />
                       )
-                    ) : (val || "·")}
+                    ) : val ? val : <span style={{ fontSize: "0.6rem", color: "#94a3b8" }}>결석</span>}
                   </div>
                 </div>
               );
