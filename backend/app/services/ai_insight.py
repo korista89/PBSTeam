@@ -1728,10 +1728,22 @@ def _summarize_medication_period(label: str, start: str, end: str, data: dict) -
     }
 
 
+def _format_medications(medications: list) -> str:
+    """"약물 없음(관찰만)" 상태와 여러 약물 병용을 모두 표현한다. 빈 목록은
+    "미복용"으로 명시해, 약물 시작 전/중단 후 관찰과 병용약물 변경을 모두
+    다룰 수 있게 한다."""
+    names = [
+        f"{(m.get('name') or '').strip()}{(' ' + m.get('dose', '').strip()) if m.get('dose', '').strip() else ''}"
+        for m in (medications or [])
+        if (m.get("name") or "").strip()
+    ]
+    return ", ".join(names) if names else "미복용"
+
+
 def generate_medication_response_report(
     student_info: dict,
-    medication_name: str,
-    medication_dose: str,
+    before_medications: list,
+    after_medications: list,
     before_period: dict,
     after_period: dict,
     before_data: dict,
@@ -1739,7 +1751,9 @@ def generate_medication_response_report(
 ) -> str:
     """
     약물 복용 변경 전/후 교실 행동을 비교해, 담임교사가 정신건강의학과 진료 시
-    의료진에게 제출할 수 있는 "교실 관찰 의견서"를 만든다.
+    의료진에게 제출할 수 있는 "교실 관찰 의견서"를 만든다. 각 기간에 여러
+    약물을 병용했거나(다약제), 한쪽 기간이 아예 미복용(예: 약물 시작 전
+    관찰, 또는 중단 후 관찰)이어도 다룰 수 있다.
 
     이 함수는 의도적으로 진단이나 처방을 만들어내지 않는다. 진단명 추정과 약물
     조정 제안은 COMMON_BCBA_SYSTEM_PROMPT 10번 규칙에서 이미 금지되어 있고,
@@ -1752,19 +1766,30 @@ def generate_medication_response_report(
 
     payload = {
         "student": {"code": student_info.get("code"), "class": student_info.get("class")},
-        "medication": {"name": medication_name, "dose": medication_dose},
+        "medications": {
+            "before": [{"name": m.get("name"), "dose": m.get("dose")} for m in (before_medications or []) if (m.get("name") or "").strip()] or "미복용",
+            "after": [{"name": m.get("name"), "dose": m.get("dose")} for m in (after_medications or []) if (m.get("name") or "").strip()] or "미복용",
+        },
         "before": before_summary,
         "after": after_summary,
     }
     summary_json = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+    before_meds_label = _format_medications(before_medications)
+    after_meds_label = _format_medications(after_medications)
 
     prompt = f"""[약물 복용 변경 전후 교실 행동 관찰 비교 자료]
 {summary_json}
 
+변경 전 복용: {before_meds_label}
+변경 후 복용: {after_meds_label}
+
 [용도]
 이 문서는 담임교사가 정신건강의학과 진료 시 의료진에게 제출하는 "교실 관찰 의견서"다.
-이미 진행 중인 약물치료에 대해 교실에서 관찰한 객관적 행동 변화를 의료진에게 전달해
-의료진의 진단·용량 조정 판단을 돕는 참고자료를 작성하는 것이 목적이다.
+교실에서 관찰한 객관적 행동 변화를 의료진에게 전달해 의료진의 진단·처방 판단을 돕는
+참고자료를 작성하는 것이 목적이다. 한쪽 기간이 "미복용"이면 약물 시작 전(또는 중단
+후) 관찰이라는 뜻이고, 양쪽 다 약물이 있으면 병용 약물이 바뀐 경우(교체·추가·감량 등)
+라는 뜻이니 문맥에 맞게 서술하라. 여러 약물이 병용된 경우 약물별로 구분하지 말고
+"복용 조합"으로 묶어 행동 변화와만 연결하라(어느 약이 효과가 있었는지 추정 금지).
 **이 문서는 진단서나 처방전이 아니며, 그런 것처럼 쓰면 안 된다.**
 
 [반드시 지킬 것]
@@ -1776,12 +1801,13 @@ def generate_medication_response_report(
 4. 관찰 기간의 길이가 서로 다를 수 있으므로 반드시 "주당 평균"으로 비교하고, 총
    건수만으로 비교하지 마라.
 5. 상관관계일 뿐 인과관계가 아님을 분명히 한다(계절, 학사일정, 교우관계 등 다른
-   요인 때문일 수도 있음).
+   요인 때문일 수도 있음). 병용 약물이 여러 개면 그중 어느 것의 효과인지도 알 수
+   없다는 점을 함께 밝힌다.
 6. 쉬운 말로 쓰되 의료진이 읽을 자료이므로 수치는 생략하지 말고 구체적으로 쓴다.
 
 [출력 형식 — 아래 소제목만 사용]
 ### 담임교사 관찰 의견서
-- 학생 코드, 관찰 기간(변경 전/후), 약물명·용량을 첫 줄에 나열한다.
+- 학생 코드, 관찰 기간(변경 전/후), 변경 전/후 복용 약물(미복용 포함)을 첫 줄에 나열한다.
 ### 1. 관찰 요약
 - 변경 전후 주당 평균 발생 건수·평균 강도 변화를 2~3문장으로 요약한다.
 ### 2. 세부 비교

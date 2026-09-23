@@ -51,8 +51,8 @@ class MedicationReportTests(unittest.TestCase):
         with mock.patch("app.services.ai_insight._call_llm", side_effect=fake_call_llm):
             result = generate_medication_response_report(
                 student_info={"code": "2211", "class": "초1-1"},
-                medication_name="메틸페니데이트",
-                medication_dose="10mg",
+                before_medications=[],
+                after_medications=[{"name": "메틸페니데이트", "dose": "10mg"}],
                 before_period={"start": "2026-03-01", "end": "2026-03-31"},
                 after_period={"start": "2026-04-01", "end": "2026-04-30"},
                 before_data=_period_data(10),
@@ -64,6 +64,34 @@ class MedicationReportTests(unittest.TestCase):
         self.assertIn("증량·감량·교체·중단을 제안하지 마라", captured["user"])
         self.assertIn("진단서나 처방전이 아니며", captured["user"])
         self.assertIn("의학적 진단명 추정, 약물 조정 제안", captured["system"])
+        self.assertIn("변경 전 복용: 미복용", captured["user"])
+        self.assertIn("변경 후 복용: 메틸페니데이트 10mg", captured["user"])
+
+    def test_multiple_medications_per_period_are_listed(self):
+        from app.services.ai_insight import generate_medication_response_report
+
+        captured = {}
+
+        def fake_call_llm(system_prompt, user_prompt, max_tokens=2000):
+            captured["user"] = user_prompt
+            return "테스트"
+
+        with mock.patch("app.services.ai_insight._call_llm", side_effect=fake_call_llm):
+            generate_medication_response_report(
+                student_info={"code": "2211", "class": "초1-1"},
+                before_medications=[{"name": "리스페리돈", "dose": "0.5mg"}],
+                after_medications=[
+                    {"name": "리스페리돈", "dose": "0.5mg"},
+                    {"name": "아리피프라졸", "dose": "2mg"},
+                ],
+                before_period={"start": "2026-03-01", "end": "2026-03-31"},
+                after_period={"start": "2026-04-01", "end": "2026-04-30"},
+                before_data=_period_data(10),
+                after_data=_period_data(3),
+            )
+
+        self.assertIn("변경 전 복용: 리스페리돈 0.5mg", captured["user"])
+        self.assertIn("변경 후 복용: 리스페리돈 0.5mg, 아리피프라졸 2mg", captured["user"])
 
 
 if __name__ == "__main__":

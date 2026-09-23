@@ -153,11 +153,15 @@ class StudentAnalysisRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
+class MedicationEntry(BaseModel):
+    name: str
+    dose: str = ""
+
 class MedicationReportRequest(BaseModel):
     student_code: str
     student_name: Optional[str] = None
-    medication_name: str
-    medication_dose: str
+    before_medications: List[MedicationEntry] = []
+    after_medications: List[MedicationEntry] = []
     before_start: str
     before_end: str
     after_start: str
@@ -455,8 +459,8 @@ def ai_medication_response_report(
 
     result = generate_medication_response_report(
         student_info=student_info,
-        medication_name=req.medication_name,
-        medication_dose=req.medication_dose,
+        before_medications=[m.dict() for m in req.before_medications],
+        after_medications=[m.dict() for m in req.after_medications],
         before_period={"start": req.before_start, "end": req.before_end},
         after_period={"start": req.after_start, "end": req.after_end},
         before_data=before_data,

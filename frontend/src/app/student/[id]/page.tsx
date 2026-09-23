@@ -551,9 +551,41 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   );
 }
 
+interface MedicationEntry { name: string; dose: string; }
+
+function MedicationEntryList({ title, entries, onChange }: {
+  title: string; entries: MedicationEntry[]; onChange: (entries: MedicationEntry[]) => void;
+}) {
+  const inputStyle = { flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', boxSizing: 'border-box' as const };
+  const labelStyle = { fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', display: 'block' };
+
+  const updateEntry = (i: number, field: 'name' | 'dose', value: string) => {
+    onChange(entries.map((e, idx) => idx === i ? { ...e, [field]: value } : e));
+  };
+  const removeEntry = (i: number) => onChange(entries.filter((_, idx) => idx !== i));
+  const addEntry = () => onChange([...entries, { name: '', dose: '' }]);
+
+  return (
+    <div>
+      <label style={labelStyle}>{title}</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {entries.map((entry, i) => (
+          <div key={i} style={{ display: 'flex', gap: '6px' }}>
+            <input value={entry.name} onChange={e => updateEntry(i, 'name', e.target.value)} placeholder="예: 메틸페니데이트" style={inputStyle} />
+            <input value={entry.dose} onChange={e => updateEntry(i, 'dose', e.target.value)} placeholder="용량 (예: 10mg)" style={{ ...inputStyle, flex: '0 0 120px' }} />
+            <button onClick={() => removeEntry(i)} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px', width: '32px', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+          </div>
+        ))}
+      </div>
+      {entries.length === 0 && <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>약물을 추가하지 않으면 &quot;미복용&quot;으로 기록됩니다.</p>}
+      <button onClick={addEntry} style={{ marginTop: '6px', background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}>+ 약물 추가</button>
+    </div>
+  );
+}
+
 function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string, apiUrl: string }) {
-  const [medicationName, setMedicationName] = useState("");
-  const [medicationDose, setMedicationDose] = useState("");
+  const [beforeMeds, setBeforeMeds] = useState<MedicationEntry[]>([{ name: "", dose: "" }]);
+  const [afterMeds, setAfterMeds] = useState<MedicationEntry[]>([{ name: "", dose: "" }]);
   const [beforeStart, setBeforeStart] = useState("");
   const [beforeEnd, setBeforeEnd] = useState("");
   const [afterStart, setAfterStart] = useState("");
@@ -562,7 +594,7 @@ function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string
   const [analysis, setAnalysis] = useState("");
   const [copyLabel, setCopyLabel] = useState("복사하기");
 
-  const canSubmit = medicationName.trim() && medicationDose.trim() && beforeStart && beforeEnd && afterStart && afterEnd;
+  const canSubmit = !!(beforeStart && beforeEnd && afterStart && afterEnd);
 
   const requestReport = async () => {
     if (!canSubmit) return;
@@ -570,7 +602,8 @@ function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string
     try {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-medication-response-report`, {
         student_code: studentCode,
-        medication_name: medicationName, medication_dose: medicationDose,
+        before_medications: beforeMeds.filter(m => m.name.trim()),
+        after_medications: afterMeds.filter(m => m.name.trim()),
         before_start: beforeStart, before_end: beforeEnd,
         after_start: afterStart, after_end: afterEnd,
       }, { timeout: 240000 });
@@ -596,18 +629,13 @@ function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string
       <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>💊 약물 반응 모니터링 의견서</h3>
       <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5 }}>
         약물 복용 변경 전·후 기간을 설정하면 교실에서 관찰된 행동 변화를 정리한 담임교사 의견서를 만듭니다.
+        약물 시작 전(미복용)·병용 약물 등 여러 건을 함께 입력할 수 있습니다.
         정신건강의학과 진료 시 참고 자료로 제출할 수 있습니다. <strong>진단이나 처방을 대신하지는 않습니다.</strong>
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-        <div>
-          <label style={labelStyle}>약물명</label>
-          <input value={medicationName} onChange={e => setMedicationName(e.target.value)} placeholder="예: 메틸페니데이트" style={dateInputStyle} />
-        </div>
-        <div>
-          <label style={labelStyle}>용량</label>
-          <input value={medicationDose} onChange={e => setMedicationDose(e.target.value)} placeholder="예: 10mg, 1일 1회" style={dateInputStyle} />
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
+        <MedicationEntryList title="변경 전 복용 약물" entries={beforeMeds} onChange={setBeforeMeds} />
+        <MedicationEntryList title="변경 후 복용 약물" entries={afterMeds} onChange={setAfterMeds} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
