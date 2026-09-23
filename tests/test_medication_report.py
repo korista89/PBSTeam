@@ -66,6 +66,11 @@ class MedicationReportTests(unittest.TestCase):
         self.assertIn("의학적 진단명 추정, 약물 조정 제안", captured["system"])
         self.assertIn("변경 전 복용: 미복용", captured["user"])
         self.assertIn("변경 후 복용: 메틸페니데이트 10mg", captured["user"])
+        # General, well-known drug-info sharing is allowed; unsupported/uncertain
+        # facts must not be invented, and it must stay hedged (not causal).
+        self.assertIn("이미 널리 알려진, 약품", captured["user"])
+        self.assertIn("지어내지 말고", captured["user"])
+        self.assertIn("원인으로 단정하지 마라", captured["user"])
 
     def test_multiple_medications_per_period_are_listed(self):
         from app.services.ai_insight import generate_medication_response_report
