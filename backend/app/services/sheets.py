@@ -3006,15 +3006,25 @@ def get_cico_report_data(month: int):
                     if not m_rows or len(m_rows) < 2:
                         continue
                     m_headers = m_rows[0]
-                    m_tier_idx = m_headers.index("Tier2") if "Tier2" in m_headers else -1
-                    m_code_idx = m_headers.index("학생코드") if "학생코드" in m_headers else -1
-                    m_rate_idx = m_headers.index("수행/발생률") if "수행/발생률" in m_headers else -1
+                    # The generated sheet's column is the combined "학생명(코드)"
+                    # (see create_monthly_cico_sheet's fixed_headers), never a bare
+                    # "학생코드" column - an exact "학생코드" lookup never matches, so
+                    # this always found 0 previous months regardless of student/month.
+                    m_tier_idx = find_col_fuzzy(m_headers, ["Tier2", "CICO"])
+                    m_code_idx = find_col_fuzzy(m_headers, ["학생코드", "Code", "학생명(코드)"])
+                    m_rate_idx = find_col_fuzzy(m_headers, ["수행/발생률", "수행률", "발생률", "성취율", "Rate"])
 
                     if m_tier_idx >= 0 and m_code_idx >= 0 and m_rate_idx >= 0:
                         for row in m_rows[1:]:
                             if len(row) > max(m_tier_idx, m_code_idx, m_rate_idx):
                                 if row[m_tier_idx] == "O":
-                                    code = str(row[m_code_idx]).strip()
+                                    code_cell = str(row[m_code_idx]).strip()
+                                    # Extract the bare numeric code from a combined
+                                    # "이름(코드)" cell so it matches the current
+                                    # month's code (see the code_paren_match handling
+                                    # above for the same normalization).
+                                    m_code_match = re.search(r"\((\d+)\)\s*$", code_cell)
+                                    code = m_code_match.group(1) if m_code_match else code_cell
                                     rate = row[m_rate_idx]
                                     if code not in prev_rates:
                                         prev_rates[code] = []
