@@ -2005,23 +2005,34 @@ def _calculate_cico_rate(student: dict) -> dict:
         if count > 0:
             rate_num = (total_score / count)
 
+    # Normalize to "attainment" semantics: rate_num must always mean "how well
+    # the goal is being met" (higher = better), regardless of whether the
+    # target behavior is to increase or decrease. The branches above (O/X
+    # occurrence rate, score/max, avg/baseline) compute a raw occurrence or
+    # intensity ratio for 감소 목표행동, where LOWER is actually better
+    # (e.g. X/미발생 recorded every day = 0% occurrence = perfect
+    # performance) - invert it here so e.g. an all-X month reads as 100%,
+    # not 0%.
+    if rate_num is not None and behavior_type == "감소 목표행동":
+        rate_num = max(0.0, min(100.0, 100 - rate_num))
+
     # Format rate string
     if rate_num is not None:
         rate_str = f"{round(rate_num)}%"
     else:
         rate_str = ""
 
-    # Determine achievement (달성 여부)
+    # Determine achievement (달성 여부). rate_num is now always attainment
+    # (higher = better), so translate the goal criteria to the same scale:
+    # "10% 이하" (occurrence must stay under 10%) becomes an equivalent
+    # "90% 이상" attainment threshold.
     achieved = ""
     if rate_num is not None and goal_criteria:
         try:
             goal_str = goal_criteria.replace("%", "").replace("이상", "").replace("이하", "").strip()
             goal_val = float(goal_str)
-
-            if "이하" in goal_criteria:
-                achieved = "O" if rate_num <= goal_val else "X"
-            else:  # 이상 (default)
-                achieved = "O" if rate_num >= goal_val else "X"
+            effective_goal = (100 - goal_val) if "이하" in goal_criteria else goal_val
+            achieved = "O" if rate_num >= effective_goal else "X"
         except (ValueError, TypeError):
             achieved = ""
 
@@ -3130,66 +3141,37 @@ def get_cico_report_data(month: int):
             goal_str = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else ""
             team_talk = row[col_idx["팀 협의 내용"]] if "팀 협의 내용" in col_idx and col_idx["팀 협의 내용"] < len(row) else ""
 
+            behavior_type_val = row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else ""
+            scale_val = row[col_idx.get("척도", 6)] if col_idx.get("척도", 6) < len(row) else ""
+
+            # Always recompute rate/achieved from this month's daily entries via the
+            # same _calculate_cico_rate() used when saving, instead of trusting the
+            # sheet's stored "수행/발생률"/"목표 달성 여부" strings. Those columns can
+            # still hold values written before a 감소 목표행동 direction fix (or before
+            # a 척도/유형 change), which would otherwise silently show a stale/wrong
+            # number here even though the underlying daily O/X data is correct.
             rate_num = None
-            if rate_str and rate_str != "-":
+            if date_cols_cur:
+                days_dict = {dc["label"]: str(row[dc["index"]]).strip() for dc in date_cols_cur if dc["index"] < len(row)}
+                baseline_val = row[col_idx["입력 기준"]] if "입력 기준" in col_idx and col_idx["입력 기준"] < len(row) else 0
+                calc_result = _calculate_cico_rate({
+                    "days": days_dict,
+                    "척도": scale_val,
+                    "목표행동 유형": behavior_type_val,
+                    "목표 달성 기준": goal_str,
+                    "입력 기준": baseline_val,
+                })
+                if calc_result["rate_num"] is not None:
+                    rate_num = calc_result["rate_num"]
+                    rate_str = calc_result["rate_str"]
+                    achieved = calc_result["achieved"] or achieved
+
+            if rate_num is None and rate_str and rate_str != "-":
                 try:
                     r = float(rate_str.replace("%", ""))
                     rate_num = r * 100 if r <= 1 else r
                 except ValueError:
                     pass
-
-            # ── 숫자 척도 rate 재계산 (시트 값이 없거나 0일 때 daily_data로 보완) ──
-            behavior_type_val = row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else ""
-            scale_val = row[col_idx.get("척도", 6)] if col_idx.get("척도", 6) < len(row) else ""
-            if (rate_num is None or rate_num == 0.0) and date_cols_cur:
-                raw_day_vals = [str(row[dc["index"]]).strip() for dc in date_cols_cur if dc["index"] < len(row)]
-                numeric_vals = []
-                ox_vals = []
-                for v in raw_day_vals:
-                    if v in ("", "-", "·", "결석", "결"):
-                        continue
-                    if v.upper() == "O":
-                        ox_vals.append(1)
-                    elif v.upper() == "X":
-                        ox_vals.append(0)
-                    else:
-                        try:
-                            numeric_vals.append(float(v.replace("점","").replace("회","").replace("분","").replace("교시","").strip()))
-                        except ValueError:
-                            pass
-                if numeric_vals:
-                    avg_val = sum(numeric_vals) / len(numeric_vals)
-                    # Determine max scale
-                    max_scale = 1.0
-                    if "7교시" in scale_val or "0~7" in scale_val:
-                        max_scale = 7.0
-                    elif "5교시" in scale_val or "0~5" in scale_val:
-                        max_scale = 5.0
-                    elif "2점" in scale_val or "0점/1점/2점" in scale_val:
-                        max_scale = 2.0
-                    elif "100" in scale_val:
-                        max_scale = 100.0
-                    else:
-                        try:
-                            import re as _re2
-                            m = _re2.search(r"0~(\d+)", scale_val)
-                            if m:
-                                max_scale = float(m.group(1))
-                        except SheetUnavailable:
-                            raise
-                        except Exception:
-                            pass
-                    if behavior_type_val == "감소 목표행동":
-                        rate_num = (1 - avg_val / max_scale) * 100 if max_scale > 0 else 0
-                    else:
-                        rate_num = (avg_val / max_scale) * 100 if max_scale > 0 else 0
-                    rate_num = round(rate_num, 1)
-                    rate_str = f"{round(rate_num)}%"
-                elif ox_vals and not numeric_vals:
-                    rate_num = round(sum(ox_vals) / len(ox_vals) * 100, 1)
-                    rate_str = f"{round(rate_num)}%"
-            # ── 재계산 goal_str 파싱 ─────────────────────────────────────
-            goal_str_val = row[col_idx["목표 달성 기준"]] if "목표 달성 기준" in col_idx and col_idx["목표 달성 기준"] < len(row) else goal_str
 
             if rate_num is not None:
                 total_rate_sum += rate_num
@@ -3225,7 +3207,10 @@ def get_cico_report_data(month: int):
             has_t3  = str(ts.get("Tier3", "")).strip() == "O" or str(ts.get("Tier3+", "")).strip() == "O"
             cico_only = not (has_sst or has_t3)
 
-            # Goal number parsing
+            # Goal number parsing. rate_num is always attainment (higher =
+            # better) after _calculate_cico_rate(), so translate a "이하"
+            # criterion (e.g. "10% 이하" occurrence) to its attainment
+            # equivalent (90%) so every comparison below stays on one scale.
             goal_num = 80.0
             try:
                 gm = _re.search(r"(\d+(?:\.\d+)?)", goal_str)
@@ -3235,6 +3220,7 @@ def get_cico_report_data(month: int):
                 raise
             except Exception:
                 pass
+            effective_goal_num = (100 - goal_num) if "이하" in goal_str else goal_num
 
             # Decision logic
             decision = "CICO 유지"
@@ -3251,7 +3237,7 @@ def get_cico_report_data(month: int):
 
                 last2_high = (
                     len(all_rates_parsed) >= 2 and
-                    all(r is not None and r >= goal_num for r in all_rates_parsed[-2:])
+                    all(r is not None and r >= effective_goal_num for r in all_rates_parsed[-2:])
                 )
 
                 if last2_high and cico_only:
@@ -3260,7 +3246,7 @@ def get_cico_report_data(month: int):
                 elif last2_high and not cico_only:
                     decision = "CICO 유지 (T3/SST 병행)"
                     decision_color = "#3b82f6"
-                elif rate_num >= goal_num:
+                elif rate_num >= effective_goal_num:
                     decision = "CICO 유지 (양호)"
                     decision_color = "#3b82f6"
                 elif rate_num >= 50:
@@ -3278,7 +3264,7 @@ def get_cico_report_data(month: int):
                 "behavior_type": row[col_idx.get("목표행동 유형", 5)] if col_idx.get("목표행동 유형", 5) < len(row) else "",
                 "scale": row[col_idx.get("척도", 6)] if col_idx.get("척도", 6) < len(row) else "",
                 "goal_criteria": goal_str,
-                "goal_num": goal_num,
+                "goal_num": effective_goal_num,
                 "rate": rate_str,
                 "rate_num": rate_num,
                 "achieved": achieved,
