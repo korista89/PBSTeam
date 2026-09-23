@@ -3,7 +3,7 @@ from app.adapters.sheets.resilience import SheetUnavailable
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from app.services.analysis import get_analytics_data
+from app.services.analysis import get_analytics_data, get_student_analytics
 from app.services.sheets import (
     fetch_all_records, get_beable_code_mapping, get_tier3_report_data,
     fetch_student_status, fetch_meeting_notes, get_monthly_cico_data,
@@ -20,7 +20,8 @@ from app.services.ai_insight import (
     generate_bcba_meeting_minutes,
     generate_bcba_tier3_analysis,
     generate_bcba_student_analysis,
-    generate_peer_contagion_analysis
+    generate_peer_contagion_analysis,
+    generate_medication_response_report
 )
 from app.services.fba_evidence import fba_data_gate
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
@@ -151,6 +152,16 @@ class StudentAnalysisRequest(BaseModel):
     student_name: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+
+class MedicationReportRequest(BaseModel):
+    student_code: str
+    student_name: Optional[str] = None
+    medication_name: str
+    medication_dose: str
+    before_start: str
+    before_end: str
+    after_start: str
+    after_end: str
 
 class ComprehensiveAnalysisRequest(BaseModel):
     start_date: str
@@ -414,6 +425,44 @@ def ai_student_analysis(
         all_notes=all_notes
     )
     return {"analysis": result, **gate}
+
+
+@router.post("/ai-medication-response-report")
+def ai_medication_response_report(
+    req: MedicationReportRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """⑨ 🤖 약물 변경 전후 교실 행동 비교 — 정신건강의학과 진료 참고용 담임교사 관찰
+    의견서. 진단이나 처방은 하지 않으며, 교실에서 관찰된 객관적 행동 변화를
+    정리해 의료진의 판단을 돕는 참고자료만 만든다."""
+    target_code = str(req.student_code or "").strip()
+    if target_code:
+        check_student_scope(target_code, current_user)
+
+    status_records = fetch_student_status()
+    student_info = {"code": target_code, "name": req.student_name or target_code, "class": ""}
+    for s in status_records:
+        if str(s.get("학생코드", "")).strip() == target_code or str(s.get("학생명", "")).strip() == target_code:
+            student_info = {
+                "code": target_code,
+                "name": s.get("학생명", req.student_name or target_code),
+                "class": s.get("학급", ""),
+            }
+            break
+
+    before_data = get_student_analytics(target_code, start_date=req.before_start, end_date=req.before_end)
+    after_data = get_student_analytics(target_code, start_date=req.after_start, end_date=req.after_end)
+
+    result = generate_medication_response_report(
+        student_info=student_info,
+        medication_name=req.medication_name,
+        medication_dose=req.medication_dose,
+        before_period={"start": req.before_start, "end": req.before_end},
+        after_period={"start": req.after_start, "end": req.after_end},
+        before_data=before_data,
+        after_data=after_data,
+    )
+    return {"analysis": result}
 
 
 @router.get("/debug-sheets")

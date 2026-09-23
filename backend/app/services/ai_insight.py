@@ -3,6 +3,7 @@ from app.adapters.sheets.resilience import SheetUnavailable
 import json
 import re
 import time
+from datetime import datetime
 import requests
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Any
@@ -1690,6 +1691,109 @@ def generate_bcba_student_analysis(
 - 잠정 가설이며 직접 ABC 관찰로 확인해야 할 부분을 2문장 이내로 쓴다."""
 
     return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2600)
+
+
+# ------------------------------------------------------------------------------
+# ⑥-2 🤖 약물 변경 전후 교실 행동 비교 — 정신건강의학과 진료 참고용 담임교사 관찰 의견서
+# ------------------------------------------------------------------------------
+def _summarize_medication_period(label: str, start: str, end: str, data: dict) -> dict:
+    """Turn one period's get_student_analytics() result into a compact,
+    rate-normalized summary so before/after periods of different lengths are
+    still comparable (raw totals would mislead if the periods aren't equal)."""
+    days = None
+    try:
+        days = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).days + 1
+    except (ValueError, TypeError):
+        pass
+
+    profile = data.get("profile") or {}
+    total_incidents = profile.get("total_incidents", 0) or 0
+    avg_weekly = round(total_incidents / (days / 7), 1) if days and days > 0 else None
+
+    return {
+        "label": label,
+        "period": f"{start} ~ {end}",
+        "period_days": days,
+        "total_incidents": total_incidents,
+        "avg_weekly_incidents": avg_weekly,
+        "avg_intensity": profile.get("avg_intensity", 0),
+        "weekday_pattern": [
+            {"day": d.get("name"), "count": d.get("value")}
+            for d in (data.get("weekday_dist") or [])
+        ],
+        "behavior_type_distribution": [
+            {"type": b.get("name"), "count": b.get("value")}
+            for b in (data.get("behavior_types") or [])
+        ][:5],
+    }
+
+
+def generate_medication_response_report(
+    student_info: dict,
+    medication_name: str,
+    medication_dose: str,
+    before_period: dict,
+    after_period: dict,
+    before_data: dict,
+    after_data: dict,
+) -> str:
+    """
+    약물 복용 변경 전/후 교실 행동을 비교해, 담임교사가 정신건강의학과 진료 시
+    의료진에게 제출할 수 있는 "교실 관찰 의견서"를 만든다.
+
+    이 함수는 의도적으로 진단이나 처방을 만들어내지 않는다. 진단명 추정과 약물
+    조정 제안은 COMMON_BCBA_SYSTEM_PROMPT 10번 규칙에서 이미 금지되어 있고,
+    아래 프롬프트에서도 같은 제약을 다시 명시한다 — 학생 실제 행동 데이터를
+    바탕으로 교사가 관찰한 사실만 정리하고, 진단·처방은 전적으로 담당 의사의
+    몫으로 남긴다.
+    """
+    before_summary = _summarize_medication_period("변경 전", before_period["start"], before_period["end"], before_data)
+    after_summary = _summarize_medication_period("변경 후", after_period["start"], after_period["end"], after_data)
+
+    payload = {
+        "student": {"code": student_info.get("code"), "class": student_info.get("class")},
+        "medication": {"name": medication_name, "dose": medication_dose},
+        "before": before_summary,
+        "after": after_summary,
+    }
+    summary_json = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+
+    prompt = f"""[약물 복용 변경 전후 교실 행동 관찰 비교 자료]
+{summary_json}
+
+[용도]
+이 문서는 담임교사가 정신건강의학과 진료 시 의료진에게 제출하는 "교실 관찰 의견서"다.
+이미 진행 중인 약물치료에 대해 교실에서 관찰한 객관적 행동 변화를 의료진에게 전달해
+의료진의 진단·용량 조정 판단을 돕는 참고자료를 작성하는 것이 목적이다.
+**이 문서는 진단서나 처방전이 아니며, 그런 것처럼 쓰면 안 된다.**
+
+[반드시 지킬 것]
+1. 진단명을 추정하거나 단정하지 마라(예: "ADHD가 확실하다" 금지). 관찰된 행동만 기술한다.
+2. 약물 증량·감량·교체·중단을 제안하지 마라. 그 판단은 전적으로 담당 의사의 몫이다.
+3. avg_weekly_incidents(주당 평균 발생), avg_intensity(평균 강도), weekday_pattern
+   (요일별 패턴), behavior_type_distribution(행동 유형 분포)을 변경 전/후로 비교해
+   변화의 방향과 크기를 수치로 제시한다. 값이 없으면 "해당 기간 기록 없음"이라고 쓴다.
+4. 관찰 기간의 길이가 서로 다를 수 있으므로 반드시 "주당 평균"으로 비교하고, 총
+   건수만으로 비교하지 마라.
+5. 상관관계일 뿐 인과관계가 아님을 분명히 한다(계절, 학사일정, 교우관계 등 다른
+   요인 때문일 수도 있음).
+6. 쉬운 말로 쓰되 의료진이 읽을 자료이므로 수치는 생략하지 말고 구체적으로 쓴다.
+
+[출력 형식 — 아래 소제목만 사용]
+### 담임교사 관찰 의견서
+- 학생 코드, 관찰 기간(변경 전/후), 약물명·용량을 첫 줄에 나열한다.
+### 1. 관찰 요약
+- 변경 전후 주당 평균 발생 건수·평균 강도 변화를 2~3문장으로 요약한다.
+### 2. 세부 비교
+- 요일별 패턴, 행동 유형 분포 변화를 불릿으로 쓴다.
+### 3. 교실에서 함께 관찰된 사항
+- 수치로 안 잡히는 정성적 변화(집중도, 또래 관계, 수업 참여 등)가 있으면 쓰고,
+  없으면 "특이사항 없음"이라 쓴다.
+### 4. 유의사항
+- 이 자료는 교실 관찰에 근거한 참고자료이며 진단이나 처방을 대신하지 않는다는 점,
+  상관관계와 인과관계를 혼동하지 말아야 한다는 점을 명시한다."""
+
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2000)
 
 
 # ------------------------------------------------------------------------------

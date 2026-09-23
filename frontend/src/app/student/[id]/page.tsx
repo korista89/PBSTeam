@@ -280,6 +280,8 @@ export default function StudentDetail() {
                <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
             </div>
 
+            <MedicationResponseReport studentCode={profile.student_code} apiUrl={apiUrl} />
+
             {/* Be-Able 39 EBP Matched Recommendations — grounded in the real FBA evidence packet
                 (teacher_inferred_function_distribution / setting_event_cue_distribution) instead of
                 a naive string match on the chart's top function label. */}
@@ -545,6 +547,100 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
             )}
          </div>
        )}
+    </div>
+  );
+}
+
+function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string, apiUrl: string }) {
+  const [medicationName, setMedicationName] = useState("");
+  const [medicationDose, setMedicationDose] = useState("");
+  const [beforeStart, setBeforeStart] = useState("");
+  const [beforeEnd, setBeforeEnd] = useState("");
+  const [afterStart, setAfterStart] = useState("");
+  const [afterEnd, setAfterEnd] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [analysis, setAnalysis] = useState("");
+  const [copyLabel, setCopyLabel] = useState("복사하기");
+
+  const canSubmit = medicationName.trim() && medicationDose.trim() && beforeStart && beforeEnd && afterStart && afterEnd;
+
+  const requestReport = async () => {
+    if (!canSubmit) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-medication-response-report`, {
+        student_code: studentCode,
+        medication_name: medicationName, medication_dose: medicationDose,
+        before_start: beforeStart, before_end: beforeEnd,
+        after_start: afterStart, after_end: afterEnd,
+      }, { timeout: 240000 });
+      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
+    } catch (e: any) {
+      setAnalysis("⚠️ 의견서 생성 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
+    } finally { setLoading(false); }
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(analysis);
+      setCopyLabel("복사됨 ✓");
+      setTimeout(() => setCopyLabel("복사하기"), 1500);
+    } catch { /* clipboard unavailable — no-op */ }
+  };
+
+  const dateInputStyle = { width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', boxSizing: 'border-box' as const };
+  const labelStyle = { fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', display: 'block' };
+
+  return (
+    <div style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #fde68a' }}>
+      <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>💊 약물 반응 모니터링 의견서</h3>
+      <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5 }}>
+        약물 복용 변경 전·후 기간을 설정하면 교실에서 관찰된 행동 변화를 정리한 담임교사 의견서를 만듭니다.
+        정신건강의학과 진료 시 참고 자료로 제출할 수 있습니다. <strong>진단이나 처방을 대신하지는 않습니다.</strong>
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+        <div>
+          <label style={labelStyle}>약물명</label>
+          <input value={medicationName} onChange={e => setMedicationName(e.target.value)} placeholder="예: 메틸페니데이트" style={dateInputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>용량</label>
+          <input value={medicationDose} onChange={e => setMedicationDose(e.target.value)} placeholder="예: 10mg, 1일 1회" style={dateInputStyle} />
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <div>
+          <label style={labelStyle}>약물 변경 전 기간</label>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input type="date" value={beforeStart} onChange={e => setBeforeStart(e.target.value)} style={dateInputStyle} />
+            <input type="date" value={beforeEnd} onChange={e => setBeforeEnd(e.target.value)} style={dateInputStyle} />
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>약물 변경 후 기간</label>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <input type="date" value={afterStart} onChange={e => setAfterStart(e.target.value)} style={dateInputStyle} />
+            <input type="date" value={afterEnd} onChange={e => setAfterEnd(e.target.value)} style={dateInputStyle} />
+          </div>
+        </div>
+      </div>
+
+      <button onClick={requestReport} disabled={!canSubmit || loading} className="btn btn-primary" style={{ width: '100%', opacity: (!canSubmit || loading) ? 0.5 : 1 }}>
+        {loading ? "관찰 의견서 작성 중... 🧠" : "📋 담임교사 관찰 의견서 생성"}
+      </button>
+
+      {analysis && !loading && (
+        <div style={{ marginTop: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+            <button onClick={copyToClipboard} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '4px 10px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer' }}>{copyLabel}</button>
+          </div>
+          <div style={{ fontSize: '0.95rem', lineHeight: '1.8', color: '#1e293b', maxHeight: '520px', overflowY: 'auto' }} className="custom-scrollbar">
+            <ReadableAIResult text={analysis} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
