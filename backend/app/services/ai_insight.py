@@ -969,9 +969,14 @@ def _build_cico_summary_payload(
         code = str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()
         class_name = str(s.get("class") or s.get("class_name") or "").strip()
         target_behavior = str(s.get("target_behavior") or s.get("목표행동") or "").strip()
-        goal_str = str(s.get("goal") or s.get("목표달성기준") or "80% 이상").strip()
+        behavior_type = str(s.get("behavior_type") or s.get("목표행동 유형") or "증가 목표행동").strip()
+        goal_str = str(s.get("goal") or s.get("goal_criteria") or s.get("목표달성기준") or "80% 이상").strip()
+        is_decrease = "감소" in behavior_type
 
-        # Parse goal number
+        # Parse goal number. rate_num below is always attainment (higher =
+        # better, X/미발생 counts as success for 감소 목표행동), so a "이하"
+        # criterion (e.g. "10% 이하" occurrence) needs its attainment
+        # equivalent (90%) to compare against.
         goal_num = 80.0
         gm = re.search(r"(\d+(?:\.\d+)?)", goal_str)
         if gm:
@@ -979,30 +984,36 @@ def _build_cico_summary_payload(
                 goal_num = float(gm.group(1))
             except ValueError:
                 goal_num = 80.0
+        effective_goal_num = (100 - goal_num) if "이하" in goal_str else goal_num
 
-        daily_records = s.get("daily", [])
+        # get_cico_report_data() (the usual source of students_data) names this
+        # field "daily_data", not "daily" - without this the day list was always
+        # empty and every student showed up as "0 recorded days" regardless of
+        # how much data actually existed.
+        daily_records = s.get("daily_data") or s.get("daily") or []
         valid_days = [
             d for d in daily_records
             if isinstance(d, dict) and str(d.get("value", "")).strip() in ["O", "o", "V", "v", "X", "x"]
         ]
+        success_values = ["X", "x"] if is_decrease else ["O", "o", "V", "v"]
 
         recorded_days = len(valid_days)
-        success_days = len([d for d in valid_days if str(d.get("value", "")).strip() in ["O", "o", "V", "v"]])
+        success_days = len([d for d in valid_days if str(d.get("value", "")).strip() in success_values])
         total_recorded_days += recorded_days
         total_success_days += success_days
 
         rate_num = round(success_days / recorded_days * 100, 1) if recorded_days > 0 else 0.0
-        is_goal_achieved = rate_num >= goal_num
+        is_goal_achieved = rate_num >= effective_goal_num
         if is_goal_achieved:
             total_goals_met += 1
 
         # Recent 5-day and previous 5-day rates
         recent_5 = valid_days[-5:] if len(valid_days) >= 5 else valid_days
-        recent_5_success = len([d for d in recent_5 if str(d.get("value", "")).strip() in ["O", "o", "V", "v"]])
+        recent_5_success = len([d for d in recent_5 if str(d.get("value", "")).strip() in success_values])
         recent_5day_rate = round(recent_5_success / len(recent_5) * 100, 1) if recent_5 else rate_num
 
         prev_5 = valid_days[-10:-5] if len(valid_days) >= 10 else []
-        prev_5_success = len([d for d in prev_5 if str(d.get("value", "")).strip() in ["O", "o", "V", "v"]])
+        prev_5_success = len([d for d in prev_5 if str(d.get("value", "")).strip() in success_values])
         previous_5day_rate = round(prev_5_success / len(prev_5) * 100, 1) if prev_5 else None
 
         # Trend direction
@@ -1023,12 +1034,12 @@ def _build_cico_summary_payload(
         consecutive_failure = 0
         for d in reversed(valid_days):
             val = str(d.get("value", "")).strip()
-            if val in ["O", "o", "V", "v"]:
+            if val in success_values:
                 if consecutive_failure == 0:
                     consecutive_success += 1
                 else:
                     break
-            elif val in ["X", "x"]:
+            elif val in ["O", "o", "V", "v", "X", "x"]:
                 if consecutive_success == 0:
                     consecutive_failure += 1
                 else:
@@ -1046,7 +1057,7 @@ def _build_cico_summary_payload(
 
         last2_high = (
             len(all_rates_parsed) >= 2 and
-            all(r is not None and r >= goal_num for r in all_rates_parsed[-2:])
+            all(r is not None and r >= effective_goal_num for r in all_rates_parsed[-2:])
         )
 
         ts = tier_map.get(code, {})
@@ -1059,7 +1070,7 @@ def _build_cico_summary_payload(
             decision_rule = "Tier1 하향 권장 (2개월 연속 목표 달성, CICO 졸업 검토)"
         elif last2_high and not cico_only:
             decision_rule = "CICO 유지 (T3/SST 병행 지원 지속)"
-        elif rate_num >= goal_num:
+        elif rate_num >= effective_goal_num:
             decision_rule = "CICO 유지 (양호, 현재 강화제 및 피드백 유지)"
         elif rate_num >= 50:
             decision_rule = "CICO 수정 검토 (중재 충실도 점검 및 피드백 주기 단축)"

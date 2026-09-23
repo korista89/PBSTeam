@@ -341,8 +341,9 @@ export default function CICOPage() {
       const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-cico-analysis`, {
         month,
         students_data: [{
-          code: student.code, target_behavior: student.target_behavior, behavior_type: student.behavior_type,
+          code: student.code, class: student.class, target_behavior: student.target_behavior, behavior_type: student.behavior_type,
           scale: student.scale, goal_criteria: student.goal_criteria, rate: student.rate, achieved: student.achieved,
+          daily_data: student.daily_data, trend: student.trend,
         }]
       }, { timeout: 240000 });
       setAiState({ loading: false, text: res.data.analysis || "분석 결과가 없습니다." });
