@@ -64,6 +64,7 @@ interface ReportData {
   students: ReportStudent[];
 }
 
+const ALL_MONTHS = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
 const SCALE_OPTIONS = ["O/X(발생)", "0점/1점/2점", "0~5", "0~7교시", "1~100회", "1~100분"];
 const TYPE_OPTIONS = ["증가 목표행동", "감소 목표행동"];
 const CRITERIA_INCREASE = ["90% 이상", "80% 이상", "70% 이상", "60% 이상", "50% 이상"];
@@ -517,11 +518,14 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
   }).filter(d => d.value !== null);
 
   const curDays = toChartDays(reportStudent?.daily_data);
-  const trendData = (reportStudent?.trend || []).map(t => {
+  const rateByMonth = new Map((reportStudent?.trend || []).map(t => {
     let r = parseFloat(t.rate.replace("%", ""));
     if (r <= 1) r *= 100;
-    return { month: t.month, rate: isNaN(r) ? 0 : Math.round(r), goal };
-  });
+    return [t.month, isNaN(r) ? null : Math.round(r)];
+  }));
+  // X축을 3~12월로 고정: 데이터가 없는 달은 null로 비워 축 범위만 유지한다.
+  const trendData = ALL_MONTHS.map(month => ({ month, rate: rateByMonth.get(month) ?? null, goal }));
+  const hasTrendData = trendData.some(d => d.rate !== null);
 
   return (
     <>
@@ -695,7 +699,7 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
         <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div className="card" style={{ padding: 14 }}>
             <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>📈 월별 수행률 추이</div>
-            {trendData.length > 0 ? (
+            {hasTrendData ? (
               <ResponsiveContainer width="100%" height={140}>
                 <ComposedChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
@@ -712,7 +716,7 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
 
           <div className="card" style={{ padding: 14 }}>
             <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>🗓️ 월별 달성 비교</div>
-            {trendData.length > 0 ? (
+            {hasTrendData ? (
               <ResponsiveContainer width="100%" height={140}>
                 <ComposedChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" />
@@ -720,7 +724,7 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
                   <YAxis domain={[0, 100]} style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(v: any) => [`${v}%`, "수행률"]} />
                   <Bar dataKey="rate" name="수행률" radius={[4, 4, 0, 0]}>
-                    {trendData.map((d, i) => <Cell key={i} fill={d.rate >= d.goal ? "#10b981" : d.rate >= 50 ? "#f59e0b" : "#ef4444"} />)}
+                    {trendData.map((d, i) => <Cell key={i} fill={d.rate === null ? "transparent" : d.rate >= d.goal ? "#10b981" : d.rate >= 50 ? "#f59e0b" : "#ef4444"} />)}
                   </Bar>
                   <Line type="monotone" dataKey="goal" name="목표" stroke="#94a3b8" strokeWidth={1} strokeDasharray="4 2" dot={false} />
                 </ComposedChart>

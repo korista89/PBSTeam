@@ -1,5 +1,6 @@
-"""get_cico_report_data() must include the last 3 months in a student's trend,
-not just the currently viewed month.
+"""get_cico_report_data() must include every prior month (3월 onward) in a
+student's trend, not just the last 2 months, so the client's fixed 3~12월
+X축 has data for the whole semester instead of a rolling 3-month window.
 
 Regression: the previous-months lookup required an exact "학생코드" header
 match, but the sheet the app actually generates (create_monthly_cico_sheet)
@@ -35,6 +36,8 @@ def _row(rate, day_vals=("O", "O")):
 
 
 SHEETS_BY_MONTH = {
+    3: [HEADERS, _row("30%")],
+    4: [HEADERS, _row("40%")],
     5: [HEADERS, _row("50%")],
     6: [HEADERS, _row("60%")],
     7: [HEADERS, _row("70%")],
@@ -42,7 +45,7 @@ SHEETS_BY_MONTH = {
 
 
 class CicoTrendHistoryTests(unittest.TestCase):
-    def test_report_includes_last_three_months_trend(self):
+    def test_report_includes_every_month_since_march(self):
         from app.services import sheets
 
         def fake_raw_values(month):
@@ -59,7 +62,7 @@ class CicoTrendHistoryTests(unittest.TestCase):
         students = result["students"]
         self.assertEqual(len(students), 1)
         trend_months = [t["month"] for t in students[0]["trend"]]
-        self.assertEqual(trend_months, ["5월", "6월", "7월"])
+        self.assertEqual(trend_months, ["3월", "4월", "5월", "6월", "7월"])
 
 
 if __name__ == "__main__":

@@ -2990,14 +2990,17 @@ def get_cico_report_data(month: int):
              try: col_idx["수행/발생률"] = headers.index("수행/발생률")
              except: pass
 
-        # Get multi-month trends (last 3 months including current)
+        # Get multi-month trends (전체 학기: 3월 ~ 현재 달). The X축 is pinned to
+        # 3~12월 on the client, so this needs every prior month's data, not just
+        # the last 2 - each past month is cached for an hour, so this only costs
+        # extra Sheets reads on a cold cache.
         months_list = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
         month_idx = months_list.index(month_name) if month_name in months_list else -1
 
         # Collect rates from previous months using cached raw values
         prev_rates = {}  # {code: [rate_list]}
         if month_idx >= 0:
-            start_m = max(0, month_idx - 2)
+            start_m = 0
             for mi in range(start_m, month_idx):
                 m_name = months_list[mi]
                 try:
