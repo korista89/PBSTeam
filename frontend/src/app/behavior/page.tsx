@@ -116,7 +116,13 @@ export default function BehaviorPage() {
                 filteredStudents.map((s) => {
                   const isSelected = selectedStudent?.학생코드 === s.학생코드;
                   const name = s.학생이름 || s.이름 || s.학생명;
-                  const tier = s.Tier || (s["Tier 3"] === "O" ? "Tier 3" : s["Tier 2 (CICO)"] === "O" ? "Tier 2" : "Tier 1");
+                  // TierStatus 시트의 실제 컬럼명은 공백 없는 "Tier3", "Tier2(CICO)",
+                  // "Tier2(SST)", "Tier3+" 이다 (여기 있던 "Tier 3"/"Tier 2 (CICO)"는
+                  // 항상 매칭에 실패해 모든 학생이 Tier 1로만 표시되던 원인이었음).
+                  const tier = s["Tier3+"] === "O" ? "Tier 3+"
+                    : s["Tier3"] === "O" ? "Tier 3"
+                    : (s["Tier2(CICO)"] === "O" || s["Tier2(SST)"] === "O") ? "Tier 2"
+                    : "Tier 1";
 
                   return (
                     <button
@@ -143,7 +149,7 @@ export default function BehaviorPage() {
                           학번 {s.학생코드}
                         </div>
                       </div>
-                      <span className={`badge ${tier === "Tier 3" ? "badge-tier3" : tier === "Tier 2" ? "badge-tier2" : "badge-tier1"}`} style={{ fontSize: "0.68rem" }}>
+                      <span className={`badge ${tier === "Tier 3+" ? "badge-tier3-plus" : tier === "Tier 3" ? "badge-tier3" : tier === "Tier 2" ? "badge-tier2" : "badge-tier1"}`} style={{ fontSize: "0.68rem" }}>
                         {tier}
                       </span>
                     </button>
