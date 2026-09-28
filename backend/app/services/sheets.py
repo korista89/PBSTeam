@@ -3016,11 +3016,29 @@ def get_cico_report_data(month: int):
                     m_tier_idx = find_col_fuzzy(m_headers, ["Tier2", "CICO"])
                     m_code_idx = find_col_fuzzy(m_headers, ["학생코드", "Code", "학생명(코드)"])
                     m_rate_idx = find_col_fuzzy(m_headers, ["수행/발생률", "수행률", "발생률", "성취율", "Rate"])
+                    m_scale_idx = find_col_fuzzy(m_headers, ["척도", "Scale"])
+                    m_type_idx = find_col_fuzzy(m_headers, ["목표행동유형", "목표행동 유형", "Type"])
+                    m_goal_idx = find_col_fuzzy(m_headers, ["목표달성기준", "목표 달성 기준"])
+                    m_baseline_idx = find_col_fuzzy(m_headers, ["입력기준", "입력 기준(베이스라인)", "입력 기준"])
+
+                    # 해당 월의 일자 컬럼(예: "07-01", "1", "1회차") 탐지 - 저장된
+                    # "수행/발생률" 셀은 그 달이 "현재 달"이었을 때 이후로 다시
+                    # 계산되지 않아 비어있거나("-") 오래된 값일 수 있으므로,
+                    # 현재 달 행과 동일하게 실제 일별 입력값에서 매번 재계산한다.
+                    m_date_cols = []
+                    for i, h in enumerate(m_headers):
+                        h_str = str(h).strip()
+                        if re.match(r"^\d{2}-\d{2}$", h_str):
+                            m_date_cols.append({"index": i, "label": h_str})
+                        elif h_str.isdigit() and 1 <= int(h_str) <= 31:
+                            m_date_cols.append({"index": i, "label": h_str})
+                        elif "회차" in h_str:
+                            m_date_cols.append({"index": i, "label": h_str})
 
                     if m_tier_idx >= 0 and m_code_idx >= 0 and m_rate_idx >= 0:
                         for row in m_rows[1:]:
                             if len(row) > max(m_tier_idx, m_code_idx, m_rate_idx):
-                                if row[m_tier_idx] == "O":
+                                if str(row[m_tier_idx]).strip().upper() == "O":
                                     code_cell = str(row[m_code_idx]).strip()
                                     # Extract the bare numeric code from a combined
                                     # "이름(코드)" cell so it matches the current
@@ -3029,6 +3047,22 @@ def get_cico_report_data(month: int):
                                     m_code_match = re.search(r"\((\d+)\)\s*$", code_cell)
                                     code = m_code_match.group(1) if m_code_match else code_cell
                                     rate = row[m_rate_idx]
+
+                                    if m_date_cols:
+                                        m_days_dict = {
+                                            dc["label"]: str(row[dc["index"]]).strip()
+                                            for dc in m_date_cols if dc["index"] < len(row)
+                                        }
+                                        m_calc = _calculate_cico_rate({
+                                            "days": m_days_dict,
+                                            "척도": row[m_scale_idx] if m_scale_idx >= 0 and m_scale_idx < len(row) else "",
+                                            "목표행동 유형": row[m_type_idx] if m_type_idx >= 0 and m_type_idx < len(row) else "",
+                                            "목표 달성 기준": row[m_goal_idx] if m_goal_idx >= 0 and m_goal_idx < len(row) else "",
+                                            "입력 기준": row[m_baseline_idx] if m_baseline_idx >= 0 and m_baseline_idx < len(row) else 0,
+                                        })
+                                        if m_calc["rate_num"] is not None:
+                                            rate = m_calc["rate_str"]
+
                                     if code not in prev_rates:
                                         prev_rates[code] = []
                                     prev_rates[code].append({"month": m_name, "rate": rate})
