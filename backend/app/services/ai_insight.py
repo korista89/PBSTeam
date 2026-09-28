@@ -782,14 +782,33 @@ def generate_bcba_section_analysis(
 4. 향후 구글 설문지 폼 개선안(라디오버튼 강제, 귀가요구 선택지 추가 등)을 제안하라."""
 
     elif section_type == "weekly_trend":
-        prompt = f"""[분석 영역: 주별 행동 발생 추이(Weekly Trend) 분석]
+        has_yearly_compare = isinstance(raw_summary, dict) and isinstance(raw_summary.get("yearly_compare"), dict)
+        compare_note = ""
+        if has_yearly_compare:
+            yc = raw_summary["yearly_compare"]
+            compare_note = f"""
+[동일 주차 기준 연도별 비교 데이터 ({yc.get('prev2_year')}년/{yc.get('prev1_year')}년/{yc.get('curr_year')}년)]
+{json.dumps(yc.get('data', []), ensure_ascii=False, indent=2)}"""
+        prompt = f"""[분석 영역: 주별 위기행동 발생 추이(Weekly Trend) 분석]
 [주차별 건수 데이터 (시간 순)]
 {data_str}
+{compare_note}
 
 [필수 반영 지침]
 1. 최근 구간이 이전 대비 증가·감소·정체 중 무엇인지 방향성을 먼저 판단하라.
 2. 특정 주차에 급증/급감이 있다면 그 시점을 짚고 학사일정(시험, 행사, 계절 변화 등)과의 연관 가능성을 제시하라.
-3. 이 추이가 현재 학교 전체 PBS 운영이 효과가 있는지 없는지에 대해 시사하는 바를 제시하라."""
+3. 이 추이가 현재 학교 전체 PBS 운영이 효과가 있는지 없는지에 대해 시사하는 바를 제시하라.
+{"4. 연도별 비교 데이터가 있다면 같은 주차 기준으로 " + str(yc.get('prev2_year')) + "년·" + str(yc.get('prev1_year')) + "년 대비 올해가 개선되었는지 악화되었는지 간단히 짚어라." if has_yearly_compare else ""}"""
+
+    elif section_type == "weekly_restraint_trend":
+        prompt = f"""[분석 영역: 주별 제지 및 개별지원 실시 추이 분석]
+[주차별 물리적 제지/개별학생교육지원 실시 건수 데이터 (시간 순)]
+{data_str}
+
+[필수 반영 지침]
+1. 최근 구간이 이전 대비 증가·감소·정체 중 무엇인지 방향성을 먼저 판단하라.
+2. 특정 주차에 제지·개별지원 건수가 급증했다면 그 시점을 짚고 특정 학생이나 학사일정과의 연관 가능성을 제시하라.
+3. 제지·개별지원 건수가 줄지 않고 반복된다면 최소제한원칙(Least Restrictive) 관점에서 위기관리계획(BIP) 재점검이 필요한지 판단하라."""
 
     elif section_type == "tier_upgrade_candidates":
         target_tier = raw_summary.get("target_tier", "") if isinstance(raw_summary, dict) else ""

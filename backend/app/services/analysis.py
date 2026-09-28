@@ -96,7 +96,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     
     empty_res = {
         "summary": {"total_incidents": 0, "avg_intensity": 0, "risk_student_count": 0},
-        "trends": [], "weekly_trends": [],
+        "trends": [], "weekly_trends": [], "weekly_trends_compare": None, "weekly_restraint_trends": [],
         "big5": {"locations": [], "times": [], "behaviors": [], "weekdays": []},
         "risk_list": [], "functions": [], "antecedents": [], "consequences": [],
         "heatmap": [], "safety_alerts": [], "ai_comment": "데이터가 없습니다."
@@ -197,7 +197,59 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             raise
         except Exception:
             df = df[df['student_code'].str.startswith(str(class_id), na=False)]
-    
+
+    # --- 주별 위기행동 발생 추이: 연도 비교(현재/전년/전전년) ---
+    # 위 df는 이미 start_date로 좁혀져 있어 과거 연도 데이터가 잘려나간 상태이므로,
+    # resolved_records(날짜 필터 이전)에서 같은 class_id 필터만 다시 적용해 별도 집계한다.
+    weekly_trends_compare = None
+    try:
+        mdf = pd.DataFrame(resolved_records)
+        if '강도' in mdf.columns:
+            mdf['강도'] = mdf['강도'].apply(lambda x: extract_numeric(x, 0))
+        if class_id and not mdf.empty:
+            try:
+                from app.api.deps import normalize_class_identifier, get_student_class_code
+                target_canonical = normalize_class_identifier(class_id)
+                def _mdf_matches_class(sc):
+                    sc_str = str(sc).strip()
+                    if sc_str.startswith(str(class_id)):
+                        return True
+                    return get_student_class_code(sc_str) == target_canonical
+                mdf = mdf[mdf['student_code'].apply(_mdf_matches_class)]
+            except SheetUnavailable:
+                raise
+            except Exception:
+                mdf = mdf[mdf['student_code'].astype(str).str.startswith(str(class_id), na=False)]
+        if '행동발생날짜' in mdf.columns and not mdf.empty:
+            mdf['date_obj'] = robust_parse_dates(mdf['행동발생날짜'])
+            mdf = mdf[mdf['date_obj'].notna()]
+            mdf['week'] = mdf['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
+            mdf['year'] = mdf['date_obj'].dt.year.fillna(-1).astype(int)
+            by_year_week = mdf[mdf['year'] > 0].groupby(['year', 'week']).size()
+
+            curr_year = pd.to_datetime(end_date).year if end_date else pd.Timestamp.now().year
+            prev1_year, prev2_year = curr_year - 1, curr_year - 2
+
+            curr_weeks = sorted({w for (y, w) in by_year_week.index if y == curr_year})
+            compare_rows = [
+                {
+                    "week": f"{curr_year}-W{w:02d}",
+                    "count_curr": int(by_year_week.get((curr_year, w), 0)),
+                    "count_prev1": int(by_year_week.get((prev1_year, w), 0)),
+                    "count_prev2": int(by_year_week.get((prev2_year, w), 0)),
+                }
+                for w in curr_weeks
+            ]
+            weekly_trends_compare = {
+                "curr_year": int(curr_year), "prev1_year": int(prev1_year), "prev2_year": int(prev2_year),
+                "data": compare_rows
+            }
+    except SheetUnavailable:
+        raise
+    except Exception as e:
+        print(f"weekly_trends_compare error: {e}")
+        weekly_trends_compare = None
+
     # --- Tier 1: Big 5 Analysis ---
     if not df.empty:
         # Daily trend: count form submissions per date (not frequency sum)
@@ -214,9 +266,18 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             for (y, w), count in w_grouped.items():
                 label = f"{y}-W{w:02d}"
                 weekly_counts[label] = int(count)
+
+        # 주별 제지 및 개별지원(물리적 제지 O) 실시 추이 - 선택된 기간/학급 범위 그대로 사용
+        weekly_restraint_counts = {}
+        if '물리적제지여부' in df.columns and 'week' in df.columns:
+            restraint_df = df[df['물리적제지여부'].astype(str).str.startswith('O', na=False) & (df['year'] > 0)]
+            r_grouped = restraint_df.groupby(['year', 'week']).size()
+            for (y, w), count in r_grouped.items():
+                weekly_restraint_counts[f"{y}-W{w:02d}"] = int(count)
     else:
         date_counts = {}
         weekly_counts = {}
+        weekly_restraint_counts = {}
 
     # 3. Location Stats (Big 5) - count submissions per location
     location_stats = []
@@ -467,6 +528,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         },
         "trends": [{"date": k, "count": v} for k, v in date_counts.items()],
         "weekly_trends": [{"week": k, "count": v} for k, v in weekly_counts.items()],
+        "weekly_trends_compare": weekly_trends_compare,
+        "weekly_restraint_trends": [{"week": k, "count": v} for k, v in weekly_restraint_counts.items()],
         "monthly_trend": monthly_trend,
         "tier_distribution": tier_distribution,
         "big5": {

@@ -427,6 +427,15 @@ export default function Home() {
   const riskList = data?.risk_list || [];
   const tierDist: any[] = (data as any)?.tier_distribution || [];
   const weeklyTrends: any[] = (data as any)?.weekly_trends || [];
+  const weeklyRestraintTrends: any[] = (data as any)?.weekly_restraint_trends || [];
+  const weeklyTrendsCompare = (data as any)?.weekly_trends_compare || null;
+  const hasYearlyCompare = !!(weeklyTrendsCompare?.data?.length);
+  const weeklyTrendChartData = hasYearlyCompare ? weeklyTrendsCompare.data : weeklyTrends;
+  const weeklyTrendSeries = hasYearlyCompare ? [
+    { dataKey: "count_prev2", name: `${weeklyTrendsCompare.prev2_year}년`, color: "#facc15" },
+    { dataKey: "count_prev1", name: `${weeklyTrendsCompare.prev1_year}년`, color: "#84cc16" },
+    { dataKey: "count_curr", name: `${weeklyTrendsCompare.curr_year}년`, color: "#6366f1" },
+  ] : undefined;
   // Tier현황 페이지와 동일한 raw 배정 카운트 사용 (donut용 tierDist는 세그먼트 중복 배제된 값이라 다름)
   const tier1Count = summary.tier1_count ?? 0;
   const tier2CicoCount = summary.tier2_cico_count ?? 0;
@@ -571,11 +580,12 @@ export default function Home() {
 
               <div style={{ gridColumn: 'span 2' }}>
                 <WeeklyAnalysisChart
-                  data={weeklyTrends}
-                  title="주별 행동 발생 추이"
+                  data={weeklyTrendChartData}
+                  series={weeklyTrendSeries}
+                  title="주별 위기행동 발생 추이"
                   color="#6366f1"
                   yLabel="건수"
-                  action={<SectionAIButton sectionName="weekly_trend" title="주별 추이" dataContext={weeklyTrends} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
+                  action={<SectionAIButton sectionName="weekly_trend" title="주별 위기행동 추이" dataContext={{ chart_data: weeklyTrends, yearly_compare: weeklyTrendsCompare }} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
                 />
               </div>
 
@@ -591,7 +601,7 @@ export default function Home() {
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.8rem', lineHeight: 1.7, color: '#334155' }}>
                   {!interpretation && (
-                    <span style={{ color: '#94a3b8' }}>아래 2행 차트의 &quot;📊 차트 해석&quot; 버튼을 누르면 여기에 결과가 뜹니다. 차트를 보면서 함께 읽을 수 있습니다.</span>
+                    <span style={{ color: '#94a3b8' }}>차트별 &quot;📊 차트 해석&quot; 버튼을 누르면 여기에 결과가 뜹니다. 차트를 보면서 함께 읽을 수 있습니다.</span>
                   )}
                   {interpretation?.loading && <span style={{ color: '#ef4444' }}>🧠 분석 중입니다...</span>}
                   {interpretation && !interpretation.loading && <ReadableAIResult text={interpretation.text} compact />}
@@ -658,6 +668,18 @@ export default function Home() {
 
             </div>
 
+            {/* 제지·개별지원 및 CICO 목표 달성 추이 (2열 1행) */}
+            <div className="grid-2">
+              <WeeklyAnalysisChart
+                data={weeklyRestraintTrends}
+                title="주별 제지 및 개별지원 실시 추이"
+                color="#ef4444"
+                yLabel="건수"
+                action={<SectionAIButton sectionName="weekly_restraint_trend" title="주별 제지·개별지원 추이" dataContext={weeklyRestraintTrends} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
+              />
+              <CicoAchievementTrendChart startDate={startDate} endDate={endDate} onResult={setInterpretation} />
+            </div>
+
             {/* Tier 상향 검토 대상자 명단 (2열 1행) */}
             <div className="section-heading"><span>02</span> Tier 상향 검토 대상자 명단</div>
             <div className="grid-2">
@@ -694,6 +716,62 @@ export default function Home() {
         )}
       </AppShell>
     </AuthCheck>
+  );
+}
+
+// ====== 월별 CICO 목표 달성 학생 비율 추이 (대시보드 전용 별도 조회) ======
+function CicoAchievementTrendChart({
+  startDate,
+  endDate,
+  onResult
+}: {
+  startDate: string;
+  endDate: string;
+  onResult: (state: { title: string; loading: boolean; text: string }) => void;
+}) {
+  const [trend, setTrend] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTrend = async () => {
+      if (!startDate || !endDate) return;
+      setLoading(true);
+      try {
+        const startMonth = parseInt(startDate.split('-')[1], 10) || 3;
+        const endMonth = parseInt(endDate.split('-')[1], 10) || startMonth;
+        const res = await axios.get(`${apiUrl}/api/v1/cico/achievement-trend`, {
+          params: { start_month: startMonth, end_month: endMonth }
+        });
+        if (!cancelled) setTrend(res.data?.trend || []);
+      } catch {
+        if (!cancelled) setTrend([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void fetchTrend();
+    return () => { cancelled = true; };
+  }, [startDate, endDate]);
+
+  if (loading) {
+    return (
+      <div style={{ height: "300px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.5)", borderRadius: "20px", border: "1px dashed #cbd5e1", color: "#64748b" }}>
+        ⏳ CICO 달성 추이를 불러오는 중...
+      </div>
+    );
+  }
+
+  return (
+    <WeeklyAnalysisChart
+      data={trend}
+      xKey="month"
+      dataKey="ratio"
+      title="월별 CICO 목표 달성 학생 비율 추이"
+      color="#10b981"
+      yLabel="달성 비율(%)"
+      action={<SectionAIButton sectionName="cico_achievement_trend" title="월별 CICO 목표 달성 비율" dataContext={trend} startDate={startDate} endDate={endDate} onResult={onResult} />}
+    />
   );
 }
 

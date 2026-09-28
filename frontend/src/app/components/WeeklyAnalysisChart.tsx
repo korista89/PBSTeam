@@ -14,6 +14,12 @@ interface WeeklyData {
   [key: string]: any;
 }
 
+interface SeriesSpec {
+  dataKey: string;
+  name: string;
+  color: string;
+}
+
 interface Props {
   data: WeeklyData[];
   type?: "line" | "bar";
@@ -22,6 +28,12 @@ interface Props {
   color?: string;
   yLabel?: string;
   action?: React.ReactNode;
+  /** 여러 선을 겹쳐 그릴 때 사용 (예: 연도별 비교). 지정 시 dataKey/color 단일 선 대신 이 목록을 그린다. */
+  series?: SeriesSpec[];
+  /** X축에 쓸 필드명 (기본 "week"). 월별 차트 등에서는 "month"처럼 다르게 지정 가능. */
+  xKey?: string;
+  /** X축 틱 표시 형식. 기본은 ISO 주차("YYYY-Www")를 "26년3월4주차" 형태로 변환. */
+  xTickFormatter?: (value: string) => string;
 }
 
 export default function WeeklyAnalysisChart({
@@ -31,7 +43,10 @@ export default function WeeklyAnalysisChart({
   title,
   color = "#6366f1",
   yLabel = "건수",
-  action
+  action,
+  series,
+  xKey = "week",
+  xTickFormatter = formatWeek
 }: Props) {
   if (!data || data.length === 0) {
     return (
@@ -80,12 +95,12 @@ export default function WeeklyAnalysisChart({
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <XAxis
-                dataKey="week"
+                dataKey={xKey}
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "#64748b", fontSize: 11 }}
                 dy={10}
-                tickFormatter={formatWeek}
+                tickFormatter={xTickFormatter}
               />
               <YAxis
                 axisLine={false}
@@ -100,29 +115,49 @@ export default function WeeklyAnalysisChart({
                   boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
                   padding: "10px"
                 }}
+                labelFormatter={xTickFormatter}
               />
-              <Line
-                type="monotone"
-                dataKey={dataKey}
-                stroke={color}
-                strokeWidth={4}
-                dot={{ r: 6, fill: color, strokeWidth: 2, stroke: "#fff" }}
-                activeDot={{ r: 8, strokeWidth: 0 }}
-                animationDuration={1500}
-              >
-                <LabelList dataKey={dataKey} position="top" style={{ fontSize: 10, fontWeight: 800, fill: color }} />
-              </Line>
+              {series && series.length > 0 && (
+                <Legend wrapperStyle={{ fontSize: "11px", fontWeight: 700 }} />
+              )}
+              {series && series.length > 0 ? (
+                series.map((s) => (
+                  <Line
+                    key={s.dataKey}
+                    type="monotone"
+                    dataKey={s.dataKey}
+                    name={s.name}
+                    stroke={s.color}
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: s.color, strokeWidth: 2, stroke: "#fff" }}
+                    activeDot={{ r: 7, strokeWidth: 0 }}
+                    animationDuration={1500}
+                  />
+                ))
+              ) : (
+                <Line
+                  type="monotone"
+                  dataKey={dataKey}
+                  stroke={color}
+                  strokeWidth={4}
+                  dot={{ r: 6, fill: color, strokeWidth: 2, stroke: "#fff" }}
+                  activeDot={{ r: 8, strokeWidth: 0 }}
+                  animationDuration={1500}
+                >
+                  <LabelList dataKey={dataKey} position="top" style={{ fontSize: 10, fontWeight: 800, fill: color }} />
+                </Line>
+              )}
             </LineChart>
           ) : (
             <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <XAxis
-                dataKey="week"
+                dataKey={xKey}
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "#64748b", fontSize: 11 }}
                 dy={10}
-                tickFormatter={formatWeek}
+                tickFormatter={xTickFormatter}
               />
               <YAxis
                 axisLine={false}

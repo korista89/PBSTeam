@@ -12,6 +12,7 @@ from app.services.sheets import (
     create_monthly_cico_sheet
 )
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, get_student_class_code
+from app.core.time import now_kst
 
 router = APIRouter()
 
@@ -134,6 +135,43 @@ def get_cico_overview(
     except HTTPException:
         report = {"month": str(month), "students": []}
     return {"monthly": monthly, "business_days": business, "report": report}
+
+
+@router.get("/achievement-trend")
+def get_cico_achievement_trend(
+    start_month: int = 3,
+    end_month: Optional[int] = None,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """월별 CICO 목표 달성 학생 비율 추이 (교사 학급 스코프는 get_cico_report의 기존 필터링을 재사용).
+
+    3~12월 시트만 존재하므로(연도별 시트가 따로 없음) 연도 비교는 하지 않고,
+    선택된 분석기간에 해당하는 월 구간만 순회하며 달성률을 집계한다.
+    """
+    if end_month is None:
+        end_month = now_kst().month
+    start_month = max(3, min(12, start_month))
+    end_month = max(start_month, min(12, end_month))
+
+    trend = []
+    for m in range(start_month, end_month + 1):
+        try:
+            report = get_cico_report(month=m, current_user=current_user)
+        except HTTPException:
+            continue
+        summary = (report or {}).get("summary") or {}
+        total = int(summary.get("total_students", 0) or 0)
+        achieved = int(summary.get("achieved_count", 0) or 0)
+        not_achieved = int(summary.get("not_achieved_count", 0) or 0)
+        ratio = round((achieved / total) * 100, 1) if total else None
+        trend.append({
+            "month": f"{m}월",
+            "achieved_count": achieved,
+            "not_achieved_count": not_achieved,
+            "total_students": total,
+            "ratio": ratio,
+        })
+    return {"trend": trend}
 
 
 class CellUpdate(BaseModel):
