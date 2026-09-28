@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "./AuthProvider";
+import { loadInitialDateRange, persistDateRange } from "../utils";
 
 interface GlobalNavProps {
     currentPage?: string;
@@ -18,35 +19,15 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const urlStart = searchParams.get("startDate");
-        const urlEnd = searchParams.get("endDate");
-
-        const savedStart = localStorage.getItem("pbis_start_date");
-        const savedEnd = localStorage.getItem("pbis_end_date");
-
-        if (urlStart && urlEnd) {
-            setStartDate(urlStart);
-            setEndDate(urlEnd);
-            localStorage.setItem("pbis_start_date", urlStart);
-            localStorage.setItem("pbis_end_date", urlEnd);
-        } else if (savedStart && savedEnd) {
-            setStartDate(savedStart);
-            setEndDate(savedEnd);
-        } else {
-            const today = new Date();
-            const prev = new Date();
-            prev.setDate(today.getDate() - 28);
-            setStartDate(prev.toISOString().split('T')[0]);
-            setEndDate(today.toISOString().split('T')[0]);
-        }
+        const { start, end } = loadInitialDateRange();
+        setStartDate(start);
+        setEndDate(end);
         setIsInitialized(true);
     }, []);
 
     useEffect(() => {
         if (isInitialized && startDate && endDate) {
-            localStorage.setItem("pbis_start_date", startDate);
-            localStorage.setItem("pbis_end_date", endDate);
+            persistDateRange(startDate, endDate);
         }
     }, [startDate, endDate, isInitialized]);
 
@@ -264,36 +245,9 @@ export function useDateRange() {
     const [endDate, setEndDate] = useState("");
 
     useEffect(() => {
-        const loadDates = () => {
-            // Priority: 1. URL Params, 2. localStorage, 3. Default (4 weeks)
-            const searchParams = new URLSearchParams(window.location.search);
-            const urlStart = searchParams.get("startDate");
-            const urlEnd = searchParams.get("endDate");
-
-            const savedStart = localStorage.getItem("pbis_start_date");
-            const savedEnd = localStorage.getItem("pbis_end_date");
-
-            if (urlStart && urlEnd) {
-                setStartDate(urlStart);
-                setEndDate(urlEnd);
-                // Sync to localStorage
-                localStorage.setItem("pbis_start_date", urlStart);
-                localStorage.setItem("pbis_end_date", urlEnd);
-            } else if (savedStart && savedEnd) {
-                setStartDate(savedStart);
-                setEndDate(savedEnd);
-            } else {
-                const today = new Date();
-                const prev = new Date();
-                prev.setDate(today.getDate() - 28);
-                const defaultStart = prev.toISOString().split('T')[0];
-                const defaultEnd = today.toISOString().split('T')[0];
-                setStartDate(defaultStart);
-                setEndDate(defaultEnd);
-            }
-        };
-
-        loadDates();
+        const { start, end } = loadInitialDateRange();
+        setStartDate(start);
+        setEndDate(end);
 
         // Listen for date changes from GlobalNav
         const handleDateChange = (e: CustomEvent) => {

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "./AuthProvider";
 import SheetStatusBanner from "./SheetStatusBanner";
+import { loadInitialDateRange, persistDateRange } from "../utils";
 
 interface AppShellProps {
     currentPage: string;
@@ -43,35 +44,15 @@ export default function AppShell({
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const urlStart = searchParams.get("startDate");
-        const urlEnd = searchParams.get("endDate");
-
-        const savedStart = localStorage.getItem("pbis_start_date");
-        const savedEnd = localStorage.getItem("pbis_end_date");
-
-        if (urlStart && urlEnd) {
-            setStartDate(urlStart);
-            setEndDate(urlEnd);
-            localStorage.setItem("pbis_start_date", urlStart);
-            localStorage.setItem("pbis_end_date", urlEnd);
-        } else if (savedStart && savedEnd) {
-            setStartDate(savedStart);
-            setEndDate(savedEnd);
-        } else {
-            const today = new Date();
-            const prev = new Date();
-            prev.setDate(today.getDate() - 28);
-            setStartDate(prev.toISOString().split("T")[0]);
-            setEndDate(today.toISOString().split("T")[0]);
-        }
+        const { start, end } = loadInitialDateRange();
+        setStartDate(start);
+        setEndDate(end);
         setIsInitialized(true);
     }, []);
 
     useEffect(() => {
         if (isInitialized && startDate && endDate) {
-            localStorage.setItem("pbis_start_date", startDate);
-            localStorage.setItem("pbis_end_date", endDate);
+            persistDateRange(startDate, endDate);
         }
     }, [startDate, endDate, isInitialized]);
 
