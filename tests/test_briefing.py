@@ -1,0 +1,47 @@
+"""관리자 브리핑 규칙: 직전 수업일, 기간 비교, 증가·감소 학생, 10줄 요약."""
+import os
+import sys
+from datetime import date
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend"))
+from app.services.briefing import build_briefing, prev_school_days, semester_range
+
+TODAY = date(2026, 10, 26)  # 월요일
+STUDENTS = [
+    {"학생코드": "1011", "학생이름": "김O준", "학급": "초등 1학년 1반", "Tier3": "X"},
+    {"학생코드": "2022", "학생이름": "이O", "학급": "초등 2학년 2반", "Tier3": "O"},
+]
+
+
+def log(d, code, crisis=False, place="교실", slot="2구간: 1교시", status="Approved"):
+    return {"행동발생날짜": d, "학생코드": code, "장소": place, "시간대": slot, "강도": "3(위기행동)",
+            "행동유형": "신체적공격행동: 때리기", "물리적제지여부": "O(제지)" if crisis else "X(보고서 작성 불필요)",
+            "Status": status, "crisis_details": {}}
+
+
+def test_prev_school_days_skip_weekend_and_holiday():
+    assert prev_school_days(TODAY, ["2026-10-23"]) == [date(2026, 10, 22), date(2026, 10, 21)]
+    assert prev_school_days(TODAY, []) == [date(2026, 10, 23), date(2026, 10, 22)]
+
+
+def test_semester():
+    assert semester_range(date(2026, 4, 1))[0] == "1학기"
+    assert semester_range(date(2027, 1, 10))[1:] == (date(2026, 8, 16), date(2027, 2, 28))
+
+
+def test_briefing_trends_and_lines():
+    recs = [log(f"2026-10-{d:02d}", "1011", crisis=(d == 23)) for d in (16, 19, 20, 21, 22, 23)]  # 증가 0→6
+    recs += [log(f"2026-10-{d:02d}", "2022") for d in (1, 2, 5, 6)] + [log("2026-10-20", "2022")]  # 감소 4→1
+    recs.append(log("2026-10-23", "2022", crisis=True, status="Pending"))
+    b = build_briefing(recs, STUDENTS, [], TODAY)
+    assert len(b["ten_lines"]) == 10
+    assert b["days"]["yesterday"]["date"] == "2026-10-23" and b["days"]["yesterday"]["count"] == 2
+    assert [s["code"] for s in b["increasing"]] == ["1011"]
+    assert "Tier3 상향" in b["increasing"][0]["actions"][0]
+    assert [s["code"] for s in b["decreasing"]] == ["2022"]
+    assert b["todo"][0]["href"] == "/admin/approvals"
+    assert b["days"]["yesterday"]["items"][0]["missing_report"] is True
+    ok = log("2026-10-23", "1011", crisis=True)
+    ok["form_report_details"] = {"제지_법적의무_확인": "당일 학교장 보고, 당일 학부모 알림"}
+    assert build_briefing([ok], STUDENTS, [], TODAY)["days"]["yesterday"]["items"][0]["missing_report"] is False
+    assert "김O준(1011)" in b["ten_lines"][0]

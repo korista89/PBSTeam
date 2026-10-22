@@ -69,7 +69,8 @@ export default function AppShell({
             groupTitle: "운영",
             items: [
                 { href: "/", label: "대시보드", key: "dashboard", icon: "📊" },
-                { href: "/today", label: "Today결정", key: "today", icon: "🧭" }
+                { href: "/today", label: "Today결정", key: "today", icon: "🧭" },
+                ...(isAdmin() ? [{ href: "/briefing", label: "관리자 브리핑", key: "briefing", icon: "🗞️" }] : [])
             ]
         },
         {
