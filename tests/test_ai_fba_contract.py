@@ -1,6 +1,5 @@
 import os
 import sys
-import asyncio
 from unittest import mock
 
 
@@ -192,12 +191,10 @@ def test_ai_bip_api_boundary_returns_gate_metadata_and_forwards_mode():
          mock.patch("app.services.sheets.fetch_all_records", return_value=raw_logs), \
          mock.patch("app.services.sheets.fetch_student_status", return_value=status), \
          mock.patch.object(bip_endpoint, "generate_full_bip", return_value="### 1. 표적행동\n초안") as generator:
-        response = asyncio.run(
-            bip_endpoint.ai_bip_full(
-                "21101",
-                bip_endpoint.AIBIPFullRequest(mode="compact"),
-                current_user={"role": "admin", "id": "admin"},
-            )
+        response = bip_endpoint.ai_bip_full(
+            "21101",
+            bip_endpoint.AIBIPFullRequest(mode="compact"),
+            current_user={"role": "admin", "id": "admin"},
         )
 
     assert response["eligible"] is True
@@ -210,12 +207,10 @@ def test_ai_bip_api_boundary_returns_gate_metadata_and_forwards_mode():
          mock.patch("app.services.sheets.fetch_all_records", return_value=raw_logs[:2]), \
          mock.patch("app.services.sheets.fetch_student_status", return_value=status), \
          mock.patch.object(bip_endpoint, "generate_full_bip") as blocked_generator:
-        blocked = asyncio.run(
-            bip_endpoint.ai_bip_full(
-                "21101",
-                bip_endpoint.AIBIPFullRequest(mode="detailed"),
-                current_user={"role": "admin", "id": "admin"},
-            )
+        blocked = bip_endpoint.ai_bip_full(
+            "21101",
+            bip_endpoint.AIBIPFullRequest(mode="detailed"),
+            current_user={"role": "admin", "id": "admin"},
         )
 
     assert blocked["eligible"] is False

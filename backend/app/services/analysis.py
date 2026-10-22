@@ -223,8 +223,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         if '행동발생날짜' in mdf.columns and not mdf.empty:
             mdf['date_obj'] = robust_parse_dates(mdf['행동발생날짜'])
             mdf = mdf[mdf['date_obj'].notna()]
-            mdf['week'] = mdf['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
-            mdf['year'] = mdf['date_obj'].dt.year.fillna(-1).astype(int)
+            mdf['week'] = mdf['date_obj'].dt.isocalendar().week.astype('float').fillna(-1).astype(int)
+            mdf['year'] = mdf['date_obj'].dt.year.astype('float').fillna(-1).astype(int)
             by_year_week = mdf[mdf['year'] > 0].groupby(['year', 'week']).size()
 
             curr_year = pd.to_datetime(end_date).year if end_date else pd.Timestamp.now().year
@@ -258,8 +258,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         # Weekly Trend: count submissions per week
         weekly_counts = {}
         if 'date_obj' in df.columns:
-            df['week'] = df['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
-            df['year'] = df['date_obj'].dt.year.fillna(-1).astype(int)
+            df['week'] = df['date_obj'].dt.isocalendar().week.astype('float').fillna(-1).astype(int)
+            df['year'] = df['date_obj'].dt.year.astype('float').fillna(-1).astype(int)
             # Filter valid dates for weekly
             valid_df = df[df['year'] > 0]
             w_grouped = valid_df.groupby(['year', 'week']).size()  # count rows
@@ -709,8 +709,8 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     # -- Weekly Trend --
     weekly_trend = []
     if 'date_obj' in student_df.columns:
-        student_df['week'] = student_df['date_obj'].dt.isocalendar().week.fillna(-1).astype(int)
-        student_df['year'] = student_df['date_obj'].dt.year.fillna(-1).astype(int)
+        student_df['week'] = student_df['date_obj'].dt.isocalendar().week.astype('float').fillna(-1).astype(int)
+        student_df['year'] = student_df['date_obj'].dt.year.astype('float').fillna(-1).astype(int)
         s_valid = student_df[student_df['year'] > 0]
         w_counts = s_valid.groupby(['year', 'week'])['발생횟수'].sum().reset_index(name='count')
         for _, row in w_counts.iterrows():
