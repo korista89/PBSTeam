@@ -45,3 +45,12 @@ def test_briefing_trends_and_lines():
     ok["form_report_details"] = {"제지_법적의무_확인": "당일 학교장 보고, 당일 학부모 알림"}
     assert build_briefing([ok], STUDENTS, [], TODAY)["days"]["yesterday"]["items"][0]["missing_report"] is False
     assert "김O준(1011)" in b["ten_lines"][0]
+
+
+def test_trend_lists_capped_at_three():
+    students = [{"학생코드": str(1000 + i), "학생이름": f"학O{i}", "학급": "", "Tier3": "X"} for i in range(5)]
+    recs = [log(f"2026-10-{d:02d}", str(1000 + i)) for i in range(5) for d in range(19, 19 + 3 + i)]
+    recs += [log(f"2026-10-0{d}", str(2000 + i)) for i in range(5) for d in range(1, 5)]
+    b = build_briefing(recs, students, [], TODAY)
+    assert len(b["increasing"]) == 3 and b["increasing"][0]["code"] == "1004"
+    assert len(b["decreasing"]) == 3

@@ -3,7 +3,7 @@
 규칙 기반(외부 AI 미사용)이라 빠르고 학생 정보가 밖으로 나가지 않는다. 학생은 별칭·코드로만 표시한다.
 - 어제/엊그제 = 직전 수업일/그 전 수업일(주말·공휴일 제외)
 - 학기: 1학기 3. 1.~8. 15., 2학기 8. 16.~2월 말 / 학년도: 3. 1.~2월 말
-- 증가·감소 학생: 최근 14일 vs 그 전 14일, 기준 3건 이상, 50% 이상 변화
+- 증가·감소 학생: 최근 14일 vs 그 전 14일, 기준 3건 이상, 50% 이상 변화, 각각 최대 3명
 """
 from collections import Counter, defaultdict
 from datetime import date, timedelta
@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 TREND_DAYS = 14
 TREND_MIN = 3
+TREND_TOP = 3
 
 
 def _d(s: str) -> Optional[date]:
@@ -206,7 +207,8 @@ def _trends(ctx: _Ctx, today: date):
             down.append({**base, "message": f"최근 2주 위기행동이 {p}건에서 {n}건으로 줄었습니다. 담임 선생님께 칭찬과 감사를 전해 주세요."})
     up.sort(key=lambda x: (x["recent"] - x["before"], x["recent"]), reverse=True)
     down.sort(key=lambda x: x["before"] - x["recent"], reverse=True)
-    return up, down, {"recent": [a.isoformat(), today.isoformat()], "before": [pa.isoformat(), pb.isoformat()]}
+    # 변화가 큰 순으로 최대 TREND_TOP명만 고른다
+    return up[:TREND_TOP], down[:TREND_TOP], {"recent": [a.isoformat(), today.isoformat()], "before": [pa.isoformat(), pb.isoformat()]}
 
 
 def _signed(p: Optional[int]) -> str:
@@ -280,7 +282,7 @@ def build_briefing(records: List[dict], students: List[dict], holidays: Iterable
         "todo": todo,
         "tier_counts": {f"Tier{k}": tiers.get(k, 0) for k in (1, 2, 3)},
         "cico_trend": cico_trend or [],
-        "rules": {"school_day": "직전 수업일(주말·공휴일 제외)", "trend": f"최근 {TREND_DAYS}일 vs 그 전 {TREND_DAYS}일, {TREND_MIN}건 이상, 50% 이상 변화",
+        "rules": {"school_day": "직전 수업일(주말·공휴일 제외)", "trend": f"최근 {TREND_DAYS}일 vs 그 전 {TREND_DAYS}일, {TREND_MIN}건 이상, 50% 이상 변화, 각각 최대 {TREND_TOP}명",
                   "semester": "1학기 3. 1.~8. 15. / 2학기 8. 16.~2월 말"},
     }
 
