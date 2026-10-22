@@ -50,6 +50,7 @@ npm run dev                            # next dev
 규칙은 `backend/app/core/privacy.py` 와 프런트 `utils.ts`의 `maskName`이 같아야 한다.
 이름을 시트에 쓰는 새 코드는 `mask_name`/`alias_for`를 거친다. 일괄 변환·점검은 `scripts/anonymize_sheet.py`(기본은 점검만, `--apply`, `--verify`).
 실명↔별칭 대응표는 저장소 밖 `~/data/pbst_alias_map.json`에만 둔다.
+예약 작업(WSL systemd --user): `pbst-anonymize.timer`(새 실명 가림, `--incremental`), `pbst-briefing.timer`(평일 07:30 브리핑 텔레그램). 로그는 `~/data/pbst_*.log`.
 
 ## 스키마를 건드릴 때
 

@@ -4,6 +4,8 @@
   python ../scripts/anonymize_sheet.py            # 점검만(쓰기 없음). 바뀔 셀 수만 보고
   python ../scripts/anonymize_sheet.py --apply    # 실제 반영
   python ../scripts/anonymize_sheet.py --verify   # 반영 후 잔존 실명 점검(읽기 전용)
+  python ../scripts/anonymize_sheet.py --incremental  # 예약 작업용: 새로 들어온 실명만 가림(대응표 유지)
+  ※ 최초 변환 뒤에는 대응표(실명→별칭)를 덮어쓰지 않도록 --apply 는 --rebuild 를 함께 줘야 실행된다.
 
 - 실명↔별칭 대응표는 저장소 밖 ~/data/pbst_alias_map.json 에만 둔다(권한 600). 저장소·로그에 실명을 쓰지 않는다.
 - 이름은 학생 이름 열과 자유서술 열에서만 치환한다. 교사 이름 열(입력교사명·Author 등)과 Users 탭은 건드리지 않는다.
@@ -19,7 +21,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
-from app.core.privacy import anonymize_text, build_alias_map  # noqa: E402
+from app.core.privacy import anonymize_text, build_alias_map, mask_name  # noqa: E402
 
 SHEET_ID = "1pMQIowYYBIk-6owcJqCNK5mA8GtssEEr6XdUq8gC9Cs"
 MAP_PATH = os.path.expanduser("~/data/pbst_alias_map.json")
@@ -47,9 +49,15 @@ def connect(write):
     return gspread.authorize(creds).open_by_key(SHEET_ID)
 
 
-def read_all(sh):
+# 새 실명이 들어올 수 있는 탭(구글폼·자유서술). 월별·그림말 탭은 사이트가 TierStatus 별칭으로 만든다.
+INCREMENTAL_TABS = ["Log_Main", "TierStatus", "BIP", "MeetingNotes", "PW_협의록"]
+
+
+def read_all(sh, only=None):
     data = {}
     for ws in sh.worksheets():
+        if only and ws.title not in only:
+            continue
         data[ws.title] = (ws, retry(ws.get_all_values, value_render_option="FORMULA"))
         time.sleep(1.2)
     return data
@@ -76,8 +84,9 @@ def collect_names(data):
     return n2c
 
 
-def plan(data, alias):
-    """{탭: [(행,열,새값)]}"""
+def plan(data, alias, mask_unknown=False):
+    """{탭: [(행,열,새값)]}. mask_unknown: 대응표에 없는 새 이름도 이름 열에서는 규칙대로 가린다."""
+    known_aliases = set(alias.values())
     changes = {}
     for tab, (ws, rows) in data.items():
         if tab in SKIP_TABS or not rows:
@@ -92,6 +101,8 @@ def plan(data, alias):
                     m = re.match(r"^(.*?)(\(\d+\))?$", cell.strip())
                     base = m.group(1).strip()
                     new = alias.get(base)
+                    if not new and mask_unknown and base not in known_aliases and mask_name(base) != base:
+                        new = mask_name(base)
                     new = (new + (m.group(2) or "")) if new else cell
                 else:
                     new = anonymize_text(cell, alias)
@@ -120,8 +131,19 @@ def apply(sh, changes):
 
 
 def main():
-    mode = "apply" if "--apply" in sys.argv else "verify" if "--verify" in sys.argv else "dry"
-    sh = connect(mode == "apply")
+    mode = ("incremental" if "--incremental" in sys.argv else "apply" if "--apply" in sys.argv
+            else "verify" if "--verify" in sys.argv else "dry")
+    sh = connect(mode in ("apply", "incremental"))
+    if mode == "incremental":
+        saved = json.load(open(MAP_PATH))
+        changes = plan(read_all(sh, INCREMENTAL_TABS), saved["alias"], mask_unknown=True)
+        stamp = time.strftime("%Y-%m-%d %H:%M")
+        print(f"[{stamp}] 새 실명 셀:", {t: len(c) for t, c in changes.items()} or "없음")
+        if changes:
+            apply(sh, changes)
+        return
+    if mode in ("dry", "apply") and os.path.exists(MAP_PATH) and "--rebuild" not in sys.argv:
+        sys.exit(f"대응표 {MAP_PATH} 가 이미 있습니다. 새 실명만 가리려면 --incremental, 전체 재작성은 --rebuild 를 붙이세요.")
     if mode == "verify":
         saved = json.load(open(MAP_PATH))
         data = read_all(sh)
