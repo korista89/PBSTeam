@@ -36,9 +36,9 @@ def test_briefing_trends_and_lines():
     b = build_briefing(recs, STUDENTS, [], TODAY)
     assert len(b["ten_lines"]) == 10
     assert b["days"]["yesterday"]["date"] == "2026-10-23" and b["days"]["yesterday"]["count"] == 2
-    assert [s["code"] for s in b["increasing"]] == ["1011"]
+    assert b["increasing"][0]["code"] == "1011" and b["increasing"][0]["strong"] is True
     assert "Tier3 상향" in b["increasing"][0]["actions"][0]
-    assert [s["code"] for s in b["decreasing"]] == ["2022"]
+    assert b["decreasing"][0]["code"] == "2022" and b["decreasing"][0]["strong"] is True
     assert b["todo"][0]["href"] == "/admin/approvals"
     assert b["days"]["yesterday"]["items"][0]["missing_report"] is True
     ok = log("2026-10-23", "1011", crisis=True)
@@ -54,3 +54,13 @@ def test_trend_lists_capped_at_three():
     b = build_briefing(recs, students, [], TODAY)
     assert len(b["increasing"]) == 3 and b["increasing"][0]["code"] == "1004"
     assert len(b["decreasing"]) == 3
+
+
+def test_trend_fills_up_to_three_with_weaker_changes():
+    students = [{"학생코드": c, "학생이름": f"학O{c}", "학급": "", "Tier3": "X"} for c in ("1", "2", "3")]
+    recs = [log(f"2026-10-{d:02d}", "1") for d in (19, 20, 21, 22)]          # 0→4 기준 충족
+    recs += [log("2026-10-20", "2"), log("2026-10-21", "2")]                 # 0→2 기준 미달(관찰)
+    recs += [log("2026-10-05", "3"), log("2026-10-22", "3")] + [log("2026-10-06", "3")]  # 2→1 감소(관찰)
+    b = build_briefing(recs, students, [], TODAY)
+    assert [(s["code"], s["strong"]) for s in b["increasing"]] == [("1", True), ("2", False)]
+    assert [(s["code"], s["strong"]) for s in b["decreasing"]] == [("3", False)]

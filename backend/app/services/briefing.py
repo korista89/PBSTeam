@@ -196,19 +196,27 @@ def _trends(ctx: _Ctx, today: date):
             cur[c].append((d, c, r))
         elif pa <= d <= pb:
             prev[c].append((d, c, r))
+    # 기준(3건 이상·50% 이상 변화)을 넘는 학생을 먼저, 모자라면 변화가 큰 학생으로 3명까지 채운다.
+    # 기준 미달로 채운 학생은 strong=False 로 표시해 화면에서 '관찰'로 구분한다.
     up, down = [], []
     for c in set(cur) | set(prev):
         n, p = len(cur[c]), len(prev[c])
         base = {"code": c, "label": ctx.label(c), "class": ctx.info.get(c, {}).get("class", ""),
                 "tier": ctx.info.get(c, {}).get("tier", 1), "recent": n, "before": p}
-        if n >= TREND_MIN and (p == 0 or n >= p * 1.5):
-            up.append({**base, "actions": _actions_for(ctx, c, cur[c])})
-        elif p >= TREND_MIN and n <= p * 0.5:
-            down.append({**base, "message": f"최근 2주 위기행동이 {p}건에서 {n}건으로 줄었습니다. 담임 선생님께 칭찬과 감사를 전해 주세요."})
-    up.sort(key=lambda x: (x["recent"] - x["before"], x["recent"]), reverse=True)
-    down.sort(key=lambda x: x["before"] - x["recent"], reverse=True)
-    # 변화가 큰 순으로 최대 TREND_TOP명만 고른다
+        if n > p:
+            strong = n >= TREND_MIN and (p == 0 or n >= p * 1.5)
+            up.append({**base, "strong": strong, "actions": _actions_for(ctx, c, cur[c])})
+        elif p > n:
+            strong = p >= TREND_MIN and n <= p * 0.5
+            down.append({**base, "strong": strong,
+                         "message": f"최근 2주 위기행동이 {p}건에서 {n}건으로 줄었습니다. 담임 선생님께 칭찬과 감사를 전해 주세요."})
+    up.sort(key=lambda x: (x["strong"], x["recent"] - x["before"], x["recent"]), reverse=True)
+    down.sort(key=lambda x: (x["strong"], x["before"] - x["recent"], x["before"]), reverse=True)
     return up[:TREND_TOP], down[:TREND_TOP], {"recent": [a.isoformat(), today.isoformat()], "before": [pa.isoformat(), pb.isoformat()]}
+
+
+def _trend_txt(s: dict) -> str:
+    return f"{s['label']} {s['before']}→{s['recent']}건" + ("" if s["strong"] else "(관찰)")
 
 
 def _signed(p: Optional[int]) -> str:
@@ -243,7 +251,7 @@ def build_briefing(records: List[dict], students: List[dict], holidays: Iterable
         todo.append({"level": "high", "text": f"최근 2주 위기조치 {len(missing)}건 관리자 보고·보호자 알림 기록 누락 확인", "href": "/logs"})
     if revision:
         todo.append({"level": "mid", "text": f"재작성 요청 {revision}건 작성자 보완 확인", "href": "/logs"})
-    for s in up[:3]:
+    for s in (x for x in up if x["strong"]):
         todo.append({"level": "mid", "text": f"{s['label']}: {s['actions'][0]}", "href": f"/student/{s['code']}"})
     if down:
         todo.append({"level": "low", "text": f"감소 학생 {len(down)}명 담임에게 칭찬 전달", "href": None})
@@ -266,8 +274,8 @@ def build_briefing(records: List[dict], students: List[dict], holidays: Iterable
         f"최근 1주: {week['count']}건·{week['students']}명({_signed(week['change_pct'])} vs 그 전 주), {place_slot(week)}.",
         f"최근 1개월: {month['count']}건·{month['students']}명({_signed(month['change_pct'])} vs 그 전 달), 조치 {month['crisis']}건.",
         f"이번 {sem_label}: {semester['count']}건({_signed(semester['change_pct'])} vs 작년 같은 기간) · 학년도 누적 {year['count']}건.",
-        ("⚠️ 증가: " + ", ".join(f"{s['label']} {s['before']}→{s['recent']}건" for s in up[:3])) if up else "⚠️ 증가 학생 없음.",
-        ("👏 감소: " + ", ".join(f"{s['label']} {s['before']}→{s['recent']}건" for s in down[:3])) if down else "👏 뚜렷한 감소 학생 없음.",
+        ("⚠️ 증가: " + ", ".join(_trend_txt(s) for s in up)) if up else "⚠️ 증가 학생 없음.",
+        ("👏 감소: " + ", ".join(_trend_txt(s) for s in down)) if down else "👏 감소 학생 없음.",
         f"✅ 결재 대기 {pending}건 · 재작성 {revision}건 · 보고/알림 누락 {len(missing)}건.",
         "👉 오늘 할 일: " + (todo[0]["text"] if todo else "특이사항 없음, 현 지원 유지."),
     ]
