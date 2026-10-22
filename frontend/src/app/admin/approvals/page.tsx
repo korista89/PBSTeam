@@ -7,6 +7,7 @@ import AppShell from '../../components/AppShell';
 import { AuthCheck, useAuth } from '../../components/AuthProvider';
 import { useSheetLiveSync } from '../../hooks/useSheetLiveSync';
 import CrisisDetailPanel from '../../components/CrisisDetailPanel';
+import { maskName } from '../../utils';
 
 export default function AdminApprovalsPage() {
   const { user } = useAuth();
@@ -133,7 +134,7 @@ export default function AdminApprovalsPage() {
 
                 <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                   <div>
-                    <p><strong>학생:</strong> {log['학생명']} ({log['학생코드']})</p>
+                    <p><strong>학생:</strong> {maskName(log['학생명'])} ({log['학생코드']})</p>
                     <p><strong>날짜/시간:</strong> {log['행동발생날짜']} ({log['시간대']})</p>
                     <p><strong>입력교사:</strong> {log['입력교사명']}</p>
                   </div>

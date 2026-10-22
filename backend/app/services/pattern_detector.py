@@ -6,7 +6,7 @@ def detect_clinical_patterns(normalized_logs: List[dict]) -> Dict[str, Any]:
     """
     1,557건 정규화 로그에서 수학적·결정론적(Deterministic) 임상 패턴 자동 감지:
     1. 또래 전염 및 연쇄 촉발 패턴
-    2. 특정 루틴 고착화 패턴 (예: 김예원 점심/급식실 귀가 요구)
+    2. 특정 루틴 고착화 패턴 (예: 박서윤 점심/급식실 귀가 요구)
     3. 배경사건(수면/투약)과 강도 간의 상관도
     4. 시간대-장소-기능 고위험 삼각 클러스터 (Hotspot Triad)
     5. 교직원 상해 발생 패턴

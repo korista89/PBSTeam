@@ -55,7 +55,7 @@ def analyze_peer_contagion(normalized_logs: List[dict], tier_info_list: List[dic
         for source in candidates:
             if source == reactor:
                 continue
-            # 이름 2자 이상 매칭 (예: '승현', '곽승현')
+            # 이름 2자 이상 매칭 (예: '하준', '나하준')
             first_name = source[1:] if len(source) >= 3 else source
             if source in notes or (len(first_name) >= 2 and first_name in notes):
                 edge_key = (source, reactor)

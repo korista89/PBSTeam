@@ -138,8 +138,8 @@ def generate_dry_run_payload():
     print_banner("3. 표준 테스트 페이로드 (구글 폼과 100% 동일한 Mock Data)")
     mock_payload = {
         "timestamp": "2026-08-16 21:00:00",
-        "student_name": "전성진",
-        "teacher_name": "김명섭",
+        "student_name": "한유진",
+        "teacher_name": "김교사",
         "date": "2026-07-23",
         "time_slot": "2구간: 1교시, 5구간: 초등점심/중등4교시",
         "location": "교실",

@@ -54,6 +54,10 @@ def submit_behavior_log(
         status = "Pending" if is_crisis else "Approved"
         source = "Vercel"
 
+        # 실명이 시트에 들어가지 않게 별칭으로 저장(이미 별칭이면 그대로)
+        if payload.get("학생명"):
+            from app.core.privacy import mask_name
+            payload["학생명"] = mask_name(payload["학생명"])
         payload["Log_ID"] = log_id
         payload["Status"] = status
         payload["Source"] = source

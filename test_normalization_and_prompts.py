@@ -55,11 +55,11 @@ print(f"6-3. 심리안정실 복귀 성공: {sig1['sensory_room_success']} -> {'
 
 # 7. 또래 전염 분석 엔진 테스트
 mock_logs = [
-    {"student_name": "이한결", "notes": "승현이의 짜증과 울음 소리로 인해 울고 소리 지름", "date": "2026-07-08", "class_name": "초6-2", "primary_slot": 3},
-    {"student_name": "조성우", "notes": "승현이와 한결이의 울음 소리가 자극이 되었음.", "date": "2026-07-08", "class_name": "초6-2", "primary_slot": 3},
-    {"student_name": "이엘", "notes": "정재민 학생의 울음 소리를 많이 힘들어 함", "date": "2026-07-10", "class_name": "초2-2", "primary_slot": 2}
+    {"student_name": "오지안", "notes": "하준이의 짜증과 울음 소리로 인해 울고 소리 지름", "date": "2026-07-08", "class_name": "초6-2", "primary_slot": 3},
+    {"student_name": "윤솔아", "notes": "하준이와 지안이의 울음 소리가 자극이 되었음.", "date": "2026-07-08", "class_name": "초6-2", "primary_slot": 3},
+    {"student_name": "윤솔", "notes": "한유진 학생의 울음 소리를 많이 힘들어 함", "date": "2026-07-10", "class_name": "초2-2", "primary_slot": 2}
 ]
-contagion = analyze_peer_contagion(mock_logs, [{"name": "곽승현", "class": "초6-2"}, {"name": "이한결", "class": "초6-2"}, {"name": "정재민", "class": "초2-2"}])
+contagion = analyze_peer_contagion(mock_logs, [{"name": "나하준", "class": "초6-2"}, {"name": "오지안", "class": "초6-2"}, {"name": "한유진", "class": "초2-2"}])
 print(f"7. 또래 전염 엣지 수: {len(contagion['edges'])}개 (기대: >=2) -> {'✅ 통과' if len(contagion['edges']) >= 2 else '❌ 실패'}")
 
 # 8. 별도 ABC 문항이 없는 특기사항 중심 FBA 근거 집계

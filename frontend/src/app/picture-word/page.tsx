@@ -1198,7 +1198,7 @@ export default function PictureWordPage() {
                       minWidth: "80px",
                     }}
                   >
-                    {n}
+                    {maskName(n)}
                   </th>
                 ))}
                 <th

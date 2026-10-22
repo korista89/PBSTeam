@@ -44,6 +44,13 @@ npm run dev                            # next dev
   확인 없이 돌리지 않는다. 이름이 `fix`·`recreate`·`migrate`로 시작하면 전부 여기 해당한다.
 - 커밋·푸시는 사용자가 명시적으로 요청할 때만 한다.
 
+## 학생 이름
+
+시트(Log_Main·TierStatus·월별 탭·PW_어휘데이터 등)에는 실명이 아니라 **별칭**(김O준, 이O, 겹치면 김O준-1011)만 저장한다.
+규칙은 `backend/app/core/privacy.py` 와 프런트 `utils.ts`의 `maskName`이 같아야 한다.
+이름을 시트에 쓰는 새 코드는 `mask_name`/`alias_for`를 거친다. 일괄 변환·점검은 `scripts/anonymize_sheet.py`(기본은 점검만, `--apply`, `--verify`).
+실명↔별칭 대응표는 저장소 밖 `~/data/pbst_alias_map.json`에만 둔다.
+
 ## 스키마를 건드릴 때
 
 백엔드 Pydantic 모델과 프론트 TypeScript 타입이 짝을 이룬다.

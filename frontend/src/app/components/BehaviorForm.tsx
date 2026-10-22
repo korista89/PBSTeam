@@ -5,6 +5,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import { useAuth } from './AuthProvider';
 import DropdownTextarea from './DropdownTextarea';
+import { maskName } from '../utils';
 
 const TIME_SLOTS = [
   "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
@@ -224,7 +225,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
       const payload: Record<string, string> = {
         학생코드: studentId,
-        학생명: studentName,
+        학생명: maskName(studentName),
         입력교사명: user?.name || user?.id || '알수없음',
         행동발생날짜: formData.행동발생날짜,
         '시간대(위기행동 시작 시간 기준)': formData.시간대.join(', '),
@@ -318,7 +319,10 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
   return (
     <div style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0070f3', paddingBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
-        <h3 style={{ margin: 0 }}>새 위기행동 데이터 입력: {studentName}</h3>
+        <div>
+          <h3 style={{ margin: 0 }}>새 위기행동 데이터 입력: {maskName(studentName)}</h3>
+          <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#92400e' }}>※ 특기사항 등 서술란에는 학생 실명 대신 학생코드나 가림 이름(예: 김O준)을 쓰세요.</p>
+        </div>
         <div style={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden' }}>
           {(['quick', 'detailed'] as const).map(m => (
             <button
@@ -504,7 +508,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>특기사항(기타)</label>
-          <textarea name="특기사항" value={formData.특기사항} onChange={handleChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }} />
+          <textarea name="특기사항" placeholder="실명 대신 학생코드 사용" value={formData.특기사항} onChange={handleChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }} />
         </div>
         </>
         )}

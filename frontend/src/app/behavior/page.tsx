@@ -8,6 +8,7 @@ import StudentTimeline from "../components/StudentTimeline";
 import AppShell from "../components/AppShell";
 import { useAuth, AuthCheck } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
+import { maskName } from "../utils";
 
 export default function BehaviorPage() {
   const { user, isAdmin } = useAuth();
@@ -143,7 +144,7 @@ export default function BehaviorPage() {
                     >
                       <div>
                         <div style={{ fontWeight: isSelected ? 800 : 600, fontSize: "0.85rem", color: isSelected ? "var(--primary-blue)" : "var(--text-primary)" }}>
-                          {name}
+                          {maskName(name)}
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
                           학번 {s.학생코드}
@@ -174,11 +175,11 @@ export default function BehaviorPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--primary-blue)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "0.95rem" }}>
-                        {(selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명 || "학")[0]}
+                        {(maskName(selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명) || "학")[0]}
                       </div>
                       <div>
                         <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                          {selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명}
+                          {maskName(selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명)}
                           <span style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--text-muted)", marginLeft: "8px" }}>
                             (학생코드: {selectedStudent.학생코드})
                           </span>
@@ -196,7 +197,7 @@ export default function BehaviorPage() {
                   <div className="card" style={{ padding: "20px" }}>
                     <BehaviorForm
                       studentId={selectedStudent.학생코드}
-                      studentName={selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명}
+                      studentName={maskName(selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명)}
                       onLogSubmitted={handleLogSubmitted}
                       defaultMode={requestedMode}
                     />

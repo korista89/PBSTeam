@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any, Union
 from app.adapters.sheets.client import get_cached, set_cached, invalidate_cache
 from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable, invalidate_worksheet_lookups
 from app.core.time import now_kst
+from app.core.privacy import mask_name
 
 # Simple in-memory cache
 _cache = {
@@ -533,7 +534,7 @@ def update_student_codes(new_codes: list):
         # Headers
         data = [["Code", "Name", "Memo"]]
         for item in new_codes:
-            data.append([item.get('Code'), item.get('Name'), item.get('Memo', '')])
+            data.append([item.get('Code'), mask_name(item.get('Name')), item.get('Memo', '')])
 
         ws.clear()
         # Updated for gspread 6.x: specify range explicitly
@@ -1232,9 +1233,12 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
 
                 # Update student name (column 4 / D)
                 if student_name is not None:
+                    # 실명은 저장하지 않고 별칭만 저장한다(다른 학생과 겹치면 -학생코드 접미사)
+                    from app.core.privacy import alias_for
+                    taken = {str(x.get('학생이름', '')): str(x.get('학생코드')) for x in records if str(x.get('학생코드')) != str(code)}
                     batch_updates.append({
                         "range": f"D{row_num}",
-                        "values": [[student_name]]
+                        "values": [[alias_for(student_name, str(code), taken)]]
                     })
 
                 # Update enrollment (column 5 / E)
@@ -3242,7 +3246,7 @@ def get_cico_report_data(month: int):
                 # Try name-based key
                 prev_daily_data = prev_daily.get(name, [])
             if not prev_daily_data:
-                # Try partial match: code might be "박다솜(2211)" vs key "2211"
+                # Try partial match: code might be "최도윤(2211)" vs key "2211"
                 for k, v in prev_daily.items():
                     if code and (code in k or k in code):
                         prev_daily_data = v

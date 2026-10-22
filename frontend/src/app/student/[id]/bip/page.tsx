@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AuthCheck } from "../../../components/AuthProvider";
 import AppShell from "../../../components/AppShell";
 import { useDateRange } from "../../../components/GlobalNav";
-import { parseBIPAIResult } from "../../../utils";
+import { parseBIPAIResult, maskName } from "../../../utils";
 import ReadableAIResult from "../../../components/ReadableAIResult";
 import * as XLSX from "xlsx";
 import { API_BASE_URL } from "@/app/lib/api";
@@ -513,7 +513,7 @@ export default function BIPEditor() {
         // Title row data
         const data: (string | undefined)[][] = [
             ["행동중재계획 (BIP)"],
-            [`학생: ${studentName} (${studentCode})`, "", `작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`, "", `작성자: ${bip.Author || "Teacher"}`],
+            [`학생: ${maskName(studentName)} (${studentCode})`, "", `작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`, "", `작성자: ${bip.Author || "Teacher"}`],
             [],
         ];
 
@@ -578,7 +578,7 @@ export default function BIPEditor() {
         <AuthCheck>
             <AppShell
                 currentPage="roster"
-                title={`📋 행동중재계획 (BIP) — ${studentName}`}
+                title={`📋 행동중재계획 (BIP) — ${maskName(studentName)}`}
                 subtitle={`학번/코드: ${studentCode} · 작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`}
                 headerActions={
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
