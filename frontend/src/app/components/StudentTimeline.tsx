@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import { useSheetLiveSync } from '../hooks/useSheetLiveSync';
-import CrisisDetailPanel from './CrisisDetailPanel';
+import LogDetailPanel from './LogDetailPanel';
 
 export default function StudentTimeline({ studentId, refreshTrigger }: { studentId: string, refreshTrigger: number }) {
   const [logs, setLogs] = useState<any[]>([]);
@@ -56,7 +56,7 @@ export default function StudentTimeline({ studentId, refreshTrigger }: { student
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', borderBottom: '1px solid rgba(0,0,0,0.1)', paddingBottom: '5px' }}>
                 <strong>{log['행동발생날짜']} ({log['시간대']})</strong>
-                <span>상태: <strong>{isPending ? '⏳ 결재 대기' : '✅ 승인 완료'}</strong></span>
+                <span>상태: <strong>{isPending ? '⏳ 결재 대기' : log.Status === 'Revision Requested' ? '↩️ 재작성 요청' : '✅ 승인 완료'}</strong></span>
               </div>
               <p><strong>장소:</strong> {log['장소'] || '-'}</p>
               <p><strong>유형:</strong> {log['행동유형'] || '-'}</p>
@@ -65,12 +65,12 @@ export default function StudentTimeline({ studentId, refreshTrigger }: { student
               <p><strong>설명:</strong> {log['특기사항'] || '-'}</p>
               <p><strong>입력교사:</strong> {log['입력교사명'] || '-'}</p>
 
-              {(log.crisis_details || log.form_report_details) && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(0,0,0,0.2)' }}>
-                  <strong style={{ display: 'block', marginBottom: '8px' }}>위기행동 지원 보고서 상세</strong>
-                  <CrisisDetailPanel crisisDetails={log.crisis_details} formReportDetails={log.form_report_details} isCrisis={isCrisis} />
+              <details style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(0,0,0,0.2)' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700 }}>상세 보기 · 수정 · 삭제</summary>
+                <div style={{ marginTop: '8px', color: '#0f172a' }}>
+                  <LogDetailPanel log={log} isCrisis={isCrisis} onSaved={() => void fetchLogs(true)} />
                 </div>
-              )}
+              </details>
             </div>
           );
         })}

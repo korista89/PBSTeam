@@ -138,11 +138,11 @@ export default function StudentDetail() {
               🗂️ 전체 로그에서 보기
             </button>
             <button
-              onClick={() => router.push(`/behavior?mode=quick&student=${encodeURIComponent(profile.student_code || studentName)}`)}
+              onClick={() => router.push(`/behavior?student=${encodeURIComponent(profile.student_code || studentName)}`)}
               className="btn btn-secondary"
               style={{ color: '#b91c1c' }}
             >
-              🚨 빠른 위기 기록
+              🚨 위기행동 기록
             </button>
             <button onClick={() => router.back()} className="btn btn-secondary">
               ← 뒤로가기

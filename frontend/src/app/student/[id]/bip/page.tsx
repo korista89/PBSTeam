@@ -620,13 +620,13 @@ export default function BIPEditor() {
                     {/* 표적행동(문제행동/목표행동) 데이터 관리는 별도 탭(/target-behavior)으로 분리됨 */}
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                         <div style={{ fontSize: '0.85rem', color: '#475569' }}>
-                            📉 위 필드1(표적행동)·필드8(평가계획)을 실제 데이터로 뒷받침하려면 문제행동기록 탭에서 데이터를 등록·기록하세요.
+                            📉 위 필드1(표적행동)·필드8(평가계획)을 실제 데이터로 뒷받침하려면 표적행동기록 탭에서 데이터를 등록·기록하세요.
                         </div>
                         <button
                             onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(studentCode)}`)}
                             className="btn btn-secondary"
                         >
-                            📉 문제행동기록 데이터 보기
+                            📉 표적행동기록 데이터 보기
                         </button>
                     </div>
 

@@ -137,12 +137,13 @@ function CheckboxGroup({ options, selected, onToggle }: { options: string[]; sel
   );
 }
 
-export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: 'quick' | 'detailed' }) {
+export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: string }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  // 위기행동 발생 직후 그 자리에서 바로 끝낼 수 있는 최소 입력 경로 — 구글 폼의
-  // "간단히 먼저 기록" 분기와 같은 역할을 사이트 안에서 한 페이지로 제공한다.
-  const [mode, setMode] = useState<'quick' | 'detailed'>(defaultMode || 'detailed');
+  // 두 갈래: 보고서 사안이 아닌 위기행동은 '데이터만 입력', 제지·개별학생교육지원·상해가
+  // 있었으면 '보고서 작성'(보고서 필수). 서버도 같은 규칙으로 검사한다.
+  const [mode, setModeState] = useState<'data' | 'report'>(defaultMode === 'report' ? 'report' : 'data');
+  const NO_REPORT = 'X - 보고서 작성 불필요';
 
   const [formData, setFormData] = useState({
     행동발생날짜: new Date().toISOString().split('T')[0],
@@ -151,7 +152,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     행동유형: '',
     강도: '',
     기능: '', 기능기타: '',
-    물리적제지여부: 'X - 보고서 작성 불필요',
+    물리적제지여부: defaultMode === 'report' ? '' : 'X - 보고서 작성 불필요',
     발생횟수: '', 발생횟수기타: '',
     특기사항: ''
   });
@@ -184,6 +185,11 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
   const [message, setMessage] = useState('');
   const isCrisis = formData.물리적제지여부 !== 'X - 보고서 작성 불필요' && formData.물리적제지여부 !== '';
+
+  const setMode = (m: 'data' | 'report') => {
+    setModeState(m);
+    setFormData(prev => ({ ...prev, 물리적제지여부: m === 'data' ? NO_REPORT : (prev.물리적제지여부 === NO_REPORT ? '' : prev.물리적제지여부) }));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -284,10 +290,10 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
       const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log`, payload);
 
       if (res.data.success) {
-        setMessage(res.data.status === 'Pending' ? '✅ 행동기록 및 보고서가 제출되었습니다 (관리자 승인 대기중).' : '✅ 행동이 기록되었습니다.');
+        setMessage(res.data.status === 'Pending' ? '✅ 위기행동 데이터와 보고서가 제출되었습니다 (관리자 승인 대기).' : '✅ 위기행동 데이터가 저장되었습니다 (보고서 없음).');
         setFormData({
           행동발생날짜: new Date().toISOString().split('T')[0], 시간대: [], 장소: '', 장소기타: '',
-          행동유형: '', 강도: '', 기능: '', 기능기타: '', 물리적제지여부: 'X - 보고서 작성 불필요',
+          행동유형: '', 강도: '', 기능: '', 기능기타: '', 물리적제지여부: mode === 'data' ? NO_REPORT : '',
           발생횟수: '', 발생횟수기타: '', 특기사항: ''
         });
         set배경사건([]); set선행사건([]); set후속결과([]);
@@ -320,11 +326,11 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     <div style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0070f3', paddingBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
-          <h3 style={{ margin: 0 }}>새 위기행동 데이터 입력: {maskName(studentName)}</h3>
+          <h3 style={{ margin: 0 }}>위기행동 기록: {maskName(studentName)}</h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#92400e' }}>※ 특기사항 등 서술란에는 학생 실명 대신 학생코드나 가림 이름(예: 김O준)을 쓰세요.</p>
         </div>
         <div style={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden' }}>
-          {(['quick', 'detailed'] as const).map(m => (
+          {(['data', 'report'] as const).map(m => (
             <button
               key={m}
               type="button"
@@ -334,17 +340,17 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 background: mode === m ? '#0f172a' : '#fff', color: mode === m ? '#fff' : '#0f172a',
               }}
             >
-              {m === 'quick' ? '⚡ 빠른 입력' : '📝 상세 입력'}
+              {m === 'data' ? '📝 데이터만 입력' : '🚨 보고서 작성'}
             </button>
           ))}
         </div>
       </div>
 
-      {mode === 'quick' && (
-        <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '10px 0 0' }}>
-          위기행동 발생 직후 핵심만 먼저 남기는 경로입니다. 나머지 상세 항목(행동유형·강도·ABC 등)은 나중에 결재함/전체 로그에서 보완하거나, 위에서 &ldquo;상세 입력&rdquo;으로 전환해 바로 채울 수 있습니다.
-        </p>
-      )}
+      <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '10px 0 0' }}>
+        {mode === 'data'
+          ? '보고서 사안이 아닌 위기행동의 데이터만 저장합니다. 제지·개별학생교육지원·상해가 있었다면 위의 "🚨 보고서 작성"을 고르세요.'
+          : '제지·개별학생교육지원·상해가 있었던 위기행동입니다. 데이터와 함께 위기행동 발생 보고서를 작성해야 제출됩니다(관리자 승인 필요).'}
+      </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '20px' }}>
 
@@ -353,52 +359,6 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           <input type="date" name="행동발생날짜" value={formData.행동발생날짜} onChange={handleChange} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
         </div>
 
-        {mode === 'quick' ? (
-          <>
-            <div style={groupStyle}>
-              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>행동 발생 장소</label>
-              <select name="장소" value={formData.장소} onChange={handleChange} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', width: '100%' }}>
-                <option value="">선택</option>
-                {PLACES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-
-            <div style={{ ...groupStyle, backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
-              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px', color: '#b91c1c' }}>조치유형 *</label>
-              {ACTION_TYPES.map(a => (
-                <label key={a} style={radioStyle}>
-                  <input type="radio" name="물리적제지여부" value={a} checked={formData.물리적제지여부 === a} onChange={handleChange} required />
-                  {a}
-                </label>
-              ))}
-            </div>
-
-            <div style={groupStyle}>
-              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>경위 (한 줄로 간단히)</label>
-              <input type="text" name="특기사항" value={formData.특기사항} onChange={handleChange}
-                placeholder="예: 과제 지시 후 소리를 지르며 책상을 넘어뜨려 분리지도함"
-                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-            </div>
-
-            {isCrisis && (
-              <div style={{ ...groupStyle, display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px', color: !crisisData.관리자_보고_시간.trim() ? '#b91c1c' : undefined }}>학교장(관리자) 보고 시각</label>
-                  <input type="text" name="관리자_보고_시간" value={crisisData.관리자_보고_시간} onChange={handleCrisisChange} placeholder="예: 14:05" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px', color: !crisisData.학부모_알림_시간.trim() ? '#b91c1c' : undefined }}>보호자 알림 시각</label>
-                  <input type="text" name="학부모_알림_시간" value={crisisData.학부모_알림_시간} onChange={handleCrisisChange} placeholder="예: 14:10" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                {(!crisisData.관리자_보고_시간.trim() || !crisisData.학부모_알림_시간.trim()) && (
-                  <div style={{ width: '100%', fontSize: '0.76rem', color: '#92400e' }}>
-                    ⚠️ 비워두면 나중에 결재함/전체 로그에서 꼭 보완하세요 — 법정 보고·알림 의무는 플랫폼 입력만으로 대신할 수 없습니다.
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
         <>
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>시간대 *</label>
@@ -481,15 +441,17 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           </label>
         </div>
 
+        {mode === 'report' && (
         <div style={{ ...groupStyle, backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px', color: '#b91c1c' }}>방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부 *</label>
-          {ACTION_TYPES.map(a => (
+          {ACTION_TYPES.filter(a => a !== NO_REPORT).map(a => (
             <label key={a} style={radioStyle}>
               <input type="radio" name="물리적제지여부" value={a} checked={formData.물리적제지여부 === a} onChange={handleChange} required />
               {a}
             </label>
           ))}
         </div>
+        )}
 
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>배경사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(오늘 평소와 다른 점 — 복수 선택 가능)</span></label>
@@ -511,10 +473,9 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           <textarea name="특기사항" placeholder="실명 대신 학생코드 사용" value={formData.특기사항} onChange={handleChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }} />
         </div>
         </>
-        )}
 
         {/* ── CRISIS REPORT BRANCHING (상세 입력 모드에서만) ── */}
-        {isCrisis && mode === 'detailed' && (
+        {isCrisis && mode === 'report' && (
           <div style={{ marginTop: '20px', padding: '20px', border: '2px solid #b91c1c', borderRadius: '12px', backgroundColor: '#fff' }}>
             <h3 style={{ color: '#b91c1c', textAlign: 'center', marginBottom: '5px' }}>🚨 위기행동 지원 및 개별학생교육지원 보고서</h3>
             <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', marginBottom: '20px' }}>
@@ -533,7 +494,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[방어 및 보호를 위한 제지 사용 학교장 보고서]</h4>
                 <div style={{ marginBottom: '10px' }}>
                   <div style={{fontWeight: 'bold', marginBottom: '5px'}}>제지를 사용하게 된 경위:</div>
-                  <DropdownTextarea name="제지_경위" value={crisisData.제지_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
+                  <DropdownTextarea name="제지_경위" value={crisisData.제지_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
                 </div>
                 <div style={{ marginBottom: '10px' }}>
                   <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>제지에 사용한 방법:</label>
@@ -573,7 +534,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 </div>
                 <div style={{ marginBottom: '10px' }}>
                   <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원을 실시하게 된 경위:</div>
-                  <DropdownTextarea name="개별학생교육지원_경위" value={crisisData.개별학생교육지원_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
+                  <DropdownTextarea name="개별학생교육지원_경위" value={crisisData.개별학생교육지원_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
                 </div>
                 <div style={{ marginBottom: '10px' }}>
                   <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원 내용 및 회복 과정:</div>
@@ -603,7 +564,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 </div>
                 <div style={{ marginBottom: '10px' }}>
                   <div style={{fontWeight: 'bold', marginBottom: '5px'}}>상해가 발생하게 된 경위:</div>
-                  <DropdownTextarea name="상해_경위" value={crisisData.상해_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} />
+                  <DropdownTextarea name="상해_경위" value={crisisData.상해_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
                 </div>
                 <div style={{ marginBottom: '10px' }}>
                   <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>

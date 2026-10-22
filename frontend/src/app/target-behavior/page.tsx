@@ -70,7 +70,7 @@ export default function TargetBehaviorPage() {
     const [searchKeyword, setSearchKeyword] = useState("");
     const [requestedStudentCode, setRequestedStudentCode] = useState("");
 
-    // BIP 페이지의 "문제행동기록 데이터 보기" 버튼 등에서 ?student=코드 로 들어오면
+    // BIP 페이지의 "표적행동기록 데이터 보기" 버튼 등에서 ?student=코드 로 들어오면
     // 해당 학생을 바로 선택한다. useSearchParams()는 Suspense 경계를 요구해 정적 빌드가
     // 실패하므로 /logs, /behavior와 동일하게 window.location.search를 직접 읽는다.
     useEffect(() => {
@@ -280,7 +280,7 @@ export default function TargetBehaviorPage() {
         <AuthCheck>
             <AppShell
                 currentPage="target-behavior"
-                title="📉 문제행동기록"
+                title="📉 표적행동기록"
                 subtitle="담임교사가 정의한 문제행동·목표행동을 BIP 적용기간 동안 추적 · 위기행동과 겹쳐 보기"
             >
                 <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "20px", alignItems: "start" }}>

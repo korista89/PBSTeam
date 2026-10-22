@@ -13,15 +13,15 @@ import { maskName } from "../utils";
 export default function BehaviorPage() {
   const { user, isAdmin } = useAuth();
   // 학생 프로파일의 "빠른 위기 기록" 버튼 등에서 ?mode=quick&student=코드 로 들어오면
-  // 해당 학생을 바로 선택하고 빠른 입력 모드로 열어준다 — 예전 별도 페이지(behavior-log/quick)를
+  // 해당 학생을 바로 선택한다(mode=report 면 보고서 작성으로 연다) — 예전 별도 페이지(behavior-log/quick)를
   // 여기 하나로 합쳤기 때문에 진입 경로만 쿼리스트링으로 이어준다.
   // useSearchParams()는 App Router에서 Suspense 경계를 요구해 정적 빌드가 실패하므로
   // (/logs 페이지와 동일하게) window.location.search를 직접 읽는다.
-  const [requestedMode, setRequestedMode] = useState<'quick' | 'detailed'>('detailed');
+  const [requestedMode, setRequestedMode] = useState<'data' | 'report'>('data');
   const [requestedStudentCode, setRequestedStudentCode] = useState("");
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") === "quick") setRequestedMode("quick");
+    if (params.get("mode") === "report") setRequestedMode("report");
     const student = params.get("student");
     if (student) setRequestedStudentCode(student);
   }, []);

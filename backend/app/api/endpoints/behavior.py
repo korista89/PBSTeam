@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from app.adapters.sheets.resilience import SheetUnavailable
 from typing import Optional, List, Dict, Any
-from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records, clear_cache, normalize_date_string
+from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records, clear_cache, normalize_date_string, FORM_REPORT_HEADERS
 from app.core.config import settings
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
 from app.adapters.sheets.tier_status import TierStatusAdapter
@@ -58,6 +58,11 @@ def submit_behavior_log(
         if payload.get("학생명"):
             from app.core.privacy import mask_name
             payload["학생명"] = mask_name(payload["학생명"])
+        # 입력자는 화면 값이 아니라 로그인 계정으로 기록한다(본인 기록 수정·삭제 권한의 기준)
+        payload["입력교사명"] = _author_label(current_user)
+        action = str(payload.get(ACTION_HEADER, "")).strip()
+        if action in REPORT_REQUIRED and not str(payload.get(REPORT_REQUIRED[action], "")).strip():
+            raise HTTPException(status_code=400, detail="제지·개별학생교육지원·상해가 있었다면 위기행동 발생 보고서를 작성해야 합니다.")
         payload["Log_ID"] = log_id
         payload["Status"] = status
         payload["Source"] = source
@@ -84,123 +89,135 @@ def submit_behavior_log(
         clear_cache("records")
             
         return {"success": True, "message": "Log submitted", "log_id": log_id, "status": status}
-    except SheetUnavailable:
+    except (HTTPException, SheetUnavailable):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ── 권한·상태 규칙 ──────────────────────────────────────────────
+# 관리자: 모든 기록 추가·수정·삭제·재작성 요청·승인. 교사: 본인이 입력한 기록만 수정·삭제.
+# 교사가 보고서(위기조치 있는 기록)를 고치면 다시 승인 대기(Pending)로 돌아간다(재제출).
+# 삭제는 행을 지우지 않고 Status=Deleted 로 남긴다(되돌릴 수 있게). 모든 조회에서 제외된다.
+NO_REPORT_ACTIONS = {"", "X - 보고서 작성 불필요", "X(보고서 작성 불필요)"}
+ACTION_HEADER = "방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부"
+# 조치유형별로 반드시 채워야 하는 보고서 항목(경위)
+REPORT_REQUIRED = {
+    "방어 및 보호를 위한 제지": "[제지] 방어 및 보호를 위한 제지를 사용하게 된 경위",
+    "개별학생교육지원": "[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위",
+    "본인/타인상해만 발생": "[상해]  상해가 발생하게 된 경위",
+}
+
+
+def _is_admin(user: Dict[str, Any]) -> bool:
+    return str(user.get("role", "")).lower() in ["admin", "superadmin"]
+
+
+def _author_label(user: Dict[str, Any]) -> str:
+    return str(user.get("name") or user.get("id") or "알수없음").strip()
+
+
+def _is_author(row_author: str, user: Dict[str, Any]) -> bool:
+    row_author = str(row_author or "").strip()
+    return bool(row_author) and row_author in {str(user.get("id", "")).strip(), str(user.get("name", "")).strip()} - {""}
+
+
+def _now_str() -> str:
+    return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _load_log_row(log_id: str):
+    """(worksheet, headers, row_num, row) — 없으면 404. 삭제된 기록도 404."""
+    if not log_id:
+        raise HTTPException(status_code=400, detail="log_id required")
+    client = get_sheets_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
+    ws = client.open_by_url(settings.SHEET_URL).worksheet("Log_Main")
+    all_vals = ws.get_all_values()
+    headers = all_vals[0] if all_vals else []
+    for col in ("Log_ID", "Status", "Approval_Meta"):
+        if col not in headers:
+            raise HTTPException(status_code=500, detail=f"Schema error: Missing {col} column")
+    id_idx = headers.index("Log_ID")
+    for i, row in enumerate(all_vals[1:]):
+        if (row[id_idx] if id_idx < len(row) else "") == log_id:
+            if _cell(row, headers, "Status") == "Deleted":
+                break
+            return ws, headers, i + 2, row
+    raise HTTPException(status_code=404, detail="Log ID not found")
+
+
+def _cell(row: list, headers: list, header: str) -> str:
+    k = headers.index(header) if header in headers else -1
+    return str(row[k]).strip() if 0 <= k < len(row) else ""
+
+
+def _set_status(ws, headers, row_num, status: str, meta: str):
+    ws.update_cells([
+        gspread.Cell(row=row_num, col=headers.index("Status") + 1, value=status),
+        gspread.Cell(row=row_num, col=headers.index("Approval_Meta") + 1, value=meta),
+    ])
+    clear_cache("records")
+    try:
+        from app.adapters.sheets.client import invalidate_cache
+        invalidate_cache()
+    except Exception:
+        pass
+
 
 @router.post("/approve")
 def approve_behavior_log(
     payload: dict = Body(...),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
-    """
-    Approve a pending behavior log (Admin only).
-    """
-    log_id = payload.get("log_id")
-    admin_id = current_admin.get("id") or current_admin.get("name") or "Admin"
-    
-    if not log_id:
-        raise HTTPException(status_code=400, detail="log_id required")
-        
-    client = get_sheets_client()
-    if not client:
-        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
-        
+    """승인(관리자). 승인 대기·재작성 요청 상태에서 승인할 수 있다."""
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
-        log_main_ws = sheet.worksheet("Log_Main")
-        
-        all_vals = log_main_ws.get_all_values()
-        if len(all_vals) < 2:
-            raise HTTPException(status_code=404, detail="No logs found")
-            
-        headers = all_vals[0]
-        try:
-            log_id_idx = headers.index("Log_ID")
-            status_idx = headers.index("Status")
-            approval_idx = headers.index("Approval_Meta")
-        except ValueError:
-            raise HTTPException(status_code=500, detail="Schema error: Missing Log_ID or Status columns")
-            
-        for i, row in enumerate(all_vals[1:]):
-            row_log_id = row[log_id_idx] if log_id_idx < len(row) else ""
-            if row_log_id == log_id:
-                row_status = row[status_idx] if status_idx < len(row) else ""
-                if row_status == "Approved":
-                    return {"success": False, "message": "Already approved"}
-                
-                meta = f"Approved by {admin_id} on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                
-                log_main_ws.update_cell(i + 2, status_idx + 1, "Approved")
-                log_main_ws.update_cell(i + 2, approval_idx + 1, meta)
-                clear_cache("records")
-                
-                return {"success": True, "message": "Log approved"}
-                
-        raise HTTPException(status_code=404, detail="Log ID not found")
-        
-    except SheetUnavailable:
+        ws, headers, row_num, row = _load_log_row(payload.get("log_id"))
+        if _cell(row, headers, "Status") == "Approved":
+            return {"success": False, "message": "Already approved"}
+        _set_status(ws, headers, row_num, "Approved", f"Approved by {_author_label(current_admin)} on {_now_str()}")
+        return {"success": True, "message": "Log approved"}
+    except (HTTPException, SheetUnavailable):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/revise")
 def revise_behavior_log(
     payload: dict = Body(...),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
-    """
-    Request revision for a pending behavior log (Admin only).
-    """
-    log_id = payload.get("log_id")
-    admin_id = current_admin.get("id") or current_admin.get("name") or "Admin"
-    memo = payload.get("memo", "")
-    
-    if not log_id:
-        raise HTTPException(status_code=400, detail="log_id required")
-        
-    client = get_sheets_client()
-    if not client:
-        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
-        
+    """재작성 요청(관리자). 승인된 기록에도 요청할 수 있다. 작성자가 고치면 다시 승인 대기로 돌아간다."""
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
-        log_main_ws = sheet.worksheet("Log_Main")
-        
-        all_vals = log_main_ws.get_all_values()
-        if len(all_vals) < 2:
-            raise HTTPException(status_code=404, detail="No logs found")
-            
-        headers = all_vals[0]
-        try:
-            log_id_idx = headers.index("Log_ID")
-            status_idx = headers.index("Status")
-            approval_idx = headers.index("Approval_Meta")
-        except ValueError:
-            raise HTTPException(status_code=500, detail="Schema error: Missing Log_ID or Status columns")
-            
-        for i, row in enumerate(all_vals[1:]):
-            row_log_id = row[log_id_idx] if log_id_idx < len(row) else ""
-            if row_log_id == log_id:
-                row_status = row[status_idx] if status_idx < len(row) else ""
-                if row_status == "Approved":
-                    return {"success": False, "message": "Already approved"}
-                
-                meta = f"Revision requested by {admin_id} on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Memo: {memo}"
-                
-                log_main_ws.update_cell(i + 2, status_idx + 1, "Revision Requested")
-                log_main_ws.update_cell(i + 2, approval_idx + 1, meta)
-                clear_cache("records")
-                
-                return {"success": True, "message": "Revision requested"}
-                
-        raise HTTPException(status_code=404, detail="Log ID not found")
-        
-    except SheetUnavailable:
+        ws, headers, row_num, row = _load_log_row(payload.get("log_id"))
+        memo = str(payload.get("memo", "")).strip()
+        _set_status(ws, headers, row_num, "Revision Requested",
+                    f"Revision requested by {_author_label(current_admin)} on {_now_str()}. Memo: {memo}")
+        return {"success": True, "message": "Revision requested"}
+    except (HTTPException, SheetUnavailable):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{log_id}")
+def delete_behavior_log(
+    log_id: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """삭제(관리자는 모든 기록, 교사는 본인 기록). 행은 남기고 Status=Deleted 로 표시한다."""
+    try:
+        ws, headers, row_num, row = _load_log_row(log_id)
+        if not _is_admin(current_user) and not _is_author(_cell(row, headers, "입력교사명"), current_user):
+            raise HTTPException(status_code=403, detail="본인이 입력한 기록만 삭제할 수 있습니다.")
+        _set_status(ws, headers, row_num, "Deleted", f"Deleted by {_author_label(current_user)} on {_now_str()}")
+        return {"success": True, "message": "Log deleted"}
+    except (HTTPException, SheetUnavailable):
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.patch("/{log_id}")
 def update_behavior_log(
@@ -209,67 +226,41 @@ def update_behavior_log(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     """
-    행동 로그의 데이터 필드를 수정한다 (전체 로그 페이지 인라인 편집용).
+    행동 로그의 데이터 필드를 수정한다 (관리자는 모든 기록, 교사는 본인 기록).
     필드명은 짧은 키(FIELD_HEADER_CANDIDATES) 또는 crisis_details의 원본 헤더명을 그대로 받는다.
+    Status·Log_ID·입력교사명 등 관리 열은 여기서 바꿀 수 없다.
     """
     if not payload:
         raise HTTPException(status_code=400, detail="수정할 필드가 없습니다")
-
-    client = get_sheets_client()
-    if not client:
-        raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
-
     try:
-        sheet = client.open_by_url(settings.SHEET_URL)
-        log_main_ws = sheet.worksheet("Log_Main")
+        ws, headers, row_num, row = _load_log_row(log_id)
+        admin = _is_admin(current_user)
+        if not admin and not _is_author(_cell(row, headers, "입력교사명"), current_user):
+            raise HTTPException(status_code=403, detail="본인이 입력한 기록만 수정할 수 있습니다.")
 
-        all_vals = log_main_ws.get_all_values()
-        if len(all_vals) < 2:
-            raise HTTPException(status_code=404, detail="No logs found")
-
-        headers = all_vals[0]
-        try:
-            log_id_idx = headers.index("Log_ID")
-        except ValueError:
-            raise HTTPException(status_code=500, detail="Schema error: Missing Log_ID column")
-        student_code_idx = headers.index("학생코드") if "학생코드" in headers else None
-
-        target_row_num = None
-        target_row = None
-        for i, row in enumerate(all_vals[1:]):
-            row_log_id = row[log_id_idx] if log_id_idx < len(row) else ""
-            if row_log_id == log_id:
-                target_row_num = i + 2
-                target_row = row
-                break
-
-        if target_row_num is None:
-            raise HTTPException(status_code=404, detail="Log ID not found")
-
-        student_code = target_row[student_code_idx] if student_code_idx is not None and student_code_idx < len(target_row) else ""
-        if student_code:
-            check_student_scope(student_code, current_user)
-
+        protected = {"Log_ID", "Status", "Approval_Meta", "Source", "타임스탬프", "입력교사명", "학생코드", "학생명"}
         cells = []
         for key, value in payload.items():
             header_text = key if key in headers else next(
-                (c for c in FIELD_HEADER_CANDIDATES.get(key, []) if c in headers), None
+                (c for c in FIELD_HEADER_CANDIDATES.get(key, []) + [FORM_REPORT_HEADERS.get(key, "")] if c in headers), None
             )
-            if not header_text:
+            if not header_text or header_text in protected:
                 continue
-            col_idx = headers.index(header_text) + 1
-            cells.append(gspread.Cell(row=target_row_num, col=col_idx, value=str(value)))
-
+            cells.append(gspread.Cell(row=row_num, col=headers.index(header_text) + 1, value=str(value)))
         if not cells:
             raise HTTPException(status_code=400, detail="일치하는 필드를 찾을 수 없습니다")
+        ws.update_cells(cells)
 
-        log_main_ws.update_cells(cells)
-        clear_cache("records")
-
+        # 교사가 보고서를 고치면(또는 재작성 요청에 응하면) 다시 승인 대기로
+        status = _cell(row, headers, "Status")
+        action = _cell(row, headers, ACTION_HEADER) if ACTION_HEADER in headers else ""
+        is_report = action not in NO_REPORT_ACTIONS
+        if not admin and (status == "Revision Requested" or (is_report and status == "Approved")):
+            _set_status(ws, headers, row_num, "Pending", f"Resubmitted by {_author_label(current_user)} on {_now_str()}")
+        else:
+            clear_cache("records")
         return {"success": True, "message": "Log updated", "updated_fields": len(cells)}
-    except HTTPException:
-        raise
-    except SheetUnavailable:
+    except (HTTPException, SheetUnavailable):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -59,6 +59,8 @@ class LogMainAdapter:
         events = []
 
         for idx, row in enumerate(raw_records):
+            if str(row.get("Status", "")).strip() == "Deleted":  # 삭제 표시된 기록 제외
+                continue
             event = cls._normalize_row(row, row_idx=idx + 2)
             if event:
                 events.append(event)

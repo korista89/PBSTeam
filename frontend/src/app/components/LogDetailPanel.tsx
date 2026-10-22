@@ -5,6 +5,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "../constants";
 import CrisisDetailPanel from "./CrisisDetailPanel";
+import { useAuth } from "./AuthProvider";
 
 interface LogDetailPanelProps {
     log: any;
@@ -26,8 +27,29 @@ const EDITABLE_FIELDS: { key: string; label: string; multiline?: boolean }[] = [
     { key: "특기사항", label: "특기사항", multiline: true },
 ];
 
+const STATUS_LABEL: Record<string, string> = {
+    Pending: "⏳ 승인 대기", Approved: "✅ 승인", "Revision Requested": "↩️ 재작성 요청",
+};
+
+// 보고서 항목(원본 헤더 키·짧은 키)도 편집 대상에 넣는다. PATCH가 둘 다 받아 실제 헤더로 매핑한다.
+const reportEntries = (log: any): [string, string][] => [
+    ...Object.entries(log.crisis_details || {}),
+    ...Object.entries(log.form_report_details || {}),
+].map(([k, v]) => [k, String(v ?? "")] as [string, string]);
+
 export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPanelProps) {
     const router = useRouter();
+    const { user, isAdmin } = useAuth();
+    // 권한 규칙(서버와 동일): 관리자는 모든 기록, 교사는 본인이 입력한 기록만 수정·삭제
+    const author = String(log["입력교사명"] ?? "").trim();
+    const admin = isAdmin();
+    const mine = !!author && [user?.id, user?.name].filter(Boolean).map(String).includes(author);
+    const canEdit = admin || mine;
+    const status = String(log["Status"] ?? "");
+    const [reportValues, setReportValues] = useState<Record<string, string>>(() => Object.fromEntries(reportEntries(log)));
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const [reviseMemo, setReviseMemo] = useState("");
+    const [showRevise, setShowRevise] = useState(false);
     const [editing, setEditing] = useState(false);
     const [values, setValues] = useState<Record<string, string>>(() =>
         Object.fromEntries(EDITABLE_FIELDS.map(f => [f.key, String(log[f.key] ?? "")]))
@@ -42,6 +64,7 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
 
     const startEdit = () => {
         setValues(Object.fromEntries(EDITABLE_FIELDS.map(f => [f.key, String(log[f.key] ?? "")])));
+        setReportValues(Object.fromEntries(reportEntries(log)));
         setError("");
         setEditing(true);
     };
@@ -51,11 +74,15 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
         setSaving(true);
         setError("");
         try {
-            const changed = Object.fromEntries(
-                EDITABLE_FIELDS
-                    .filter(f => values[f.key] !== String(log[f.key] ?? ""))
-                    .map(f => [f.key, values[f.key]])
-            );
+            const original = Object.fromEntries(reportEntries(log));
+            const changed = {
+                ...Object.fromEntries(
+                    EDITABLE_FIELDS
+                        .filter(f => values[f.key] !== String(log[f.key] ?? ""))
+                        .map(f => [f.key, values[f.key]])
+                ),
+                ...Object.fromEntries(Object.entries(reportValues).filter(([k, v]) => v !== original[k])),
+            };
             if (Object.keys(changed).length > 0) {
                 await axios.patch(`${API_BASE_URL}/api/v1/behavior-log/${encodeURIComponent(log["Log_ID"])}`, changed);
             }
@@ -68,9 +95,54 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
         }
     };
 
+    const act = async (fn: () => Promise<unknown>) => {
+        setSaving(true);
+        setError("");
+        try {
+            await fn();
+            setConfirmDelete(false);
+            setShowRevise(false);
+            onSaved?.();
+        } catch (err: any) {
+            setError(err.response?.data?.detail || err.message || "처리에 실패했습니다.");
+        } finally {
+            setSaving(false);
+        }
+    };
+    const logId = encodeURIComponent(log["Log_ID"] || "");
+    const remove = () => act(() => axios.delete(`${API_BASE_URL}/api/v1/behavior-log/${logId}`));
+    const approve = () => act(() => axios.post(`${API_BASE_URL}/api/v1/behavior-log/approve`, { log_id: log["Log_ID"] }));
+    const revise = () => act(() => axios.post(`${API_BASE_URL}/api/v1/behavior-log/revise`, { log_id: log["Log_ID"], memo: reviseMemo }));
+    const small = { fontSize: "0.78rem", padding: "5px 10px" };
+
     return (
         <div style={{ backgroundColor: "#fff", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginBottom: "12px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "12px", fontSize: "0.8rem", color: "#475569" }}>
+                <b>{STATUS_LABEL[status] || status || "-"}</b>
+                <span>· 입력: {author || "-"}</span>
+                {status === "Revision Requested" && log["Approval_Meta"] && (
+                    <span style={{ color: "#b45309" }}>· {String(log["Approval_Meta"]).split("Memo:")[1]?.trim() || "보완 요청"}</span>
+                )}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "8px", marginBottom: "12px" }}>
+                {admin && !editing && status !== "Approved" && (
+                    <button onClick={approve} className="btn btn-primary" style={small} disabled={saving}>✅ 승인</button>
+                )}
+                {admin && !editing && (
+                    <button onClick={() => setShowRevise(v => !v)} className="btn btn-secondary" style={small} disabled={saving}>↩️ 재작성 요청</button>
+                )}
+                {canEdit && !editing && (
+                    confirmDelete ? (
+                        <>
+                            <button onClick={() => setConfirmDelete(false)} className="btn btn-secondary" style={small} disabled={saving}>취소</button>
+                            <button onClick={remove} className="btn" style={{ ...small, background: "#dc2626", color: "#fff" }} disabled={saving}>
+                                {saving ? "삭제 중..." : "정말 삭제"}
+                            </button>
+                        </>
+                    ) : (
+                        <button onClick={() => setConfirmDelete(true)} className="btn btn-secondary" style={{ ...small, color: "#dc2626" }}>🗑️ 삭제</button>
+                    )
+                )}
                 <button onClick={goToStudent} className="btn btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px" }}>
                     👤 학생 프로필로 이동
                 </button>
@@ -83,12 +155,20 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
                             {saving ? "저장 중..." : "💾 저장"}
                         </button>
                     </>
-                ) : (
+                ) : canEdit ? (
                     <button onClick={startEdit} className="btn btn-primary" style={{ fontSize: "0.78rem", padding: "5px 10px" }}>
                         ✏️ 편집
                     </button>
-                )}
+                ) : null}
             </div>
+
+            {showRevise && (
+                <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                    <input value={reviseMemo} onChange={(e) => setReviseMemo(e.target.value)} placeholder="보완할 내용 (작성자에게 표시)"
+                        style={{ flex: 1, padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "0.85rem" }} />
+                    <button onClick={revise} className="btn btn-primary" style={small} disabled={saving}>요청 보내기</button>
+                </div>
+            )}
 
             {error && (
                 <div style={{ background: "#fef2f2", color: "#dc2626", padding: "8px 12px", borderRadius: "6px", fontSize: "0.82rem", marginBottom: "12px" }}>
@@ -123,7 +203,20 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
                 ))}
             </div>
 
-            {(log.crisis_details || log.form_report_details) && (
+            {editing && Object.keys(reportValues).length > 0 && (
+                <div style={{ marginTop: "16px", display: "grid", gap: "10px" }}>
+                    <div style={{ fontWeight: 800, color: "#b91c1c", fontSize: "0.85rem" }}>🚨 보고서 항목</div>
+                    {Object.entries(reportValues).map(([k, v]) => (
+                        <div key={k}>
+                            <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8", marginBottom: "3px" }}>{k.replace(/_/g, " ")}</div>
+                            <textarea value={v} rows={2} onChange={(e) => setReportValues(r => ({ ...r, [k]: e.target.value }))}
+                                style={{ width: "100%", padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "0.85rem" }} />
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {!editing && (log.crisis_details || log.form_report_details) && (
                 <div style={{ marginTop: "16px" }}>
                     <CrisisDetailPanel crisisDetails={log.crisis_details} formReportDetails={log.form_report_details} isCrisis={isCrisis} />
                 </div>
