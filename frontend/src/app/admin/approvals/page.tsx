@@ -195,8 +195,9 @@ export default function ApprovalsPage() {
                           ↩️ 재작성 요청
                         </button>
                         </>}
+                        {report && <a href={`/report/crisis/${encodeURIComponent(id)}`} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 8, fontWeight: 700, fontSize: "0.85rem", border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}>📄 보고서·인쇄</a>}
                         <button onClick={() => setOpen(open === id ? null : id)}
-                          style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", border: "1px solid #cbd5e1", background: "#fff" }}>
+                          style={{ marginLeft: report ? 0 : "auto", padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", border: "1px solid #cbd5e1", background: "#fff" }}>
                           {open === id ? "▲ 닫기" : "▼ 상세·수정"}
                         </button>
                       </div>

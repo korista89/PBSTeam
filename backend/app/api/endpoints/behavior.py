@@ -271,6 +271,47 @@ def get_approval_inbox(
     return {"success": True, "logs": out}
 
 
+def _report_record(log_id: str, current_user: Dict[str, Any]):
+    rec = next((r for r in fetch_all_records(force_refresh=False) if str(r.get("Log_ID", "")).strip() == log_id), None)
+    if not rec:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+    code = str(rec.get("학생코드") or rec.get("코드번호") or "").strip()
+    if code:
+        check_student_scope(code, current_user)
+    elif not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="학생코드가 없는 기록은 관리자만 볼 수 있습니다.")
+    cls = next((s.class_name for s in TierStatusAdapter.fetch_students() if s.student_code.strip() == code), "")
+    return rec, cls
+
+
+@router.get("/report-template.hwpx")
+def download_report_template(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """빈 위기행동 지원 및 개별학생교육지원 보고서 양식(hwpx)."""
+    from fastapi.responses import Response
+    from app.services.crisis_report import build_hwpx
+    return Response(build_hwpx(), media_type="application/hwp+zip",
+                    headers={"Content-Disposition": "attachment; filename=crisis_report_template.hwpx"})
+
+
+@router.get("/{log_id}/report")
+def get_crisis_report(log_id: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """보고서 화면(인쇄·PDF)용 항목. 한글 파일과 같은 내용이다."""
+    from app.services.crisis_report import report_fields
+    rec, cls = _report_record(log_id, current_user)
+    return report_fields(rec, cls)
+
+
+@router.get("/{log_id}/report.hwpx")
+def download_crisis_report(log_id: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """기록 내용을 채운 보고서 한글 파일. 파일 이름에는 날짜·학생코드만 쓴다(실명 미포함)."""
+    from fastapi.responses import Response
+    from app.services.crisis_report import report_fields, build_hwpx
+    rec, cls = _report_record(log_id, current_user)
+    name = f"crisis_report_{str(rec.get('행동발생날짜', '')).replace('-', '')}_{rec.get('학생코드', '')}.hwpx"
+    return Response(build_hwpx(report_fields(rec, cls)), media_type="application/hwp+zip",
+                    headers={"Content-Disposition": f"attachment; filename={name}"})
+
+
 @router.delete("/{log_id}")
 def delete_behavior_log(
     log_id: str,

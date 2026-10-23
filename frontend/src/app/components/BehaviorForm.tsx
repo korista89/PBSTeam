@@ -184,6 +184,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
   });
 
   const [message, setMessage] = useState('');
+  // 개별학생교육지원 유형(보고서 '보고 사유' 체크와 연결). 시트 열을 늘리지 않으려고 경위 첫머리에 [유형]으로 저장한다.
+  const [지원유형, set지원유형] = useState('');
   const isCrisis = formData.물리적제지여부 !== 'X - 보고서 작성 불필요' && formData.물리적제지여부 !== '';
 
   const setMode = (m: 'data' | 'report') => {
@@ -261,7 +263,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         } else if (formData.물리적제지여부 === '개별학생교육지원') {
           payload['[개별학생교육지원] 개별학생교육지원을 실시한 시간 (24시간대기준) - 예: 11:30~12:10 (30분)'] = crisisData.개별학생교육지원_시간;
           payload['[개별학생교육지원] 개별학생교육지원을 담당한 교사'] = crisisData.개별학생교육지원_교사;
-          payload['[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위'] = crisisData.개별학생교육지원_경위;
+          payload['[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위'] = (지원유형 ? `[${지원유형}] ` : '') + crisisData.개별학생교육지원_경위;
           payload['[개별학생교육지원] 개별학생교육지원 장소'] = crisisData.개별학생교육지원_장소_신규;
           payload['[개별학생교육지원] 개별학생교육지원 내용 및 회복 과정'] = crisisData.개별학생교육지원_내용_회복과정;
           payload['[개별학생교육지원] 부상자 치료, 가정학습 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.개별학생교육지원_사후조치_특기사항;
@@ -350,6 +352,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         {mode === 'data'
           ? '보고서 사안이 아닌 위기행동의 데이터만 저장합니다. 제지·개별학생교육지원·상해가 있었다면 위의 "🚨 보고서 작성"을 고르세요.'
           : '제지·개별학생교육지원·상해가 있었던 위기행동입니다. 데이터와 함께 위기행동 발생 보고서를 작성해야 제출됩니다(관리자 승인 필요).'}
+        {mode === 'report' && <> 제출 뒤 결재함·전체 로그의 &lsquo;📄 보고서 보기·인쇄&rsquo;에서 PDF로 인쇄해 서명합니다. <a href={`${API_BASE_URL}/api/v1/behavior-log/report-template.hwpx`}>⬇️ 빈 양식(hwpx)</a></>}
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '20px' }}>
@@ -534,6 +537,11 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 </div>
                 <div style={{ marginBottom: '10px' }}>
                   <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원을 실시하게 된 경위:</div>
+                  <select value={지원유형} onChange={e => set지원유형(e.target.value)} required
+                    style={{ width: '100%', padding: '8px', marginBottom: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
+                    <option value="">개별학생교육지원 유형 선택 *</option>
+                    {['수업 중 교실 내 분리', '수업 중 교실 밖 분리', '수업시간 외 특정장소 분리'].map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                   <DropdownTextarea name="개별학생교육지원_경위" value={crisisData.개별학생교육지원_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
                 </div>
                 <div style={{ marginBottom: '10px' }}>

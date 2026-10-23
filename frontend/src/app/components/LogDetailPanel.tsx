@@ -143,6 +143,11 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
                         <button onClick={() => setConfirmDelete(true)} className="btn btn-secondary" style={{ ...small, color: "#dc2626" }}>🗑️ 삭제</button>
                     )
                 )}
+                {log["Log_ID"] && (isCrisis || log.crisis_details || log.form_report_details) && (
+                    <button onClick={() => router.push(`/report/crisis/${encodeURIComponent(log["Log_ID"])}`)} className="btn btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px" }}>
+                        📄 보고서 보기·인쇄
+                    </button>
+                )}
                 <button onClick={goToStudent} className="btn btn-secondary" style={{ fontSize: "0.78rem", padding: "5px 10px" }}>
                     👤 학생 프로필로 이동
                 </button>
