@@ -25,11 +25,20 @@ export default function CrisisReportPage() {
   const [f, setF] = useState<Fields | null>(null);
   const [error, setError] = useState("");
 
+  const draft = id === "draft";
   useEffect(() => {
+    if (draft) {
+      // 입력 폼의 '작성 중 보고서 인쇄'가 넘긴 저장 전 내용
+      try {
+        const v = localStorage.getItem("pbst_report_draft");
+        if (v) setF(JSON.parse(v)); else setError("작성 중인 보고서 내용이 없습니다. 입력 화면에서 다시 눌러 주세요.");
+      } catch { setError("작성 중인 보고서 내용을 읽지 못했습니다."); }
+      return;
+    }
     axios.get(`${API_BASE_URL}/api/v1/behavior-log/${encodeURIComponent(id)}/report`)
       .then(r => setF(r.data))
       .catch(e => setError(e.response?.data?.detail || e.message || "보고서를 불러오지 못했습니다."));
-  }, [id]);
+  }, [id, draft]);
 
   const hwpx = `${API_BASE_URL}/api/v1/behavior-log/${encodeURIComponent(id)}/report.hwpx`;
   const blank = `${API_BASE_URL}/api/v1/behavior-log/report-template.hwpx`;
@@ -42,9 +51,10 @@ export default function CrisisReportPage() {
       `}</style>
       <div style={{ background: "#e5e7eb", minHeight: "100vh", padding: "16px 0" }}>
         <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "0 12px" }}>
-          <button onClick={() => window.history.back()} className="btn btn-secondary">← 돌아가기</button>
+          <button onClick={() => (draft ? window.close() : window.history.back())} className="btn btn-secondary">{draft ? "✕ 닫기" : "← 돌아가기"}</button>
           <button onClick={() => window.print()} className="btn btn-primary" disabled={!f}>🖨️ PDF 인쇄</button>
-          <a href={hwpx} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 한글 파일(기록 채움)</a>
+          {!draft && <a href={hwpx} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 한글 파일(기록 채움)</a>}
+          {draft && <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#b45309" }}>저장 전 미리보기입니다 — 제출해야 기록이 남습니다.</span>}
           <a href={blank} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 빈 양식(hwpx)</a>
           <span style={{ fontSize: "0.8rem", color: "#475569" }}>인쇄 창에서 &lsquo;PDF로 저장&rsquo;을 고르면 PDF가 됩니다. 인쇄 후 서명해 담당자에게 제출하세요.</span>
         </div>

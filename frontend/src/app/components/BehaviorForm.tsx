@@ -221,6 +221,37 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     }));
   };
 
+  // 저장 전에도 작성 중인 내용을 보고서 양식으로 인쇄해 볼 수 있게, 보고서 화면(/report/crisis/draft)에 넘긴다.
+  // 항목 구성은 서버 report_fields() 와 같다.
+  const previewReport = () => {
+    const c = crisisData;
+    const act = formData.물리적제지여부;
+    const line = (label: string, v: string) => (v.trim() ? `[${label}] ${v.trim()}` : '');
+    const draft = {
+      기록번호: '(저장 전 미리보기)', 소속: String(user?.class_name || '').replace(/관리자$/, ''), 학생: `${maskName(studentName)}(${studentId})`, 담임교사: '',
+      보고사유: {
+        '방어 및 보호를 위한 제지': act === '방어 및 보호를 위한 제지',
+        '본인/타인 상해 발생': act === '본인/타인상해만 발생',
+        '수업 중 교실 내 분리': 지원유형 === '수업 중 교실 내 분리',
+        '수업 중 교실 밖 분리': 지원유형 === '수업 중 교실 밖 분리',
+        '수업시간 외 특정장소 분리': 지원유형 === '수업시간 외 특정장소 분리',
+      },
+      발생일시: `${formData.행동발생날짜} ${formData.시간대.join(', ')}`.trim(),
+      발생장소: formData.장소 === '기타' ? formData.장소기타 : formData.장소,
+      지도교사: c.발생시지도교사, 지원시간: c.개별학생교육지원_시간, 지원장소: c.개별학생교육지원_장소_신규, 지원교사: c.개별학생교육지원_교사,
+      A: c.배경_선행사건, B: c.나타난_위기행동, C: c.후속결과,
+      경위: [line('제지 경위', c.제지_경위), line('제지 방법', c.제지_방법), line('개별학생교육지원 경위', c.개별학생교육지원_경위),
+        line('상해 경위', c.상해_경위) + (c.상해_대상자.trim() ? ` (상해 입은 사람: ${c.상해_대상자.trim()})` : '')].filter(Boolean).join('\n'),
+      관찰기록: [c.개별학생교육지원_내용_회복과정, c.제지_사후조치_특기사항, c.개별학생교육지원_사후조치_특기사항, c.상해_사후조치_특기사항].filter(v => v.trim()).join('\n'),
+      조치사항: ([['부상자 치료', '부상자_치료'], ['관리자 보고', '관리자_보고'], ['학부모 알림', '학부모_알림'], ['학생 상담', '학생_상담'], ['학부모 상담', '학부모_상담'], ['긴급회의', '긴급회의']] as const)
+        .map(([구분, k]) => ({ 구분, 일시: (c as any)[`${k}_시간`] || '', 내용: (c as any)[`${k}_내용`] || '' })),
+      법적의무확인: [c.제지_법적의무_확인, c.개별학생교육지원_법적의무_확인.join(', '), c.상해_후속조치_확인].filter(v => v && v.trim()).join(' / '),
+      상태: '',
+    };
+    try { localStorage.setItem('pbst_report_draft', JSON.stringify(draft)); } catch { /* 저장 불가 시 미리보기만 생략 */ }
+    window.open('/report/crisis/draft', '_blank');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -645,6 +676,12 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         <button type="submit" disabled={loading} style={{ padding: '15px', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold', marginTop: '20px' }}>
           {loading ? '기록 제출 중...' : '행동 기록 제출'}
         </button>
+        {mode === 'report' && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+            <button type="button" onClick={previewReport} className="btn btn-secondary" style={{ flex: 1, minWidth: 180 }}>🖨️ 작성 중 보고서 인쇄(미리보기)</button>
+            <a href={`${API_BASE_URL}/api/v1/behavior-log/report-template.hwpx`} className="btn btn-secondary" style={{ flex: 1, minWidth: 180, textAlign: 'center', textDecoration: 'none' }}>⬇️ 빈 양식(hwpx)</a>
+          </div>
+        )}
         {message && <div style={{ marginTop: '15px', padding: '12px', borderRadius: '8px', backgroundColor: message.includes('❌') ? '#fee2e2' : '#dcfce7', color: message.includes('❌') ? '#991b1b' : '#166534', textAlign: 'center', fontWeight: 'bold' }}>{message}</div>}
       </form>
     </div>
