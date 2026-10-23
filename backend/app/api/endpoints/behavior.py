@@ -7,6 +7,7 @@ from app.api.deps import require_authenticated_user, require_admin, check_studen
 from app.adapters.sheets.tier_status import TierStatusAdapter
 import uuid
 import datetime
+from app.core.time import now_kst, today_kst
 import gspread
 
 router = APIRouter()
@@ -66,7 +67,7 @@ def submit_behavior_log(
         payload["Log_ID"] = log_id
         payload["Status"] = status
         payload["Source"] = source
-        now = datetime.datetime.now()
+        now = now_kst().replace(tzinfo=None)
         ampm = "오후" if now.hour >= 12 else "오전"
         hour12 = now.hour % 12 or 12
         payload["타임스탬프"] = f"{now.year}. {now.month}. {now.day} {ampm} {hour12}:{now.minute:02d}:{now.second:02d}"
@@ -122,7 +123,7 @@ def _is_author(row_author: str, user: Dict[str, Any]) -> bool:
 
 
 def _now_str() -> str:
-    return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return now_kst().replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def _load_log_row(log_id: str):
@@ -234,7 +235,7 @@ def get_approval_inbox(
 ):
     """결재함 목록(관리자): 보고서와 데이터만 입력 기록을 결재 단계 상태와 함께 돌려준다."""
     from app.services.sheets import fetch_approval_states
-    since = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+    since = (today_kst() - datetime.timedelta(days=days)).isoformat()
     states = fetch_approval_states()
     out = []
     for r in fetch_all_records(force_refresh=False):

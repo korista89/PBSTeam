@@ -821,7 +821,8 @@ from datetime import timedelta, datetime
 def analyze_meeting_data(target_date: str = None):
     # Default: Last 4 weeks from today (or target date)
     if not target_date:
-        end_dt = datetime.now()
+        from app.core.time import now_kst
+        end_dt = now_kst().replace(tzinfo=None)
     else:
         end_dt = pd.to_datetime(target_date)
     

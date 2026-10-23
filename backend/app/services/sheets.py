@@ -1157,7 +1157,7 @@ def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""
     try:
         records = safe_get_all_records(ws)
         from datetime import datetime
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d")
 
         # Column mapping (A=1, B=2, etc. H=8)
         tier_columns = {
@@ -1211,7 +1211,7 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
     try:
         records = safe_get_all_records(ws)
         from datetime import datetime
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d")
 
         tier_columns = {
             'Tier1': 'H',
@@ -1448,7 +1448,7 @@ def add_cico_daily(data: dict):
 
     try:
         from datetime import datetime
-        date_str = data.get('date', datetime.now().strftime("%Y-%m-%d"))
+        date_str = data.get('date', now_kst().replace(tzinfo=None).strftime("%Y-%m-%d"))
         row = [
             date_str,
             data.get('student_code'),
@@ -1697,13 +1697,13 @@ def add_meeting_note(data: dict):
 
     try:
         from datetime import datetime
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        created_at = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
 
         import uuid
         note_uuid = str(uuid.uuid4())
 
         row = [
-            data.get('date', datetime.now().strftime("%Y-%m-%d")),
+            data.get('date', now_kst().replace(tzinfo=None).strftime("%Y-%m-%d")),
             data.get('meeting_type', 'tier1'),
             data.get('content', ''),
             data.get('author', ''),
@@ -4027,7 +4027,7 @@ def add_board_post(title: str, content: str, author: str):
         import uuid
 
         post_id = str(uuid.uuid4())[:8]
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        created_at = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
 
         row = [post_id, title, content, author, created_at, 0]
         if settings.ENVIRONMENT.lower() != "production":
@@ -4861,5 +4861,5 @@ def add_approval_step(log_id: str, step: str, by: str, cancel: bool = False, mem
     if not ws:
         raise RuntimeError("Approvals 탭에 접근할 수 없습니다")
     ws.append_row([log_id, step, "취소" if cancel else "확인", by,
-                   datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), memo], value_input_option="RAW")
+                   now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"), memo], value_input_option="RAW")
     invalidate_cache("approvals:")
