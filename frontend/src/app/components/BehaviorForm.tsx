@@ -413,13 +413,13 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
         {/* ── 보고서: 인쇄 양식과 같은 표(ReportSheet)에 바로 쓴다. 쓴 그대로 인쇄된다. ── */}
         {mode === 'report' && (() => {
-          const cell: React.CSSProperties = { width: '100%', padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', boxSizing: 'border-box' };
+          const cell: React.CSSProperties = { width: '100%', padding: '3px 4px', boxSizing: 'border-box' };
           const tip = (t: string) => <div style={{ fontSize: '0.72rem', color: '#64748b', margin: '0 0 3px' }}>{t}</div>;
           const area = (key: 'A' | 'B' | 'C', examples: string[]) => (
             <>{tip({ A: '행동 직전 상황 한 줄(언제·무엇이 있었나)', B: '학생이 보인 행동만: 모양·횟수·지속 시간', C: '행동 직후 바뀐 것 한 줄(교사 대응 과정은 경위에)' }[key])}<DropdownTextarea name={key} value={report[key]} onChange={e => upd({ [key]: e.target.value } as Partial<Report>)} examples={examples} /><VagueHint text={report[key]} /></>
           );
           const seed = (a: string[], b: string[], tail: string) => (a.length || b.length ? [`${[...a, ...b].join(', ')} ${tail}`] : []);
-          const mirror = (v: string) => <span style={{ color: v ? '#0f172a' : '#94a3b8', fontSize: '0.85rem' }}>{v || '위 입력란에서 선택'}</span>;
+          const mirror = (v: string) => <span style={{ color: v ? '#0f172a' : '#94a3b8', fontSize: '9.5pt' }}>{v || '위 입력란에서 선택'}</span>;
           const place = formData.장소 === '기타' ? formData.장소기타 : formData.장소;
           return (
             <div style={{ marginTop: 20, padding: '16px', border: '2px solid #b91c1c', borderRadius: 12, background: '#fff' }}>
@@ -427,12 +427,12 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                 아래 표는 인쇄되는 보고서와 같은 칸입니다. 쓴 그대로 인쇄됩니다.<br />
                 경위·관찰기록은 <b>시각 + 한 일</b>을 한 줄씩 시간순으로 쓰세요. <b>누가·어디서·무엇을·어떻게</b>가 드러나게, 해석(&lsquo;흥분함&rsquo;) 대신 <b>보인 행동</b>(&lsquo;소리를 지르며 책상을 3회 침&rsquo;)으로 씁니다.
               </div>
-              <div>
+              <div data-report-sheet>
                 <ReportSheet edit c={{
                   소속: studentClass || '', 학생: `${maskName(studentName)}(${studentId})`,
                   담임교사: <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>인쇄 후 서명</span>,
                   보고사유: REASONS.map(r => (
-                    <label key={r} style={{ marginRight: 12, whiteSpace: 'nowrap', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <label key={r} style={{ marginRight: 12, whiteSpace: 'nowrap', fontSize: '9.5pt', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <input type="checkbox" checked={report.사유.includes(r)} onChange={() => upd({ 사유: report.사유.includes(r) ? report.사유.filter(x => x !== r) : [...report.사유, r] })} /> {r}
                     </label>
                   )),

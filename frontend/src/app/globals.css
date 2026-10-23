@@ -532,3 +532,12 @@ a {
     grid-row: auto !important;
   }
 }
+
+/* 보고서 작성 모드: 폼을 한 줄 전체로 넓히고(타임라인은 아래로), 입력 표를 인쇄본(A4)과 같은 폭·글꼴로 맞춘다. */
+.behavior-split-grid:has([data-report-sheet]) { grid-template-columns: minmax(0, 1fr) !important; }
+[data-report-sheet] { max-width: 734px; margin: 0 auto; font-family: 'Malgun Gothic', sans-serif; }
+[data-report-sheet] input:not([type="checkbox"]), [data-report-sheet] textarea, [data-report-sheet] select {
+  font: 9.5pt 'Malgun Gothic', sans-serif !important; padding: 3px 4px !important; border: 1px solid #e2e8f0 !important; background: #f8fafc; border-radius: 3px;
+}
+[data-report-sheet] input:focus, [data-report-sheet] textarea:focus { background: #fff; border-color: #60a5fa !important; outline: none; }
+[data-report-sheet] textarea { min-height: 0 !important; field-sizing: content; }

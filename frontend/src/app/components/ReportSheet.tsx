@@ -17,9 +17,9 @@ const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "5px 7p
 const hint: React.CSSProperties = { fontWeight: 400, fontSize: "7.5pt" };
 
 export default function ReportSheet({ c, edit }: { c: SheetCells; edit?: boolean }) {
-  // 인쇄는 양식처럼 칸 높이를 고정하고, 작성 화면은 입력 줄 수만큼 늘어난다.
+  // 작성 화면은 입력칸 여백만 줄이고 글꼴·칸 높이는 인쇄와 같게 둔다(글이 길면 칸이 늘어난다).
   const td: React.CSSProperties = edit ? { ...tdBase, padding: 3, whiteSpace: "normal" } : tdBase;
-  const big = (h: number): React.CSSProperties => (edit ? td : { ...td, height: h });
+  const big = (h: number): React.CSSProperties => ({ ...td, height: h });  // 작성 화면도 인쇄 칸 높이 이상으로
   return (
     <>
       <h1 style={{ textAlign: "center", fontSize: "16pt", margin: "0 0 4px", letterSpacing: 1 }}>위기행동 지원 및 개별학생교육지원 보고서</h1>
