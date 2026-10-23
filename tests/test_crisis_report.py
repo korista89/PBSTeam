@@ -106,3 +106,22 @@ def test_google_form_record_prints():
     assert [k for k, v in f["보고사유"].items() if v] == ["본인/타인 상해 발생"]
     assert f["경위"] == "[상해 경위] 급식실에서 밀침 (상해 입은 사람: 또래)" and f["지도교사"] == "최교사"
     build_hwpx(f)
+
+
+def test_auto_fill_and_duplicate_check():
+    """'위 내용 자동 반영'은 빈 칸만 채우고, 경위는 'B 참조'로 시작해 B와 겹치지 않는다."""
+    if not shutil.which("node"):
+        pytest.skip("node 없음")
+    js = """import {autoFill, emptyReport, duplicatesB, STORY_START} from './frontend/src/app/crisisReport.ts';
+const d = {배경: ['수면 부족', '특이사항 없음'], 선행: ['활동 전환'], 후속: ['교실 밖 공간 이동'],
+  행동유형: '물건파괴행동: 물건 던지기 및 시설물 파손', 강도: '3(위기행동): 신체 흔적', 특기사항: '의자 2회 던짐'};
+const a = autoFill(emptyReport(), d);
+const kept = autoFill({...emptyReport(), A: '직접 쓴 A'}, d);
+console.log(JSON.stringify({A: a.A, B: a.B, C: a.C, s: a.경위[0].s, start: STORY_START, keptA: kept.A,
+  dup: duplicatesB([{t: '', s: '의자를 2회 던짐'}], '의자를 2회 던짐'), nodup: duplicatesB([{t: '', s: STORY_START}], a.B)}));"""
+    out = json.loads(subprocess.run(["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "-e", js],
+                                    cwd=ROOT, capture_output=True, text=True, check=True).stdout)
+    assert out["A"] == "수면 부족인 날, 활동 전환 직후 발생함"
+    assert out["B"] == "물건파괴행동 (강도 3) — 의자 2회 던짐"
+    assert out["C"] == "교실 밖 공간 이동" and out["s"] == out["start"] and out["keptA"] == "직접 쓴 A"
+    assert out["dup"] is True and out["nodup"] is False

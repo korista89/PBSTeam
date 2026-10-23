@@ -13,7 +13,7 @@ export type SheetCells = {
 };
 
 const th: React.CSSProperties = { border: "1px solid #000", background: "#f2f2f2", fontWeight: 700, padding: "5px 6px", textAlign: "center", verticalAlign: "middle", fontSize: "9.5pt" };
-const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "5px 7px", verticalAlign: "top", fontSize: "9.5pt", whiteSpace: "pre-wrap", wordBreak: "break-word" };
+const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "5px 7px", verticalAlign: "middle", fontSize: "9.5pt", whiteSpace: "pre-wrap", wordBreak: "break-word" };
 const hint: React.CSSProperties = { fontWeight: 400, fontSize: "7.5pt" };
 
 export default function ReportSheet({ c, edit }: { c: SheetCells; edit?: boolean }) {

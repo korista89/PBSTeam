@@ -55,16 +55,47 @@ export function reportColumns(r: Report): Record<string, string> {
   return cols;
 }
 
+// '위 내용 자동 반영': 통계 입력(체크·선택)으로 A·B·C와 경위 첫 줄을 채운다. 이미 쓴 칸은 건드리지 않는다.
+// 칸 구분 — A·B·C는 행동 분석 요약(직전 상황 / 학생이 보인 행동 / 직후 바뀐 것),
+// 경위는 교사 대응의 시간 순서(누가 언제 무엇을 결정·이동·제지했나). 학생 행동은 B에 한 번만 쓰고 경위에서는 'B 참조'로 가리킨다.
+export const STORY_START = "위기행동 발생(B 참조)";
+export type DataInput = { 배경: string[]; 선행: string[]; 후속: string[]; 행동유형: string; 강도: string; 특기사항: string };
+const short = (v: string) => v.split(":")[0].trim();  // '물건파괴행동: 물건 던지기…' → '물건파괴행동', '3(위기행동): …' → '3(위기행동)'
+export function autoFill(r: Report, d: DataInput): Report {
+  const bg = d.배경.filter(x => x !== "특이사항 없음");
+  const A = [bg.length ? `${bg.join(", ")}인 날` : "", d.선행.length ? `${d.선행.join(", ")} 직후 발생함` : ""].filter(Boolean).join(", ");
+  const B = [d.행동유형 && `${short(d.행동유형)}${d.강도 ? ` (강도 ${short(d.강도).replace(/\(.*\)/, "")})` : ""}`, d.특기사항.trim()].filter(Boolean).join(" — ");
+  const C = d.후속.length ? `${d.후속.join(", ")}` : "";
+  const storyEmpty = !r.경위.some(x => x.s.trim());
+  return {
+    ...r,
+    A: r.A.trim() ? r.A : A,
+    B: r.B.trim() ? r.B : B,
+    C: r.C.trim() ? r.C : C,
+    경위: storyEmpty ? [{ t: r.경위[0]?.t || "", s: STORY_START }, ...r.경위.slice(1)] : r.경위,
+  };
+}
+
+// 경위 줄이 B(학생 행동)를 그대로 되풀이하는지 — 겹치면 경위에는 교사 대응을 쓰도록 알려 준다.
+export function duplicatesB(lines: Line[], b: string): boolean {
+  const n = (v: string) => v.replace(/[\s.,·()]/g, "");
+  const nb = n(b);
+  return nb.length >= 6 && lines.some(l => { const s = n(l.s); return s.length >= 6 && (nb.includes(s) || s.includes(nb)); });
+}
+
+// 해당 없음으로 넘길 수 있는 조치 행(관리자 보고·학부모 알림은 법적 의무라 필수)
+export const OPTIONAL_FOLLOWUPS = ["부상자_치료", "학생_상담", "학부모_상담", "긴급회의"];
+export const NOT_APPLICABLE = "해당 없음";
+
 // 관찰할 수 없는 해석·감정 낱말 — 보이면 '실제로 보인 행동'으로 바꿔 쓰도록 알려 준다.
 export const VAGUE = ["흥분", "화가 나", "짜증", "기분이", "통제 불능", "난동", "폭력적", "공격적", "고집", "떼를", "말을 안 들", "이상한"];
 export const vagueIn = (text: string) => VAGUE.filter(w => text.includes(w));
 
 export const STORY_EXAMPLES: { label: string; items: string[] }[] = [
-  { label: "발생", items: [
-    "국어 활동 중 학습지를 찢고 책상을 손바닥으로 3회 내리침",
-    "활동 전환 안내 직후 바닥에 누워 소리를 지름",
-    "옆 학생의 팔을 잡아당기고 손으로 2회 때림",
-    "자기 머리를 주먹으로 반복해서 때림(약 5회)",
+  { label: "발생(학생 행동은 B에)", items: [
+    STORY_START,
+    "B 행동이 다시 나타남(2차)",
+    "B 행동이 강해짐: 대상이 또래로 바뀜",
   ] },
   { label: "교사 대응·결정", items: [
     "언어 재지시 2회, 선택지(쉬기/계속하기) 제시했으나 행동이 계속됨",

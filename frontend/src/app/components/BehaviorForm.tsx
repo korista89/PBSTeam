@@ -7,7 +7,7 @@ import { useAuth } from './AuthProvider';
 import DropdownTextarea from './DropdownTextarea';
 import { maskName } from '../utils';
 import ReportSheet from './ReportSheet';
-import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES } from '../crisisReport';
+import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES, autoFill, duplicatesB, OPTIONAL_FOLLOWUPS, NOT_APPLICABLE } from '../crisisReport';
 
 const TIME_SLOTS = [
   "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
@@ -211,6 +211,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     if (!report.사유.length) return '보고 사유를 하나 이상 체크하세요.';
     if (!report.지도교사.trim()) return '발생 시 지도교사를 쓰세요.';
     if (!report.경위.some(r => r.s.trim())) return '경위를 한 줄 이상 쓰세요.';
+    if (!report.조치.관리자_보고.일시.trim() || !report.조치.학부모_알림.일시.trim()) return '관리자 보고·학부모 알림의 일시는 필수입니다(법적 의무).';
     return '';
   };
 
@@ -400,11 +401,22 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         </div>
         </>
 
+        {mode === 'report' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 14px', border: '1px dashed #b91c1c', borderRadius: 8, background: '#fff7f7' }}>
+            <button type="button" onClick={() => setReport(autoFill(report, { 배경: 배경사건, 선행: 선행사건, 후속: 후속결과, 행동유형: formData.행동유형, 강도: formData.강도, 특기사항: formData.특기사항 }))}
+              style={{ padding: '9px 16px', fontWeight: 700, border: 'none', borderRadius: 8, background: '#b91c1c', color: '#fff', cursor: 'pointer' }}>
+              ⬇️ 위 내용 자동 반영
+            </button>
+            <span style={{ fontSize: '0.8rem', color: '#7f1d1d' }}>배경·선행 → A, 행동유형·강도·특기사항 → B, 후속결과 → C, 경위 첫 줄을 채웁니다. <b>비어 있는 칸만</b> 채우니, 반영 뒤 고쳐 쓰고 제출하세요.</span>
+          </div>
+        )}
+
         {/* ── 보고서: 인쇄 양식과 같은 표(ReportSheet)에 바로 쓴다. 쓴 그대로 인쇄된다. ── */}
         {mode === 'report' && (() => {
           const cell: React.CSSProperties = { width: '100%', padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', boxSizing: 'border-box' };
+          const tip = (t: string) => <div style={{ fontSize: '0.72rem', color: '#64748b', margin: '0 0 3px' }}>{t}</div>;
           const area = (key: 'A' | 'B' | 'C', examples: string[]) => (
-            <><DropdownTextarea name={key} value={report[key]} onChange={e => upd({ [key]: e.target.value } as Partial<Report>)} examples={examples} /><VagueHint text={report[key]} /></>
+            <>{tip({ A: '행동 직전 상황 한 줄(언제·무엇이 있었나)', B: '학생이 보인 행동만: 모양·횟수·지속 시간', C: '행동 직후 바뀐 것 한 줄(교사 대응 과정은 경위에)' }[key])}<DropdownTextarea name={key} value={report[key]} onChange={e => upd({ [key]: e.target.value } as Partial<Report>)} examples={examples} /><VagueHint text={report[key]} /></>
           );
           const seed = (a: string[], b: string[], tail: string) => (a.length || b.length ? [`${[...a, ...b].join(', ')} ${tail}`] : []);
           const mirror = (v: string) => <span style={{ color: v ? '#0f172a' : '#94a3b8', fontSize: '0.85rem' }}>{v || '위 입력란에서 선택'}</span>;
@@ -433,13 +445,27 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                   A: area('A', [...seed(배경사건, 선행사건, '상황에서 발생함'), ...EXAMPLE_ANTECEDENTS]),
                   B: area('B', EXAMPLE_BEHAVIORS),
                   C: area('C', [...seed(후속결과, [], '이(가) 이어짐'), ...EXAMPLE_CONSEQUENCES]),
-                  경위: <><LinesInput rows={report.경위} onChange={v => upd({ 경위: v })} examples={STORY_EXAMPLES} /><VagueHint text={report.경위.map(r => r.s).join(' ')} /></>,
+                  경위: <>{tip('교사 대응을 시간순으로: 누가 언제 무엇을 결정·이동·제지했나. 학생 행동은 B에 쓰고 여기서는 "B 참조"로')}<LinesInput rows={report.경위} onChange={v => upd({ 경위: v })} examples={STORY_EXAMPLES} /><VagueHint text={report.경위.map(r => r.s).join(' ')} />
+                    {duplicatesB(report.경위, report.B) && <div style={{ fontSize: '0.75rem', color: '#b45309', marginTop: 3 }}>💡 B(나타난 위기행동)와 같은 문장이 있습니다. 경위에는 &lsquo;위기행동 발생(B 참조)&rsquo;처럼 줄이고 교사가 한 일을 쓰세요.</div>}</>,
                   관찰기록: <><LinesInput rows={report.관찰기록} onChange={v => upd({ 관찰기록: v })} examples={OBSERVE_EXAMPLES} /><VagueHint text={report.관찰기록.map(r => r.s).join(' ')} /></>,
-                  조치사항: FOLLOWUPS.map(([구분, k]) => ({
-                    구분,
-                    일시: <input value={report.조치[k].일시} onChange={e => upd({ 조치: { ...report.조치, [k]: { ...report.조치[k], 일시: e.target.value } } })} placeholder="10/23 11:00" style={cell} />,
-                    내용: <input value={report.조치[k].내용} onChange={e => upd({ 조치: { ...report.조치, [k]: { ...report.조치[k], 내용: e.target.value } } })} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : ''} style={cell} />,
-                  })),
+                  조치사항: FOLLOWUPS.map(([구분, k]) => {
+                    const v = report.조치[k];
+                    const setRow = (patch: Partial<typeof v>) => upd({ 조치: { ...report.조치, [k]: { ...v, ...patch } } });
+                    const optional = OPTIONAL_FOLLOWUPS.includes(k);
+                    const na = optional && v.내용 === NOT_APPLICABLE;
+                    return {
+                      구분,
+                      일시: optional
+                        ? <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                            <input type="checkbox" checked={na} onChange={() => setRow(na ? { 내용: '' } : { 일시: '', 내용: NOT_APPLICABLE })} /> 해당 없음
+                            {!na && <input value={v.일시} onChange={e => setRow({ 일시: e.target.value })} placeholder="일시" style={{ ...cell, minWidth: 0 }} />}
+                          </label>
+                        : <input value={v.일시} onChange={e => setRow({ 일시: e.target.value })} required placeholder="10/23 11:00 *" style={{ ...cell, borderColor: '#f87171' }} />,
+                      내용: na
+                        ? <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{NOT_APPLICABLE}</span>
+                        : <input value={v.내용} onChange={e => setRow({ 내용: e.target.value })} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : '해당 있을 때만'} style={cell} />,
+                    };
+                  }),
                 }} />
               </div>
             </div>
