@@ -118,7 +118,7 @@ function LinesInput({ rows, onChange, examples }: { rows: Line[]; onChange: (v: 
     <div>
       {rows.map((r, i) => (
         <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'flex-start' }}>
-          <input value={r.t} onChange={e => set(i, { t: e.target.value.replace(/^(\d{1,2})(\d{2})$/, '$1:$2') })} inputMode="numeric" maxLength={5} placeholder="10:20" aria-label={`${i + 1}번째 줄 시각`} style={{ width: 58, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4 }} />
+          <input value={r.t} onChange={e => set(i, { t: e.target.value })} onBlur={e => set(i, { t: e.target.value.replace(/^(\d{1,2})(\d{2})$/, '$1:$2') })} inputMode="numeric" maxLength={5} placeholder="10:20" aria-label={`${i + 1}번째 줄 시각`} style={{ width: 58, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4 }} />
           <textarea value={r.s} rows={1} onChange={e => set(i, { s: e.target.value })} aria-label={`${i + 1}번째 줄 내용`}
             placeholder="보인 행동 또는 교사가 한 일" style={{ flex: 1, minWidth: 0, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', resize: 'vertical', fieldSizing: 'content' } as React.CSSProperties} />
           <select value="" onChange={e => e.target.value && set(i, { s: e.target.value })} aria-label="예시 문장 고르기" style={{ width: 62, padding: 4, fontSize: '0.75rem' }}>
