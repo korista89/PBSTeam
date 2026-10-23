@@ -89,7 +89,7 @@ export default function StudentDetail() {
 
   if (loading) return (
     <AuthCheck>
-      <AppShell currentPage="roster" title="🔬 학생 FBA 프로파일">
+      <AppShell currentPage="student" title="🔬 학생 FBA 프로파일">
         <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
            <div style={{ fontSize: '2.5rem', animation: 'spin 2s linear infinite', marginBottom: '12px' }}>💿</div>
            <p style={{ fontWeight: 800 }}>{maskName(studentName)} 학생의 행동 데이터를 심층 분석하고 있습니다...</p>
@@ -100,7 +100,7 @@ export default function StudentDetail() {
 
   if (error || !data) return (
     <AuthCheck>
-      <AppShell currentPage="roster" title="🔬 학생 FBA 프로파일">
+      <AppShell currentPage="student" title="🔬 학생 FBA 프로파일">
         <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⚠️</div>
           <p style={{ fontWeight: 800, color: 'var(--tier3)' }}>{error || "데이터가 없습니다."}</p>
@@ -120,7 +120,7 @@ export default function StudentDetail() {
   return (
     <AuthCheck>
       <AppShell
-        currentPage="roster"
+        currentPage="student"
         title={`🔬 ${maskName(profile.name)} 학생 FBA 프로파일`}
         subtitle={`${profile.class} (${profile.student_code}) · ${profile.tier || "Tier 1"} 중재 대상자 · 기능적행동평가(FBA) — 행동중재계획(BIP) 작성은 별도 페이지`}
         headerActions={

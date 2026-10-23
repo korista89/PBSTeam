@@ -280,7 +280,7 @@ export default function TargetBehaviorPage() {
         <AuthCheck>
             <AppShell
                 currentPage="target-behavior"
-                title="📉 표적행동기록"
+                title="📉 개별표적행동기록"
                 subtitle="담임교사가 정의한 문제행동·목표행동을 BIP 적용기간 동안 추적 · 위기행동과 겹쳐 보기"
             >
                 <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "20px", alignItems: "start" }}>

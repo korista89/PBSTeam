@@ -64,65 +64,67 @@ export default function AppShell({
         );
     };
 
+    const admin = isAdmin();
     const navGroups: NavGroup[] = [
         {
             groupTitle: "운영",
             items: [
-                { href: "/", label: "대시보드", key: "dashboard", icon: "📊" },
+                { href: "/", label: "전체대시보드", key: "dashboard", icon: "📊" },
+                ...(admin ? [{ href: "/briefing", label: "관리자 브리핑", key: "briefing", icon: "🗞️" }] : []),
                 { href: "/today", label: "Today결정", key: "today", icon: "🧭" },
-                ...(isAdmin() ? [{ href: "/briefing", label: "관리자 브리핑", key: "briefing", icon: "🗞️" }] : [])
+                ...(admin ? [{ href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" }] : [])
             ]
         },
         {
-            groupTitle: "기록 / 학생",
+            groupTitle: "위기행동",
             items: [
-                ...(isAdmin() ? [{ href: "/roster", label: "학생 명단", key: "roster", icon: "🏫" }] : []),
+                { href: "/protocol", label: "프로토콜 안내", key: "protocol", icon: "📜" },
                 { href: "/behavior", label: "위기행동기록", key: "behavior", icon: "🚨" },
-                { href: "/target-behavior", label: "표적행동기록", key: "target-behavior", icon: "📉" },
-                { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" },
-                { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
-                { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },
-                { href: "/cico", label: "CICO 관리", key: "cico", icon: "📝" }
+                { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" }
             ]
         },
         {
-            groupTitle: "분석 / EBP",
+            groupTitle: "Tier1",
             items: [
-                { href: "/report/tier3", label: "FBA/BIP관리", key: "report-tier3", icon: "🧩" },
-                { href: "/ebp", label: "Be-Able EBP", key: "ebp", icon: "📚" }
+                { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
+                { href: "/picture-word", label: "경은그림말", key: "picture-word", icon: "🎨" },
+                { href: "/board", label: "자료 공유 게시판", key: "board", icon: "💬" }
+            ]
+        },
+        {
+            groupTitle: "Tier2",
+            items: [
+                { href: "/cico", label: "CICO관리", key: "cico", icon: "📝" }
+            ]
+        },
+        {
+            groupTitle: "Tier3",
+            items: [
+                { href: "/student", label: "개별학생대시보드", key: "student", icon: "👤" },
+                { href: "/target-behavior", label: "개별표적행동기록", key: "target-behavior", icon: "📉" },
+                { href: "/report/tier3", label: "개별행동중재계획", key: "report-tier3", icon: "🧩" },
+                { href: "/ebp", label: "경기Be-Able EBP", key: "ebp", icon: "📚" }
             ]
         },
         {
             groupTitle: "회의 / 협의록",
             items: [
                 { href: "/meeting", label: "협의회 에이전트", key: "meeting", icon: "🤝" },
-                { href: "/consultation/report", label: "월별/공식 회의록", key: "consultation-report", icon: "📑" }
+                { href: "/consultation/report", label: "월별 회의록", key: "consultation-report", icon: "📑" }
             ]
         },
         {
-            groupTitle: "협업 / 도구",
+            // 요청 목록에 없던 메뉴 — 지우지 않고 맨 아래 '관리'로 모았다
+            groupTitle: "관리",
             items: [
-                { href: "/board", label: "자료 공유 게시판", key: "board", icon: "💬" },
-                { href: "/picture-word", label: "경은그림말", key: "picture-word", icon: "🎨" }
-            ]
-        },
-        {
-            groupTitle: "도움말",
-            items: [
-                { href: "/protocol", label: "프로토콜 안내", key: "protocol", icon: "📜" }
+                { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },
+                ...(admin ? [
+                    { href: "/roster", label: "학생 명단", key: "roster", icon: "🏫" },
+                    { href: "/admin", label: "관리자설정", key: "admin", icon: "⚙️" }
+                ] : [])
             ]
         }
     ];
-
-    if (isAdmin()) {
-        navGroups.push({
-            groupTitle: "시스템 관리",
-            items: [
-                { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" },
-                { href: "/admin", label: "관리자설정", key: "admin", icon: "⚙️" }
-            ]
-        });
-    }
 
     if (!user) return null;
 

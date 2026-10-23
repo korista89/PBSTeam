@@ -565,7 +565,7 @@ export default function BIPEditor() {
 
     if (loading) return (
         <AuthCheck>
-            <AppShell currentPage="roster" title="📋 행동중재계획 (BIP)">
+            <AppShell currentPage="report-tier3" title="📋 행동중재계획 (BIP)">
                 <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     <div style={{ fontSize: '2rem', animation: 'spin 2s linear infinite', marginBottom: '12px' }}>⏳</div>
                     <p style={{ fontWeight: 700 }}>BIP 데이터를 불러오고 있습니다...</p>
@@ -577,7 +577,7 @@ export default function BIPEditor() {
     return (
         <AuthCheck>
             <AppShell
-                currentPage="roster"
+                currentPage="report-tier3"
                 title={`📋 행동중재계획 (BIP) — ${maskName(studentName)}`}
                 subtitle={`학번/코드: ${studentCode} · 작성일: ${bip.UpdatedAt || new Date().toISOString().split('T')[0]}`}
                 headerActions={

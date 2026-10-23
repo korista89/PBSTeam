@@ -102,7 +102,7 @@ export default function Tier3Report() {
     <AuthCheck>
       <AppShell
         currentPage="report-tier3"
-        title="🧩 FBA/BIP관리"
+        title="🧩 개별행동중재계획 (FBA/BIP)"
         subtitle={`Tier 3(Tier3+) 대상학생 기능적행동평가(FBA) 기반 행동중재계획(BIP) 수립·관리 ${startDate && endDate ? `(${startDate} ~ ${endDate})` : ""}`}
         headerActions={
           <button onClick={fetchData} className="btn btn-secondary">
@@ -157,7 +157,7 @@ export default function Tier3Report() {
 
           {/* 해석 가이드 */}
           <div style={{ marginTop:12, padding:"22px 26px", background:"linear-gradient(135deg,#fff1f2,#ffe4e6)", borderRadius:20, border:"1px solid #fecdd3" }}>
-            <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#881337" }}>📖 FBA/BIP관리 해석 가이드</h3>
+            <h3 style={{ margin:"0 0 14px 0", fontSize:"1rem", fontWeight:800, color:"#881337" }}>📖 개별행동중재계획(FBA/BIP) 해석 가이드</h3>
             <div className="grid-responsive" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, fontSize:"0.75rem", color:"#0f172a", lineHeight:1.7 }}>
               {[
                 {t:"학생별 프레임", b:"Tier3 대상학생마다 FBA 관련 추세 차트(주간빈도·행동유형·강도)를 한눈에 보여주는 트리아지 화면입니다. BIP 작성·AI 초안·EBP 선택·위기절차·협의기록·데이터기반 의사결정 제안은 '상세'·'BIP 작성/수정' 버튼으로 이동하는 통합 BIP 페이지에서 관리합니다."},

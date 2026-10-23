@@ -79,7 +79,7 @@ export default function AdminApprovalsPage() {
   return (
     <AuthCheck>
       <AppShell
-        currentPage="admin-approvals"
+        currentPage="approvals"
         title="✅ 관리자 결재함 (위기행동 승인)"
         subtitle={`대기 중인 위기행동 보고서: ${logs.length}건`}
         hideDateFilter={true}
