@@ -48,6 +48,14 @@ export default function CrisisReportPage() {
           <a href={blank} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 빈 양식(hwpx)</a>
           <span style={{ fontSize: "0.8rem", color: "#475569" }}>인쇄 창에서 &lsquo;PDF로 저장&rsquo;을 고르면 PDF가 됩니다. 인쇄 후 서명해 담당자에게 제출하세요.</span>
         </div>
+        {f && (() => {
+          const empty = [["A 배경/선행", f.A], ["C 후속결과", f.C], ["경위", f.경위], ["관찰기록", f.관찰기록], ["발생 시 지도교사", f.지도교사]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
+          return empty.length > 0 && (
+            <div className="no-print" style={{ maxWidth: 794, margin: "0 auto 12px", padding: "10px 14px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, fontSize: "0.85rem", color: "#92400e" }}>
+              ⚠️ 비어 있는 칸: <b>{empty.join(", ")}</b> — 전체 로그나 결재함의 &lsquo;상세·수정&rsquo;에서 채운 뒤 인쇄하세요. (빈 칸은 인쇄 후 손으로 써도 됩니다.)
+            </div>
+          );
+        })()}
         {error && <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", color: "#dc2626", padding: 12 }}>⚠️ {error}</div>}
         {f && (
           <div className="sheet" style={{ background: "#fff", maxWidth: 794, margin: "0 auto", padding: "28px 30px", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", color: "#000", fontFamily: "'Malgun Gothic', sans-serif" }}>

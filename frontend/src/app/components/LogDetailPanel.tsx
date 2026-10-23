@@ -32,10 +32,18 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 // 보고서 항목(원본 헤더 키·짧은 키)도 편집 대상에 넣는다. PATCH가 둘 다 받아 실제 헤더로 매핑한다.
-const reportEntries = (log: any): [string, string][] => [
-    ...Object.entries(log.crisis_details || {}),
-    ...Object.entries(log.form_report_details || {}),
-].map(([k, v]) => [k, String(v ?? "")] as [string, string]);
+// 위기조치 기록은 아직 값이 없는 칸도 채울 수 있게 기본 칸을 항상 보여준다(보고서 양식의 칸과 같음).
+const REPORT_KEYS = [
+    "발생 시 지도교사", "A_배경_선행사건", "B_나타난_위기행동", "C_후속결과",
+    "제지_경위", "제지_방법", "개별학생교육지원_시간", "개별학생교육지원_장소_신규", "개별학생교육지원_교사",
+    "개별학생교육지원_경위", "개별학생교육지원_내용_회복과정", "상해_대상자", "상해_경위",
+    ...["부상자_치료", "관리자_보고", "학부모_알림", "학생_상담", "학부모_상담", "긴급회의"].flatMap(k => [`${k}_시간`, `${k}_내용`]),
+];
+const reportEntries = (log: any, crisis?: boolean): [string, string][] => {
+    const have: Record<string, unknown> = { ...(log.crisis_details || {}), ...(log.form_report_details || {}) };
+    const keys = crisis ? [...REPORT_KEYS, ...Object.keys(have).filter(k => !REPORT_KEYS.includes(k))] : Object.keys(have);
+    return keys.map(k => [k, String(have[k] ?? "")] as [string, string]);
+};
 
 export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPanelProps) {
     const router = useRouter();
@@ -46,7 +54,7 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
     const mine = !!author && [user?.id, user?.name].filter(Boolean).map(String).includes(author);
     const canEdit = admin || mine;
     const status = String(log["Status"] ?? "");
-    const [reportValues, setReportValues] = useState<Record<string, string>>(() => Object.fromEntries(reportEntries(log)));
+    const [reportValues, setReportValues] = useState<Record<string, string>>(() => Object.fromEntries(reportEntries(log, isCrisis)));
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [reviseMemo, setReviseMemo] = useState("");
     const [showRevise, setShowRevise] = useState(false);
@@ -64,7 +72,7 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
 
     const startEdit = () => {
         setValues(Object.fromEntries(EDITABLE_FIELDS.map(f => [f.key, String(log[f.key] ?? "")])));
-        setReportValues(Object.fromEntries(reportEntries(log)));
+        setReportValues(Object.fromEntries(reportEntries(log, isCrisis)));
         setError("");
         setEditing(true);
     };
@@ -74,7 +82,7 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
         setSaving(true);
         setError("");
         try {
-            const original = Object.fromEntries(reportEntries(log));
+            const original = Object.fromEntries(reportEntries(log, isCrisis));
             const changed = {
                 ...Object.fromEntries(
                     EDITABLE_FIELDS
