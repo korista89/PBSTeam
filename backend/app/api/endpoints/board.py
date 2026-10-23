@@ -23,12 +23,13 @@ class PostResponse(BaseModel):
     created_at: str
     views: int
 
-@router.get("/", response_model=List[dict])
+# Vercel 이 주소 끝 "/" 를 지우므로 "" 로 둔다("/" 면 서버가 다시 "/" 로 돌려보내 무한 리다이렉트)
+@router.get("", response_model=List[dict])
 def get_posts(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     posts = fetch_board_posts()
     return posts
 
-@router.post("/")
+@router.post("")
 def create_post(
     post: PostCreate,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
