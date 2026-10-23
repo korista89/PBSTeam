@@ -40,7 +40,7 @@ export default function SettingsPage() {
                         <h3 style={{ margin: "0 0 12px", fontSize: "1rem" }}>👤 내 계정</h3>
                         <div style={{ display: "grid", gridTemplateColumns: "90px 1fr", rowGap: 8, fontSize: "0.92rem" }}>
                             <span style={{ color: "#64748b" }}>아이디</span><b>{user?.id || "-"}</b>
-                            <span style={{ color: "#64748b" }}>담당 학급</span><b>{user?.class_name || user?.class_id || "-"}</b>
+                            <span style={{ color: "#64748b" }}>담당 학급</span><b>{String(user?.class_name || user?.class_id || "-").replace(/관리자$/, "")}</b>
                             <span style={{ color: "#64748b" }}>권한</span><b>학급 담임</b>
                         </div>
                         <p style={{ margin: "14px 0 0", fontSize: "0.82rem", color: "#64748b", lineHeight: 1.6 }}>
