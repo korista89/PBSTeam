@@ -455,15 +455,16 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                     const na = optional && v.내용 === NOT_APPLICABLE;
                     return {
                       구분,
-                      일시: optional
-                        ? <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                            <input type="checkbox" checked={na} onChange={() => setRow(na ? { 내용: '' } : { 일시: '', 내용: NOT_APPLICABLE })} /> 해당 없음
-                            {!na && <input value={v.일시} onChange={e => setRow({ 일시: e.target.value })} placeholder="일시" style={{ ...cell, minWidth: 0 }} />}
-                          </label>
-                        : <input value={v.일시} onChange={e => setRow({ 일시: e.target.value })} required placeholder="10/23 11:00 *" style={{ ...cell, borderColor: '#f87171' }} />,
-                      내용: na
-                        ? <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{NOT_APPLICABLE}</span>
-                        : <input value={v.내용} onChange={e => setRow({ 내용: e.target.value })} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : '해당 있을 때만'} style={cell} />,
+                      일시: na
+                        ? <span />
+                        : <input value={v.일시} onChange={e => setRow({ 일시: e.target.value })} required={!optional} placeholder={optional ? '일시' : '10/23 11:00 *'} style={optional ? cell : { ...cell, borderColor: '#f87171' }} />,
+                      내용: <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {optional && <label style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '8.5pt', whiteSpace: 'nowrap', color: '#475569' }}>
+                          <input type="checkbox" checked={na} onChange={() => setRow(na ? { 내용: '' } : { 일시: '', 내용: NOT_APPLICABLE })} /> 해당 없음</label>}
+                        {na
+                          ? <span style={{ fontSize: '9.5pt' }}>{NOT_APPLICABLE}</span>
+                          : <input value={v.내용} onChange={e => setRow({ 내용: e.target.value })} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : '해당 있을 때만'} style={{ ...cell, flex: 1 }} />}
+                      </div>,
                     };
                   }),
                 }} />
