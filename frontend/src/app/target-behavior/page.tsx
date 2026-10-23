@@ -69,6 +69,7 @@ export default function TargetBehaviorPage() {
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
     const [searchKeyword, setSearchKeyword] = useState("");
     const [requestedStudentCode, setRequestedStudentCode] = useState("");
+    const appliedRequestRef = React.useRef(false);
 
     // BIP 페이지의 "표적행동기록 데이터 보기" 버튼 등에서 ?student=코드 로 들어오면
     // 해당 학생을 바로 선택한다. useSearchParams()는 Suspense 경계를 요구해 정적 빌드가
@@ -86,7 +87,13 @@ export default function TargetBehaviorPage() {
             if (!Array.isArray(data)) data = [];
             const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.학생코드 === v.학생코드) === i);
             setStudents(unique);
-            setSelectedStudent((current: any) => unique.find((s: any) => s.학생코드 === (current?.학생코드 || requestedStudentCode)) || unique[0] || null);
+            setSelectedStudent((current: any) => {
+          // 주소(?student=)로 지정한 학생을 처음 한 번은 우선한다(그 뒤엔 사용자가 고른 학생 유지)
+          const want = !appliedRequestRef.current && requestedStudentCode ? requestedStudentCode : current?.학생코드;
+          const hit = unique.find((s: any) => String(s.학생코드) === String(want || ""));
+          if (hit && want === requestedStudentCode) appliedRequestRef.current = true;
+          return hit || unique.find((s: any) => s.학생코드 === current?.학생코드) || unique[0] || null;
+        });
         } catch (err) {
             console.error("Failed to load students", err);
         }

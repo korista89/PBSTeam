@@ -19,6 +19,7 @@ export default function BehaviorPage() {
   // (/logs 페이지와 동일하게) window.location.search를 직접 읽는다.
   const [requestedMode, setRequestedMode] = useState<'data' | 'report'>('data');
   const [requestedStudentCode, setRequestedStudentCode] = useState("");
+    const appliedRequestRef = React.useRef(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "report") setRequestedMode("report");
@@ -48,9 +49,13 @@ export default function BehaviorPage() {
             a.findIndex((t: any) => t.학생코드 === v.학생코드) === i
         );
         setStudents(unique);
-        setSelectedStudent((current: any) => (
-          unique.find((student: any) => student.학생코드 === (current?.학생코드 || requestedStudentCode)) || unique[0] || null
-        ));
+        setSelectedStudent((current: any) => {
+          // 주소(?student=)로 지정한 학생을 처음 한 번은 우선한다(그 뒤엔 사용자가 고른 학생 유지)
+          const want = !appliedRequestRef.current && requestedStudentCode ? requestedStudentCode : current?.학생코드;
+          const hit = unique.find((student: any) => String(student.학생코드) === String(want || ""));
+          if (hit && want === requestedStudentCode) appliedRequestRef.current = true;
+          return hit || unique.find((student: any) => student.학생코드 === current?.학생코드) || unique[0] || null;
+        });
     } catch (err) {
       console.error("Failed to load students", err);
     }
