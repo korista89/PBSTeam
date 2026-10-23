@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+import uuid
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -130,17 +131,45 @@ def apply(sh, changes):
         print(f"  {tab}: {len(cells)}셀 반영")
 
 
+def fill_log_ids(data):
+    """Log_ID 가 빈 Log_Main 행(구글폼 입력)에 번호를 붙인다. 빈 칸에만 쓴다. 결재함이 Log_ID 로 결재 단계를 연결하기 때문.
+    출처(Source)도 비어 있으면 'Google Forms' 로 채운다."""
+    ws, rows = data.get("Log_Main", (None, []))
+    if not rows:
+        return {}
+    hdr = rows[0]
+    if "Log_ID" not in hdr:
+        return {}
+    li, si = hdr.index("Log_ID"), hdr.index("Source") if "Source" in hdr else None
+    key_cols = [hdr.index(h) for h in ("타임스탬프", "학생명") if h in hdr]
+    cells = []
+    for ri in range(1, len(rows)):
+        r = rows[ri]
+        if not any(k < len(r) and str(r[k]).strip() for k in key_cols):
+            continue
+        if not (li < len(r) and str(r[li]).strip()):
+            cells.append((ri, li, str(uuid.uuid4())))
+            if si is not None and not (si < len(r) and str(r[si]).strip()):
+                cells.append((ri, si, "Google Forms"))
+    return {"Log_Main": cells} if cells else {}
+
+
 def main():
     mode = ("incremental" if "--incremental" in sys.argv else "apply" if "--apply" in sys.argv
             else "verify" if "--verify" in sys.argv else "dry")
     sh = connect(mode in ("apply", "incremental"))
     if mode == "incremental":
         saved = json.load(open(MAP_PATH))
-        changes = plan(read_all(sh, INCREMENTAL_TABS), saved["alias"], mask_unknown=True)
+        data = read_all(sh, INCREMENTAL_TABS)
+        changes = plan(data, saved["alias"], mask_unknown=True)
         stamp = time.strftime("%Y-%m-%d %H:%M")
         print(f"[{stamp}] 새 실명 셀:", {t: len(c) for t, c in changes.items()} or "없음")
         if changes:
             apply(sh, changes)
+        ids = fill_log_ids(data)
+        if ids:
+            print(f"[{stamp}] Log_ID 채움: {len([c for c in ids['Log_Main'] if c[1] == data['Log_Main'][1][0].index('Log_ID')])}행")
+            apply(sh, ids)
         return
     if mode in ("dry", "apply") and os.path.exists(MAP_PATH) and "--rebuild" not in sys.argv:
         sys.exit(f"대응표 {MAP_PATH} 가 이미 있습니다. 새 실명만 가리려면 --incremental, 전체 재작성은 --rebuild 를 붙이세요.")

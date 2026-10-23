@@ -4806,3 +4806,60 @@ if __name__ == "__main__":
 
     print("_with_retry self-check OK")
 
+
+
+# =============================
+# 결재 단계 기록 (Approvals 탭) — Log_Main 열 구조를 바꾸지 않고 Log_ID 로 연결한다.
+# 행은 추가만 한다(누가·언제 눌렀는지 이력 보존). 같은 Log_ID·단계의 마지막 행이 현재 상태다.
+# =============================
+APPROVAL_STEPS = ["담당자확인", "교감확인", "학교장확인", "학교장보고요청"]
+APPROVAL_HEADERS = ["Log_ID", "Step", "Action", "By", "At", "Memo"]
+
+
+def ensure_approvals_sheet():
+    client = get_sheets_client()
+    if not client:
+        return None
+    try:
+        sheet = client.open_by_url(settings.SHEET_URL)
+        try:
+            return sheet.worksheet("Approvals")
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title="Approvals", rows=1000, cols=len(APPROVAL_HEADERS))
+            ws.append_row(APPROVAL_HEADERS)
+            return ws
+    except SheetUnavailable:
+        raise
+    except Exception as e:
+        print(f"Error checking Approvals sheet: {e}")
+        return None
+
+
+def fetch_approval_states(force_refresh: bool = False) -> Dict[str, Dict[str, dict]]:
+    """{Log_ID: {단계: {"by","at","memo"}}} — 취소된 단계는 빠진다."""
+    if not force_refresh:
+        cached = get_cached("approvals:states", ttl=60)
+        if cached is not None:
+            return cached
+    ws = ensure_approvals_sheet()
+    states: Dict[str, Dict[str, dict]] = {}
+    if ws:
+        for r in safe_get_all_records(ws):
+            log_id, step = str(r.get("Log_ID", "")).strip(), str(r.get("Step", "")).strip()
+            if not log_id or step not in APPROVAL_STEPS:
+                continue
+            if str(r.get("Action", "")).strip() == "취소":
+                states.get(log_id, {}).pop(step, None)
+            else:
+                states.setdefault(log_id, {})[step] = {"by": str(r.get("By", "")), "at": str(r.get("At", "")), "memo": str(r.get("Memo", ""))}
+    set_cached("approvals:states", states)
+    return states
+
+
+def add_approval_step(log_id: str, step: str, by: str, cancel: bool = False, memo: str = "") -> None:
+    ws = ensure_approvals_sheet()
+    if not ws:
+        raise RuntimeError("Approvals 탭에 접근할 수 없습니다")
+    ws.append_row([log_id, step, "취소" if cancel else "확인", by,
+                   datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), memo], value_input_option="RAW")
+    invalidate_cache("approvals:")

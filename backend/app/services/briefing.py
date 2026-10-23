@@ -224,7 +224,9 @@ def _signed(p: Optional[int]) -> str:
 
 
 def build_briefing(records: List[dict], students: List[dict], holidays: Iterable[str], today: date,
-                   cico_trend: Optional[List[dict]] = None) -> Dict[str, Any]:
+                   cico_trend: Optional[List[dict]] = None,
+                   signoffs: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """signoffs: 결재함 단계 기록 {Log_ID: {단계: ...}}. 있으면 '결재 대기'를 학교장확인 전 보고서(최근 30일)로 센다."""
     ctx = _Ctx(records, students)
     holidays = list(holidays)
     d1, d2 = prev_school_days(today, holidays, 2)
@@ -241,12 +243,18 @@ def build_briefing(records: List[dict], students: List[dict], holidays: Iterable
     up, down, trend_range = _trends(ctx, today)
 
     recent = ctx.between(today - timedelta(days=13), today)
-    pending = sum(1 for _, _, r in ctx.rows if r.get("Status") == "Pending")
+    if signoffs is None:
+        pending = sum(1 for _, _, r in ctx.rows if r.get("Status") == "Pending")
+    else:
+        pending = sum(1 for d, _, r in ctx.rows
+                      if r.get("Status") == "Pending" or (
+                          _is_crisis(r) and d >= today - timedelta(days=29)
+                          and "학교장확인" not in signoffs.get(str(r.get("Log_ID", "")), {})))
     revision = sum(1 for _, _, r in ctx.rows if r.get("Status") == "Revision Requested")
     missing = [i for day in (_day_detail(ctx, d) for d in {d for d, _, _ in recent}) for i in day["items"] if i["missing_report"]]
     todo = []
     if pending:
-        todo.append({"level": "high", "text": f"결재 대기 보고서 {pending}건 승인·재작성 요청", "href": "/admin/approvals"})
+        todo.append({"level": "high", "text": f"학교장확인 전 보고서 {pending}건 결재", "href": "/admin/approvals"})
     if missing:
         todo.append({"level": "high", "text": f"최근 2주 위기조치 {len(missing)}건 관리자 보고·보호자 알림 기록 누락 확인", "href": "/logs"})
     if revision:

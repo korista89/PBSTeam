@@ -1,165 +1,221 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
-import { API_BASE_URL } from '../../constants';
-import AppShell from '../../components/AppShell';
-import { AuthCheck, useAuth } from '../../components/AuthProvider';
-import { useSheetLiveSync } from '../../hooks/useSheetLiveSync';
-import LogDetailPanel from '../../components/LogDetailPanel';
-import { maskName } from '../../utils';
+// 결재함 — 보고서(제지·개별학생교육지원·상해)와 '데이터만 입력' 기록을 모두 모아
+// 담당자확인 → 교감확인 → 학교장확인 순으로 확인하고, 필요하면 학교장보고를 요청한다.
+// 학교장확인이 되면 보고서는 최종 승인(Approved)된다. 단계 기록은 시트 'Approvals' 탭에 남는다.
+import React, { useCallback, useEffect, useState } from "react";
+import axios from "axios";
+import { API_BASE_URL } from "../../constants";
+import AppShell from "../../components/AppShell";
+import { AuthCheck, useAuth } from "../../components/AuthProvider";
+import { useSheetLiveSync } from "../../hooks/useSheetLiveSync";
+import LogDetailPanel from "../../components/LogDetailPanel";
+import { maskName } from "../../utils";
 
-export default function AdminApprovalsPage() {
-  const { user } = useAuth();
-  const [logs, setLogs] = useState<any[]>([]);
+type Sign = { by: string; at: string; memo?: string };
+type Row = Record<string, any> & { kind: "report" | "data"; signoffs: Record<string, Sign> };
+
+const STEPS = [
+  { key: "담당자확인", icon: "👤" },
+  { key: "교감확인", icon: "🧑‍💼" },
+  { key: "학교장확인", icon: "🏫" },
+] as const;
+const REPORT_REQ = "학교장보고요청";
+const KINDS = [
+  { key: "all", label: "전체" },
+  { key: "report", label: "🚨 보고서" },
+  { key: "data", label: "📝 데이터만 입력" },
+] as const;
+// 결재 상태는 '학교장확인' 여부가 기준이다(구글폼 보고서는 시트 Status 가 비어 있어 Status 만으로는 알 수 없다).
+const stateOf = (r: Row) =>
+  r.Status === "Revision Requested" ? { label: "재작성 요청", bg: "#ffedd5", fg: "#c2410c" }
+  : r.signoffs?.["학교장확인"] ? { label: "최종 확인", bg: "#dcfce7", fg: "#15803d" }
+  : r.kind === "report" ? { label: "결재 대기", bg: "#fef3c7", fg: "#b45309" }
+  : { label: "확인 전", bg: "#f1f5f9", fg: "#475569" };
+const short = (v: unknown) => String(v ?? "").split(":")[0].split("(")[0].trim() || "-";
+const kdate = (s: string) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${+m[2]}. ${+m[3]}.` : s || "-"; };
+const hm = (at: string) => String(at || "").slice(5, 16).replace("-", ".").replace(" ", " ");
+
+export default function ApprovalsPage() {
+  const { isAdmin } = useAuth();
+  const [rows, setRows] = useState<Row[]>([]);
+  const [kind, setKind] = useState<(typeof KINDS)[number]["key"]>("all");
+  const [pendingOnly, setPendingOnly] = useState(true);
+  const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [adminId, setAdminId] = useState('Admin');
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<string>("");
+  const [open, setOpen] = useState<string | null>(null);
+  const [reviseFor, setReviseFor] = useState<string | null>(null);
+  const [memo, setMemo] = useState("");
 
-  const fetchPendingLogs = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/pending`);
-      setLogs(res.data.logs || []);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Error fetching pending logs');
+      const res = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/inbox`, { params: { kind, days, pending_only: pendingOnly } });
+      setRows(res.data.logs || []);
+      setError("");
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || "결재함을 불러오지 못했습니다.");
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [kind, days, pendingOnly]);
 
-  useEffect(() => {
-    if (user) {
-      setAdminId(user.name || user.id || 'Admin');
-    }
-    void fetchPendingLogs();
-  }, [user, fetchPendingLogs]);
-  useSheetLiveSync(() => fetchPendingLogs(true));
+  useEffect(() => { if (isAdmin()) void load(); }, [isAdmin, load]);
+  useSheetLiveSync(() => load(true));
 
-  const handleApprove = async (logId: string) => {
-    if (!confirm('해당 위기행동 기록 및 보고서를 승인하시겠습니까?')) return;
-
+  const sign = async (r: Row, step: string) => {
+    const done = !!r.signoffs?.[step];
+    setBusy(`${r.Log_ID}|${step}`);
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/approve`, {
-        log_id: logId,
-        admin_id: adminId
-      });
-      if (res.data.success) {
-        alert('승인되었습니다.');
-        fetchPendingLogs();
-      } else {
-        alert('승인 실패: ' + res.data.message);
-      }
-    } catch (err: any) {
-      alert('오류 발생: ' + (err.response?.data?.detail || err.message));
+      await axios.post(`${API_BASE_URL}/api/v1/behavior-log/sign`, { log_id: r.Log_ID, step, cancel: done });
+      await load(true);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || "처리에 실패했습니다.");
+    } finally {
+      setBusy("");
     }
   };
 
-  const handleRevise = async (logId: string) => {
-    const memo = prompt('재작성 요청 사유(메모)를 입력해주세요:');
-    if (memo === null) return; // User cancelled
-
+  const revise = async (r: Row) => {
+    setBusy(`${r.Log_ID}|revise`);
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/revise`, {
-        log_id: logId,
-        admin_id: adminId,
-        memo: memo
-      });
-      if (res.data.success) {
-        alert('재작성 요청이 처리되었습니다.');
-        fetchPendingLogs();
-      } else {
-        alert('요청 실패: ' + res.data.message);
-      }
-    } catch (err: any) {
-      alert('오류 발생: ' + (err.response?.data?.detail || err.message));
+      await axios.post(`${API_BASE_URL}/api/v1/behavior-log/revise`, { log_id: r.Log_ID, memo });
+      setReviseFor(null); setMemo("");
+      await load(true);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || "처리에 실패했습니다.");
+    } finally {
+      setBusy("");
     }
+  };
+
+  const counts = {
+    total: rows.length,
+    waitingPrincipal: rows.filter(r => !r.signoffs?.["학교장확인"]).length,
+    reportReq: rows.filter(r => r.signoffs?.[REPORT_REQ]).length,
+    pending: rows.filter(r => r.kind === "report" && !r.signoffs?.["학교장확인"]).length,
   };
 
   return (
     <AuthCheck>
-      <AppShell
-        currentPage="approvals"
-        title="✅ 관리자 결재함 (위기행동 승인)"
-        subtitle={`대기 중인 위기행동 보고서: ${logs.length}건`}
-        hideDateFilter={true}
-        headerActions={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <a href="/logs" className="btn btn-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-              🗂️ 전체 로그 보기
-            </a>
-            <button onClick={() => void fetchPendingLogs()} className="btn btn-secondary">
-              🔄 새로고침
-            </button>
-          </div>
-        }
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          {loading ? (
-            <div className="card" style={{ padding: "60px", textAlign: "center", color: "var(--text-secondary)" }}>
-              <div style={{ fontSize: "2rem", marginBottom: "12px", animation: "spin 2s linear infinite" }}>⏳</div>
-              <p style={{ fontWeight: 700 }}>결재 대기 목록을 불러오고 있습니다...</p>
-            </div>
-          ) : error ? (
-            <div className="card" style={{ padding: "20px", background: "#fef2f2", color: "#dc2626", textAlign: "center" }}>
-              ⚠️ {error}
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">✅</div>
-              <div className="empty-state-title">결재 대기 중인 위기행동 보고서가 없습니다</div>
-              <div className="empty-state-text">모든 위기행동 및 특별 지원 보고서가 정상 결재되었습니다.</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {logs.map(log => (
-              <div key={log.Log_ID} style={{ border: '2px solid #b91c1c', borderRadius: '8px', padding: '20px', backgroundColor: '#fef2f2' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #fca5a5', paddingBottom: '10px', marginBottom: '10px' }}>
-                  <h3 style={{ margin: 0, color: '#b91c1c' }}>🚨 위기행동 지원 보고서 결재</h3>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button
-                      onClick={() => handleRevise(log.Log_ID)}
-                      style={{ backgroundColor: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                    >
-                      재작성 요청 (Revise)
-                    </button>
-                    <button
-                      onClick={() => handleApprove(log.Log_ID)}
-                      style={{ backgroundColor: '#4caf50', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                    >
-                      승인 (Approve)
-                    </button>
-                  </div>
+      <AppShell currentPage="approvals" title="✅ 결재함" subtitle="보고서와 데이터 입력을 담당자 → 교감 → 학교장 순으로 확인합니다" hideDateFilter={true}
+        headerActions={<button onClick={() => void load()} className="btn btn-secondary" disabled={loading}>🔄 새로고침</button>}>
+        {!isAdmin() ? <div className="card" style={{ padding: 20 }}>관리자만 볼 수 있는 화면입니다.</div> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* 요약 */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+              {[
+                { label: "목록", value: counts.total, color: "#0f172a" },
+                { label: "학교장확인 전", value: counts.waitingPrincipal, color: "#b45309" },
+                { label: "결재 대기 보고서", value: counts.pending, color: "#dc2626" },
+                { label: "학교장보고 요청", value: counts.reportReq, color: "#7c3aed" },
+              ].map(c => (
+                <div key={c.label} className="card" style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 700 }}>{c.label}</div>
+                  <div style={{ fontSize: "1.7rem", fontWeight: 900, color: c.color }}>{c.value}<span style={{ fontSize: "0.9rem" }}>건</span></div>
                 </div>
+              ))}
+            </div>
 
-                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                  <div>
-                    <p><strong>학생:</strong> {maskName(log['학생명'])} ({log['학생코드']})</p>
-                    <p><strong>날짜/시간:</strong> {log['행동발생날짜']} ({log['시간대']})</p>
-                    <p><strong>입력교사:</strong> {log['입력교사명']}</p>
-                  </div>
-                  <div>
-                    <p><strong>장소:</strong> {log['장소']}</p>
-                    <p><strong>유형:</strong> {log['행동유형']}</p>
-                    <p><strong>강도/빈도:</strong> {log['강도']} / {log['발생횟수']}</p>
-                  </div>
-                </div>
-
-                <div style={{ backgroundColor: 'white', padding: '10px', borderRadius: '4px', border: '1px solid #fca5a5', marginBottom: '15px' }}>
-                  <strong>특기사항: </strong> {log['특기사항']}
-                </div>
-
-                <details>
-                  <summary style={{ cursor: 'pointer', fontWeight: 700 }}>보고서 상세 보기 · 수정 · 삭제</summary>
-                  <div style={{ marginTop: '10px' }}>
-                    <LogDetailPanel log={log} isCrisis={String(log['물리적제지여부'] || '').startsWith('O')} onSaved={() => void fetchPendingLogs(true)} />
-                  </div>
-                </details>
+            {/* 필터 */}
+            <div className="card" style={{ padding: "12px 16px", display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden" }}>
+                {KINDS.map(k => (
+                  <button key={k.key} onClick={() => setKind(k.key)}
+                    style={{ padding: "8px 14px", border: "none", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem",
+                      background: kind === k.key ? "#0f172a" : "#fff", color: kind === k.key ? "#fff" : "#0f172a" }}>{k.label}</button>
+                ))}
               </div>
-            ))}
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9rem", cursor: "pointer" }}>
+                <input type="checkbox" checked={pendingOnly} onChange={e => setPendingOnly(e.target.checked)} /> 학교장확인 전인 것만
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9rem" }}>
+                기간
+                <select value={days} onChange={e => setDays(Number(e.target.value))} style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #cbd5e1" }}>
+                  {[7, 14, 30, 90, 180, 365].map(d => <option key={d} value={d}>최근 {d}일</option>)}
+                </select>
+              </label>
+              <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>결재 대기·재작성 요청은 기간과 관계없이 항상 보입니다.</span>
             </div>
-          )}
-        </div>
+
+            {error && <div className="card" style={{ padding: 12, background: "#fef2f2", color: "#dc2626" }}>⚠️ {error}</div>}
+            {loading ? <div className="card" style={{ padding: 30, textAlign: "center" }}>⏳ 결재함을 불러오는 중...</div> :
+              rows.length === 0 ? <div className="card" style={{ padding: 30, textAlign: "center", color: "#16a34a", fontWeight: 700 }}>✅ 확인할 기록이 없습니다.</div> : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {rows.map(r => {
+                  const id = r.Log_ID as string;
+                  const st = stateOf(r);
+                  const report = r.kind === "report";
+                  const reqd = r.signoffs?.[REPORT_REQ];
+                  return (
+                    <div key={id} className="card" style={{ padding: 0, overflow: "hidden", borderLeft: `5px solid ${report ? "#dc2626" : "#3b82f6"}` }}>
+                      {/* 기록 요약 */}
+                      <div style={{ padding: "12px 16px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 800, padding: "2px 8px", borderRadius: 6,
+                          background: report ? "#fee2e2" : "#dbeafe", color: report ? "#b91c1c" : "#1d4ed8" }}>{report ? "🚨 보고서" : "📝 데이터"}</span>
+                        <b style={{ fontSize: "0.95rem" }}>{kdate(r["행동발생날짜"])}</b>
+                        <b>{maskName(r["학생명"])}</b><span style={{ color: "#64748b", fontSize: "0.85rem" }}>({r["학생코드"]}) {r["학급"] || ""}</span>
+                        <span style={{ color: "#334155", fontSize: "0.88rem" }}>{short(r["장소"])} · {short(r["행동유형"])} · 강도 {String(r["강도"] || "-").slice(0, 1)}</span>
+                        {report && <span style={{ color: "#dc2626", fontWeight: 700, fontSize: "0.85rem" }}>{short(r["제지유형_원문"])}</span>}
+                        <span style={{ marginLeft: "auto", fontSize: "0.75rem", fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: st.bg, color: st.fg }}>{st.label}</span>
+                        {reqd && <span style={{ fontSize: "0.75rem", fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: "#ede9fe", color: "#6d28d9" }}>📣 학교장보고 요청됨</span>}
+                      </div>
+
+                      {/* 결재 단계 */}
+                      <div style={{ padding: "10px 16px", background: "#f8fafc", borderTop: "1px solid #eef2f7", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        {STEPS.map((s, i) => {
+                          const done = r.signoffs?.[s.key];
+                          return (
+                            <React.Fragment key={s.key}>
+                              {i > 0 && <span style={{ color: "#cbd5e1" }}>→</span>}
+                              <button onClick={() => void sign(r, s.key)} disabled={!!busy}
+                                title={done ? `${done.by} · ${done.at} (다시 누르면 취소)` : `${s.key} 하기`}
+                                style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: "0.85rem",
+                                  border: done ? "1px solid #16a34a" : "1px solid #cbd5e1",
+                                  background: done ? "#16a34a" : "#fff", color: done ? "#fff" : "#0f172a", opacity: busy === `${id}|${s.key}` ? 0.5 : 1 }}>
+                                {done ? "✓" : s.icon} {s.key}{done && <span style={{ fontWeight: 500, marginLeft: 6, fontSize: "0.75rem" }}>{hm(done.at)}</span>}
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
+                        <span style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
+                        <button onClick={() => void sign(r, REPORT_REQ)} disabled={!!busy}
+                          title={reqd ? `${reqd.by} · ${reqd.at} (다시 누르면 취소)` : "학교장에게 보고를 요청합니다"}
+                          style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: "0.85rem",
+                            border: "1px solid #7c3aed", background: reqd ? "#7c3aed" : "#fff", color: reqd ? "#fff" : "#7c3aed" }}>
+                          📣 학교장보고요청{reqd ? " ✓" : ""}
+                        </button>
+                        <button onClick={() => { setReviseFor(reviseFor === id ? null : id); setMemo(""); }} disabled={!!busy}
+                          style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", border: "1px solid #f59e0b", background: "#fff", color: "#b45309" }}>
+                          ↩️ 재작성 요청
+                        </button>
+                        <button onClick={() => setOpen(open === id ? null : id)}
+                          style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", border: "1px solid #cbd5e1", background: "#fff" }}>
+                          {open === id ? "▲ 닫기" : "▼ 상세·수정"}
+                        </button>
+                      </div>
+
+                      {reviseFor === id && (
+                        <div style={{ padding: "10px 16px", display: "flex", gap: 8, borderTop: "1px solid #eef2f7" }}>
+                          <input value={memo} onChange={e => setMemo(e.target.value)} placeholder="보완할 내용 (작성자에게 보입니다)"
+                            style={{ flex: 1, padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 8 }} />
+                          <button onClick={() => void revise(r)} className="btn btn-primary" disabled={!!busy}>요청 보내기</button>
+                        </div>
+                      )}
+                      {open === id && (
+                        <div style={{ padding: 16, borderTop: "1px solid #eef2f7" }}>
+                          <LogDetailPanel log={r} isCrisis={report} onSaved={() => void load(true)} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </AppShell>
     </AuthCheck>
   );

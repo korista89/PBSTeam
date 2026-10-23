@@ -18,7 +18,7 @@ from dotenv import dotenv_values
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from app.core.time import today_kst  # noqa: E402
 from app.services.briefing import build_briefing  # noqa: E402
-from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config  # noqa: E402
+from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config, fetch_approval_states  # noqa: E402
 
 HERMES_ENV = os.path.expanduser("~/workspace/cowork/hermes/.env")
 SITE = "https://pbs-team.vercel.app/briefing"
@@ -34,7 +34,7 @@ def main():
     if today.weekday() >= 5 or today.isoformat() in {str(h)[:10] for h in holidays}:
         print(f"{today} 수업일 아님 — 보내지 않음")
         return
-    b = build_briefing(fetch_all_records(force_refresh=True), fetch_student_status(), holidays, today)
+    b = build_briefing(fetch_all_records(force_refresh=True), fetch_student_status(), holidays, today, signoffs=fetch_approval_states())
     text = "\n".join(
         [f"🗞️ 경은PBST 관리자 브리핑 ({today.month}. {today.day}.)", ""]
         + [f"{i}. {line}" for i, line in enumerate(b["ten_lines"], 1)]

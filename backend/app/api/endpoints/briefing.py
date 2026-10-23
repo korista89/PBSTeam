@@ -7,7 +7,7 @@ from app.adapters.sheets.client import get_cached, set_cached
 from app.api.deps import require_admin
 from app.core.time import today_kst
 from app.services.briefing import build_briefing, semester_range
-from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config
+from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config, fetch_approval_states
 
 router = APIRouter()
 CACHE_KEY = "briefing:admin"
@@ -39,6 +39,7 @@ def get_admin_briefing(refresh: bool = False, current_admin: Dict[str, Any] = De
         students=fetch_student_status(),
         holidays=get_holidays_from_config() or [],
         today=today,
+        signoffs=fetch_approval_states(),
     )
     set_cached(CACHE_KEY, data)
     return data
