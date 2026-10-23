@@ -208,8 +208,9 @@ def sign_behavior_log(
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
     """결재 단계 확인(관리자): 담당자확인·교감확인·학교장확인·학교장보고요청. cancel=true 면 취소.
-    학교장확인이 되면 보고서는 최종 승인(Approved)으로 바뀐다."""
-    from app.services.sheets import APPROVAL_STEPS, add_approval_step
+    담당자·교감·학교장 확인이 모두(순서 무관) 되면 보고서는 최종 승인(Approved),
+    승인 뒤 셋 중 하나라도 취소하면 다시 결재 대기(Pending)로 돌아간다."""
+    from app.services.sheets import APPROVAL_STEPS, add_approval_step, fetch_approval_states, is_fully_signed
     step = str(payload.get("step", "")).strip()
     if step not in APPROVAL_STEPS:
         raise HTTPException(status_code=400, detail=f"step 은 {', '.join(APPROVAL_STEPS)} 중 하나여야 합니다.")
@@ -217,9 +218,14 @@ def sign_behavior_log(
     try:
         ws, headers, row_num, row = _load_log_row(payload.get("log_id"))
         add_approval_step(payload["log_id"], step, _author_label(current_admin), cancel=cancel, memo=str(payload.get("memo", "")))
-        if step == "학교장확인" and not cancel and _cell(row, headers, "Status") != "Approved":
-            _set_status(ws, headers, row_num, "Approved", f"Approved by {_author_label(current_admin)} (학교장확인) on {_now_str()}")
-        return {"success": True, "step": step, "cancel": cancel}
+        complete = is_fully_signed(fetch_approval_states(force_refresh=True).get(payload["log_id"]))
+        status = _cell(row, headers, "Status")
+        is_report = _cell(row, headers, ACTION_HEADER) not in NO_REPORT_ACTIONS
+        if complete and status != "Approved":
+            _set_status(ws, headers, row_num, "Approved", f"Approved by {_author_label(current_admin)} (3단계 확인 완료) on {_now_str()}")
+        elif not complete and is_report and status == "Approved":
+            _set_status(ws, headers, row_num, "Pending", f"Reopened by {_author_label(current_admin)} ({step} 취소) on {_now_str()}")
+        return {"success": True, "step": step, "cancel": cancel, "complete": complete}
     except (HTTPException, SheetUnavailable):
         raise
     except Exception as e:
@@ -230,11 +236,11 @@ def sign_behavior_log(
 def get_approval_inbox(
     kind: str = Query("all", description="report(보고서) | data(데이터만) | all"),
     days: int = Query(30, ge=1, le=400),
-    pending_only: bool = Query(False, description="학교장확인 전인 것만"),
+    pending_only: bool = Query(False, description="3단계 확인이 끝나지 않은 것만"),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
     """결재함 목록(관리자): 보고서와 데이터만 입력 기록을 결재 단계 상태와 함께 돌려준다."""
-    from app.services.sheets import fetch_approval_states
+    from app.services.sheets import fetch_approval_states, is_fully_signed
     since = (today_kst() - datetime.timedelta(days=days)).isoformat()
     states = fetch_approval_states()
     out = []
@@ -250,9 +256,9 @@ def get_approval_inbox(
         # 결재 대기·재작성 요청은 기간과 무관하게 보이고, 나머지는 최근 기간만
         if status not in ("Pending", "Revision Requested") and normalize_date_string(r.get("행동발생날짜", "")) < since:
             continue
-        if pending_only and "학교장확인" in signed:
+        if pending_only and is_fully_signed(signed):
             continue
-        out.append({**r, "kind": "report" if is_report else "data", "signoffs": signed})
+        out.append({**r, "kind": "report" if is_report else "data", "signoffs": signed, "complete": is_fully_signed(signed)})
     out.sort(key=lambda r: (r.get("Status") != "Pending", str(r.get("타임스탬프", ""))), reverse=False)
     out.sort(key=lambda r: str(r.get("행동발생날짜", "")), reverse=True)
     out.sort(key=lambda r: r.get("Status") not in ("Pending", "Revision Requested"))

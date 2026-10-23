@@ -1,8 +1,8 @@
 "use client";
 
 // 결재함 — 보고서(제지·개별학생교육지원·상해)와 '데이터만 입력' 기록을 모두 모아
-// 담당자확인 → 교감확인 → 학교장확인 순으로 확인하고, 필요하면 학교장보고를 요청한다.
-// 학교장확인이 되면 보고서는 최종 승인(Approved)된다. 단계 기록은 시트 'Approvals' 탭에 남는다.
+// 담당자확인·교감확인·학교장확인을 순서와 관계없이 모두 받으면 결재 완료(보고서는 최종 승인)다.
+// 필요하면 학교장보고를 요청한다. 단계 기록은 시트 'Approvals' 탭에 남는다.
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../../constants";
@@ -13,7 +13,7 @@ import LogDetailPanel from "../../components/LogDetailPanel";
 import { maskName } from "../../utils";
 
 type Sign = { by: string; at: string; memo?: string };
-type Row = Record<string, any> & { kind: "report" | "data"; signoffs: Record<string, Sign> };
+type Row = Record<string, any> & { kind: "report" | "data"; signoffs: Record<string, Sign>; complete?: boolean };
 
 const STEPS = [
   { key: "담당자확인", icon: "👤" },
@@ -26,12 +26,11 @@ const KINDS = [
   { key: "report", label: "🚨 보고서" },
   { key: "data", label: "📝 데이터만 입력" },
 ] as const;
-// 결재 상태는 '학교장확인' 여부가 기준이다(구글폼 보고서는 시트 Status 가 비어 있어 Status 만으로는 알 수 없다).
+// 결재 상태는 3단계 확인 완료 여부가 기준이다(구글폼 보고서는 시트 Status 가 비어 있어 Status 만으로는 알 수 없다).
 const stateOf = (r: Row) =>
   r.Status === "Revision Requested" ? { label: "재작성 요청", bg: "#ffedd5", fg: "#c2410c" }
-  : r.signoffs?.["학교장확인"] ? { label: "최종 확인", bg: "#dcfce7", fg: "#15803d" }
-  : r.kind === "report" ? { label: "결재 대기", bg: "#fef3c7", fg: "#b45309" }
-  : { label: "확인 전", bg: "#f1f5f9", fg: "#475569" };
+  : r.complete ? { label: "결재 완료", bg: "#dcfce7", fg: "#15803d" }
+  : { label: `${STEPS.filter(s => r.signoffs?.[s.key]).length}/3 확인`, bg: r.kind === "report" ? "#fef3c7" : "#f1f5f9", fg: r.kind === "report" ? "#b45309" : "#475569" };
 const short = (v: unknown) => String(v ?? "").split(":")[0].split("(")[0].trim() || "-";
 const kdate = (s: string) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${+m[2]}. ${+m[3]}.` : s || "-"; };
 const hm = (at: string) => String(at || "").slice(5, 16).replace("-", ".").replace(" ", " ");
@@ -93,14 +92,14 @@ export default function ApprovalsPage() {
 
   const counts = {
     total: rows.length,
-    waitingPrincipal: rows.filter(r => !r.signoffs?.["학교장확인"]).length,
+    waitingPrincipal: rows.filter(r => !r.complete).length,
     reportReq: rows.filter(r => r.signoffs?.[REPORT_REQ]).length,
-    pending: rows.filter(r => r.kind === "report" && !r.signoffs?.["학교장확인"]).length,
+    pending: rows.filter(r => r.kind === "report" && !r.complete).length,
   };
 
   return (
     <AuthCheck>
-      <AppShell currentPage="approvals" title="✅ 결재함" subtitle="보고서와 데이터 입력을 담당자 → 교감 → 학교장 순으로 확인합니다" hideDateFilter={true}
+      <AppShell currentPage="approvals" title="✅ 결재함" subtitle="담당자·교감·학교장 확인 3개가 모두 끝나야 결재 완료됩니다 (순서 무관)" hideDateFilter={true}
         headerActions={<button onClick={() => void load()} className="btn btn-secondary" disabled={loading}>🔄 새로고침</button>}>
         {!isAdmin() ? <div className="card" style={{ padding: 20 }}>관리자만 볼 수 있는 화면입니다.</div> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -108,8 +107,8 @@ export default function ApprovalsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
               {[
                 { label: "목록", value: counts.total, color: "#0f172a" },
-                { label: "학교장확인 전", value: counts.waitingPrincipal, color: "#b45309" },
-                { label: "결재 대기 보고서", value: counts.pending, color: "#dc2626" },
+                { label: "결재 미완료", value: counts.waitingPrincipal, color: "#b45309" },
+                { label: "결재 미완료 보고서", value: counts.pending, color: "#dc2626" },
                 { label: "학교장보고 요청", value: counts.reportReq, color: "#7c3aed" },
               ].map(c => (
                 <div key={c.label} className="card" style={{ padding: "14px 16px" }}>
@@ -129,7 +128,7 @@ export default function ApprovalsPage() {
                 ))}
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9rem", cursor: "pointer" }}>
-                <input type="checkbox" checked={pendingOnly} onChange={e => setPendingOnly(e.target.checked)} /> 학교장확인 전인 것만
+                <input type="checkbox" checked={pendingOnly} onChange={e => setPendingOnly(e.target.checked)} /> 결재 미완료만
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.9rem" }}>
                 기간
@@ -169,7 +168,7 @@ export default function ApprovalsPage() {
                           const done = r.signoffs?.[s.key];
                           return (
                             <React.Fragment key={s.key}>
-                              {i > 0 && <span style={{ color: "#cbd5e1" }}>→</span>}
+                              {i > 0 && <span style={{ color: "#cbd5e1" }}>·</span>}
                               <button onClick={() => void sign(r, s.key)} disabled={!!busy}
                                 title={done ? `${done.by} · ${done.at} (다시 누르면 취소)` : `${s.key} 하기`}
                                 style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: "0.85rem",

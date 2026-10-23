@@ -116,23 +116,34 @@ def test_crisis_without_report_rejected_and_author_from_session():
     assert ws.appended[0][HEAD.index("입력교사명")] == "초1-1"
 
 
-def test_sign_principal_approves_and_inbox_lists_both_kinds():
+def test_sign_needs_all_three_any_order_and_cancel_reopens():
     ws = WS([["p", "Pending", "", "초1-1", "1011", "방어 및 보호를 위한 제지", ""]])
-    calls = []
-    with _patch(ws), mock.patch("app.services.sheets.add_approval_step", side_effect=lambda *a, **k: calls.append((a, k))):
+    signed = {}
+
+    def add(log_id, step, by, cancel=False, memo=""):
+        (signed.pop(step, None) if cancel else signed.__setitem__(step, {"by": by}))
+
+    with _patch(ws), mock.patch("app.services.sheets.add_approval_step", side_effect=add), \
+         mock.patch("app.services.sheets.fetch_approval_states", side_effect=lambda force_refresh=False: {"p": dict(signed)}):
+        B.sign_behavior_log({"log_id": "p", "step": "학교장확인"}, current_admin=ADMIN)   # 순서 무관: 학교장 먼저
         B.sign_behavior_log({"log_id": "p", "step": "담당자확인"}, current_admin=ADMIN)
-        assert status(ws, "p") == "Pending"
-        B.sign_behavior_log({"log_id": "p", "step": "학교장확인"}, current_admin=ADMIN)
-        assert status(ws, "p") == "Approved"
+        assert status(ws, "p") == "Pending"                                              # 2/3 은 미완료
+        B.sign_behavior_log({"log_id": "p", "step": "학교장보고요청"}, current_admin=ADMIN)
+        assert status(ws, "p") == "Pending"                                              # 보고요청은 완료 조건 아님
+        r = B.sign_behavior_log({"log_id": "p", "step": "교감확인"}, current_admin=ADMIN)
+        assert r["complete"] is True and status(ws, "p") == "Approved"
+        B.sign_behavior_log({"log_id": "p", "step": "교감확인", "cancel": True}, current_admin=ADMIN)
+        assert status(ws, "p") == "Pending"                                              # 취소하면 다시 대기
         with pytest.raises(HTTPException):
             B.sign_behavior_log({"log_id": "p", "step": "아무거나"}, current_admin=ADMIN)
-    assert [c[0][1] for c in calls] == ["담당자확인", "학교장확인"]
 
+
+def test_inbox_lists_both_kinds_and_pending_only():
     recs = [{"Log_ID": "r", "행동발생날짜": "2099-01-01", "물리적제지여부": "O(제지)", "Status": "Pending"},
             {"Log_ID": "d", "행동발생날짜": "2099-01-01", "물리적제지여부": "X(보고서 작성 불필요)", "Status": "Approved"},
             {"Log_ID": "", "행동발생날짜": "2099-01-01", "Status": "Approved"}]
     with mock.patch.object(B, "fetch_all_records", return_value=recs), \
-         mock.patch("app.services.sheets.fetch_approval_states", return_value={"d": {"학교장확인": {"by": "a", "at": "x"}}}):
+         mock.patch("app.services.sheets.fetch_approval_states", return_value={"d": {k: {"by": "a", "at": "x"} for k in ("담당자확인", "교감확인", "학교장확인")}}):
         allr = B.get_approval_inbox(kind="all", days=30, pending_only=False, current_admin=ADMIN)["logs"]
         assert {(r["Log_ID"], r["kind"]) for r in allr} == {("r", "report"), ("d", "data")}
         assert [r["Log_ID"] for r in B.get_approval_inbox(kind="all", days=30, pending_only=True, current_admin=ADMIN)["logs"]] == ["r"]

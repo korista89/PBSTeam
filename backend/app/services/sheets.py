@@ -4813,6 +4813,12 @@ if __name__ == "__main__":
 # 행은 추가만 한다(누가·언제 눌렀는지 이력 보존). 같은 Log_ID·단계의 마지막 행이 현재 상태다.
 # =============================
 APPROVAL_STEPS = ["담당자확인", "교감확인", "학교장확인", "학교장보고요청"]
+# 이 셋이 모두(순서 무관) 확인되어야 결재 완료다
+FINAL_STEPS = ["담당자확인", "교감확인", "학교장확인"]
+
+
+def is_fully_signed(signed: Optional[Dict[str, Any]]) -> bool:
+    return all(s in (signed or {}) for s in FINAL_STEPS)
 APPROVAL_HEADERS = ["Log_ID", "Step", "Action", "By", "At", "Memo"]
 
 

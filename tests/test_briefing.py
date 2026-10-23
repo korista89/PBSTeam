@@ -69,5 +69,5 @@ def test_trend_fills_up_to_three_with_weaker_changes():
 def test_pending_counts_reports_without_principal_check():
     a = log("2026-10-23", "1011", crisis=True); a["Log_ID"] = "a"
     b = log("2026-10-22", "1011", crisis=True); b["Log_ID"] = "b"
-    out = build_briefing([a, b], STUDENTS, [], TODAY, signoffs={"b": {"학교장확인": {}}})
+    out = build_briefing([a, b], STUDENTS, [], TODAY, signoffs={"b": {"담당자확인": {}, "교감확인": {}, "학교장확인": {}}, "a": {"학교장확인": {}}})
     assert "결재 대기 1건" in out["ten_lines"][8]
