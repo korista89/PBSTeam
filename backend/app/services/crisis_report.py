@@ -5,6 +5,7 @@
 """
 import io
 import os
+import re
 from typing import Any, Dict, List, Tuple
 
 from app.services import hwpx_lib as H
@@ -28,11 +29,16 @@ def _g(d: Dict[str, Any], *keys) -> str:
     return ""
 
 
+HOMEROOM = "담임교사:"  # 담임교사 이름도 열을 늘리지 않으려고 1차_경위 첫머리 [담임교사:이름] 표시로 저장한다
+
+
 def split_tags(text: str, allowed=REASONS) -> Tuple[List[str], str]:
-    """'[제지][수업 중 교실 밖 분리] 경위…' → (['제지…', '수업 중 교실 밖 분리'], '경위…'). 앞머리의 허용된 [표시]만 떼어 낸다."""
+    """'[제지][담임교사:홍길동] 경위…' → (['제지…', '담임교사:홍길동'], '경위…'). 앞머리의 허용된 [표시]만 떼어 낸다."""
     t, tags = str(text or "").strip(), []
     while True:
         hit = next((a for a in allowed if t.startswith(f"[{a}]")), None)
+        if not hit and t.startswith(f"[{HOMEROOM}") and "]" in t.split("\n", 1)[0]:
+            hit = t[1:t.index("]")]
         if not hit:
             return tags, t
         tags.append(hit)
@@ -72,8 +78,8 @@ def report_fields(rec: Dict[str, Any], class_name: str = "") -> Dict[str, Any]:
     return {
         "기록번호": rec.get("Log_ID", ""),
         "소속": class_name or rec.get("학급", ""),
-        "학생": f"{rec.get('학생명', '')}({rec.get('학생코드', '')})",
-        "담임교사": "",
+        "학생": re.sub(r"-\d+$", "", str(rec.get("학생명", ""))),  # 가림 이름만(겹침 구분 꼬리 -1011 제외)
+        "담임교사": next((x[len(HOMEROOM):] for x in tags if x.startswith(HOMEROOM)), ""),
         "보고사유": reasons,
         "발생일시": f"{rec.get('행동발생날짜', '')} {rec.get('시간대', '')}".strip(),
         "발생장소": str(rec.get("장소", "")),

@@ -14,13 +14,13 @@ export const FOLLOWUPS: [string, string][] = [
 
 export type Line = { t: string; s: string };
 export type Report = {
-  사유: string[]; 지도교사: string; 지원시간: string; 지원장소: string; 지원교사: string;
+  사유: string[]; 담임교사: string; 지도교사: string; 지원시간: string; 지원장소: string; 지원교사: string;
   A: string; B: string; C: string; 경위: Line[]; 관찰기록: Line[];
   조치: Record<string, { 일시: string; 내용: string }>;
 };
 
 export const emptyReport = (): Report => ({
-  사유: [], 지도교사: "", 지원시간: "", 지원장소: "", 지원교사: "", A: "", B: "", C: "",
+  사유: [], 담임교사: "", 지도교사: "", 지원시간: "", 지원장소: "", 지원교사: "", A: "", B: "", C: "",
   경위: [{ t: "", s: "" }], 관찰기록: [{ t: "", s: "" }],
   조치: Object.fromEntries(FOLLOWUPS.map(([, k]) => [k, { 일시: "", 내용: "" }])),
 });
@@ -38,7 +38,8 @@ export function primaryAction(reasons: string[]): string {
 }
 
 export function reportColumns(r: Report): Record<string, string> {
-  const tags = REASONS.filter(x => r.사유.includes(x)).map(x => `[${x}]`).join("");
+  const homeroom = r.담임교사.replace(/[[\]\n]/g, "").trim();
+  const tags = REASONS.filter(x => r.사유.includes(x)).map(x => `[${x}]`).join("") + (homeroom ? `[담임교사:${homeroom}]` : "");
   const story = linesText(r.경위);
   const cols: Record<string, string> = {
     [ACTION_HEADER]: primaryAction(r.사유),

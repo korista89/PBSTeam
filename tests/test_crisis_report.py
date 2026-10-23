@@ -28,6 +28,7 @@ def _entries(b):
 def test_fields_and_hwpx():
     assert split_tags("[수업 중 교실 내 분리] 내용") == (["수업 중 교실 내 분리"], "내용")
     assert split_tags("[방어 및 보호를 위한 제지][본인/타인 상해 발생]\n10:20 침") == (["방어 및 보호를 위한 제지", "본인/타인 상해 발생"], "10:20 침")
+    assert split_tags("[수업 중 교실 밖 분리][담임교사:정담임]\n10:20 [메모] 침") == (["수업 중 교실 밖 분리", "담임교사:정담임"], "10:20 [메모] 침")
     f = report_fields(REC, "초1-1")
     assert [k for k, v in f["보고사유"].items() if v] == ["방어 및 보호를 위한 제지", "수업 중 교실 밖 분리"]
     assert f["조치사항"][1] == {"구분": "관리자 보고", "일시": "10:30", "내용": "교감 보고"}
@@ -35,7 +36,7 @@ def test_fields_and_hwpx():
     boxes = dict(H.list_checkboxes(e))
     assert boxes["CheckBox6"] == "CHECKED" and boxes["CheckBox1"] == "CHECKED" and boxes["CheckBox7"] == "UNCHECKED"
     x = H._dec(H.sections(e)[0]["data"])
-    for s in ["김O준(1011)", "홍교사", "교감 보고", "PBST 기록번호: abc", "초1-1"]:
+    for s in ["김O준", "홍교사", "교감 보고", "PBST 기록번호: abc", "초1-1"]:
         assert s in x
 
 
@@ -54,7 +55,7 @@ LOG_MAIN_REPORT_HEADERS = {
     *[f"{k}_{s}" for k in ["부상자_치료", "관리자_보고", "학부모_알림", "학생_상담", "학부모_상담", "긴급회의"] for s in ["시간", "내용"]],
 }
 SCREEN = {  # 작성 화면에 교사가 쓴 값
-    "사유": ["방어 및 보호를 위한 제지", "수업 중 교실 밖 분리"], "지도교사": "홍교사",
+    "사유": ["방어 및 보호를 위한 제지", "수업 중 교실 밖 분리"], "담임교사": "정담임", "지도교사": "홍교사",
     "지원시간": "11:30~12:10 (40분)", "지원장소": "심리안정실", "지원교사": "박교사(40분)",
     "A": "활동 전환 안내 직후", "B": "책상을 3회 내리침", "C": "활동 중단",
     "경위": [{"t": "11:20", "s": "학습지를 찢음"}, {"t": "", "s": ""}, {"t": "11:25", "s": "두 교사가 손목을 잡아 제지함(30초)"}],
@@ -79,7 +80,7 @@ def _screen_columns():
 def test_screen_to_print_roundtrip():
     cols = _screen_columns()
     assert set(cols) <= LOG_MAIN_REPORT_HEADERS
-    row = {**cols, "Log_ID": "x1", "학생명": "김O준", "학생코드": "1011", "행동발생날짜": "2026. 10. 23", "시간대(위기행동 시작 시간 기준)": "4구간: 3교시",
+    row = {**cols, "Log_ID": "x1", "학생명": "김O준-1011", "학생코드": "1011", "행동발생날짜": "2026. 10. 23", "시간대(위기행동 시작 시간 기준)": "4구간: 3교시",
            "행동 발생 장소(위기행동 시작 장소 기준)": "교실"}
     f = report_fields(map_log_row(row), "초1-1")
     assert [k for k, v in f["보고사유"].items() if v] == SCREEN["사유"]
@@ -87,12 +88,12 @@ def test_screen_to_print_roundtrip():
               "A": "활동 전환 안내 직후", "B": "책상을 3회 내리침", "C": "활동 중단",
               "경위": "11:20 학습지를 찢음\n11:25 두 교사가 손목을 잡아 제지함(30초)",  # 빈 줄은 빠지고 [사유] 표시는 안 보인다
               "관찰기록": "11:32 도착 후 바닥에 누움\n12:05 교실로 복귀함",
-              "발생일시": "2026-10-23 4구간: 3교시", "발생장소": "교실", "학생": "김O준(1011)"}
+              "발생일시": "2026-10-23 4구간: 3교시", "발생장소": "교실", "학생": "김O준", "담임교사": "정담임"}
     for k, v in expect.items():
         assert f[k] == v, k
     assert f["조치사항"][1] == {"구분": "관리자 보고", "일시": "10/23 12:20", "내용": "교감 구두 보고"}
     x = H._dec(H.sections(_entries(build_hwpx(f)))[0]["data"])
-    for v in ["홍교사", "심리안정실", "박교사(40분)", "책상을 3회 내리침", "11:20 학습지를 찢음", "12:05 교실로 복귀함", "교감 구두 보고", "전화 안내"]:
+    for v in ["정담임", "홍교사", "심리안정실", "박교사(40분)", "책상을 3회 내리침", "11:20 학습지를 찢음", "12:05 교실로 복귀함", "교감 구두 보고", "전화 안내"]:
         assert v in x, v
     boxes = dict(H.list_checkboxes(_entries(build_hwpx(f))))
     assert boxes["CheckBox6"] == "CHECKED" and boxes["CheckBox1"] == "CHECKED" and boxes["CheckBox8"] == "UNCHECKED"

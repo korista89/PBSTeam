@@ -429,8 +429,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
               </div>
               <div data-report-sheet>
                 <ReportSheet edit c={{
-                  소속: studentClass || '', 학생: `${maskName(studentName)}(${studentId})`,
-                  담임교사: <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>인쇄 후 서명</span>,
+                  소속: studentClass || '', 학생: maskName(studentName).replace(/-\d+$/, ''),
+                  담임교사: <input value={report.담임교사} onChange={e => upd({ 담임교사: e.target.value })} placeholder="교사명" style={cell} />,
                   보고사유: REASONS.map(r => (
                     <label key={r} style={{ marginRight: 12, whiteSpace: 'nowrap', fontSize: '9.5pt', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <input type="checkbox" checked={report.사유.includes(r)} onChange={() => upd({ 사유: report.사유.includes(r) ? report.사유.filter(x => x !== r) : [...report.사유, r] })} /> {r}
