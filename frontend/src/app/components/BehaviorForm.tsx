@@ -137,7 +137,7 @@ function CheckboxGroup({ options, selected, onToggle }: { options: string[]; sel
   );
 }
 
-export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: string }) {
+export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode, studentClass }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: string, studentClass?: string }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   // 두 갈래: 보고서 사안이 아닌 위기행동은 '데이터만 입력', 제지·개별학생교육지원·상해가
@@ -228,7 +228,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     const act = formData.물리적제지여부;
     const line = (label: string, v: string) => (v.trim() ? `[${label}] ${v.trim()}` : '');
     const draft = {
-      기록번호: '(저장 전 미리보기)', 소속: String(user?.class_name || '').replace(/관리자$/, ''), 학생: `${maskName(studentName)}(${studentId})`, 담임교사: '',
+      기록번호: '(저장 전 미리보기)', 소속: studentClass || '', 학생: `${maskName(studentName)}(${studentId})`, 담임교사: '',
       보고사유: {
         '방어 및 보호를 위한 제지': act === '방어 및 보호를 위한 제지',
         '본인/타인 상해 발생': act === '본인/타인상해만 발생',

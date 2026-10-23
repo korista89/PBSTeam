@@ -205,6 +205,7 @@ export default function BehaviorPage() {
                       studentName={maskName(selectedStudent.학생이름 || selectedStudent.이름 || selectedStudent.학생명)}
                       onLogSubmitted={handleLogSubmitted}
                       defaultMode={requestedMode}
+                      studentClass={selectedStudent.학급 || ""}
                     />
                   </div>
                   <div className="card" style={{ padding: "20px" }}>
