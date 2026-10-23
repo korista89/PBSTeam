@@ -14,7 +14,7 @@ TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "data", "crisis_report_
 # 보고 사유 체크박스(양식 안 순서): 제지 / 상해 / 수업 중 교실 내 / 수업 중 교실 밖 / 수업시간 외 특정장소
 REASONS = ["방어 및 보호를 위한 제지", "본인/타인 상해 발생", "수업 중 교실 내 분리", "수업 중 교실 밖 분리", "수업시간 외 특정장소 분리"]
 REASON_BOXES = ["CheckBox6", "CheckBox7", "CheckBox8", "CheckBox1", "CheckBox9"]
-# 개별학생교육지원 유형은 경위 첫머리 [유형] 표시로 저장한다(Log_Main 열 구조를 바꾸지 않기 위해)
+# 보고 사유는 1차_경위(사이트)·개별학생교육지원 경위(구글 폼) 첫머리에 [사유] 표시로 저장한다(Log_Main 열 구조를 바꾸지 않기 위해)
 SUPPORT_TYPES = REASONS[2:]
 FOLLOWUPS = [("부상자 치료", "부상자_치료"), ("관리자 보고", "관리자_보고"), ("학부모 알림", "학부모_알림"),
              ("학생 상담", "학생_상담"), ("학부모 상담", "학부모_상담"), ("긴급회의", "긴급회의")]
@@ -28,37 +28,42 @@ def _g(d: Dict[str, Any], *keys) -> str:
     return ""
 
 
-def split_support_type(text: str) -> Tuple[str, str]:
-    """'[수업 중 교실 밖 분리] 경위…' → (유형, 경위)."""
-    t = str(text or "").strip()
-    for s in SUPPORT_TYPES:
-        if t.startswith(f"[{s}]"):
-            return s, t[len(s) + 2:].strip()
-    return "", t
+def split_tags(text: str, allowed=REASONS) -> Tuple[List[str], str]:
+    """'[제지][수업 중 교실 밖 분리] 경위…' → (['제지…', '수업 중 교실 밖 분리'], '경위…'). 앞머리의 허용된 [표시]만 떼어 낸다."""
+    t, tags = str(text or "").strip(), []
+    while True:
+        hit = next((a for a in allowed if t.startswith(f"[{a}]")), None)
+        if not hit:
+            return tags, t
+        tags.append(hit)
+        t = t[len(hit) + 2:].lstrip()
 
 
 def report_fields(rec: Dict[str, Any], class_name: str = "") -> Dict[str, Any]:
+    """사이트 입력(1차_경위 앞머리에 [보고 사유], 시각별 줄)과 구글 폼 옛 기록([제지]·[개별학생교육지원]·[상해] 열)을 모두 같은 양식 칸으로."""
     cd = rec.get("crisis_details") or {}
     fr = rec.get("form_report_details") or {}
     action = str(rec.get("제지유형_원문") or "")
-    stype, support_story = split_support_type(_g(fr, "개별학생교육지원_경위"))
+    tags, story1 = split_tags(_g(cd, "1차_경위"))
+    stypes, support_story = split_tags(_g(fr, "개별학생교육지원_경위"), SUPPORT_TYPES)
 
-    reasons = {
-        REASONS[0]: "제지" in action or bool(_g(fr, "제지_경위", "제지_방법")),
-        REASONS[1]: "상해" in action or bool(_g(fr, "상해_경위", "상해_대상자")),
-    }
-    for s in SUPPORT_TYPES:
-        reasons[s] = stype == s
-    if "개별학생교육지원" in action and not stype:
+    reasons = {r: r in tags or r in stypes for r in REASONS}
+    reasons[REASONS[0]] |= "제지" in action or bool(_g(fr, "제지_경위", "제지_방법"))
+    reasons[REASONS[1]] |= "상해" in action or bool(_g(fr, "상해_경위", "상해_대상자"))
+    if "개별학생교육지원" in action and not any(reasons[s] for s in SUPPORT_TYPES):
         reasons[REASONS[3]] = True  # 유형 미기재 개별학생교육지원은 가장 흔한 '수업 중 교실 밖'으로 둔다
 
     story = "\n".join(x for x in [
+        story1,
+        _g(cd, "2차_경위") and f"[2차] {_g(cd, '2차_경위')}",
         _g(fr, "제지_경위") and f"[제지 경위] {_g(fr, '제지_경위')}",
         _g(fr, "제지_방법") and f"[제지 방법] {_g(fr, '제지_방법')}",
         support_story and f"[개별학생교육지원 경위] {support_story}",
         _g(fr, "상해_경위") and f"[상해 경위] {_g(fr, '상해_경위')}" + (f" (상해 입은 사람: {_g(fr, '상해_대상자')})" if _g(fr, "상해_대상자") else ""),
     ] if x)
     observe = "\n".join(x for x in [
+        _g(cd, "1차_관찰기록"),
+        _g(cd, "2차_관찰기록") and f"[2차] {_g(cd, '2차_관찰기록')}",
         _g(fr, "개별학생교육지원_내용_회복과정"),
         _g(fr, "제지_사후조치_특기사항", "개별학생교육지원_사후조치_특기사항", "상해_사후조치_특기사항"),
     ] if x)
@@ -73,9 +78,9 @@ def report_fields(rec: Dict[str, Any], class_name: str = "") -> Dict[str, Any]:
         "발생일시": f"{rec.get('행동발생날짜', '')} {rec.get('시간대', '')}".strip(),
         "발생장소": str(rec.get("장소", "")),
         "지도교사": _g(cd, "발생 시 지도교사"),
-        "지원시간": _g(fr, "개별학생교육지원_시간"),
-        "지원장소": _g(fr, "개별학생교육지원_장소_신규"),
-        "지원교사": _g(fr, "개별학생교육지원_교사"),
+        "지원시간": _g(cd, "1차_개별학생교육지원_시간") or _g(fr, "개별학생교육지원_시간"),
+        "지원장소": _g(cd, "1차_개별학생교육지원_장소") or _g(fr, "개별학생교육지원_장소_신규"),
+        "지원교사": _g(cd, "1차_개별학생교육지원_교사") or _g(fr, "개별학생교육지원_교사"),
         "A": _g(cd, "A_배경_선행사건") or " · ".join(x for x in [rec.get("배경사건", ""), rec.get("선행사건", "")] if x),
         "B": _g(cd, "B_나타난_위기행동") or " · ".join(x for x in [rec.get("행동유형", ""), f"강도 {rec.get('강도', '')}", rec.get("특기사항", "")] if x),
         "C": _g(cd, "C_후속결과") or str(rec.get("후속결과", "")),

@@ -6,6 +6,8 @@ import { API_BASE_URL } from '../constants';
 import { useAuth } from './AuthProvider';
 import DropdownTextarea from './DropdownTextarea';
 import { maskName } from '../utils';
+import ReportSheet from './ReportSheet';
+import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES } from '../crisisReport';
 
 const TIME_SLOTS = [
   "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
@@ -19,9 +21,6 @@ const PLACES = [
   "시청각실", "회의실", "운동장/놀이터", "주차장", "통학버스", "경은마루", "강당",
   "컴퓨터실", "식품조리실", "가정생활실", "미래교육실", "세탁교육실", "진로준비실",
   "워크스테이션", "VR1실", "VR2실", "집", "기타"
-];
-const ACTION_TYPES = [
-  "방어 및 보호를 위한 제지", "개별학생교육지원", "본인/타인상해만 발생", "X - 보고서 작성 불필요"
 ];
 const BG_OPTIONS = [
   "수면 부족", "늦은 등교", "식사 못함", "약물 변화", "신체 불편", "컨디션 저하",
@@ -83,7 +82,7 @@ const EXAMPLE_BEHAVIORS = [
   "교실 문을 발로 차거나 창문 난간에 올라가는 등 위험 행동을 보임",
   "자신의 머리를 벽에 부딪히거나 때리는 자해 행동을 함",
   "교사의 지시를 완강히 거부하며 바닥에 드러누움",
-  "통제 불능 상태로 복도를 배회하며 소리를 지름",
+  "복도를 뛰어다니며 큰 소리로 소리를 지름",
   "다른 학생에게 침을 뱉거나 할퀴려고 시도함",
   "자리에서 이탈하여 갑자기 교실 밖으로 뛰어 나감"
 ];
@@ -99,31 +98,6 @@ const EXAMPLE_CONSEQUENCES = [
   "상황이 지속되어 학부모에게 연락 후 조기 귀가 조치됨",
   "안정 후 자신의 행동에 대해 교사와 면담을 진행함"
 ];
-const EXAMPLE_OBSERVATIONS = [
-  "직접 입력",
-  "분리 장소 도착 후에도 10분 이상 소리를 지르고 물건을 차며 흥분함",
-  "바닥에 엎드려 울기를 반복하다가 감정 카드를 보고 점차 안정됨",
-  "자리에 앉기를 거부하고 벽에 머리를 부딪히는 등 자해 시도를 함",
-  "교사의 지시나 질문에 반응하지 않고 멍한 상태로 15분 이상 앉아 있음",
-  "안정실 도착 후 5분 만에 울음을 그치고 대화에 응하며 스스로 진정함",
-  "울면서 혼잣말을 하거나 자신의 몸을 가볍게 때리는 행동을 반복함",
-  "심호흡하기, 약속하기 활동에 참여하며 점진적으로 지시에 순응함",
-  "간식 등 선호 자극 제공 후 10분간 휴식하자 완전히 안정되어 복귀 의사 표현",
-  "분리지도 내내 불만을 토로했으나, 20분 경과 후 스스로 감정을 가라앉힘"
-];
-const EXAMPLE_PROCESS = [
-  "직접 입력",
-  "수업 중 고성방가 및 욕설로 수차례 제지하였으나 불응하여 지정 장소로 분리",
-  "타 학생을 공격하려는 징후를 보여 안전 확보를 위해 즉각적으로 분리함",
-  "교구재 파손 후 교사에게 물건을 던져 물리적 제지 후 심리안정실로 이동",
-  "이동 수업 중 복도에 주저앉아 고함을 쳐 다른 반에 방해되지 않도록 분리함",
-  "식사/간식 거부 및 식판을 던져 주변 학생 대피 후 1:1 대면하여 분리함",
-  "돌발적으로 교실을 이탈하여 복도를 뛰어다녀 뒤따라가 안전하게 안정실로 안내",
-  "지시에 불응하고 교사를 때리려 하여 지도교사 2인이 양손을 제지하고 분리",
-  "자해 위험이 높아 신체적 안전 확보가 우선이라 판단하여 즉시 물리적 제지함",
-  "쉬는 시간에 또래와 다툼 후 흥분하여 책상을 엎으려 시도하여 즉각 개입 및 분리"
-];
-
 function CheckboxGroup({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (opt: string) => void }) {
   return (
     <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
@@ -137,13 +111,39 @@ function CheckboxGroup({ options, selected, onToggle }: { options: string[]; sel
   );
 }
 
+// 경위·관찰기록: '시각 + 한 일' 한 줄씩 시간순으로 쌓는다. 예시 문장을 고르면 그 줄에 들어가고 그대로 고쳐 쓴다.
+function LinesInput({ rows, onChange, examples }: { rows: Line[]; onChange: (v: Line[]) => void; examples: { label: string; items: string[] }[] }) {
+  const set = (i: number, patch: Partial<Line>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <div>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'flex-start' }}>
+          <input type="time" value={r.t} onChange={e => set(i, { t: e.target.value })} aria-label={`${i + 1}번째 줄 시각`} style={{ width: 96, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4 }} />
+          <textarea value={r.s} rows={1} onChange={e => set(i, { s: e.target.value })} aria-label={`${i + 1}번째 줄 내용`}
+            placeholder="보인 행동 또는 교사가 한 일" style={{ flex: 1, minWidth: 0, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', resize: 'vertical', fieldSizing: 'content' } as React.CSSProperties} />
+          <select value="" onChange={e => e.target.value && set(i, { s: e.target.value })} aria-label="예시 문장 고르기" style={{ width: 62, padding: 4, fontSize: '0.75rem' }}>
+            <option value="">예시</option>
+            {examples.map(g => <optgroup key={g.label} label={g.label}>{g.items.map(x => <option key={x} value={x}>{x}</option>)}</optgroup>)}
+          </select>
+          {rows.length > 1 && <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label="줄 지우기" style={{ padding: '4px 7px', border: '1px solid #cbd5e1', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>✕</button>}
+        </div>
+      ))}
+      <button type="button" onClick={() => onChange([...rows, { t: '', s: '' }])} style={{ padding: '4px 10px', fontSize: '0.8rem', border: '1px dashed #64748b', borderRadius: 4, background: '#f8fafc', cursor: 'pointer' }}>＋ 줄 추가</button>
+    </div>
+  );
+}
+
+function VagueHint({ text }: { text: string }) {
+  const words = vagueIn(text);
+  return words.length ? <div style={{ fontSize: '0.75rem', color: '#b45309', marginTop: 3 }}>💡 &lsquo;{words.join("', '")}&rsquo; 대신 실제로 보인 행동(예: 소리를 지름, 발로 문을 3회 참)으로 써 주세요.</div> : null;
+}
+
 export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode, studentClass }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: string, studentClass?: string }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   // 두 갈래: 보고서 사안이 아닌 위기행동은 '데이터만 입력', 제지·개별학생교육지원·상해가
   // 있었으면 '보고서 작성'(보고서 필수). 서버도 같은 규칙으로 검사한다.
   const [mode, setModeState] = useState<'data' | 'report'>(defaultMode === 'report' ? 'report' : 'data');
-  const NO_REPORT = 'X - 보고서 작성 불필요';
 
   const [formData, setFormData] = useState({
     행동발생날짜: new Date().toISOString().split('T')[0],
@@ -152,7 +152,6 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     행동유형: '',
     강도: '',
     기능: '', 기능기타: '',
-    물리적제지여부: defaultMode === 'report' ? '' : 'X - 보고서 작성 불필요',
     발생횟수: '', 발생횟수기타: '',
     특기사항: ''
   });
@@ -163,35 +162,11 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     setList(list.includes(opt) ? list.filter(o => o !== opt) : [...list, opt]);
   };
 
-  const [crisisData, setCrisisData] = useState({
-    발생시지도교사: '',
-    배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
-    // [방어 및 보호를 위한 제지 사용 학교장 보고서]
-    제지_경위: '', 제지_방법: '', 제지_사후조치_특기사항: '', 제지_법적의무_확인: '',
-    // [개별학생교육지원 실시 학교장 보고서] — 1·2차 구분 없이 1회성으로 기록
-    개별학생교육지원_시간: '', 개별학생교육지원_교사: '', 개별학생교육지원_경위: '',
-    개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '',
-    개별학생교육지원_법적의무_확인: [] as string[],
-    // [본인/타인 상해 발생 보고서]
-    상해_대상자: '', 상해_경위: '', 상해_사후조치_특기사항: '', 상해_후속조치_확인: '',
-    // 공통 발생 이후 조치사항
-    부상자_치료_시간: '', 부상자_치료_내용: '',
-    관리자_보고_시간: '', 관리자_보고_내용: '',
-    학부모_알림_시간: '', 학부모_알림_내용: '',
-    학생_상담_시간: '', 학생_상담_내용: '',
-    학부모_상담_시간: '', 학부모_상담_내용: '',
-    긴급회의_시간: '', 긴급회의_내용: ''
-  });
+  const [report, setReport] = useState<Report>(emptyReport);
+  const upd = (patch: Partial<Report>) => setReport(prev => ({ ...prev, ...patch }));
 
   const [message, setMessage] = useState('');
-  // 개별학생교육지원 유형(보고서 '보고 사유' 체크와 연결). 시트 열을 늘리지 않으려고 경위 첫머리에 [유형]으로 저장한다.
-  const [지원유형, set지원유형] = useState('');
-  const isCrisis = formData.물리적제지여부 !== 'X - 보고서 작성 불필요' && formData.물리적제지여부 !== '';
-
-  const setMode = (m: 'data' | 'report') => {
-    setModeState(m);
-    setFormData(prev => ({ ...prev, 물리적제지여부: m === 'data' ? NO_REPORT : (prev.물리적제지여부 === NO_REPORT ? '' : prev.물리적제지여부) }));
-  };
+  const setMode = (m: 'data' | 'report') => setModeState(m);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -206,50 +181,49 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     }
   };
 
-  const handleCrisisChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setCrisisData({ ...crisisData, [e.target.name]: e.target.value });
-  };
-
-  // 개별학생교육지원 법적의무 확인 — 실제 구글폼이 "당일 학교장 보고 여부"/"당일 학부모
-  // 알림 여부" 두 항목을 체크박스(복수선택)로 받고 있어, 사이트도 같은 형식으로 맞춘다.
-  const toggleSupportLegalCheck = (opt: string) => {
-    setCrisisData(prev => ({
-      ...prev,
-      개별학생교육지원_법적의무_확인: prev.개별학생교육지원_법적의무_확인.includes(opt)
-        ? prev.개별학생교육지원_법적의무_확인.filter(o => o !== opt)
-        : [...prev.개별학생교육지원_법적의무_확인, opt]
-    }));
-  };
-
-  // 저장 전에도 작성 중인 내용을 보고서 양식으로 인쇄해 볼 수 있게, 보고서 화면(/report/crisis/draft)에 넘긴다.
-  // 항목 구성은 서버 report_fields() 와 같다.
-  const previewReport = () => {
-    const c = crisisData;
-    const act = formData.물리적제지여부;
-    const line = (label: string, v: string) => (v.trim() ? `[${label}] ${v.trim()}` : '');
-    const draft = {
-      기록번호: '(저장 전 미리보기)', 소속: studentClass || '', 학생: `${maskName(studentName)}(${studentId})`, 담임교사: '',
-      보고사유: {
-        '방어 및 보호를 위한 제지': act === '방어 및 보호를 위한 제지',
-        '본인/타인 상해 발생': act === '본인/타인상해만 발생',
-        '수업 중 교실 내 분리': 지원유형 === '수업 중 교실 내 분리',
-        '수업 중 교실 밖 분리': 지원유형 === '수업 중 교실 밖 분리',
-        '수업시간 외 특정장소 분리': 지원유형 === '수업시간 외 특정장소 분리',
-      },
-      발생일시: `${formData.행동발생날짜} ${formData.시간대.join(', ')}`.trim(),
-      발생장소: formData.장소 === '기타' ? formData.장소기타 : formData.장소,
-      지도교사: c.발생시지도교사, 지원시간: c.개별학생교육지원_시간, 지원장소: c.개별학생교육지원_장소_신규, 지원교사: c.개별학생교육지원_교사,
-      A: c.배경_선행사건, B: c.나타난_위기행동, C: c.후속결과,
-      경위: [line('제지 경위', c.제지_경위), line('제지 방법', c.제지_방법), line('개별학생교육지원 경위', c.개별학생교육지원_경위),
-        line('상해 경위', c.상해_경위) + (c.상해_대상자.trim() ? ` (상해 입은 사람: ${c.상해_대상자.trim()})` : '')].filter(Boolean).join('\n'),
-      관찰기록: [c.개별학생교육지원_내용_회복과정, c.제지_사후조치_특기사항, c.개별학생교육지원_사후조치_특기사항, c.상해_사후조치_특기사항].filter(v => v.trim()).join('\n'),
-      조치사항: ([['부상자 치료', '부상자_치료'], ['관리자 보고', '관리자_보고'], ['학부모 알림', '학부모_알림'], ['학생 상담', '학생_상담'], ['학부모 상담', '학부모_상담'], ['긴급회의', '긴급회의']] as const)
-        .map(([구분, k]) => ({ 구분, 일시: (c as any)[`${k}_시간`] || '', 내용: (c as any)[`${k}_내용`] || '' })),
-      법적의무확인: [c.제지_법적의무_확인, c.개별학생교육지원_법적의무_확인.join(', '), c.상해_후속조치_확인].filter(v => v && v.trim()).join(' / '),
-      상태: '',
+  // 제출과 미리보기가 같은 payload를 쓴다(미리보기는 서버가 저장본과 같은 경로로 양식 칸을 만든다).
+  const buildPayload = (): Record<string, string> => {
+    const 장소값 = formData.장소 === '기타' ? formData.장소기타 : formData.장소;
+    const 기능값 = formData.기능 === '기타' ? formData.기능기타 : formData.기능;
+    const 발생횟수값 = formData.발생횟수 === '기타' ? formData.발생횟수기타 : formData.발생횟수;
+    return {
+      학생코드: studentId,
+      학생명: maskName(studentName),
+      입력교사명: user?.name || user?.id || '알수없음',
+      행동발생날짜: formData.행동발생날짜,
+      '시간대(위기행동 시작 시간 기준)': formData.시간대.join(', '),
+      '행동 발생 장소(위기행동 시작 장소 기준)': 장소값,
+      '행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)': formData.행동유형,
+      '강도(1~5점 척도)': formData.강도,
+      '기능(이번 행동을 통해 파악된 기능)': 기능값,
+      '발생횟수(한 에피소드 당 1회로 입력 권장)': 발생횟수값,
+      '특기사항(기타)': formData.특기사항,
+      '배경사건 - 오늘 평소와 다른 점이 있었나요? (복수 선택 가능)': 배경사건.join(', '),
+      '선행사건 - 행동 직전에 무엇이 있었나요?   (복수 선택 가능)': 선행사건.join(', '),
+      '후속결과 - 행동 직후 무엇이 달라졌나요?   (복수 선택 가능)': 후속결과.join(', '),
+      ...(mode === 'report' ? reportColumns(report) : { [ACTION_HEADER]: NO_REPORT }),
     };
-    try { localStorage.setItem('pbst_report_draft', JSON.stringify(draft)); } catch { /* 저장 불가 시 미리보기만 생략 */ }
-    window.open('/report/crisis/draft', '_blank');
+  };
+
+  // 보고서 필수 칸 — 비어 있으면 안내 문구, 다 찼으면 ''.
+  const reportProblem = () => {
+    if (mode !== 'report') return '';
+    if (!report.사유.length) return '보고 사유를 하나 이상 체크하세요.';
+    if (!report.지도교사.trim()) return '발생 시 지도교사를 쓰세요.';
+    if (!report.경위.some(r => r.s.trim())) return '경위를 한 줄 이상 쓰세요.';
+    return '';
+  };
+
+  const previewReport = async () => {
+    const w = window.open('', '_blank');  // 팝업 차단을 피하려고 클릭 순간에 창을 먼저 연다
+    try {
+      const r = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/report-preview`, buildPayload());
+      localStorage.setItem('pbst_report_draft', JSON.stringify(r.data));
+      if (w) w.location.href = '/report/crisis/draft'; else window.open('/report/crisis/draft', '_blank');
+    } catch (err: any) {
+      w?.close();
+      setMessage('❌ 미리보기 실패: ' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -258,89 +232,19 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     setMessage('');
 
     try {
-      const 장소값 = formData.장소 === '기타' ? formData.장소기타 : formData.장소;
-      const 기능값 = formData.기능 === '기타' ? formData.기능기타 : formData.기능;
-      const 발생횟수값 = formData.발생횟수 === '기타' ? formData.발생횟수기타 : formData.발생횟수;
-
-      const payload: Record<string, string> = {
-        학생코드: studentId,
-        학생명: maskName(studentName),
-        입력교사명: user?.name || user?.id || '알수없음',
-        행동발생날짜: formData.행동발생날짜,
-        '시간대(위기행동 시작 시간 기준)': formData.시간대.join(', '),
-        '행동 발생 장소(위기행동 시작 장소 기준)': 장소값,
-        '행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)': formData.행동유형,
-        '강도(1~5점 척도)': formData.강도,
-        '기능(이번 행동을 통해 파악된 기능)': 기능값,
-        '방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부': formData.물리적제지여부,
-        '발생횟수(한 에피소드 당 1회로 입력 권장)': 발생횟수값,
-        '특기사항(기타)': formData.특기사항,
-        '배경사건 - 오늘 평소와 다른 점이 있었나요? (복수 선택 가능)': 배경사건.join(', '),
-        '선행사건 - 행동 직전에 무엇이 있었나요?   (복수 선택 가능)': 선행사건.join(', '),
-        '후속결과 - 행동 직후 무엇이 달라졌나요?   (복수 선택 가능)': 후속결과.join(', '),
-      };
-
-      if (isCrisis) {
-        payload['발생 시 지도교사'] = crisisData.발생시지도교사;
-        payload['A_배경_선행사건'] = crisisData.배경_선행사건;
-        payload['B_나타난_위기행동'] = crisisData.나타난_위기행동;
-        payload['C_후속결과'] = crisisData.후속결과;
-
-        if (formData.물리적제지여부 === '방어 및 보호를 위한 제지') {
-          payload['[제지] 방어 및 보호를 위한 제지를 사용하게 된 경위'] = crisisData.제지_경위;
-          payload['[제지] 방어 및 보호를 위한 제지에 사용한 방법'] = crisisData.제지_방법;
-          payload['[제지] 부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.제지_사후조치_특기사항;
-          payload['[제지]  법적 의무 실행 여부 확인'] = crisisData.제지_법적의무_확인;
-        } else if (formData.물리적제지여부 === '개별학생교육지원') {
-          payload['[개별학생교육지원] 개별학생교육지원을 실시한 시간 (24시간대기준) - 예: 11:30~12:10 (30분)'] = crisisData.개별학생교육지원_시간;
-          payload['[개별학생교육지원] 개별학생교육지원을 담당한 교사'] = crisisData.개별학생교육지원_교사;
-          payload['[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위'] = (지원유형 ? `[${지원유형}] ` : '') + crisisData.개별학생교육지원_경위;
-          payload['[개별학생교육지원] 개별학생교육지원 장소'] = crisisData.개별학생교육지원_장소_신규;
-          payload['[개별학생교육지원] 개별학생교육지원 내용 및 회복 과정'] = crisisData.개별학생교육지원_내용_회복과정;
-          payload['[개별학생교육지원] 부상자 치료, 가정학습 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.개별학생교육지원_사후조치_특기사항;
-          payload['[개별학생교육지원]  법적 의무 실행 여부 확인'] = crisisData.개별학생교육지원_법적의무_확인.join(', ');
-        } else if (formData.물리적제지여부 === '본인/타인상해만 발생') {
-          payload['[상해] 상해를 입은 사람'] = crisisData.상해_대상자;
-          payload['[상해]  상해가 발생하게 된 경위'] = crisisData.상해_경위;
-          payload['[상해]  부상자 치료 등 사후조치 관련 특기사항 (누가 어디를 다쳐서 어떻게 조치했는지)'] = crisisData.상해_사후조치_특기사항;
-          payload['[상해]  후속 조치 여부 확인'] = crisisData.상해_후속조치_확인;
-        }
-
-        payload['부상자_치료_시간'] = crisisData.부상자_치료_시간;
-        payload['부상자_치료_내용'] = crisisData.부상자_치료_내용;
-        payload['관리자_보고_시간'] = crisisData.관리자_보고_시간;
-        payload['관리자_보고_내용'] = crisisData.관리자_보고_내용;
-        payload['학부모_알림_시간'] = crisisData.학부모_알림_시간;
-        payload['학부모_알림_내용'] = crisisData.학부모_알림_내용;
-        payload['학생_상담_시간'] = crisisData.학생_상담_시간;
-        payload['학생_상담_내용'] = crisisData.학생_상담_내용;
-        payload['학부모_상담_시간'] = crisisData.학부모_상담_시간;
-        payload['학부모_상담_내용'] = crisisData.학부모_상담_내용;
-        payload['긴급회의_시간'] = crisisData.긴급회의_시간;
-        payload['긴급회의_내용'] = crisisData.긴급회의_내용;
-      }
-
-      const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log`, payload);
+      const problem = reportProblem();
+      if (problem) { setMessage('❌ ' + problem); return; }
+      const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log`, buildPayload());
 
       if (res.data.success) {
         setMessage(res.data.status === 'Pending' ? '✅ 위기행동 데이터와 보고서가 제출되었습니다 (관리자 승인 대기).' : '✅ 위기행동 데이터가 저장되었습니다 (보고서 없음).');
         setFormData({
           행동발생날짜: new Date().toISOString().split('T')[0], 시간대: [], 장소: '', 장소기타: '',
-          행동유형: '', 강도: '', 기능: '', 기능기타: '', 물리적제지여부: mode === 'data' ? NO_REPORT : '',
+          행동유형: '', 강도: '', 기능: '', 기능기타: '',
           발생횟수: '', 발생횟수기타: '', 특기사항: ''
         });
         set배경사건([]); set선행사건([]); set후속결과([]);
-        setCrisisData({
-          발생시지도교사: '', 배경_선행사건: '', 나타난_위기행동: '', 후속결과: '',
-          제지_경위: '', 제지_방법: '', 제지_사후조치_특기사항: '', 제지_법적의무_확인: '',
-          개별학생교육지원_시간: '', 개별학생교육지원_교사: '', 개별학생교육지원_경위: '',
-          개별학생교육지원_장소_신규: '', 개별학생교육지원_내용_회복과정: '', 개별학생교육지원_사후조치_특기사항: '',
-          개별학생교육지원_법적의무_확인: [] as string[],
-          상해_대상자: '', 상해_경위: '', 상해_사후조치_특기사항: '', 상해_후속조치_확인: '',
-          부상자_치료_시간: '', 부상자_치료_내용: '', 관리자_보고_시간: '', 관리자_보고_내용: '',
-          학부모_알림_시간: '', 학부모_알림_내용: '', 학생_상담_시간: '', 학생_상담_내용: '',
-          학부모_상담_시간: '', 학부모_상담_내용: '', 긴급회의_시간: '', 긴급회의_내용: ''
-        });
+        setReport(emptyReport());
         onLogSubmitted();
       } else {
         setMessage('❌ 오류 발생: ' + res.data.message);
@@ -475,18 +379,6 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           </label>
         </div>
 
-        {mode === 'report' && (
-        <div style={{ ...groupStyle, backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px', color: '#b91c1c' }}>방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부 *</label>
-          {ACTION_TYPES.filter(a => a !== NO_REPORT).map(a => (
-            <label key={a} style={radioStyle}>
-              <input type="radio" name="물리적제지여부" value={a} checked={formData.물리적제지여부 === a} onChange={handleChange} required />
-              {a}
-            </label>
-          ))}
-        </div>
-        )}
-
         <div style={groupStyle}>
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>배경사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(오늘 평소와 다른 점 — 복수 선택 가능)</span></label>
           <CheckboxGroup options={BG_OPTIONS} selected={배경사건} onToggle={(o) => toggleIn(배경사건, set배경사건, o)} />
@@ -508,170 +400,51 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         </div>
         </>
 
-        {/* ── CRISIS REPORT BRANCHING (상세 입력 모드에서만) ── */}
-        {isCrisis && mode === 'report' && (
-          <div style={{ marginTop: '20px', padding: '20px', border: '2px solid #b91c1c', borderRadius: '12px', backgroundColor: '#fff' }}>
-            <h3 style={{ color: '#b91c1c', textAlign: 'center', marginBottom: '5px' }}>🚨 위기행동 지원 및 개별학생교육지원 보고서</h3>
-            <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', marginBottom: '20px' }}>
-              💡 각 항목의 <strong>[📝 예시 선택]</strong> 버튼을 눌러 예시 문장을 선택한 후 편집하세요. 작성 부담이 줄어듭니다!
-            </p>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ fontWeight: 'bold' }}>발생 시 지도교사: *</label>
-              <input type="text" name="발생시지도교사" value={crisisData.발생시지도교사} onChange={handleCrisisChange} style={{ marginLeft: '10px', padding: '6px', border: '1px solid #ccc', borderRadius: '4px' }} required />
-            </div>
-
-            {/* 조치유형(제지/개별학생교육지원/상해)에 따라 학교장 보고서 3종 중 하나만 노출 —
-                구글 폼도 동일하게 조치유형 답변에 따라 해당 섹션으로만 진입한다. */}
-            {formData.물리적제지여부 === '방어 및 보호를 위한 제지' && (
-              <div style={{ marginBottom: '20px', padding: '14px', border: '1px solid #fca5a5', borderRadius: '8px', backgroundColor: '#fef2f2' }}>
-                <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[방어 및 보호를 위한 제지 사용 학교장 보고서]</h4>
-                <div style={{ marginBottom: '10px' }}>
-                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>제지를 사용하게 된 경위:</div>
-                  <DropdownTextarea name="제지_경위" value={crisisData.제지_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>제지에 사용한 방법:</label>
-                  <input type="text" name="제지_방법" value={crisisData.제지_방법} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>
-                  <input type="text" name="제지_사후조치_특기사항" value={crisisData.제지_사후조치_특기사항} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>법적 의무 실행 여부 확인:</label>
-                  {['예', '아니오'].map(v => (
-                    <label key={v} style={{ marginRight: '16px' }}>
-                      <input type="radio" name="제지_법적의무_확인" value={v} checked={crisisData.제지_법적의무_확인 === v} onChange={handleCrisisChange} /> {v}
-                    </label>
-                  ))}
-                </div>
+        {/* ── 보고서: 인쇄 양식과 같은 표(ReportSheet)에 바로 쓴다. 쓴 그대로 인쇄된다. ── */}
+        {mode === 'report' && (() => {
+          const cell: React.CSSProperties = { width: '100%', padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', boxSizing: 'border-box' };
+          const area = (key: 'A' | 'B' | 'C', examples: string[]) => (
+            <><DropdownTextarea name={key} value={report[key]} onChange={e => upd({ [key]: e.target.value } as Partial<Report>)} examples={examples} /><VagueHint text={report[key]} /></>
+          );
+          const seed = (a: string[], b: string[], tail: string) => (a.length || b.length ? [`${[...a, ...b].join(', ')} ${tail}`] : []);
+          const mirror = (v: string) => <span style={{ color: v ? '#0f172a' : '#94a3b8', fontSize: '0.85rem' }}>{v || '위 입력란에서 선택'}</span>;
+          const place = formData.장소 === '기타' ? formData.장소기타 : formData.장소;
+          return (
+            <div style={{ marginTop: 20, padding: '16px', border: '2px solid #b91c1c', borderRadius: 12, background: '#fff', overflowX: 'auto' }}>
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', fontSize: '0.8rem', color: '#7f1d1d', marginBottom: 12, lineHeight: 1.6 }}>
+                아래 표는 인쇄되는 보고서와 같은 칸입니다. 쓴 그대로 인쇄됩니다.<br />
+                경위·관찰기록은 <b>시각 + 한 일</b>을 한 줄씩 시간순으로 쓰세요. <b>누가·어디서·무엇을·어떻게</b>가 드러나게, 해석(&lsquo;흥분함&rsquo;) 대신 <b>보인 행동</b>(&lsquo;소리를 지르며 책상을 3회 침&rsquo;)으로 씁니다.
               </div>
-            )}
-
-            {formData.물리적제지여부 === '개별학생교육지원' && (
-              <div style={{ marginBottom: '20px', padding: '14px', border: '1px solid #fca5a5', borderRadius: '8px', backgroundColor: '#fef2f2' }}>
-                <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[개별학생교육지원 실시 학교장 보고서]</h4>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>실시 시간 (24시간대기준):</label>
-                    <input type="text" name="개별학생교육지원_시간" value={crisisData.개별학생교육지원_시간} onChange={handleCrisisChange} placeholder="예: 11:30~12:10 (30분)" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>장소:</label>
-                    <input type="text" name="개별학생교육지원_장소_신규" value={crisisData.개별학생교육지원_장소_신규} onChange={handleCrisisChange} placeholder="예: 심리안정실" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>담당 교사:</label>
-                    <input type="text" name="개별학생교육지원_교사" value={crisisData.개별학생교육지원_교사} onChange={handleCrisisChange} placeholder="교사명" style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원을 실시하게 된 경위:</div>
-                  <select value={지원유형} onChange={e => set지원유형(e.target.value)} required
-                    style={{ width: '100%', padding: '8px', marginBottom: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
-                    <option value="">개별학생교육지원 유형 선택 *</option>
-                    {['수업 중 교실 내 분리', '수업 중 교실 밖 분리', '수업시간 외 특정장소 분리'].map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                  <DropdownTextarea name="개별학생교육지원_경위" value={crisisData.개별학생교육지원_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>개별학생교육지원 내용 및 회복 과정:</div>
-                  <DropdownTextarea name="개별학생교육지원_내용_회복과정" value={crisisData.개별학생교육지원_내용_회복과정} onChange={handleCrisisChange} examples={EXAMPLE_OBSERVATIONS} />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>
-                  <input type="text" name="개별학생교육지원_사후조치_특기사항" value={crisisData.개별학생교육지원_사후조치_특기사항} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>법적 의무 실행 여부 확인:</label>
-                  {['당일 학교장 보고 여부 (법적 의무)', '당일 학부모 알림 여부 (법적 의무)'].map(opt => (
-                    <label key={opt} style={{ display: 'block', marginBottom: '4px' }}>
-                      <input type="checkbox" checked={crisisData.개별학생교육지원_법적의무_확인.includes(opt)} onChange={() => toggleSupportLegalCheck(opt)} /> {opt}
+              <div style={{ minWidth: 640 }}>
+                <ReportSheet edit c={{
+                  소속: studentClass || '', 학생: `${maskName(studentName)}(${studentId})`,
+                  담임교사: <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>인쇄 후 서명</span>,
+                  보고사유: REASONS.map(r => (
+                    <label key={r} style={{ marginRight: 12, whiteSpace: 'nowrap', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <input type="checkbox" checked={report.사유.includes(r)} onChange={() => upd({ 사유: report.사유.includes(r) ? report.사유.filter(x => x !== r) : [...report.사유, r] })} /> {r}
                     </label>
-                  ))}
-                </div>
+                  )),
+                  발생일시: mirror(`${formData.행동발생날짜} ${formData.시간대.join(', ')}`.trim()),
+                  발생장소: mirror(place),
+                  지도교사: <input value={report.지도교사} onChange={e => upd({ 지도교사: e.target.value })} required placeholder="교사명 *" style={cell} />,
+                  지원시간: <input value={report.지원시간} onChange={e => upd({ 지원시간: e.target.value })} placeholder="11:30~12:10 (40분)" style={cell} />,
+                  지원장소: <input value={report.지원장소} onChange={e => upd({ 지원장소: e.target.value })} placeholder="심리안정실" style={cell} />,
+                  지원교사: <input value={report.지원교사} onChange={e => upd({ 지원교사: e.target.value })} placeholder="교사명(시간)" style={cell} />,
+                  A: area('A', [...seed(배경사건, 선행사건, '상황에서 발생함'), ...EXAMPLE_ANTECEDENTS]),
+                  B: area('B', EXAMPLE_BEHAVIORS),
+                  C: area('C', [...seed(후속결과, [], '이(가) 이어짐'), ...EXAMPLE_CONSEQUENCES]),
+                  경위: <><LinesInput rows={report.경위} onChange={v => upd({ 경위: v })} examples={STORY_EXAMPLES} /><VagueHint text={report.경위.map(r => r.s).join(' ')} /></>,
+                  관찰기록: <><LinesInput rows={report.관찰기록} onChange={v => upd({ 관찰기록: v })} examples={OBSERVE_EXAMPLES} /><VagueHint text={report.관찰기록.map(r => r.s).join(' ')} /></>,
+                  조치사항: FOLLOWUPS.map(([구분, k]) => ({
+                    구분,
+                    일시: <input value={report.조치[k].일시} onChange={e => upd({ 조치: { ...report.조치, [k]: { ...report.조치[k], 일시: e.target.value } } })} placeholder="10/23 11:00" style={cell} />,
+                    내용: <input value={report.조치[k].내용} onChange={e => upd({ 조치: { ...report.조치, [k]: { ...report.조치[k], 내용: e.target.value } } })} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : ''} style={cell} />,
+                  })),
+                }} />
               </div>
-            )}
-
-            {formData.물리적제지여부 === '본인/타인상해만 발생' && (
-              <div style={{ marginBottom: '20px', padding: '14px', border: '1px solid #fca5a5', borderRadius: '8px', backgroundColor: '#fef2f2' }}>
-                <h4 style={{ margin: '0 0 10px 0', color: '#b91c1c' }}>[본인/타인 상해 발생 보고서]</h4>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>상해를 입은 사람:</label>
-                  <input type="text" name="상해_대상자" value={crisisData.상해_대상자} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <div style={{fontWeight: 'bold', marginBottom: '5px'}}>상해가 발생하게 된 경위:</div>
-                  <DropdownTextarea name="상해_경위" value={crisisData.상해_경위} onChange={handleCrisisChange} examples={EXAMPLE_PROCESS} required />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>부상자 치료 등 사후조치 관련 특기사항:</label>
-                  <input type="text" name="상해_사후조치_특기사항" value={crisisData.상해_사후조치_특기사항} onChange={handleCrisisChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>후속 조치 여부 확인:</label>
-                  {['예', '아니오'].map(v => (
-                    <label key={v} style={{ marginRight: '16px' }}>
-                      <input type="radio" name="상해_후속조치_확인" value={v} checked={crisisData.상해_후속조치_확인 === v} onChange={handleCrisisChange} /> {v}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* A-B-C 행동 분석 */}
-            <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>행동 분석 (A-B-C)</h4>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ fontWeight: 'bold' }}>A. 배경/선행사건 (요약):</label>
-              <DropdownTextarea name="배경_선행사건" value={crisisData.배경_선행사건} onChange={handleCrisisChange} examples={EXAMPLE_ANTECEDENTS} />
             </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ fontWeight: 'bold' }}>B. 나타난 위기행동 (구체적 서술):</label>
-              <DropdownTextarea name="나타난_위기행동" value={crisisData.나타난_위기행동} onChange={handleCrisisChange} examples={EXAMPLE_BEHAVIORS} />
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontWeight: 'bold' }}>C. 후속결과 (요약):</label>
-              <DropdownTextarea name="후속결과" value={crisisData.후속결과} onChange={handleCrisisChange} examples={EXAMPLE_CONSEQUENCES} />
-            </div>
-
-            {/* 발생 이후 조치사항 */}
-            <h4 style={{borderBottom: '1px solid #ccc', paddingBottom: '5px'}}>발생 이후 조치사항</h4>
-            <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: '480px', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f1f5f9' }}>
-                  <th style={{ border: '1px solid #ccc', padding: '8px', width: '20%' }}>구분</th>
-                  <th style={{ border: '1px solid #ccc', padding: '8px', width: '30%' }}>시간/일자</th>
-                  <th style={{ border: '1px solid #ccc', padding: '8px', width: '50%' }}>내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { label: '부상자 치료', timeKey: '부상자_치료_시간', contentKey: '부상자_치료_내용', required: false },
-                  { label: '*관리자 보고', timeKey: '관리자_보고_시간', contentKey: '관리자_보고_내용', required: true, highlight: true },
-                  { label: '*학부모 알림', timeKey: '학부모_알림_시간', contentKey: '학부모_알림_내용', required: true, highlight: true },
-                  { label: '학생 상담', timeKey: '학생_상담_시간', contentKey: '학생_상담_내용', required: false },
-                  { label: '학부모 상담', timeKey: '학부모_상담_시간', contentKey: '학부모_상담_내용', required: false },
-                  { label: '긴급회의', timeKey: '긴급회의_시간', contentKey: '긴급회의_내용', required: false },
-                ].map(item => (
-                  <tr key={item.label}>
-                    <td style={{ border: '1px solid #ccc', padding: '8px', fontWeight: 'bold', textAlign: 'center', color: item.highlight ? '#b91c1c' : 'inherit' }}>{item.label}</td>
-                    <td style={{ border: '1px solid #ccc', padding: '4px' }}>
-                      <input type="text" name={item.timeKey} value={(crisisData as any)[item.timeKey]} onChange={handleCrisisChange}
-                        placeholder="날짜/시간" style={{width:'100%', border:'none', padding:'6px'}} />
-                    </td>
-                    <td style={{ border: '1px solid #ccc', padding: '4px' }}>
-                      <input type="text" name={item.contentKey} value={(crisisData as any)[item.contentKey]} onChange={handleCrisisChange}
-                        placeholder="내용 입력" style={{width:'100%', border:'none', padding:'6px'}} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         <button type="submit" disabled={loading} style={{ padding: '15px', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold', marginTop: '20px' }}>
           {loading ? '기록 제출 중...' : '행동 기록 제출'}

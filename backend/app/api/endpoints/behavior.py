@@ -62,7 +62,7 @@ def submit_behavior_log(
         # 입력자는 화면 값이 아니라 로그인 계정으로 기록한다(본인 기록 수정·삭제 권한의 기준)
         payload["입력교사명"] = _author_label(current_user)
         action = str(payload.get(ACTION_HEADER, "")).strip()
-        if action in REPORT_REQUIRED and not str(payload.get(REPORT_REQUIRED[action], "")).strip():
+        if action in REPORT_REQUIRED and not any(str(payload.get(h, "")).strip() for h in (REPORT_REQUIRED[action], SITE_STORY_HEADER)):
             raise HTTPException(status_code=400, detail="제지·개별학생교육지원·상해가 있었다면 위기행동 발생 보고서를 작성해야 합니다.")
         payload["Log_ID"] = log_id
         payload["Status"] = status
@@ -101,7 +101,8 @@ def submit_behavior_log(
 # 삭제는 행을 지우지 않고 Status=Deleted 로 남긴다(되돌릴 수 있게). 모든 조회에서 제외된다.
 NO_REPORT_ACTIONS = {"", "X - 보고서 작성 불필요", "X(보고서 작성 불필요)"}
 ACTION_HEADER = "방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부"
-# 조치유형별로 반드시 채워야 하는 보고서 항목(경위)
+# 조치유형별로 반드시 채워야 하는 보고서 항목(경위). 사이트 보고서 화면은 유형과 상관없이 1차_경위에 쓴다.
+SITE_STORY_HEADER = "1차_경위"
 REPORT_REQUIRED = {
     "방어 및 보호를 위한 제지": "[제지] 방어 및 보호를 위한 제지를 사용하게 된 경위",
     "개별학생교육지원": "[개별학생교육지원] 개별학생교육지원을 실시하게 된 경위",
@@ -280,8 +281,24 @@ def _report_record(log_id: str, current_user: Dict[str, Any]):
         check_student_scope(code, current_user)
     elif not _is_admin(current_user):
         raise HTTPException(status_code=403, detail="학생코드가 없는 기록은 관리자만 볼 수 있습니다.")
-    cls = next((s.class_name for s in TierStatusAdapter.fetch_students() if s.student_code.strip() == code), "")
-    return rec, cls
+    return rec, _class_of(code)
+
+
+def _class_of(code: str) -> str:
+    return next((s.class_name for s in TierStatusAdapter.fetch_students() if s.student_code.strip() == code), "")
+
+
+@router.post("/report-preview")
+def preview_crisis_report(payload: dict = Body(...), current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """저장 전 미리보기: 제출과 같은 payload를 저장본과 같은 경로(map_log_row → report_fields)로 바꿔 보여준다."""
+    from app.core.privacy import mask_name
+    from app.services.crisis_report import report_fields
+    from app.services.sheets import map_log_row
+    code = str(payload.get("학생코드", "")).strip()
+    if code:
+        check_student_scope(code, current_user)
+    row = {**payload, "학생명": mask_name(payload.get("학생명", "")), "Log_ID": "(저장 전 미리보기)"}
+    return report_fields(map_log_row(row), _class_of(code))
 
 
 @router.get("/report-template.hwpx")

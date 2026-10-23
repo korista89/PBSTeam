@@ -27,6 +27,8 @@ type RetryableConfig = InternalAxiosRequestConfig & { _pbstRetry503?: number };
 // Sheet health signals for SheetStatusBanner (backend: app/adapters/sheets/resilience.py).
 export const SHEET_STALE_EVENT = "pbsteam:sheet-stale";
 export const SHEET_UNAVAILABLE_EVENT = "pbsteam:sheet-unavailable";
+// 응답 자체가 없거나(학교망 순간 끊김·DNS) 서버 첫 실행 지연(502/504) — 재시도 뒤에도 실패하면 알린다.
+export const NETWORK_FAIL_EVENT = "pbsteam:network-fail";
 
 export interface SheetStaleDetail {
   sources: string[];
@@ -88,6 +90,19 @@ export function installApiClient() {
       }
     }
     if (status === 503) emit(SHEET_UNAVAILABLE_EVENT);
+
+    // 연결 실패·콜드스타트: 조회와 로그인은 다시 보내도 안전하므로 1.5초·3초 뒤 두 번 더 시도한다.
+    const transient = !error.response || status === 502 || status === 504;
+    const safe = (config?.method || "get").toLowerCase() === "get" || url.includes("/api/v1/auth/login");
+    if (transient && config && safe) {
+      const attempt = (config._pbstRetry503 || 0) + 1;
+      if (attempt <= MAX_503_RETRIES) {
+        config._pbstRetry503 = attempt;
+        await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+        return axios.request(config);
+      }
+    }
+    if (transient) emit(NETWORK_FAIL_EVENT);
 
     if (status === 401 && !AUTH_PROBE_PATHS.some((p) => url.includes(p))) {
       onSessionLost?.();
