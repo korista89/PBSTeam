@@ -81,7 +81,7 @@ export default function BehaviorPage() {
         title="🚨 위기행동기록 및 타임라인"
         subtitle="빠른 입력부터 상세 ABC 기록까지 한 화면에서 — 학생별 누적 타임라인 확인"
       >
-        <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "20px", alignItems: "start" }}>
+        <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)", gap: "20px", alignItems: "start" }}>
           {/* Left Column: Student Selector List */}
           <div className="card" style={{ padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -198,7 +198,7 @@ export default function BehaviorPage() {
                 </div>
 
                 {/* Form & Timeline Split */}
-                <div className="behavior-split-grid" style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: "20px", alignItems: "start" }}>
+                <div className="behavior-split-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(260px, 1fr)", gap: "20px", alignItems: "start" }}>
                   <div className="card" style={{ padding: "20px" }}>
                     <BehaviorForm
                       studentId={selectedStudent.학생코드}
