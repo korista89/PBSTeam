@@ -118,7 +118,7 @@ function LinesInput({ rows, onChange, examples }: { rows: Line[]; onChange: (v: 
     <div>
       {rows.map((r, i) => (
         <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'flex-start' }}>
-          <input type="time" value={r.t} onChange={e => set(i, { t: e.target.value })} aria-label={`${i + 1}번째 줄 시각`} style={{ width: 96, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4 }} />
+          <input value={r.t} onChange={e => set(i, { t: e.target.value.replace(/^(\d{1,2})(\d{2})$/, '$1:$2') })} inputMode="numeric" maxLength={5} placeholder="10:20" aria-label={`${i + 1}번째 줄 시각`} style={{ width: 58, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4 }} />
           <textarea value={r.s} rows={1} onChange={e => set(i, { s: e.target.value })} aria-label={`${i + 1}번째 줄 내용`}
             placeholder="보인 행동 또는 교사가 한 일" style={{ flex: 1, minWidth: 0, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', resize: 'vertical', fieldSizing: 'content' } as React.CSSProperties} />
           <select value="" onChange={e => e.target.value && set(i, { s: e.target.value })} aria-label="예시 문장 고르기" style={{ width: 62, padding: 4, fontSize: '0.75rem' }}>
@@ -410,12 +410,12 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
           const mirror = (v: string) => <span style={{ color: v ? '#0f172a' : '#94a3b8', fontSize: '0.85rem' }}>{v || '위 입력란에서 선택'}</span>;
           const place = formData.장소 === '기타' ? formData.장소기타 : formData.장소;
           return (
-            <div style={{ marginTop: 20, padding: '16px', border: '2px solid #b91c1c', borderRadius: 12, background: '#fff', overflowX: 'auto' }}>
+            <div style={{ marginTop: 20, padding: '16px', border: '2px solid #b91c1c', borderRadius: 12, background: '#fff' }}>
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', fontSize: '0.8rem', color: '#7f1d1d', marginBottom: 12, lineHeight: 1.6 }}>
                 아래 표는 인쇄되는 보고서와 같은 칸입니다. 쓴 그대로 인쇄됩니다.<br />
                 경위·관찰기록은 <b>시각 + 한 일</b>을 한 줄씩 시간순으로 쓰세요. <b>누가·어디서·무엇을·어떻게</b>가 드러나게, 해석(&lsquo;흥분함&rsquo;) 대신 <b>보인 행동</b>(&lsquo;소리를 지르며 책상을 3회 침&rsquo;)으로 씁니다.
               </div>
-              <div style={{ minWidth: 640 }}>
+              <div>
                 <ReportSheet edit c={{
                   소속: studentClass || '', 학생: `${maskName(studentName)}(${studentId})`,
                   담임교사: <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>인쇄 후 서명</span>,

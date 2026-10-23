@@ -59,7 +59,7 @@ export default function CrisisReportPage() {
           const empty = [["A 배경/선행", f.A], ["C 후속결과", f.C], ["경위", f.경위], ["관찰기록", f.관찰기록], ["발생 시 지도교사", f.지도교사]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);
           return empty.length > 0 && (
             <div className="no-print" style={{ maxWidth: 794, margin: "0 auto 12px", padding: "10px 14px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, fontSize: "0.85rem", color: "#92400e" }}>
-              ⚠️ 비어 있는 칸: <b>{empty.join(", ")}</b> — 전체 로그나 결재함의 &lsquo;상세·수정&rsquo;에서 채운 뒤 인쇄하세요. (빈 칸은 인쇄 후 손으로 써도 됩니다.)
+              ⚠️ 비어 있는 칸: <b>{empty.join(", ")}</b> — {draft ? "입력 화면에서" : <>전체 로그나 결재함의 &lsquo;상세·수정&rsquo;에서</>} 채운 뒤 인쇄하세요. (빈 칸은 인쇄 후 손으로 써도 됩니다.)
             </div>
           );
         })()}

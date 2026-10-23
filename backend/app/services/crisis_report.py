@@ -82,7 +82,7 @@ def report_fields(rec: Dict[str, Any], class_name: str = "") -> Dict[str, Any]:
         "지원장소": _g(cd, "1차_개별학생교육지원_장소") or _g(fr, "개별학생교육지원_장소_신규"),
         "지원교사": _g(cd, "1차_개별학생교육지원_교사") or _g(fr, "개별학생교육지원_교사"),
         "A": _g(cd, "A_배경_선행사건") or " · ".join(x for x in [rec.get("배경사건", ""), rec.get("선행사건", "")] if x),
-        "B": _g(cd, "B_나타난_위기행동") or " · ".join(x for x in [rec.get("행동유형", ""), f"강도 {rec.get('강도', '')}", rec.get("특기사항", "")] if x),
+        "B": _g(cd, "B_나타난_위기행동") or " · ".join(x for x in [rec.get("행동유형", ""), rec.get("강도") and f"강도 {rec.get('강도')}", rec.get("특기사항", "")] if x),
         "C": _g(cd, "C_후속결과") or str(rec.get("후속결과", "")),
         "경위": story,
         "관찰기록": observe,
