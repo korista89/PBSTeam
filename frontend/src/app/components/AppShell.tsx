@@ -69,10 +69,11 @@ export default function AppShell({
         {
             groupTitle: "운영",
             items: [
-                { href: "/", label: "전체대시보드", key: "dashboard", icon: "📊" },
-                ...(admin ? [{ href: "/briefing", label: "관리자 브리핑", key: "briefing", icon: "🗞️" }] : []),
+                // 담임도 관리자와 같은 메뉴를 쓰고, 화면은 자기 학급 범위로 열린다
+                { href: "/", label: admin ? "전체대시보드" : "학급대시보드", key: "dashboard", icon: "📊" },
+                { href: "/briefing", label: admin ? "관리자 브리핑" : "학급 브리핑", key: "briefing", icon: "🗞️" },
                 { href: "/today", label: "Today결정", key: "today", icon: "🧭" },
-                ...(admin ? [{ href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" }] : [])
+                { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" }
             ]
         },
         {
@@ -114,14 +115,13 @@ export default function AppShell({
             ]
         },
         {
-            // 요청 목록에 없던 메뉴 — 지우지 않고 맨 아래 '관리'로 모았다
             groupTitle: "관리",
             items: [
                 { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },
-                ...(admin ? [
-                    { href: "/roster", label: "학생 명단", key: "roster", icon: "🏫" },
-                    { href: "/admin", label: "관리자설정", key: "admin", icon: "⚙️" }
-                ] : [])
+                { href: "/roster", label: admin ? "학생 명단" : "우리 반 명단", key: "roster", icon: "🏫" },
+                admin
+                    ? { href: "/admin", label: "관리자설정", key: "admin", icon: "⚙️" }
+                    : { href: "/settings", label: "내 설정", key: "settings", icon: "⚙️" }
             ]
         }
     ];

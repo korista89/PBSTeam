@@ -61,7 +61,9 @@ export default function ApprovalsPage() {
     }
   }, [kind, days, pendingOnly]);
 
-  useEffect(() => { if (isAdmin()) void load(); }, [isAdmin, load]);
+  useEffect(() => { void load(); }, [load]);
+  // 담임은 자기 학급 기록의 결재 진행을 보고, 재작성 요청에 응한다(결재 버튼은 관리자 전용)
+  const admin = isAdmin();
   useSheetLiveSync(() => load(true));
 
   const sign = async (r: Row, step: string) => {
@@ -99,9 +101,10 @@ export default function ApprovalsPage() {
 
   return (
     <AuthCheck>
-      <AppShell currentPage="approvals" title="✅ 결재함" subtitle="담당자·교감·학교장 확인 3개가 모두 끝나야 결재 완료됩니다 (순서 무관)" hideDateFilter={true}
+      <AppShell currentPage="approvals" title={admin ? "✅ 결재함" : "✅ 결재함 (우리 반)"}
+        subtitle={admin ? "담당자·교감·학교장 확인 3개가 모두 끝나야 결재 완료됩니다 (순서 무관)" : "우리 반 기록의 결재 진행 상황입니다 · 재작성 요청을 받은 기록은 '상세·수정'에서 고치면 다시 결재가 올라갑니다"} hideDateFilter={true}
         headerActions={<button onClick={() => void load()} className="btn btn-secondary" disabled={loading}>🔄 새로고침</button>}>
-        {!isAdmin() ? <div className="card" style={{ padding: 20 }}>관리자만 볼 수 있는 화면입니다.</div> : (
+        {(
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {/* 요약 */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
@@ -169,9 +172,9 @@ export default function ApprovalsPage() {
                           return (
                             <React.Fragment key={s.key}>
                               {i > 0 && <span style={{ color: "#cbd5e1" }}>·</span>}
-                              <button onClick={() => void sign(r, s.key)} disabled={!!busy}
-                                title={done ? `${done.by} · ${done.at} (다시 누르면 취소)` : `${s.key} 하기`}
-                                style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: "0.85rem",
+                              <button onClick={() => admin && void sign(r, s.key)} disabled={!!busy || !admin}
+                                title={done ? `${done.by} · ${done.at}${admin ? " (다시 누르면 취소)" : ""}` : admin ? `${s.key} 하기` : `${s.key} 전`}
+                                style={{ padding: "7px 12px", borderRadius: 8, cursor: admin ? "pointer" : "default", fontWeight: 800, fontSize: "0.85rem",
                                   border: done ? "1px solid #16a34a" : "1px solid #cbd5e1",
                                   background: done ? "#16a34a" : "#fff", color: done ? "#fff" : "#0f172a", opacity: busy === `${id}|${s.key}` ? 0.5 : 1 }}>
                                 {done ? "✓" : s.icon} {s.key}{done && <span style={{ fontWeight: 500, marginLeft: 6, fontSize: "0.75rem" }}>{hm(done.at)}</span>}
@@ -179,6 +182,7 @@ export default function ApprovalsPage() {
                             </React.Fragment>
                           );
                         })}
+                        {admin && <>
                         <span style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 4px" }} />
                         <button onClick={() => void sign(r, REPORT_REQ)} disabled={!!busy}
                           title={reqd ? `${reqd.by} · ${reqd.at} (다시 누르면 취소)` : "학교장에게 보고를 요청합니다"}
@@ -190,12 +194,19 @@ export default function ApprovalsPage() {
                           style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", border: "1px solid #f59e0b", background: "#fff", color: "#b45309" }}>
                           ↩️ 재작성 요청
                         </button>
+                        </>}
                         <button onClick={() => setOpen(open === id ? null : id)}
                           style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.85rem", border: "1px solid #cbd5e1", background: "#fff" }}>
                           {open === id ? "▲ 닫기" : "▼ 상세·수정"}
                         </button>
                       </div>
 
+                      {r.Status === "Revision Requested" && (
+                        <div style={{ padding: "10px 16px", borderTop: "1px solid #eef2f7", background: "#fff7ed", color: "#9a3412", fontSize: "0.88rem" }}>
+                          ↩️ <b>보완 요청:</b> {String(r["Approval_Meta"] || "").split("Memo:")[1]?.trim() || "관리자가 보완을 요청했습니다."}
+                          {!admin && " — '상세·수정'에서 고친 뒤 저장하면 다시 결재가 올라갑니다."}
+                        </div>
+                      )}
                       {reviseFor === id && (
                         <div style={{ padding: "10px 16px", display: "flex", gap: 8, borderTop: "1px solid #eef2f7" }}>
                           <input value={memo} onChange={e => setMemo(e.target.value)} placeholder="보완할 내용 (작성자에게 보입니다)"

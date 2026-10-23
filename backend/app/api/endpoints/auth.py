@@ -103,6 +103,27 @@ def list_users(current_admin: Dict[str, Any] = Depends(require_admin)):
     users = get_all_users()
     return users
 
+class MyPasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.put("/me/password")
+def change_my_password(request: MyPasswordRequest, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """로그인한 본인 비밀번호 변경(현재 비밀번호 확인 필요)."""
+    from app.services.sheets import get_user_by_id, update_user_password_cas
+    from app.core.security import verify_password_compat
+    if len(request.new_password) < 4:
+        raise HTTPException(status_code=400, detail="새 비밀번호는 4자 이상이어야 합니다.")
+    user = get_user_by_id(current_user["id"], strict=True)
+    stored = str((user or {}).get("Password", ""))
+    if not user or not verify_password_compat(request.current_password, stored).verified:
+        raise HTTPException(status_code=400, detail="현재 비밀번호가 맞지 않습니다.")
+    if not update_user_password_cas(current_user["id"], stored, request.new_password):
+        raise HTTPException(status_code=409, detail="비밀번호가 방금 다른 곳에서 바뀌었습니다. 다시 시도하세요.")
+    return {"success": True}
+
+
 @router.put("/users/{user_id}/password")
 def change_password(user_id: str, request: PasswordUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Admin only: Update password for a user"""

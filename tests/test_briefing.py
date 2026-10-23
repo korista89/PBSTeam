@@ -71,3 +71,14 @@ def test_pending_counts_reports_without_principal_check():
     b = log("2026-10-22", "1011", crisis=True); b["Log_ID"] = "b"
     out = build_briefing([a, b], STUDENTS, [], TODAY, signoffs={"b": {"담당자확인": {}, "교감확인": {}, "학교장확인": {}}, "a": {"학교장확인": {}}})
     assert "결재 대기 1건" in out["ten_lines"][8]
+
+
+def test_teacher_briefing_scoped_to_own_class():
+    from unittest import mock
+    from app.api.endpoints import briefing as BR
+    stud = [mock.Mock(student_code="1011", class_name="초1-1"), mock.Mock(student_code="2022", class_name="초2-2")]
+    with mock.patch.object(BR.TierStatusAdapter, "fetch_students", return_value=stud):
+        assert BR.class_scope({"role": "admin"}) is None
+        cls = BR.class_scope({"role": "class_teacher", "class_id": "초1-1"})
+        recs, studs = BR.scope_records([log("2026-10-23", "1011"), log("2026-10-23", "2022")], STUDENTS, cls)
+    assert [r["학생코드"] for r in recs] == ["1011"] and [s["학생코드"] for s in studs] == ["1011"]

@@ -142,9 +142,15 @@ def test_inbox_lists_both_kinds_and_pending_only():
     recs = [{"Log_ID": "r", "행동발생날짜": "2099-01-01", "물리적제지여부": "O(제지)", "Status": "Pending"},
             {"Log_ID": "d", "행동발생날짜": "2099-01-01", "물리적제지여부": "X(보고서 작성 불필요)", "Status": "Approved"},
             {"Log_ID": "", "행동발생날짜": "2099-01-01", "Status": "Approved"}]
-    with mock.patch.object(B, "fetch_all_records", return_value=recs), \
+    stud = [mock.Mock(student_code="1011", class_name="초1-1"), mock.Mock(student_code="2022", class_name="초2-2")]
+    recs[0]["학생코드"], recs[1]["학생코드"] = "1011", "2022"
+    with mock.patch.object(B.TierStatusAdapter, "fetch_students", return_value=stud), \
+         mock.patch.object(B, "fetch_all_records", return_value=recs), \
          mock.patch("app.services.sheets.fetch_approval_states", return_value={"d": {k: {"by": "a", "at": "x"} for k in ("담당자확인", "교감확인", "학교장확인")}}):
-        allr = B.get_approval_inbox(kind="all", days=30, pending_only=False, current_admin=ADMIN)["logs"]
+        allr = B.get_approval_inbox(kind="all", days=30, pending_only=False, current_user=ADMIN)["logs"]
         assert {(r["Log_ID"], r["kind"]) for r in allr} == {("r", "report"), ("d", "data")}
-        assert [r["Log_ID"] for r in B.get_approval_inbox(kind="all", days=30, pending_only=True, current_admin=ADMIN)["logs"]] == ["r"]
-        assert [r["Log_ID"] for r in B.get_approval_inbox(kind="data", days=30, pending_only=False, current_admin=ADMIN)["logs"]] == ["d"]
+        assert [r["Log_ID"] for r in B.get_approval_inbox(kind="all", days=30, pending_only=True, current_user=ADMIN)["logs"]] == ["r"]
+        assert [r["Log_ID"] for r in B.get_approval_inbox(kind="data", days=30, pending_only=False, current_user=ADMIN)["logs"]] == ["d"]
+        # 담임은 자기 학급(초1-1) 기록만 본다
+        mine = B.get_approval_inbox(kind="all", days=30, pending_only=False, current_user=T1)["logs"]
+        assert [r["Log_ID"] for r in mine] == ["r"] and mine[0]["학급"] == "초1-1"

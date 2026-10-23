@@ -237,17 +237,23 @@ def get_approval_inbox(
     kind: str = Query("all", description="report(보고서) | data(데이터만) | all"),
     days: int = Query(30, ge=1, le=400),
     pending_only: bool = Query(False, description="3단계 확인이 끝나지 않은 것만"),
-    current_admin: Dict[str, Any] = Depends(require_admin)
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    """결재함 목록(관리자): 보고서와 데이터만 입력 기록을 결재 단계 상태와 함께 돌려준다."""
+    """결재함 목록: 보고서와 데이터만 입력 기록을 결재 단계 상태와 함께 돌려준다.
+    관리자는 전교, 담임은 자기 학급 기록만(결재 버튼은 관리자 전용)."""
     from app.services.sheets import fetch_approval_states, is_fully_signed
     since = (today_kst() - datetime.timedelta(days=days)).isoformat()
     states = fetch_approval_states()
     out = []
+    code_cls = {s.student_code.strip(): normalize_class_identifier(s.class_name) for s in TierStatusAdapter.fetch_students()}
+    user_class = None if _is_admin(current_user) else (normalize_class_identifier(current_user.get("class_id") or current_user.get("id")) or "__none__")
     for r in fetch_all_records(force_refresh=False):
         log_id = str(r.get("Log_ID", "")).strip()
         if not log_id:
             continue  # 결재 단계는 Log_ID 로 연결된다(Log_ID 없는 옛 폼 기록 제외)
+        cls = code_cls.get(str(r.get("학생코드") or r.get("코드번호") or "").strip(), "")
+        if user_class and cls != user_class:
+            continue
         is_report = str(r.get("물리적제지여부", "")).startswith("O")
         if (kind == "report" and not is_report) or (kind == "data" and is_report):
             continue
@@ -258,7 +264,7 @@ def get_approval_inbox(
             continue
         if pending_only and is_fully_signed(signed):
             continue
-        out.append({**r, "kind": "report" if is_report else "data", "signoffs": signed, "complete": is_fully_signed(signed)})
+        out.append({**r, "학급": cls, "kind": "report" if is_report else "data", "signoffs": signed, "complete": is_fully_signed(signed)})
     out.sort(key=lambda r: (r.get("Status") != "Pending", str(r.get("타임스탬프", ""))), reverse=False)
     out.sort(key=lambda r: str(r.get("행동발생날짜", "")), reverse=True)
     out.sort(key=lambda r: r.get("Status") not in ("Pending", "Revision Requested"))

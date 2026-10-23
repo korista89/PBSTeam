@@ -25,7 +25,7 @@ interface DayItem {
 interface Day { date: string; count: number; students: number; crisis: number; items: DayItem[] }
 interface Trend { code: string; label: string; class: string; tier: number; recent: number; before: number; strong: boolean; actions?: string[]; message?: string }
 interface Briefing {
-  today: string; ten_lines: string[];
+  today: string; ten_lines: string[]; scope?: string;
   days: { yesterday: Day; day_before: Day; today: Day };
   periods: { week: Period; month: Period; semester: Period; year: Period };
   increasing: Trend[]; decreasing: Trend[];
@@ -108,7 +108,7 @@ export default function BriefingPage() {
     axios.get(`${API_BASE_URL}/api/v1/briefing/cico`).then(r => setCico(r.data.trend || [])).catch(() => setCico([]));
   }, []);
 
-  useEffect(() => { if (isAdmin()) void load(); }, [isAdmin, load]);
+  useEffect(() => { void load(); }, [load]);
 
   const p = data?.periods[tab];
 
@@ -116,7 +116,7 @@ export default function BriefingPage() {
     <AuthCheck>
       <AppShell
         currentPage="briefing"
-        title="🗞️ 관리자 브리핑"
+        title={isAdmin() ? "🗞️ 관리자 브리핑" : `🗞️ 학급 브리핑${data?.scope ? ` (${data.scope})` : ""}`}
         subtitle={data ? `${kdate(data.today)} 기준 · 급하면 맨 위 10줄만 읽으세요` : "학교에서 있었던 일을 한눈에"}
         hideDateFilter={true}
         headerActions={
@@ -126,9 +126,7 @@ export default function BriefingPage() {
           </div>
         }
       >
-        {!isAdmin() ? (
-          <div className="card" style={{ padding: 20 }}>관리자만 볼 수 있는 화면입니다.</div>
-        ) : loading && !data ? (
+        {loading && !data ? (
           <div className="card" style={{ padding: 30, textAlign: "center" }}>⏳ 브리핑을 만들고 있습니다...</div>
         ) : error ? (
           <div className="card" style={{ padding: 20, background: "#fef2f2", color: "#dc2626" }}>⚠️ {error}</div>

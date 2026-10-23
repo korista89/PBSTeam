@@ -3,12 +3,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Link from "next/link";
-import { AuthCheck } from "../components/AuthProvider";
+import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
 
 export default function RosterPage() {
+  const { isAdmin } = useAuth();
   const [roster, setRoster] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,17 +30,17 @@ export default function RosterPage() {
   useSheetLiveSync(() => fetchRoster(true));
 
   return (
-    <AuthCheck requireAdmin>
+    <AuthCheck>
       <AppShell
         currentPage="roster"
-        title="🏫 전교 학급 및 학생 명렬표 관리"
-        subtitle="34개 학급별 학생 명단 및 고유 학생 코드 배정 현황"
+        title={isAdmin() ? "🏫 전교 학급 및 학생 명렬표 관리" : "🏫 우리 반 명단"}
+        subtitle={isAdmin() ? "34개 학급별 학생 명단 및 고유 학생 코드 배정 현황" : "담당 학급 학생 명단과 학생 코드 (수정은 관리자에게 요청)"}
         hideDateFilter={true}
-        headerActions={
+        headerActions={isAdmin() ? (
           <Link href="/roster/edit" className="btn btn-primary">
             ✏️ 학생 명렬 및 코드 일괄 편집
           </Link>
-        }
+        ) : undefined}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           {loading ? (
@@ -74,11 +75,11 @@ export default function RosterPage() {
                         학생 수: <strong>{cls.student_count}</strong>명
                       </div>
                       <Link
-                        href="/roster/edit"
+                        href={isAdmin() ? "/roster/edit" : "/student"}
                         className="btn btn-secondary"
                         style={{ marginTop: "6px", width: "100%", textAlign: "center", fontSize: "0.78rem" }}
                       >
-                        학생 관리
+                        {isAdmin() ? "학생 관리" : "학생 목록 보기"}
                       </Link>
                     </div>
                   ))}
