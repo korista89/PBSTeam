@@ -1,297 +1,421 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+// 개별학생대시보드 — 위에서 아래로 "누구인가 → 지금 어떤가 → 언제·어디서·왜 → 최근 기록 → 지원 도구" 순서로 읽힌다.
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import {
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis,
-  BarChart, Bar, LabelList, ComposedChart, Area
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Bar, Line, ComposedChart,
 } from "recharts";
 import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
 import { useSheetLiveSync } from "../../hooks/useSheetLiveSync";
 import { useDateRange } from "../../components/GlobalNav";
-import { TIER_COLORS } from "../../constants";
-import WeeklyAnalysisChart from "../../components/WeeklyAnalysisChart";
 import ReadableAIResult from "../../components/ReadableAIResult";
-import CrisisDetailPanel from "../../components/CrisisDetailPanel";
+import LogDetailPanel from "../../components/LogDetailPanel";
 import { maskName } from "../../utils";
 import { API_BASE_URL } from "@/app/lib/api";
 
-// 대시보드(page.tsx)와 동일한 팔레트 — 화면마다 같은 지표가 다른 색으로 보이지 않게 통일.
-const PIE_COLORS_TYPE = ['#3b82f6', '#f59e0b', '#ef4444', '#22c55e', '#8b5cf6', '#06b6d4', '#f97316'];
+// ── 디자인 토큰(이 화면 전용) ────────────────────────────────
+const C = {
+  ink: "#0f172a", sub: "#475569", mute: "#94a3b8", line: "#e8edf3", soft: "#f8fafc",
+  blue: "#2563eb", blueSoft: "#eff6ff", red: "#dc2626", redSoft: "#fef2f2",
+  amber: "#d97706", amberSoft: "#fffbeb", green: "#16a34a", greenSoft: "#f0fdf4", violet: "#7c3aed",
+};
+const card: React.CSSProperties = { background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, padding: 20, boxShadow: "0 1px 2px rgba(15,23,42,0.04)" };
+const h3: React.CSSProperties = { margin: 0, fontSize: "1rem", fontWeight: 800, color: C.ink };
+const hint: React.CSSProperties = { margin: "4px 0 0", fontSize: "0.8rem", color: C.mute };
+
+// ── 로그 가공 ────────────────────────────────────────────────
+type Log = Record<string, any>;
+const dOf = (l: Log) => String(l["행동발생날짜"] || "").slice(0, 10);
+const short = (v: unknown) => String(v ?? "").split(":")[0].split("(")[0].trim() || "미기재";
+const intensity = (l: Log) => { const s = String(l["강도"] ?? "").trim(); return /^\d/.test(s) ? Number(s[0]) : null; };
+const isCrisis = (l: Log) => String(l["물리적제지여부"] || "").startsWith("O");
+const slots = (l: Log) => String(l["시간대"] || "").split(",").map(s => s.trim()).filter(Boolean);
+const slotNo = (s: string) => { const m = s.match(/(\d+)구간/); return m ? Number(m[1]) : 99; };
+const slotLabel = (s: string) => { const [a, b] = s.split(":"); return b ? `${slotNo(s)}구간 ${b.trim().replace(/\(.*?\)/g, "").split("/")[0]}` : a; };
+const slotSummary = (l: Log) => { const ss = slots(l).map(slotLabel); return ss.length ? ss[0] + (ss.length > 1 ? ` 외 ${ss.length - 1}` : "") : "-"; };
+// 날짜 계산은 UTC 기준으로만 한다(로컬 시간대가 끼면 toISOString에서 하루씩 밀린다)
+const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const kd = (iso: string) => { const [, m, d] = iso.split("-"); return `${+m}. ${+d}.`; };
+const mondayOf = (iso: string) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+const todayIso = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+
+function countBy<T>(arr: T[], key: (t: T) => string | string[]) {
+  const m = new Map<string, number>();
+  arr.forEach(a => ([] as string[]).concat(key(a)).forEach(k => m.set(k, (m.get(k) || 0) + 1)));
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+// ── 작은 화면 조각 ───────────────────────────────────────────
+function Kpi({ label, value, unit, note, tone }: { label: string; value: string | number; unit?: string; note?: React.ReactNode; tone?: string }) {
+  return (
+    <div style={{ ...card, padding: "16px 18px" }}>
+      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: C.sub }}>{label}</div>
+      <div style={{ marginTop: 6, fontSize: "1.9rem", fontWeight: 900, color: tone || C.ink, lineHeight: 1.1 }}>
+        {value}<span style={{ fontSize: "0.95rem", fontWeight: 700, marginLeft: 2 }}>{unit}</span>
+      </div>
+      {note && <div style={{ marginTop: 6, fontSize: "0.78rem", color: C.sub }}>{note}</div>}
+    </div>
+  );
+}
+
+function HBars({ data, color, total, keepOrder }: { data: [string, number][]; color: string; total: number; keepOrder?: boolean }) {
+  const max = Math.max(1, ...data.map(d => d[1]));
+  if (data.length === 0 || (!keepOrder && data.every(d => !d[1]))) return <div style={{ color: C.mute, fontSize: "0.85rem" }}>기록 없음</div>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {data.map(([k, v]) => (
+        <div key={k}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, color: C.ink }}>{k}</span>
+            <span style={{ color: C.sub }}><b style={{ color: C.ink }}>{v}</b>건 · {total ? Math.round((v / total) * 100) : 0}%</span>
+          </div>
+          <div style={{ height: 8, background: C.soft, borderRadius: 99 }}>
+            <div style={{ width: `${(v / max) * 100}%`, height: "100%", background: color, borderRadius: 99 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Heatmap({ logs }: { logs: Log[] }) {
+  const places = countBy(logs, l => short(l["장소"])).slice(0, 6).map(p => p[0]);
+  const slotList = [...new Set(logs.flatMap(slots))].sort((a, b) => slotNo(a) - slotNo(b));
+  const cell = new Map<string, number>();
+  logs.forEach(l => slots(l).forEach(s => { const k = `${short(l["장소"])}|${s}`; cell.set(k, (cell.get(k) || 0) + 1); }));
+  const max = Math.max(1, ...cell.values());
+  if (!places.length || !slotList.length) return <div style={{ color: C.mute, fontSize: "0.85rem" }}>장소·시간대 기록이 없습니다.</div>;
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ borderCollapse: "separate", borderSpacing: 4, fontSize: "0.78rem" }}>
+        <thead>
+          <tr>
+            <th />
+            {slotList.map(s => <th key={s} style={{ color: C.sub, fontWeight: 700, padding: "0 4px", width: 84, maxWidth: 84, lineHeight: 1.3 }}>{slotLabel(s)}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {places.map(p => (
+            <tr key={p}>
+              <td style={{ fontWeight: 800, color: C.ink, paddingRight: 8, whiteSpace: "nowrap" }}>{p}</td>
+              {slotList.map(s => {
+                const v = cell.get(`${p}|${s}`) || 0;
+                const a = v / max;
+                return (
+                  <td key={s} title={`${p} · ${slotLabel(s)}: ${v}건`}
+                    style={{ height: 40, width: 84, borderRadius: 8, textAlign: "center", fontWeight: 800,
+                      background: v ? `rgba(220,38,38,${0.12 + a * 0.75})` : C.soft, color: a > 0.5 ? "#fff" : C.ink }}>
+                    {v || ""}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const TABS = [
+  { key: "notes", label: "📝 상담·관찰 기록" },
+  { key: "ebp", label: "📚 EBP 추천" },
+  { key: "fba", label: "🔬 FBA 증거" },
+  { key: "ai", label: "🤖 AI 종합 분석" },
+  { key: "med", label: "💊 약물 반응 의견서" },
+] as const;
 
 export default function StudentDetail() {
   const params = useParams();
   const router = useRouter();
-  const studentName = decodeURIComponent(params.id as string);
+  const studentKey = decodeURIComponent(params.id as string);
   const { startDate, endDate } = useDateRange();
   const apiUrl = API_BASE_URL;
 
   const [data, setData] = useState<StudentData | null>(null);
+  const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [fbaEvidence, setFbaEvidence] = useState<any>(null);
-  const [crisisLogs, setCrisisLogs] = useState<any[]>([]);
-  const [expandedCrisisId, setExpandedCrisisId] = useState<string | null>(null);
+  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("notes");
+  const [openLog, setOpenLog] = useState<string | null>(null);
+  const [crisisOnly, setCrisisOnly] = useState(false);
 
   const fetchData = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const sparams = new URLSearchParams();
-      if (startDate && endDate) {
-        sparams.append("start_date", startDate);
-        sparams.append("end_date", endDate);
-      }
-      const queryString = sparams.toString();
-      const url = `${apiUrl}/api/v1/students/${encodeURIComponent(studentName)}?${queryString}`;
-      const response = await axios.get(url);
-      setData(response.data);
+      const q = startDate && endDate ? `?start_date=${startDate}&end_date=${endDate}` : "";
+      const res = await axios.get(`${apiUrl}/api/v1/students/${encodeURIComponent(studentKey)}${q}`);
+      setData(res.data);
     } catch (err: any) {
-      console.error(err);
       if (err.response?.status === 404) setError("학생을 찾을 수 없습니다.");
-      else if (err.response?.status === 403) setError("이 학생의 데이터에 접근할 권한이 없습니다. 본인 배정 학급 학생의 데이터만 열람 가능합니다.");
-      else setError("데이터 로딩 실패");
+      else if (err.response?.status === 403) setError("이 학생의 데이터에 접근할 권한이 없습니다. 담당 학급 학생만 볼 수 있습니다.");
+      else setError("데이터를 불러오지 못했습니다.");
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [apiUrl, studentName, startDate, endDate]);
+  }, [apiUrl, studentKey, startDate, endDate]);
 
-  useEffect(() => {
-    if (studentName) fetchData();
-  }, [fetchData, studentName]);
-  useSheetLiveSync(() => fetchData(true), { enabled: Boolean(studentName) });
-
-  // FBA 증거 요약 — build_fba_evidence_summary()를 그대로 노출하는 결정론적(비-LLM) 엔드포인트.
-  // 화면 렌더링과 EBP 추천 근거로 함께 쓴다.
   const studentCode = data?.profile?.student_code;
-  useEffect(() => {
+  const fetchLogs = useCallback(async () => {
     if (!studentCode) return;
-    axios.get(`${apiUrl}/api/v1/bip/students/${studentCode}/fba-evidence`)
-      .then(res => setFbaEvidence(res.data))
-      .catch(() => setFbaEvidence(null));
+    try {
+      const res = await axios.get(`${apiUrl}/api/v1/behavior-log/timeline/${encodeURIComponent(studentCode)}`);
+      setLogs(res.data?.logs || []);
+    } catch { setLogs([]); }
   }, [apiUrl, studentCode]);
 
-  // 위기대응 이력 — 결재 상태와 무관하게 크리스코드가 있는 로그만 모아
-  // "제지 등 법정기록"을 학생 단위로 언제든 다시 확인할 수 있게 한다.
+  useEffect(() => { if (studentKey) void fetchData(); }, [fetchData, studentKey]);
+  useEffect(() => { void fetchLogs(); }, [fetchLogs]);
+  useSheetLiveSync(() => { void fetchData(true); void fetchLogs(); }, { enabled: Boolean(studentKey) });
   useEffect(() => {
     if (!studentCode) return;
-    axios.get(`${apiUrl}/api/v1/behavior-log/timeline/${encodeURIComponent(studentCode)}`)
-      .then(res => {
-        const logs = (res.data?.logs || []).filter((l: any) => l.crisis_details || l.form_report_details);
-        logs.sort((a: any, b: any) => String(b.타임스탬프 || "").localeCompare(String(a.타임스탬프 || "")));
-        setCrisisLogs(logs);
-      })
-      .catch(() => setCrisisLogs([]));
+    axios.get(`${apiUrl}/api/v1/bip/students/${studentCode}/fba-evidence`).then(r => setFbaEvidence(r.data)).catch(() => setFbaEvidence(null));
   }, [apiUrl, studentCode]);
 
-  if (loading) return (
+  // 분석기간 안의 기록만 쓴다(상단 기간 필터와 일치)
+  const inRange = useMemo(() => logs.filter(l => {
+    const d = dOf(l);
+    return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
+  }), [logs, startDate, endDate]);
+
+  const stats = useMemo(() => {
+    const today = todayIso();
+    const last14 = logs.filter(l => dOf(l) > addDays(today, -14)).length;
+    const prev14 = logs.filter(l => dOf(l) > addDays(today, -28) && dOf(l) <= addDays(today, -14)).length;
+    const lastDate = logs.map(dOf).filter(Boolean).sort().pop() || "";
+    const ints = inRange.map(intensity).filter((v): v is number => v !== null);
+    const weeks = new Map<string, { count: number; sum: number; n: number }>();
+    inRange.forEach(l => {
+      const w = mondayOf(dOf(l)); const e = weeks.get(w) || { count: 0, sum: 0, n: 0 };
+      const i = intensity(l); e.count += 1; if (i !== null) { e.sum += i; e.n += 1; } weeks.set(w, e);
+    });
+    const firstW = mondayOf(startDate || [...weeks.keys()].sort()[0] || today);
+    const lastW = mondayOf(endDate && endDate < today ? endDate : today);
+    const weekly: { week: string; count: number; avg: number | null }[] = [];
+    for (let w = firstW; w <= lastW && weekly.length < 60; w = addDays(w, 7)) {
+      const e = weeks.get(w);
+      weekly.push({ week: kd(w), count: e?.count || 0, avg: e && e.n ? +(e.sum / e.n).toFixed(1) : null });
+    }
+    return {
+      total: inRange.length, last14, prev14, lastDate,
+      daysSince: lastDate ? Math.round((Date.parse(today) - Date.parse(lastDate)) / 86400000) : null,
+      avg: ints.length ? ints.reduce((a, b) => a + b, 0) / ints.length : 0,
+      high: ints.filter(i => i >= 4).length,
+      crisis: inRange.filter(isCrisis).length,
+      types: countBy(inRange, l => short(l["행동유형"])).slice(0, 5),
+      places: countBy(inRange, l => short(l["장소"])),
+      slotsTop: countBy(inRange, l => slots(l).map(slotLabel)),
+      weekly,
+    };
+  }, [logs, inRange, startDate, endDate]);
+
+  if (loading || error || !data) return (
     <AuthCheck>
-      <AppShell currentPage="student" title="🔬 학생 FBA 프로파일">
-        <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-           <div style={{ fontSize: '2.5rem', animation: 'spin 2s linear infinite', marginBottom: '12px' }}>💿</div>
-           <p style={{ fontWeight: 800 }}>{maskName(studentName)} 학생의 행동 데이터를 심층 분석하고 있습니다...</p>
+      <AppShell currentPage="student" title="👤 개별학생대시보드">
+        <div style={{ ...card, padding: 60, textAlign: "center" }}>
+          {loading ? <p style={{ fontWeight: 800, color: C.sub }}>⏳ {maskName(studentKey)} 학생의 기록을 불러오는 중입니다...</p> : (
+            <>
+              <p style={{ fontWeight: 800, color: C.red }}>⚠️ {error || "데이터가 없습니다."}</p>
+              <button onClick={() => router.push("/student")} className="btn btn-primary" style={{ marginTop: 16 }}>학생 목록으로</button>
+            </>
+          )}
         </div>
       </AppShell>
     </AuthCheck>
   );
 
-  if (error || !data) return (
-    <AuthCheck>
-      <AppShell currentPage="student" title="🔬 학생 FBA 프로파일">
-        <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⚠️</div>
-          <p style={{ fontWeight: 800, color: 'var(--tier3)' }}>{error || "데이터가 없습니다."}</p>
-          <button onClick={() => router.push('/')} className="btn btn-primary" style={{ marginTop: '16px' }}>대시보드로 돌아가기</button>
-        </div>
-      </AppShell>
-    </AuthCheck>
-  );
+  const profile = data.profile;
+  const code = profile.student_code;
+  const tierText = profile.tier || "Tier 1";
+  const tierLevel = tierText.includes("3") ? 3 : tierText.includes("2") ? 2 : 1;
+  const tierColor = tierLevel === 3 ? C.red : tierLevel === 2 ? C.amber : C.green;
+  const functions = (data.functions || []).map(f => [short(f.name), f.value] as [string, number]);
+  const fnTotal = functions.reduce((a, f) => a + f[1], 0);
+  const diff = stats.last14 - stats.prev14;
+  const trendTone = diff > 0 ? C.red : diff < 0 ? C.green : C.sub;
+  const recent = [...inRange].filter(l => !crisisOnly || isCrisis(l))
+    .sort((a, b) => (dOf(b) + String(b["타임스탬프"] || "")).localeCompare(dOf(a) + String(a["타임스탬프"] || ""))).slice(0, 10);
 
-  if (!data) return null;
-
-  const profile = data.profile || { name: studentName, student_code: "-", class: "-", tier: "Tier 1", total_incidents: 0, avg_intensity: 0 };
-  const abc_data = data.abc_data || [];
-  const functions = data.functions || [];
-  const cico_trend = data.cico_trend || [];
+  const insights = [
+    stats.places[0] && stats.slotsTop[0] && `주로 **${stats.places[0][0]}**에서, **${stats.slotsTop[0][0]}**에 많이 일어납니다.`,
+    stats.types[0] && `가장 많은 행동은 **${stats.types[0][0]}**(${stats.types[0][1]}건)입니다.`,
+    functions[0] && `교사가 추정한 주된 기능은 **${functions[0][0]}**(${Math.round((functions[0][1] / Math.max(1, fnTotal)) * 100)}%)입니다.`,
+    diff !== 0 ? `최근 2주 **${stats.last14}건**으로, 그 전 2주(${stats.prev14}건)보다 **${diff > 0 ? "늘었습니다" : "줄었습니다"}**.` : `최근 2주 ${stats.last14}건으로 그 전 2주와 같습니다.`,
+  ].filter(Boolean) as string[];
 
   return (
     <AuthCheck>
-      <AppShell
-        currentPage="student"
-        title={`🔬 ${maskName(profile.name)} 학생 FBA 프로파일`}
-        subtitle={`${profile.class} (${profile.student_code}) · ${profile.tier || "Tier 1"} 중재 대상자 · 기능적행동평가(FBA) — 행동중재계획(BIP) 작성은 별도 페이지`}
-        headerActions={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => router.push(`/student/${encodeURIComponent(studentName)}/bip`)}
-              className="btn btn-ai"
-            >
-              📝 BIP 작성/수정
-            </button>
-            <button
-              onClick={() => router.push(`/logs?q=${encodeURIComponent(profile.student_code || studentName)}`)}
-              className="btn btn-secondary"
-            >
-              🗂️ 전체 로그에서 보기
-            </button>
-            <button
-              onClick={() => router.push(`/behavior?student=${encodeURIComponent(profile.student_code || studentName)}`)}
-              className="btn btn-secondary"
-              style={{ color: '#b91c1c' }}
-            >
-              🚨 위기행동 기록
-            </button>
-            <button onClick={() => router.back()} className="btn btn-secondary">
-              ← 뒤로가기
-            </button>
-          </div>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {/* KPI Cards — 절제된 색(값에만 강조색, 그 외 회색/흰색)으로 통일 */}
-            <div className="grid-responsive" style={{ marginBottom: '8px' }}>
-               {[
-                { label: "총 행동 발생", value: `${profile.total_incidents}건`, color: "#0f172a" },
-                { label: "평균 행동 강도", value: profile.avg_intensity.toFixed(1), color: profile.avg_intensity >= 3.5 ? "#dc2626" : "#0f172a" },
-                { label: "위험 수준", value: (profile.tier || "").includes("3") ? "높음" : "보통", color: (profile.tier || "").includes("3") ? "#dc2626" : "#0f172a" }
-               ].map((c, i) => (
-                 <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', marginBottom: '6px' }}>{c.label}</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 800, color: c.color }}>{c.value}</div>
-                 </div>
-               ))}
-            </div>
+      <AppShell currentPage="student" title="👤 개별학생대시보드" subtitle={`분석기간 ${startDate || "처음"} ~ ${endDate || "오늘"} 기준`}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-            {/* FBA Evidence Summary — 이 페이지에서 "행동/배경/기능"을 요약하는 유일한 섹션.
-                예전엔 이 위에 별도로 그럴듯하게 기능을 추측해 보여주는 "FBA Summary" 3박스가
-                있었는데, 실제 기능 데이터가 없는 학생에서도 그럴듯한 값을 채워 보여줘 아래
-                증거요약(정직하게 "미상"으로 표기)과 서로 다른 답을 보여주는 문제가 있었다.
-                하나로 합쳐 페이지 안에서 근거 없이 서로 다른 결론이 나오지 않게 한다. */}
-            <FBAEvidencePanel evidence={fbaEvidence} />
-
-            {/* 위기대응 이력 — 결재함(Pending)에서만 보이던 위기대응 상세기록을 결재 여부와
-                무관하게 학생 단위로 상시 열람 가능하게 한다. 담임/IEP팀이 제지·개별학생교육지원
-                등 법정기록을 다시 찾아보려 할 때 결재함을 뒤질 필요가 없도록 하는 것이 목적. */}
-            {crisisLogs.length > 0 && (
-              <div>
-                <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>🚨 위기대응 이력 ({crisisLogs.length}건)</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {crisisLogs.map((log, i) => {
-                    const logId = log.Log_ID || String(i);
-                    const isExpanded = expandedCrisisId === logId;
-                    const isCrisis = String(log["물리적제지여부"] || "").startsWith("O");
-                    const missingLegal = isCrisis && !!log.crisis_details && (
-                      !String(log.crisis_details["관리자_보고_시간"] || "").trim() ||
-                      !String(log.crisis_details["학부모_알림_시간"] || "").trim()
-                    );
-                    return (
-                      <div key={logId} className="card" style={{ padding: '14px 18px', border: missingLegal ? '1px solid #f59e0b' : '1px solid var(--border-subtle)' }}>
-                        <div
-                          onClick={() => setExpandedCrisisId(isExpanded ? null : logId)}
-                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                        >
-                          <div style={{ fontWeight: 700 }}>
-                            {log["행동발생날짜"]} ({log["시간대"]}) · {log["행동유형"]} · {log["장소"]}
-                            {missingLegal && <span style={{ marginLeft: '8px', color: '#b91c1c', fontSize: '0.8rem' }}>⚠️ 법정 보고/알림 미기록</span>}
-                          </div>
-                          <span style={{ color: '#94a3b8' }}>{isExpanded ? "▲ 접기" : "▼ 상세 보기"}</span>
-                        </div>
-                        {isExpanded && (
-                          <div style={{ marginTop: '12px' }}>
-                            <CrisisDetailPanel crisisDetails={log.crisis_details} formReportDetails={log.form_report_details} isCrisis={isCrisis} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+          {/* 1. 학생 헤더 */}
+          <section style={{ ...card, padding: 0, overflow: "hidden" }}>
+            <div style={{ height: 6, background: tierColor }} />
+            <div style={{ padding: "20px 24px", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ width: 64, height: 64, borderRadius: "50%", background: `${tierColor}18`, color: tierColor, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", fontWeight: 900, flexShrink: 0 }}>
+                {maskName(profile.name)[0] || "학"}
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 900, color: C.ink }}>{maskName(profile.name)}</h2>
+                  {tierText.split(",").map(t => t.trim()).filter(Boolean).map(t => (
+                    <span key={t} style={{ padding: "3px 10px", borderRadius: 99, fontSize: "0.75rem", fontWeight: 800,
+                      background: t.includes("3") ? C.redSoft : t.includes("2") ? C.amberSoft : C.greenSoft,
+                      color: t.includes("3") ? C.red : t.includes("2") ? C.amber : C.green }}>{t}</span>
+                  ))}
+                </div>
+                <div style={{ marginTop: 6, color: C.sub, fontSize: "0.9rem" }}>
+                  {profile.class} · 학생코드 {code}
+                  {stats.lastDate && <> · 마지막 위기행동 <b style={{ color: C.ink }}>{kd(stats.lastDate)}</b> ({stats.daysSince === 0 ? "오늘" : `${stats.daysSince}일 전`})</>}
                 </div>
               </div>
-            )}
-
-            {/* Charts Grid */}
-            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                <ChartSection title="📍 ABC 패턴 맵 (장소 x 시간 x 강도)">
-                  <ResponsiveContainer>
-                    <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
-                      <XAxis type="category" dataKey="x" name="시간" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <YAxis type="category" dataKey="y" name="장소" width={100} axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                      <ZAxis type="number" dataKey="z" range={[100, 800]} />
-                      <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                      <Scatter name="행동" data={abc_data} fill={PIE_COLORS_TYPE[0]} opacity={0.6} />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </ChartSection>
-
-                <ChartSection title="🎭 행동 기능 분포">
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie data={functions} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
-                        {Array.isArray(functions) && functions.length > 0 && functions.map((_, i) => <Cell key={i} fill={PIE_COLORS_TYPE[i % PIE_COLORS_TYPE.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={(v: any) => [`${v}건`, '']} />
-                      <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </ChartSection>
-            </div>
-
-            {/* 발생 추이 — 주별/일별/요일별을 흩어 놓지 않고 한 클러스터로 모아 "언제 발생하는가"를
-                한 번에 훑어볼 수 있게 한다. */}
-            <div>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>📈 발생 추이</h3>
-              <div className="responsive-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' }}>
-                <WeeklyAnalysisChart
-                  data={data.weekly_trend || []}
-                  title="주별 발생 추이"
-                  color={PIE_COLORS_TYPE[0]}
-                />
-                <ChartSection title="📉 일별 추이 (전체 기간)" height={340}>
-                   <ResponsiveContainer>
-                      <ComposedChart data={cico_trend}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                        <Tooltip />
-                        <Area type="monotone" dataKey="count" fill={`${PIE_COLORS_TYPE[0]}10`} stroke={PIE_COLORS_TYPE[0]} strokeWidth={3} />
-                        <Bar dataKey="count" fill={PIE_COLORS_TYPE[0]} barSize={10} radius={[5,5,0,0]} />
-                      </ComposedChart>
-                   </ResponsiveContainer>
-                </ChartSection>
-                <ChartSection title="📅 요일별 패턴" height={340}>
-                  <ResponsiveContainer>
-                      <BarChart data={data.weekday_dist || []}>
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700 }} />
-                          <Tooltip />
-                          <Bar dataKey="value" fill={PIE_COLORS_TYPE[1]} radius={[10, 10, 10, 10]} barSize={20}>
-                              <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 800, fill: PIE_COLORS_TYPE[1] }} />
-                          </Bar>
-                      </BarChart>
-                  </ResponsiveContainer>
-                </ChartSection>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => router.push(`/behavior?student=${encodeURIComponent(code)}`)} className="btn" style={{ background: C.red, color: "#fff" }}>🚨 위기행동 기록</button>
+                <button onClick={() => router.push(`/student/${encodeURIComponent(code)}/bip`)} className="btn btn-ai">🧩 행동중재계획(BIP)</button>
+                <button onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)} className="btn btn-secondary">📉 표적행동</button>
+                <button onClick={() => router.push(`/logs?q=${encodeURIComponent(code)}`)} className="btn btn-secondary">🗂️ 전체 로그</button>
               </div>
             </div>
+          </section>
 
-            {/* 지원 도구 — 상담/관찰 기록과 AI 종합 분석 */}
-            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
-               <ConsultationLog studentCode={profile.student_code} />
-               <StudentAIAnalysis studentCode={profile.student_code} apiUrl={apiUrl} />
+          {/* 2. 핵심 지표 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
+            <Kpi label="기간 내 위기행동" value={stats.total} unit="건" note={`평균 강도 ${stats.avg.toFixed(1)} / 5`} />
+            <Kpi label="최근 2주" value={stats.last14} unit="건" tone={trendTone}
+              note={<span style={{ color: trendTone, fontWeight: 700 }}>{diff > 0 ? `▲ ${diff}건 증가` : diff < 0 ? `▼ ${-diff}건 감소` : "변화 없음"} <span style={{ color: C.mute, fontWeight: 500 }}>(그 전 2주 {stats.prev14}건)</span></span>} />
+            <Kpi label="고강도(4~5)" value={stats.high} unit="건" tone={stats.high ? C.red : C.ink} note="강도 4 이상" />
+            <Kpi label="위기조치(제지 등)" value={stats.crisis} unit="건" tone={stats.crisis ? C.red : C.ink} note="보고서 작성 사안" />
+          </div>
+
+          {/* 3. 한눈에 */}
+          {insights.length > 0 && (
+            <section style={{ ...card, background: C.blueSoft, borderColor: "#dbeafe" }}>
+              <h3 style={{ ...h3, color: "#1e40af" }}>💡 한눈에 보기</h3>
+              <ul style={{ margin: "10px 0 0", paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6, color: C.ink, fontSize: "0.95rem", lineHeight: 1.6 }}>
+                {insights.map((t, i) => (
+                  <li key={i} dangerouslySetInnerHTML={{ __html: t.replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string)).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") }} />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* 4. 주별 추이 */}
+          <section style={card}>
+            <h3 style={h3}>📈 주별 발생 추이</h3>
+            <p style={hint}>막대 = 주별 건수, 선 = 그 주 평균 강도</p>
+            <div style={{ height: 260, marginTop: 12 }}>
+              {stats.total === 0 ? <div style={{ color: C.mute, paddingTop: 100, textAlign: "center" }}>기간 내 기록이 없습니다.</div> : (
+                <ResponsiveContainer>
+                  <ComposedChart data={stats.weekly} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: C.sub }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="c" allowDecimals={false} tick={{ fontSize: 11, fill: C.sub }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="i" orientation="right" domain={[0, 5]} tick={{ fontSize: 11, fill: C.sub }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v: any, n: any) => [n === "count" ? `${v}건` : v, n === "count" ? "건수" : "평균 강도"]} labelFormatter={(l) => `${l} 주`} />
+                    <Bar yAxisId="c" dataKey="count" fill={C.blue} radius={[6, 6, 0, 0]} maxBarSize={28} />
+                    <Line yAxisId="i" dataKey="avg" stroke={C.red} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
             </div>
+          </section>
 
-            <MedicationResponseReport studentCode={profile.student_code} apiUrl={apiUrl} />
+          {/* 5. 언제·어디서 */}
+          <section style={card}>
+            <h3 style={h3}>🗺️ 언제·어디서 일어나나</h3>
+            <p style={hint}>칸이 진할수록 그 장소·시간대에 자주 일어납니다.</p>
+            <div style={{ marginTop: 14 }}><Heatmap logs={inRange} /></div>
+          </section>
 
-            {/* Be-Able 39 EBP Matched Recommendations — grounded in the real FBA evidence packet
-                (teacher_inferred_function_distribution / setting_event_cue_distribution) instead of
-                a naive string match on the chart's top function label. */}
-            <EBPRecommendationSection
-                studentCode={profile.student_code}
-                functionCode={mapFunctionLabelToCode((fbaEvidence?.deterministic_metrics?.teacher_inferred_function_distribution || [])[0]?.item || "")}
-                settingEvents={(fbaEvidence?.deterministic_metrics?.setting_event_cue_distribution || []).map((s: any) => s.item)}
-                currentTier={profile.tier || "Tier 1"}
-                apiUrl={apiUrl}
-            />
+          {/* 6. 무엇을·왜 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+            <section style={card}>
+              <h3 style={h3}>🧭 행동 유형</h3>
+              <div style={{ marginTop: 14 }}><HBars data={stats.types} color={C.blue} total={stats.total} /></div>
+            </section>
+            <section style={card}>
+              <h3 style={h3}>🎯 추정 기능 (왜 하나)</h3>
+              <div style={{ marginTop: 14 }}><HBars data={functions.slice(0, 5)} color={C.violet} total={fnTotal} /></div>
+            </section>
+            <section style={card}>
+              <h3 style={h3}>📅 요일별</h3>
+              <div style={{ marginTop: 14 }}><HBars data={["월", "화", "수", "목", "금"].map(d => [d, (data.weekday_dist || []).find(w => w.name === d)?.value || 0] as [string, number])} color={C.amber} total={stats.total} keepOrder /></div>
+            </section>
+          </div>
+
+          {/* 7. 최근 기록 */}
+          <section style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <div>
+                <h3 style={h3}>🕒 최근 기록</h3>
+                <p style={hint}>누르면 상세 내용을 보고 수정·삭제할 수 있습니다.</p>
+              </div>
+              <label style={{ fontSize: "0.85rem", color: C.sub, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input type="checkbox" checked={crisisOnly} onChange={e => setCrisisOnly(e.target.checked)} /> 위기조치(보고서)만
+              </label>
+            </div>
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              {recent.length === 0 && <div style={{ color: C.mute }}>기록이 없습니다.</div>}
+              {recent.map((l, i) => {
+                const id = l["Log_ID"] || `${dOf(l)}-${i}`;
+                const crisis = isCrisis(l);
+                const it = intensity(l);
+                return (
+                  <div key={id} style={{ border: `1px solid ${crisis ? "#fecaca" : C.line}`, borderLeft: `5px solid ${crisis ? C.red : (it ?? 0) >= 4 ? C.amber : "#cbd5e1"}`, borderRadius: 12, background: crisis ? C.redSoft : "#fff" }}>
+                    <button onClick={() => setOpenLog(openLog === id ? null : id)}
+                      style={{ width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 900, color: C.ink, minWidth: 64 }}>{dOf(l) ? kd(dOf(l)) : "-"}</span>
+                      <span title={slots(l).map(slotLabel).join(", ")} style={{ color: C.sub, fontSize: "0.85rem", width: 210, flexShrink: 0 }}>{slotSummary(l)} · {short(l["장소"])}</span>
+                      <span style={{ fontWeight: 700, color: C.ink, flex: 1 }}>{short(l["행동유형"])}</span>
+                      <span style={{ fontSize: "0.8rem", fontWeight: 800, color: (it ?? 0) >= 4 ? C.red : C.sub }}>강도 {it ?? "-"}</span>
+                      {crisis && <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#fff", background: C.red, borderRadius: 6, padding: "2px 8px" }}>{short(l["제지유형_원문"] || "위기조치")}</span>}
+                      {l["Status"] === "Pending" && <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#fff", background: C.amber, borderRadius: 6, padding: "2px 8px" }}>결재 대기</span>}
+                      <span style={{ color: C.mute }}>{openLog === id ? "▲" : "▼"}</span>
+                    </button>
+                    {openLog === id && (
+                      <div style={{ padding: "0 14px 14px" }}>
+                        <LogDetailPanel log={l} isCrisis={crisis} onSaved={() => void fetchLogs()} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* 8. 지원 도구(탭) */}
+          <section style={{ ...card, padding: 0 }}>
+            <div style={{ display: "flex", gap: 4, padding: "10px 12px 0", borderBottom: `1px solid ${C.line}`, overflowX: "auto" }}>
+              {TABS.map(t => (
+                <button key={t.key} onClick={() => setTab(t.key)}
+                  style={{ padding: "10px 14px", border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap", fontSize: "0.9rem",
+                    fontWeight: tab === t.key ? 800 : 600, color: tab === t.key ? C.blue : C.sub,
+                    borderBottom: `3px solid ${tab === t.key ? C.blue : "transparent"}` }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: 20 }}>
+              {tab === "notes" && <ConsultationLog studentCode={code} />}
+              {tab === "ebp" && (
+                <EBPRecommendationSection
+                  studentCode={code}
+                  functionCode={mapFunctionLabelToCode((fbaEvidence?.deterministic_metrics?.teacher_inferred_function_distribution || [])[0]?.item || "")}
+                  settingEvents={(fbaEvidence?.deterministic_metrics?.setting_event_cue_distribution || []).map((s: any) => s.item)}
+                  currentTier={tierText}
+                  apiUrl={apiUrl}
+                />
+              )}
+              {tab === "fba" && (fbaEvidence ? <FBAEvidencePanel evidence={fbaEvidence} /> : <div style={{ color: C.mute }}>FBA 증거를 불러오는 중이거나 자료가 없습니다.</div>)}
+              {tab === "ai" && <StudentAIAnalysis studentCode={code} apiUrl={apiUrl} />}
+              {tab === "med" && <MedicationResponseReport studentCode={code} apiUrl={apiUrl} />}
+            </div>
+          </section>
         </div>
       </AppShell>
     </AuthCheck>
@@ -331,7 +455,7 @@ function FBAEvidencePanel({ evidence }: { evidence: any }) {
   const insufficient = dq.is_insufficient_sample;
 
   return (
-    <section style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+    <section>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: 10 }}>
         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
           <span>🔬</span> FBA 증거 요약
@@ -395,17 +519,6 @@ function FBAEvidencePanel({ evidence }: { evidence: any }) {
       {dq.interpretation_limit && (
         <p style={{ marginTop: 16, marginBottom: 0, fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.6 }}>{dq.interpretation_limit}</p>
       )}
-    </section>
-  );
-}
-
-function ChartSection({ title, children, height = 340 }: { title: string, children: React.ReactNode, height?: number }) {
-  return (
-    <section style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '12px' }}>
-       <h3 style={{ margin: '0 0 16px 0', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>{title}</h3>
-       <div style={{ height }}>
-          {children}
-       </div>
     </section>
   );
 }
@@ -475,7 +588,7 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
   };
 
   return (
-    <div style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+    <div>
       <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>📝 상담 및 관찰 기록</h3>
       <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="학생 관찰 내용이나 학부모 상담 내용을 기록하십시오..." style={{ width: '100%', minHeight: '110px', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none' }} />
       <div style={{ textAlign: 'right', marginTop: '10px' }}>
@@ -529,7 +642,7 @@ function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUr
   };
 
   return (
-    <div style={{ background: '#fff', padding: '20px', borderRadius: '14px', border: '1px solid #bfdbfe' }}>
+    <div>
        {!visible ? (
          <button onClick={requestAnalysis} style={{ width: '100%', padding: '14px', background: '#2563eb', color: '#fff', borderRadius: '10px', border: 'none', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
            🤖 AI 종합 분석 리포트 생성
@@ -625,7 +738,7 @@ function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string
   const labelStyle = { fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', display: 'block' };
 
   return (
-    <div style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #fde68a' }}>
+    <div>
       <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>💊 약물 반응 모니터링 의견서</h3>
       <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5 }}>
         약물 복용 변경 전·후 기간을 설정하면 교실에서 관찰된 행동 변화를 정리한 담임교사 의견서를 만듭니다.
@@ -707,7 +820,7 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
   const isUnknown = functionCode === "UNKNOWN";
 
   return (
-    <section style={{ background: '#fff', padding: '24px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+    <section>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
