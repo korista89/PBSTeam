@@ -20,6 +20,8 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 
 type SortKey = "date" | "student" | "class" | "teacher" | "type" | "intensity" | "place" | "restraint" | "status";
 type SortDir = "desc" | "asc";
+// 처음 열 때 최근 기록부터(날짜/시간대 내림차순)
+const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: "date", dir: "desc" };
 type FilterKey = "class" | "type" | "intensity" | "place" | "teacher" | "restraint";
 
 const COLUMNS: { label: string; key: SortKey }[] = [
@@ -77,7 +79,7 @@ export default function LogsPage() {
     const [status, setStatus] = useState("전체");
     const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
     // 정렬: null이면 서버가 준 순서(입력 최신순) 그대로. 헤더를 누를 때마다 내림차순 → 오름차순 → 해제.
-    const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
+    const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(DEFAULT_SORT);
     const [filters, setFilters] = useState<Record<FilterKey, string>>(EMPTY_FILTERS);
     // 검색어를 매 키 입력마다 요청하면 네트워크 지연에 따라 응답이 요청 순서와 다르게
     // 도착할 수 있다(예: "2" 요청이 "2421" 요청보다 늦게 도착해 더 넓은 결과로 화면을
@@ -233,9 +235,9 @@ export default function LogsPage() {
                                 <option value="O">🚨 제지 있음</option>
                                 <option value="X">제지 없음</option>
                             </select>
-                            {(activeFilterCount > 0 || sort) && (
+                            {(activeFilterCount > 0 || sort !== DEFAULT_SORT) && (
                                 <button
-                                    onClick={() => { setFilters(EMPTY_FILTERS); setSort(null); }}
+                                    onClick={() => { setFilters(EMPTY_FILTERS); setSort(DEFAULT_SORT); }}
                                     className="btn btn-secondary"
                                     style={{ padding: "5px 10px", fontSize: "0.78rem" }}
                                 >
