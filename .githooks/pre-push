@@ -1,0 +1,10 @@
+#!/bin/sh
+# 배포 의존성이 Vercel 한도를 넘으면 푸시를 막는다(2026-10-26 로그인 불가 사고 재발 방지).
+# 켜기: git config core.hooksPath .githooks
+cd "$(git rev-parse --show-toplevel)" || exit 1
+PY=backend/.venv/bin/python
+[ -x "$PY" ] || PY=python3
+"$PY" -m pytest -q tests/test_deploy_bundle.py || {
+  echo "푸시 중단: 배포 의존성 검사 실패. 급하면 git push --no-verify"
+  exit 1
+}

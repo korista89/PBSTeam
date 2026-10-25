@@ -52,6 +52,11 @@ npm run dev                            # next dev
 실명↔별칭 대응표는 저장소 밖 `~/data/pbst_alias_map.json`에만 둔다.
 예약 작업(WSL systemd --user): `pbst-anonymize.timer`(새 실명 가림, `--incremental`), `pbst-briefing.timer`(평일 07:30 브리핑 텔레그램). 로그는 `~/data/pbst_*.log`.
 
+## 백엔드 의존성
+
+Vercel은 `backend/app/requirements.txt`를 읽는다. 루트·`backend/` 사본과 내용이 같아야 한다.
+설치 크기가 250MB를 넘으면 매 시작마다 런타임 설치→공간 부족→전 API 500이 난다. 새 패키지는 `tests/test_deploy_bundle.py`(200MB 예산)를 통과해야 한다.
+
 ## 스키마를 건드릴 때
 
 백엔드 Pydantic 모델과 프론트 TypeScript 타입이 짝을 이룬다.
