@@ -121,7 +121,7 @@ def build_hwpx(fields: Dict[str, Any] = None) -> bytes:
             H.fill_cell(entries, 0, ti, 11 + i, 5, row["내용"])
     for name, label in zip(REASON_BOXES, REASONS):
         H.set_checkbox(entries, name, bool((f.get("보고사유") or {}).get(label)))
-    sign = "발생 시 지도교사:                (서명)      담임교사:                (서명)"
+    sign = "담임교사:                (서명)"
     H.fill_cell(entries, 0, ti, 17, 0, f"PBST 기록번호: {f['기록번호']}      {sign}" if f.get("기록번호") else sign)
     buf = io.BytesIO()
     order = sorted(entries, key=lambda e: 0 if e["name"] == "mimetype" else 1)
