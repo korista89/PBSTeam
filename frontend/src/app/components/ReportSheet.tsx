@@ -59,9 +59,7 @@ export default function ReportSheet({ c, edit }: { c: SheetCells; edit?: boolean
       <div style={{ fontSize: "8pt", marginTop: 4 }}>* 관리자 보고·학부모 알림은 당일 이행해야 하는 법적 의무입니다.</div>
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 18, fontSize: "10pt" }}>
         <tbody><tr>
-          {["발생 시 지도교사", "개별학생교육지원 교사", "담임교사"].map(r => (
-            <td key={r} style={{ padding: "6px 4px" }}>{r}: <span style={{ display: "inline-block", minWidth: 70, borderBottom: "1px solid #000" }}>&nbsp;</span> (서명)</td>
-          ))}
+          <td style={{ padding: "6px 4px", textAlign: "right" }}>담임교사: <span style={{ display: "inline-block", minWidth: 120, borderBottom: "1px solid #000" }}>&nbsp;</span> (서명)</td>
         </tr></tbody>
       </table>
     </>
