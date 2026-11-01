@@ -20,3 +20,10 @@ def test_function_read_from_sheet_column_named_기능():
     from app.services.normalize import normalize_behavior_log
     log = normalize_behavior_log({"학생코드": "S01", "기능": "과제 회피(사회적 부적강화)", "행동유형": "방해행동"}, {})
     assert log["function_labels"] and "미상" not in log["function_labels"][0]
+
+
+def test_intensity_read_from_sheet_column_named_강도():
+    # 운영 시트의 강도 칸 이름은 '강도' — 못 읽으면 모든 기록이 강도 1로 집계된다.
+    from app.services.normalize import normalize_behavior_log
+    log = normalize_behavior_log({"학생코드": "S01", "강도": "4(위기행동): 강한 공격"}, {})
+    assert log["intensity"] == 4

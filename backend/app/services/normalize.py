@@ -428,7 +428,14 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     time_val = str(raw_row.get("time_slot", raw_row.get("시간대", ""))).strip()
     loc_val = str(raw_row.get("location", raw_row.get("행동 발생 장소", raw_row.get("장소", "")))).strip()
     type_val = str(raw_row.get("behavior_type", raw_row.get("행동유형(핵심행동으로택1)", raw_row.get("행동유형", "")))).strip()
-    int_val = str(raw_row.get("intensity", raw_row.get("강도(1~5)", raw_row.get("강도(1~5점 척도)", "1")))).strip()
+    # 운영 시트 칸 이름은 '강도'(값 예: "4(위기행동): 강한 ..."). 옛 이름도 함께 읽는다.
+    int_val = str(
+        raw_row.get("intensity")
+        or raw_row.get("강도(1~5)")
+        or raw_row.get("강도(1~5점 척도)")
+        or raw_row.get("강도")
+        or "1"
+    ).strip()
     # 운영 시트 칸 이름은 '기능'(2026-11-01 머리글 정리). 옛 이름도 함께 읽는다.
     func_val = str(
         raw_row.get("function")
@@ -483,7 +490,7 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     signals = extract_clinical_signals(notes_val, restr_val, setting_event_categories_val)
     
     try:
-        intensity_num = int(re.search(r'\d+', int_val).group(1)) if re.search(r'\d+', int_val) else 1
+        intensity_num = int(re.search(r'\d+', int_val).group(0)) if re.search(r'\d+', int_val) else 1
     except Exception:
         intensity_num = 1
         
