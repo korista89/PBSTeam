@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import {
-    ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
+    ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from "recharts";
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
@@ -352,7 +352,7 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                                         <Line yAxisId="left" type="linear" dataKey="treatment" name={`중재(${selected.MeasurementType})`} stroke="#4f46e5" strokeWidth={2} dot={{ r: 4, fill: "#4f46e5" }} connectNulls isAnimationActive={false} />
                                                         <Line yAxisId="left" type="linear" dataKey="after" name="중재 종료 후" stroke="#0891b2" strokeWidth={2} dot={{ r: 4, fill: "#0891b2" }} connectNulls isAnimationActive={false} />
                                                         <Line yAxisId="right" type="linear" dataKey="fidelity" name="중재 실행(O=100)" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: "#10b981", stroke: "#10b981" }} legendType="square" isAnimationActive={false} />
-                                                        <Line yAxisId="left" type="linear" dataKey="crisis" name="위기행동 발생(건)" stroke="#ef4444" strokeWidth={0} dot={{ r: 4, fill: "#fff", stroke: "#ef4444", strokeWidth: 2 }} legendType="circle" isAnimationActive={false} />
+                                                        <Bar yAxisId="left" dataKey="crisis" name="위기행동 발생(건)" fill="#ef4444" fillOpacity={0.5} barSize={12} isAnimationActive={false} />
                                                     </ComposedChart>
                                                 </ResponsiveContainer>
                                             </div>
