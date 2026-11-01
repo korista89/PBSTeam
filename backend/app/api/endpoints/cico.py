@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from app.services.sheets import (
     get_monthly_cico_data,
     update_monthly_cico_cells,
+    update_cico_periods,
     update_student_cico_settings,
     toggle_tier2_status,
     get_holidays_from_config,
@@ -178,6 +179,7 @@ class CellUpdate(BaseModel):
     row: int
     col: int  # 1-based column index
     value: str
+    period: str = ""  # 분포도기록지 칸이면 "1교시"~"7교시"·"점심"
 
 
 class BatchUpdateRequest(BaseModel):
@@ -233,9 +235,11 @@ def update_cico_cells(
     # are reported per cell so the client can drop just those and keep the rest.
     # Previously the first bad cell failed the batch, and because the client kept
     # re-sending it, every later save on that screen failed too.
-    valid, rejected = [], []
+    valid, periods, rejected = [], [], []
     for u in req.updates:
         cell = {"row": u.row, "col": u.col, "value": u.value}
+        if u.period:
+            cell["period"] = u.period
         target_student = row_to_student.get(u.row)
         if not target_student:
             rejected.append({**cell, "reason": "학생 행을 찾을 수 없습니다. 화면을 새로고침해 주세요."})
@@ -246,6 +250,13 @@ def update_cico_cells(
         scale = target_student.get("척도", "")
         if u.col not in allowed_daily_columns:
             rejected.append({**cell, "reason": "일일 입력 칸이 아닙니다. 화면을 새로고침해 주세요."})
+        elif u.period:
+            if target_student.get("기록방식") != "분포도" or u.period not in target_student.get("period_slots", []):
+                rejected.append({**cell, "reason": "분포도기록지 칸이 아닙니다. 화면을 새로고침해 주세요."})
+            elif u.value not in ("O", "X", ""):
+                rejected.append({**cell, "reason": "분포도기록지는 O·X만 입력할 수 있습니다."})
+            else:
+                periods.append(cell)
         elif not _is_valid_daily_value(scale, u.value):
             rejected.append({**cell, "reason": f"'{u.value}'은(는) 척도 '{scale}'에 맞지 않는 값입니다."})
         else:
@@ -256,6 +267,9 @@ def update_cico_cells(
         result = update_monthly_cico_cells(req.month, valid)
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
+    if periods:
+        result = update_cico_periods(req.month, periods)
+    valid += periods
     if rejected:
         raise HTTPException(status_code=422, detail={
             "message": f"{len(rejected)}칸은 저장하지 못했습니다" + (f" ({len(valid)}칸은 저장됨)." if valid else "."),

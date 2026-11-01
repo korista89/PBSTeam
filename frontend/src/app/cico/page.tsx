@@ -28,6 +28,9 @@ interface GridStudent {
   수행_발생률: string;
   목표_달성_여부: string;
   days: DayValue;
+  기록방식?: string;  // "분포도"면 교시별 기록(분포도기록지), 비면 하루 1칸
+  periods?: { [day: string]: { [period: string]: string } };
+  period_slots?: string[];
 }
 interface DayColumn { index: number; label: string; display?: string; }
 interface GridData {
@@ -179,7 +182,7 @@ export default function CICOPage() {
   const [is404, setIs404] = useState(false);
   const [error, setError] = useState("");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const [pendingUpdates, setPendingUpdates] = useState<{ row: number; col: number; value: string }[]>([]);
+  const [pendingUpdates, setPendingUpdates] = useState<{ row: number; col: number; value: string; period?: string }[]>([]);
   const [saveStatus, setSaveStatus] = useState("");
   const [generating, setGenerating] = useState(false);
   const [aiState, setAiState] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
@@ -273,8 +276,8 @@ export default function CICOPage() {
     if (pendingUpdates.length === 0) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     const batchToSave = pendingUpdates;
-    type Cell = { row: number; col: number; value: string };
-    const sameCell = (a: Cell, b: Cell) => a.row === b.row && a.col === b.col && a.value === b.value;
+    type Cell = { row: number; col: number; value: string; period?: string };
+    const sameCell = (a: Cell, b: Cell) => a.row === b.row && a.col === b.col && a.value === b.value && (a.period || "") === (b.period || "");
     const dropFromPending = (done: Cell[]) =>
       setPendingUpdates(current => current.filter(item => !done.some(d => sameCell(d, item))));
 
@@ -315,19 +318,24 @@ export default function CICOPage() {
     };
   }, [pendingUpdates, month, apiUrl]);
 
-  const handleCellChange = (student: GridStudent, dayLabel: string, value: string) => {
+  const handleCellChange = (student: GridStudent, dayLabel: string, value: string, period?: string) => {
     if (!gridData) return;
     const dayCol = gridData.day_columns.find(d => d.label === dayLabel);
     if (!dayCol) return;
     const colIdx = dayCol.index + 1;
-    setGridData(prev => prev ? { ...prev, students: prev.students.map(s => s.row === student.row ? { ...s, days: { ...s.days, [dayLabel]: value } } : s) } : prev);
-    setPendingUpdates(prev => [...prev.filter(u => !(u.row === student.row && u.col === colIdx)), { row: student.row, col: colIdx, value }]);
+    setGridData(prev => prev ? { ...prev, students: prev.students.map(s => s.row !== student.row ? s : period
+      ? { ...s, periods: { ...s.periods, [dayLabel]: { ...(s.periods?.[dayLabel] || {}), [period]: value } } }
+      : { ...s, days: { ...s.days, [dayLabel]: value } }) } : prev);
+    setPendingUpdates(prev => [...prev.filter(u => !(u.row === student.row && u.col === colIdx && (u.period || "") === (period || ""))),
+      { row: student.row, col: colIdx, value, ...(period ? { period } : {}) }]);
   };
 
   const handleSettingsChange = async (student: GridStudent, updates: { [field: string]: string }) => {
     try {
       await axios.post(`${apiUrl}/api/v1/cico/settings`, { month, student_code: student.학생코드, settings: updates, row_index: student.row });
       setGridData(prev => prev ? { ...prev, students: prev.students.map(s => s.row === student.row ? { ...s, ...updates } : s) } : prev);
+      // 기록 방식을 바꾸면 교시 칸·수행률이 서버에서 다시 만들어지므로 새로 읽는다
+      if ("기록방식" in updates) void fetchData(true);
       setSaveStatus("✓ 설정 저장 완료");
       setTimeout(() => setSaveStatus(""), 2000);
     } catch {
@@ -495,13 +503,14 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
   gridStudent: GridStudent;
   reportStudent: ReportStudent | null;
   dayColumns: DayColumn[];
-  onCellChange: (student: GridStudent, dayLabel: string, value: string) => void;
+  onCellChange: (student: GridStudent, dayLabel: string, value: string, period?: string) => void;
   onSettingsChange: (student: GridStudent, updates: { [field: string]: string }) => void;
   aiState: { loading: boolean; text: string };
   onRequestAI: () => void;
 }) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editingBehavior, setEditingBehavior] = useState(false);
+  const isScatter = gridStudent.기록방식 === "분포도";
 
   const dec = reportStudent ? getCICODecisionDetail(reportStudent) : null;
   const goal = reportStudent?.goal_num || 80;
@@ -600,6 +609,13 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
             </select>
           </div>
           <div>
+            <label style={labelStyle}>기록 방식</label>
+            <select value={gridStudent.기록방식 || ""} onChange={e => onSettingsChange(gridStudent, { "기록방식": e.target.value })} style={selectStyle}>
+              <option value="">일별 기록</option>
+              <option value="분포도">분포도기록지(교시별)</option>
+            </select>
+          </div>
+          <div>
             <label style={labelStyle}>달성기준</label>
             <select value={gridStudent["목표 달성 기준"]} onChange={e => onSettingsChange(gridStudent, { "목표 달성 기준": e.target.value })} style={selectStyle}>
               {(gridStudent["목표행동 유형"] === "감소 목표행동" ? CRITERIA_DECREASE : CRITERIA_INCREASE).map(o => <option key={o} value={o}>{o}</option>)}
@@ -610,10 +626,26 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
 
       {/* 일별 입력 */}
       <div className="card" style={{ padding: 18 }}>
-        <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a", marginBottom: 10 }}>✍️ 이달 일별 기록 <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#94a3b8" }}>(셀 클릭해서 입력, 자동저장)</span></div>
+        <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a", marginBottom: 10 }}>✍️ {isScatter ? "이달 분포도기록지" : "이달 일별 기록"} <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#94a3b8" }}>({isScatter ? "교시 칸을 눌러 O→X→공백, 자동저장" : "셀 클릭해서 입력, 자동저장"})</span></div>
         <div style={{ overflowX: "auto" }}>
           <div style={{ display: "flex", gap: 4, width: "max-content" }}>
-            {dayColumns.map(day => {
+            {isScatter && dayColumns.map(day => (
+              <div key={day.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                <span style={{ fontSize: "0.62rem", color: "#94a3b8" }}>{day.display || day.label}</span>
+                {(gridStudent.period_slots || []).map(p => {
+                  const v = gridStudent.periods?.[day.label]?.[p] || "";
+                  const lunch = p === "점심";
+                  return (
+                    <button key={p} type="button" aria-label={`${day.label} ${p} ${v || "기록 없음"}`}
+                      onClick={() => onCellChange(gridStudent, day.label, v === "O" ? "X" : v === "X" ? "" : "O", p)}
+                      style={{ width: 46, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: v ? getCellColor(v, gridStudent["목표행동 유형"], "O/X(발생)") : lunch ? "#fff7ed" : "#fff", border: `1px solid ${lunch ? "#fdba74" : "#cbd5e1"}`, borderRadius: 8, cursor: "pointer", fontSize: "0.68rem", fontWeight: v ? 800 : 500, color: v ? "#0f172a" : "#64748b" }}>
+                      {v || p}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {!isScatter && dayColumns.map(day => {
               const val = gridStudent.days[day.label] || "";
               const isEditing = editingCell === day.label;
               const options = getInputOptions(gridStudent.척도);

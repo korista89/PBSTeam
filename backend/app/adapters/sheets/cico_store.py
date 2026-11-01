@@ -46,6 +46,8 @@ PERIODS_ELEMENTARY = ["1교시", "2교시", "3교시", "점심", "4교시", "5�
 PERIODS_SECONDARY = ["1교시", "2교시", "3교시", "4교시", "점심", "5교시", "6교시", "7교시"]
 
 _lock = threading.Lock()
+_load_lock = threading.Lock()
+_rec_index: Tuple[Any, Dict[int, Dict]] = (None, {})
 
 
 def period_slots(class_name: str) -> List[str]:
@@ -70,11 +72,21 @@ def is_month_title(name: str) -> Optional[int]:
     return None
 
 
+def _parse(values: List[List[str]], headers: List[str]) -> List[Dict[str, Any]]:
+    hdr = values[0] if values else headers
+    out = []
+    for i, row in enumerate(values[1:], start=2):
+        rec = {h: (row[j] if j < len(row) else "") for j, h in enumerate(hdr)}
+        rec["_row"] = i
+        out.append(rec)
+    return out
+
+
 class _Table:
     """탭 하나를 읽어 두고(요청 사이 60초 캐시), 행 번호로 쓴다."""
 
-    def __init__(self, ss, title: str, headers: List[str]):
-        self.ss, self.title, self.headers = ss, title, headers
+    def __init__(self, ss, title: str, headers: List[str], store=None):
+        self.ss, self.title, self.headers, self.store = ss, title, headers, store
 
     def ws(self):
         try:
@@ -88,15 +100,12 @@ class _Table:
         from app.adapters.sheets.client import get_cached, set_cached
         key = f"cico:store:{self.title}"
         cached = get_cached(key)
+        if cached is None and self.store is not None:
+            self.store.load_all()
+            cached = get_cached(key)
         if cached is not None:
             return cached
-        values = self.ws().get_all_values()
-        hdr = values[0] if values else self.headers
-        out = []
-        for i, row in enumerate(values[1:], start=2):
-            rec = {h: (row[j] if j < len(row) else "") for j, h in enumerate(hdr)}
-            rec["_row"] = i
-            out.append(rec)
+        out = _parse(self.ws().get_all_values(), self.headers)
         set_cached(key, out)
         return out
 
@@ -112,9 +121,27 @@ class _Table:
 class CicoStore:
     def __init__(self, ss):
         self.ss = ss
-        self.settings = _Table(ss, SETTINGS_TAB, SET_HEADERS)
-        self.records = _Table(ss, RECORDS_TAB, REC_HEADERS)
-        self.calendar = _Table(ss, CALENDAR_TAB, CAL_HEADERS)
+        self.settings = _Table(ss, SETTINGS_TAB, SET_HEADERS, self)
+        self.records = _Table(ss, RECORDS_TAB, REC_HEADERS, self)
+        self.calendar = _Table(ss, CALENDAR_TAB, CAL_HEADERS, self)
+
+    def load_all(self):
+        """비어 있는 표 캐시를 한 번의 batch 읽기로 채운다. 동시에 들어온 요청은 기다렸다가 같이 쓴다."""
+        from app.adapters.sheets.client import get_cached, set_cached
+        from app.adapters.sheets.resilience import resilient_call
+        tables = (self.settings, self.records, self.calendar)
+        with _load_lock:
+            todo = [t for t in tables if get_cached(f"cico:store:{t.title}") is None]
+            if not todo:
+                return
+            ranges = ["'" + t.title + "'" for t in todo]
+            try:
+                res = resilient_call(("cico-store", tuple(ranges)), "CICO", lambda: self.ss.values_batch_get(ranges))
+            except Exception:
+                logger.warning("CICO 표 batch 읽기 실패, 표마다 따로 읽음", exc_info=True)
+                return
+            for t, vr in zip(todo, res.get("valueRanges", [])):
+                set_cached(f"cico:store:{t.title}", _parse(vr.get("values") or [], t.headers))
 
     # ── 읽기 ──────────────────────────────────────────────
     def month_rows(self, sy: int, month: int) -> List[Dict[str, Any]]:
@@ -138,10 +165,15 @@ class CicoStore:
 
     def record_map(self, sy: int) -> Dict[Tuple[str, str, str, str], Dict[str, Any]]:
         """(날짜, 학생코드, 목표, 교시) → 기록 행. 같은 열쇠가 여러 줄이면 뒤의 것이 이긴다."""
+        global _rec_index
+        rows = self.records.rows()
+        if _rec_index[0] is rows and sy in _rec_index[1]:
+            return _rec_index[1][sy]  # 같은 캐시 목록이면 색인을 다시 만들지 않는다
         out = {}
-        for r in self.records.rows():
+        for r in rows:
             if r.get("학년도") == str(sy):
                 out[(r.get("날짜", ""), r.get("학생코드", ""), r.get("목표", "") or "1", r.get("교시", ""))] = r
+        _rec_index = (rows, {**(_rec_index[1] if _rec_index[0] is rows else {}), sy: out})
         return out
 
     def periods_for(self, sy: int, month: int) -> Dict[Tuple[str, str], Dict[str, Dict[str, str]]]:

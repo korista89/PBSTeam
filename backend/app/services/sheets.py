@@ -1811,16 +1811,26 @@ def _calculate_cico_rate(student: dict) -> dict:
 
     # Collect non-empty day values
     filled_values = []
-    # In v3, days might be "1회차", "2회차" ... or legacy dates if mixed
-    for day_label, val in days.items():
-        val = str(val).strip()
-        if val and val not in ["", "-", "·"]:
-            filled_values.append(val)
+    periods = student.get("periods") if student.get("기록방식") == "분포도" else None
+    if periods is not None:
+        # 분포도기록지: 하루 칸 대신 그날 기록한 교시마다 O/X 한 개씩 센다
+        scale = "O/X(발생)"
+        recorded_days = 0
+        for day_label in days:
+            vals = [str(v).strip() for v in (periods.get(day_label) or {}).values() if str(v).strip() in ("O", "X")]
+            filled_values += vals
+            recorded_days += 1 if vals else 0
+    else:
+        # In v3, days might be "1회차", "2회차" ... or legacy dates if mixed
+        for day_label, val in days.items():
+            val = str(val).strip()
+            if val and val not in ["", "-", "·"]:
+                filled_values.append(val)
 
     if not filled_values:
         return {"rate_str": "", "achieved": "", "rate_num": None, "input_days": 0, "total_days": len(days)}
 
-    input_days = len(filled_values)
+    input_days = recorded_days if periods is not None else len(filled_values)
     total_days = len(days)
 
     # Calculate rate based on scale type
@@ -2189,13 +2199,20 @@ def get_monthly_cico_data(month: int):
             "교사메모": ["교사메모", "Memo", "비고"],
             "입력자": ["입력자", "Writer", "Author"],
             "팀 협의 내용": ["팀협의내용", "협의내용", "TeamTalk", "협의"],
-            "차월 대상여부": ["차월대상여부", "차월", "NextMonth", "next"]
+            "차월 대상여부": ["차월대상여부", "차월", "NextMonth", "next"],
+            "기록방식": ["기록방식"],
         }
 
         for key, candidates in synonyms.items():
             idx = find_col_fuzzy(headers, candidates)
             if idx != -1:
                 col_map[key] = idx
+
+        # 분포도기록지 학생은 교시별 기록을 함께 싣는다(행 번호 → CICO_설정 줄 → 목표 순번)
+        from app.adapters.sheets.cico_store import open_store, school_year, period_slots, SCATTER
+        _store = open_store(open_main_sheet()) if "기록방식" in col_map else None
+        _set_rows = _store.month_rows(school_year(), month) if _store else []
+        _periods = _store.periods_for(school_year(), month) if _store else {}
 
         # v3 Specific: If session starts at indexed 11, we look for "회차"
         day_columns = []
@@ -2257,8 +2274,13 @@ def get_monthly_cico_data(month: int):
                 "목표 달성 기준": row[col_map.get("목표 달성 기준", 9)] if col_map.get("목표 달성 기준", 9) < len(row) else "",
                 "수행_발생률": "", # Recalculated below
                 "목표_달성_여부": "",
+                "기록방식": row[col_map["기록방식"]] if "기록방식" in col_map and col_map["기록방식"] < len(row) else "",
                 "days": {}
             }
+            if student["기록방식"] == SCATTER and 0 <= row_idx - 2 < len(_set_rows):
+                goal = _set_rows[row_idx - 2].get("목표", "") or "1"
+                student["periods"] = _periods.get((code_val, goal), {})
+                student["period_slots"] = period_slots(student["학급"])
 
             # Fill day/session values
             for dc in day_columns:
@@ -2567,6 +2589,32 @@ def update_monthly_cico_cells(month: int, updates: list, student_code_override: 
     except Exception as e:
         logger.error(f"Error updating monthly CICO cells: {e}")
         return {"error": str(e)}
+
+
+def update_cico_periods(month: int, cells: list):
+    """분포도기록지 칸 저장. cells = [{"row": 월별 표 행, "col": 날짜 열(1부터), "period": "3교시", "value": "O"}]"""
+    from app.adapters.sheets.cico_store import open_store, school_year, full_date
+    sy = school_year()
+    store = open_store(open_main_sheet())
+    rows = store.month_rows(sy, month)
+    header = get_cico_raw_sheet_values(month)[0]
+    items = []
+    for c in cells:
+        srow = rows[c["row"] - 2] if 0 <= c["row"] - 2 < len(rows) else None
+        label = header[c["col"] - 1] if 0 < c["col"] <= len(header) else ""
+        if srow and label:
+            items.append((full_date(sy, label), srow.get("학생코드", ""), srow.get("목표", "") or "1", c["period"], c["value"]))
+    store.upsert_records(sy, items)
+    cur_year = now_kst().year
+    for k in (f"sheet:cico:{cur_year}:{month:02d}", f"sheet:cico:raw:{cur_year}:{month:02d}", f"sheet:cico:{month}"):
+        invalidate_cache(k)
+    # 다시 계산한 수행률·달성 여부를 CICO_설정에도 남긴다(시트에서 볼 때 맞도록)
+    data = get_monthly_cico_data(month)
+    touched = {c["row"] for c in cells}
+    store.update_settings([(rows[s["row"] - 2]["_row"], h, s[k]) for s in data.get("students", []) if s["row"] in touched
+                           for h, k in (("수행/발생률", "수행_발생률"), ("목표 달성 여부", "목표_달성_여부"))])
+    invalidate_cache(f"sheet:cico:{cur_year}:{month:02d}")
+    return {"message": f"{len(items)} cells updated"}
 
 
 def update_student_cico_settings(month: int, student_code: str, settings_data: dict, row_index: int = None):
