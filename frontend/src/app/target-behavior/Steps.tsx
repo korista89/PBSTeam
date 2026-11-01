@@ -25,9 +25,12 @@ const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:0
 export function useStudentLogs(studentCode: string) {
     const [logs, setLogs] = useState<Log[]>([]);
     useEffect(() => {
-        if (!studentCode) { setLogs([]); return; }
+        let alive = true;  // 늦게 온 이전 학생 응답은 버린다
+        setLogs([]);
+        if (!studentCode) return;
         axios.get(`${API_BASE_URL}/api/v1/behavior-log/timeline/${encodeURIComponent(studentCode)}`)
-            .then(r => setLogs(r.data?.logs || [])).catch(() => setLogs([]));
+            .then(r => { if (alive) setLogs(r.data?.logs || []); }).catch(() => { if (alive) setLogs([]); });
+        return () => { alive = false; };
     }, [studentCode]);
     return logs;
 }
@@ -90,16 +93,21 @@ function AIBox({ text, loading, onApply }: { text: string; loading: boolean; onA
 export function DataStep({ studentCode, logs, planStart }: { studentCode: string; logs: Log[]; planStart: string }) {
     const [ev, setEv] = useState<any>(null);
     useEffect(() => {
+        let alive = true;
+        setEv(null);
         if (!studentCode) return;
-        axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(studentCode)}/fba-evidence`).then(r => setEv(r.data)).catch(() => setEv(null));
+        axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(studentCode)}/fba-evidence`).then(r => { if (alive) setEv(r.data); }).catch(() => { if (alive) setEv(null); });
+        return () => { alive = false; };
     }, [studentCode]);
     const weekly = useMemo(() => {
         const m = new Map<string, number>();
         logs.forEach(l => { const d = dOf(l); if (d) { const w = mondayOf(d); m.set(w, (m.get(w) || 0) + 1); } });
         const keys = [...m.keys()].sort();
         if (!keys.length) return [];
+        const last = mondayOf(today());
+        const from = keys[0] > addDays(last, -7 * 79) ? keys[0] : addDays(last, -7 * 79);  // 최근 80주까지만
         const out: { week: string; count: number }[] = [];
-        for (let w = keys[0]; w <= mondayOf(today()) && out.length < 80; w = addDays(w, 7)) out.push({ week: w, count: m.get(w) || 0 });
+        for (let w = from; w <= last; w = addDays(w, 7)) out.push({ week: w, count: m.get(w) || 0 });
         return out;
     }, [logs]);
     const dm = ev?.deterministic_metrics || {};
@@ -113,13 +121,13 @@ export function DataStep({ studentCode, logs, planStart }: { studentCode: string
                 {kpis.map(([k, v]) => <div key={k} style={card}><div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#64748b" }}>{k}</div><div style={{ fontSize: "1.5rem", fontWeight: 900, marginTop: 4 }}>{v}</div></div>)}
             </div>
             <div style={card}>
-                <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: 8 }}>주별 행동기록 건수 {planStart && <span style={{ fontWeight: 400, color: "#7c3aed", fontSize: "0.78rem" }}>(보라 선: 중재 시작 {kDate(planStart)})</span>}</div>
+                <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: 8 }}>주별 행동기록 건수(최근 80주) {planStart && <span style={{ fontWeight: 400, color: "#7c3aed", fontSize: "0.78rem" }}>(보라 선: 중재 시작 {kDate(planStart)})</span>}</div>
                 {weekly.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>행동기록이 없습니다. 행동기록 탭에서 입력한 자료가 여기에 쌓입니다.</div> : (
                     <div style={{ height: 240 }}>
                         <ResponsiveContainer>
                             <LineChart data={weekly}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={(w: string) => kDate(w).slice(5)} />
+                                <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={(w: string) => `${w.slice(2, 4)}.${+w.slice(5, 7)}.${+w.slice(8, 10)}`} />
                                 <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                                 <Tooltip labelFormatter={(w: any) => `${kDate(String(w))} 주`} />
                                 {planStart && <ReferenceLine x={mondayOf(planStart)} stroke="#7c3aed" strokeDasharray="4 4" />}
@@ -308,9 +316,11 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
     const [ai, setAi] = useState({ loading: false, text: "" });
 
     useEffect(() => {
+        let alive = true;
         const list = behaviors.filter(b => b.Status !== "삭제");
         Promise.all(list.map(b => axios.get(`${API_BASE_URL}/api/v1/target-behaviors/${b.BehaviorID}/chart`, { params: { student_code: head.code } })
             .then(r => r.data).catch(() => null))).then(charts => {
+                if (!alive) return;
                 setRows(list.map((b, i) => {
                     const c = charts[i] || {};
                     const s = b.BIPStartDate || start;
@@ -325,6 +335,7 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
                     };
                 }));
             });
+        return () => { alive = false; };
     }, [behaviors, head.code, start, end]);
 
     const crisis = useMemo(() => {

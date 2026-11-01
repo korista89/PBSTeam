@@ -31,7 +31,7 @@ export default function InterventionPage() {
     const [selected, setSelected] = useState<any>(null);
     const [keyword, setKeyword] = useState("");
     const [onlyT3, setOnlyT3] = useState(false);
-    const [requested, setRequested] = useState("");
+    const [requested, setRequested] = useState(() => (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("student") || "" : ""));
     const appliedRef = React.useRef(false);
     const [step, setStep] = useState<StepKey>("data");
 
@@ -68,22 +68,23 @@ export default function InterventionPage() {
     const [bip, setBip] = useState<Bip>({});
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
-    const loadBip = useCallback(async () => {
-        if (!code) { setBip({}); return; }
-        try {
-            const r = await axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/bip`);
-            const d = r.data || {};
+    useEffect(() => {
+        let alive = true;
+        setBip({}); setDirty(false);
+        if (!code) return;
+        axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/bip`).then(r => {
+            if (!alive) return;  // 그사이 다른 학생을 골랐으면 버린다(다른 학생 BIP가 섞여 저장되는 것 방지)
             const s: Bip = {};
-            Object.entries(d).forEach(([k, v]) => { s[k] = v == null ? "" : String(v); });
+            Object.entries(r.data || {}).forEach(([k, v]) => { s[k] = v == null ? "" : String(v); });
             setBip({ ...s, StudentCode: code });
-        } catch { setBip({ StudentCode: code }); }
-        setDirty(false);
+        }).catch(() => { if (alive) setBip({ StudentCode: code }); });
+        return () => { alive = false; };
     }, [code]);
-    useEffect(() => { void loadBip(); }, [loadBip]);
     const editBip = (b: Bip) => { setBip(b); setDirty(true); };
     const save = async (b: Bip) => {
         setSaving(true);
         try {
+            if (b.StudentCode && b.StudentCode !== code) { alert("학생이 바뀌는 중입니다. 잠시 뒤 다시 저장해 주세요."); return; }
             const body = { ...b, StudentCode: code, UpdatedAt: today(), Author: user?.name || user?.id || "Teacher" };
             await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/bip`, body);
             setBip(body); setDirty(false);
@@ -95,14 +96,17 @@ export default function InterventionPage() {
 
     // 표적행동 목록(③ 기록 방법·④ 입력·⑤ 보고서가 함께 쓴다)
     const [behaviors, setBehaviors] = useState<any[]>([]);
+    const codeRef = React.useRef(code);
+    codeRef.current = code;
     const fetchBehaviors = useCallback(async () => {
-        if (!code) { setBehaviors([]); return; }
+        const want = code;
+        if (!want) { setBehaviors([]); return; }
         try {
-            const r = await axios.get(`${API_BASE_URL}/api/v1/target-behaviors/students/${encodeURIComponent(code)}`);
-            setBehaviors(r.data.behaviors || []);
-        } catch { setBehaviors([]); }
+            const r = await axios.get(`${API_BASE_URL}/api/v1/target-behaviors/students/${encodeURIComponent(want)}`);
+            if (codeRef.current === want) setBehaviors(r.data.behaviors || []);
+        } catch { if (codeRef.current === want) setBehaviors([]); }
     }, [code]);
-    useEffect(() => { void fetchBehaviors(); }, [fetchBehaviors]);
+    useEffect(() => { setBehaviors([]); void fetchBehaviors(); }, [fetchBehaviors]);
 
     const logs = useStudentLogs(code);
 
