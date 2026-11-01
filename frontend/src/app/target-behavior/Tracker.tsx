@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import {
-    ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceArea
+    ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from "recharts";
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
@@ -209,18 +209,26 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
         }
     };
 
+    // 단일대상연구 그래프: 기초선·중재·중재 종료 후 자료점을 서로 다른 계열로 나눠 국면 사이는 잇지 않는다.
+    const phaseStart = selected?.BIPStartDate || "";
+    const phaseEnd = selected?.BIPEndDate || "";
+    const phaseOf = (d: string) => (!phaseStart || d < phaseStart ? "baseline" : phaseEnd && d > phaseEnd ? "after" : "treatment");
     const mergedChartData = (() => {
         if (!chart) return [];
         const byDate: Record<string, any> = {};
+        const at = (d: string) => (byDate[d] = byDate[d] || { date: d });
         for (const d of chart.data_points || []) {
-            byDate[d.Date] = { ...(byDate[d.Date] || { date: d.Date }), value: Number(d.Value) || 0 };
+            const v = Number(d.Value);
+            if (!isNaN(v)) at(d.Date)[phaseOf(String(d.Date))] = v;
         }
         for (const f of chart.fidelity_points || []) {
-            byDate[f.Date] = { ...(byDate[f.Date] || { date: f.Date }), fidelity: String(f.Implemented).toUpperCase() === "O" ? 100 : 0 };
+            at(f.Date).fidelity = String(f.Implemented).toUpperCase() === "O" ? 100 : 0;
         }
         for (const c of chart.crisis_by_date || []) {
-            byDate[c.date] = { ...(byDate[c.date] || { date: c.date }), crisis: c.count };
+            at(c.date).crisis = c.count;
         }
+        if (phaseStart && Object.keys(byDate).length) at(phaseStart);  // 국면 변경선 자리
+        if (phaseEnd && Object.keys(byDate).length) at(phaseEnd);
         return Object.values(byDate).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
     })();
 
@@ -331,24 +339,20 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
 
                                             <div style={{ height: 280 }}>
                                                 <ResponsiveContainer>
-                                                    <ComposedChart data={mergedChartData}>
+                                                    <ComposedChart data={mergedChartData} margin={{ top: 14, right: 24, left: 0, bottom: 0 }}>
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                                         <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                                                         <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
                                                         <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} />
                                                         <Tooltip />
                                                         <Legend wrapperStyle={{ fontSize: '0.72rem' }} />
-                                                        {selected.BIPStartDate && selected.BIPEndDate && (
-                                                            <ReferenceArea
-                                                                yAxisId="left"
-                                                                x1={selected.BIPStartDate} x2={selected.BIPEndDate}
-                                                                fill="#7c3aed" fillOpacity={0.08}
-                                                                label={{ value: "중재기간", position: "insideTopLeft", fontSize: 10, fill: "#7c3aed" }}
-                                                            />
-                                                        )}
-                                                        <Line yAxisId="left" type="monotone" dataKey="value" name={`표적행동(${selected.MeasurementType})`} stroke="#6366f1" strokeWidth={2} connectNulls />
-                                                        <Bar yAxisId="right" dataKey="fidelity" name="중재 실행(O=100)" fill="#10b981" barSize={10} />
-                                                        <Bar yAxisId="left" dataKey="crisis" name="위기행동 발생(건)" fill="#ef4444" barSize={10} />
+                                                        {phaseStart && <ReferenceLine yAxisId="left" x={phaseStart} stroke="#0f172a" strokeDasharray="5 4" label={{ value: "중재 시작", position: "insideTopRight", fontSize: 10, fill: "#0f172a" }} />}
+                                                        {phaseEnd && <ReferenceLine yAxisId="left" x={phaseEnd} stroke="#0f172a" strokeDasharray="5 4" label={{ value: "중재 종료", position: "insideTopRight", fontSize: 10, fill: "#0f172a" }} />}
+                                                        <Line yAxisId="left" type="linear" dataKey="baseline" name={`기초선(${selected.MeasurementType})`} stroke="#64748b" strokeWidth={2} dot={{ r: 4, fill: "#64748b" }} connectNulls isAnimationActive={false} />
+                                                        <Line yAxisId="left" type="linear" dataKey="treatment" name={`중재(${selected.MeasurementType})`} stroke="#4f46e5" strokeWidth={2} dot={{ r: 4, fill: "#4f46e5" }} connectNulls isAnimationActive={false} />
+                                                        <Line yAxisId="left" type="linear" dataKey="after" name="중재 종료 후" stroke="#0891b2" strokeWidth={2} dot={{ r: 4, fill: "#0891b2" }} connectNulls isAnimationActive={false} />
+                                                        <Line yAxisId="right" type="linear" dataKey="fidelity" name="중재 실행(O=100)" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: "#10b981", stroke: "#10b981" }} legendType="square" isAnimationActive={false} />
+                                                        <Line yAxisId="left" type="linear" dataKey="crisis" name="위기행동 발생(건)" stroke="#ef4444" strokeWidth={0} dot={{ r: 4, fill: "#fff", stroke: "#ef4444", strokeWidth: 2 }} legendType="circle" isAnimationActive={false} />
                                                     </ComposedChart>
                                                 </ResponsiveContainer>
                                             </div>
