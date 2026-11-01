@@ -107,7 +107,7 @@ class SheetSyncTests(unittest.TestCase):
         worksheet.update_cell.assert_called_once_with(2, 4, "X")
 
     def test_existing_bip_sheet_migrates_all_11_field_headers(self):
-        from app.services.sheets import ensure_bip_sheet
+        from app.services.sheets import ensure_bip_sheet, BIP_FORM_HEADERS
 
         existing_headers = [
             "StudentCode", "TargetBehavior", "Hypothesis",
@@ -130,9 +130,9 @@ class SheetSyncTests(unittest.TestCase):
         added = [call.args[2] for call in worksheet.update_cell.call_args_list]
         self.assertEqual(
             added,
-            ["Goals", "MedicationStatus", "ReinforcerInfo", "OtherConsiderations"],
+            ["Goals", "MedicationStatus", "ReinforcerInfo", "OtherConsiderations", *BIP_FORM_HEADERS],
         )
-        worksheet.resize.assert_called_once_with(cols=18)
+        worksheet.resize.assert_called_once_with(cols=18 + len(BIP_FORM_HEADERS))
 
 
 if __name__ == "__main__":

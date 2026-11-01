@@ -6,7 +6,8 @@ from app.services.ai_insight import (
     generate_bip_hypothesis,
     generate_bip_strategies,
     generate_full_bip,
-    generate_data_based_decision_recommendation
+    generate_data_based_decision_recommendation,
+    generate_fba_report,
 )
 from app.services.fba_evidence import build_fba_evidence_summary, fba_data_gate
 from app.api.deps import require_authenticated_user, check_student_scope
@@ -32,6 +33,24 @@ class BIPData(BaseModel):
     TeachingEBP: Optional[str] = ""
     ConsequenceEBP: Optional[str] = ""
     CrisisEBP: Optional[str] = ""
+    # 학교 BIP 양식 칸 + FBA·결과 보고서(JSON 문자열)
+    PlanName: Optional[str] = ""
+    PlanStart: Optional[str] = ""
+    PlanEnd: Optional[str] = ""
+    Teacher: Optional[str] = ""
+    Gender: Optional[str] = ""
+    DisabilityType: Optional[str] = ""
+    MedicationYN: Optional[str] = ""
+    OperationalDefinition: Optional[str] = ""
+    MeasurementMethod: Optional[str] = ""
+    SupportTeam: Optional[str] = ""
+    CrisisNotify: Optional[str] = ""
+    CrisisReturn: Optional[str] = ""
+    CrisisHome: Optional[str] = ""
+    HomeSupport: Optional[str] = ""
+    FBAReport: Optional[str] = ""
+    ProgressReport: Optional[str] = ""
+    Source: Optional[str] = ""
 
 def _resolve_beable_code(student_code: str) -> str:
     from app.services.sheets import get_beable_code_mapping
@@ -236,6 +255,35 @@ def ai_bip_strategies(
         ),
     )
     return {"strategies": result, **gate}
+
+
+class AIFBAReportRequest(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    teacher_context: str = ""
+
+
+@router.post("/students/{student_code}/ai-fba-report")
+def ai_fba_report(
+    student_code: str,
+    req: AIFBAReportRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """FBA 결과 보고서 초안(6개 절) — 누적 행동기록 근거 요약 기반."""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
+
+    raw_logs = _filter_student_logs(fetch_all_records(), student_code, _resolve_beable_code(student_code))
+    if req.start_date and req.end_date:
+        sd, ed = normalize_date_string(req.start_date), normalize_date_string(req.end_date)
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
+    student_info = _build_student_info(student_code, fetch_student_status())
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+    gate = fba_data_gate(len(norm_logs))
+    if not gate["eligible"]:
+        return {"analysis": gate["notice"], **gate}
+    evidence = build_fba_evidence_summary(student_info, norm_logs)
+    return {"analysis": generate_fba_report(student_info, evidence, req.teacher_context, len(norm_logs)), **gate}
 
 
 class AIBIPFullRequest(BaseModel):

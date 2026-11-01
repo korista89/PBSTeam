@@ -3514,7 +3514,15 @@ BIP_BASE_HEADERS = [
     "MedicationStatus", "ReinforcerInfo", "OtherConsiderations",
     "UpdatedAt", "Author",
 ]
-BIP_REQUIRED_HEADERS = [*BIP_BASE_HEADERS, *BIP_EBP_HEADERS]
+# 학교 BIP 양식(행동중재계획) 칸 + 통합 화면(FBA 보고서·중재 결과 보고서)용 칸. 시트에 없으면 자동으로 덧붙인다.
+BIP_FORM_HEADERS = [
+    "PlanName", "PlanStart", "PlanEnd", "Teacher", "Gender", "DisabilityType",
+    "MedicationYN", "OperationalDefinition", "MeasurementMethod", "SupportTeam",
+    "CrisisNotify", "CrisisReturn", "CrisisHome", "HomeSupport",
+    "FBAReport", "ProgressReport", "Source",
+]
+BIP_REQUIRED_HEADERS = [*BIP_BASE_HEADERS, *BIP_EBP_HEADERS, *BIP_FORM_HEADERS]
+BIP_HISTORY_SHEET = "BIP_이력"
 
 def ensure_bip_sheet():
     """Ensure the live BIP sheet can persist every frontend 1~11 field."""
@@ -3566,6 +3574,21 @@ def get_bip(student_code: str):
         logger.error(f"Error getting BIP: {e}")
         return None
 
+def _archive_bip_row(ws, headers: list, row_index: int) -> None:
+    old = dict(zip(headers, ws.row_values(row_index)))
+    if not any(str(v).strip() for k, v in old.items() if k != "StudentCode"):
+        return
+    sheet = ws.spreadsheet
+    try:
+        hist = sheet.worksheet(BIP_HISTORY_SHEET)
+    except gspread.WorksheetNotFound:
+        hist = sheet.add_worksheet(title=BIP_HISTORY_SHEET, rows=200, cols=4)
+        hist.append_row(["SavedAt", "StudentCode", "UpdatedAt", "BIP(JSON)"])
+    import json
+    saved_at = now_kst().strftime("%Y-%m-%d %H:%M")
+    hist.append_row([saved_at, old.get("StudentCode", ""), old.get("UpdatedAt", ""), json.dumps(old, ensure_ascii=False)])
+
+
 def save_bip(bip_data: dict):
     """
     Save or Update BIP.
@@ -3586,6 +3609,8 @@ def save_bip(bip_data: dict):
             row.append(bip_data.get(h, ""))
 
         if cell:
+            # 덮어쓰기 전 이전 내용을 BIP_이력 탭에 남긴다(되돌리기용).
+            _archive_bip_row(ws, headers, cell.row)
             # Delete and re-insert to update
             ws.delete_rows(cell.row)
             ws.insert_row(row, index=cell.row)

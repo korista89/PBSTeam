@@ -2168,3 +2168,37 @@ def generate_peer_contagion_analysis(contagion_data: dict) -> str:
 [출력 형식]
 `핵심 패턴`, `환경 가설`, `학급 전체 예방`, `확인 방법·한계` 4개 소제목만 사용하고, 각 소제목은 3개 이하 불릿으로 작성하라."""
     return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1600)
+
+
+FBA_REPORT_SECTIONS = [
+    "의뢰 사유 및 배경 정보",
+    "표적행동 정의",
+    "자료 수집 방법 및 기간",
+    "자료 분석 결과",
+    "기능 가설",
+    "결론 및 중재 방향",
+]
+
+
+def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_context: str = "", sample_size: int = 0) -> str:
+    """FBA 결과 보고서 초안 — 누적 행동기록 근거 요약만으로 6개 절을 쓴다(없는 사실은 만들지 않는다)."""
+    gate = fba_data_gate(sample_size)
+    if not gate["eligible"]:
+        return gate["notice"]
+    sections = "\n".join(f"{i}. {t}" for i, t in enumerate(FBA_REPORT_SECTIONS, 1))
+    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
+[누적 행동기록 근거 요약(결정론적 집계)] {json.dumps(evidence_summary, ensure_ascii=False)[:12000]}
+[교사가 입력한 기존 계획·맥락] {teacher_context[:3000] or '없음'}
+
+[지시사항]
+위 자료만으로 기능적 행동평가(FBA) 결과 보고서 초안을 작성하라. 아래 6개 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 3~6줄로 쓴다.
+{sections}
+
+[작성 규칙]
+1. 표적행동은 관찰·측정 가능한 용어로 정의한다(빈도·지속시간·강도 기준 포함).
+2. 4절에는 기록 건수, 관찰일수, 평균·최대 강도, 많이 발생한 장소·시간대·행동유형을 숫자로 쓴다.
+3. 5절은 "(상황)일 때 (행동)을 하고 (결과)를 얻는다/피한다" 형식의 잠정 기능가설로 쓰고, 근거 수치를 붙인다.
+4. 자료에 없는 선행사건·후속결과·진단명은 만들지 말고 '별도 기록 없음'으로 쓴다.
+5. 6절에는 경기 Be-Able EBP 이름으로 예방·교수·강화 방향을 1줄씩 제시하고, 확인 관찰 방법 1개를 쓴다.
+6. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500)
