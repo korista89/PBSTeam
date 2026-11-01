@@ -8,7 +8,10 @@ import re
 import datetime
 import time
 from typing import Optional, List, Dict, Any, Union
-from app.adapters.sheets.client import get_cached, set_cached, invalidate_cache
+from app.adapters.sheets.client import (
+    get_cached, set_cached, invalidate_cache,
+    get_sheets_client, safe_get_all_records, safe_get_all_values,
+)
 from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable, invalidate_worksheet_lookups
 from app.core.time import now_kst
 from app.core.privacy import mask_name
@@ -35,30 +38,6 @@ _users_last_good: Optional[List[Dict[str, Any]]] = None
 class UserStoreUnavailable(Exception):
     """The Users worksheet could not be read and no previously loaded copy exists."""
 
-def safe_get_all_records(ws) -> List[Dict[str, Any]]:
-    """
-    Safely fetch all records from a worksheet.
-    Falls back to get_all_values() if get_all_records() fails (e.g. due to duplicate headers).
-    """
-    try:
-        return ws.get_all_records()
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        print(f"safe_get_all_records: get_all_records failed, falling back to get_all_values: {e}")
-        all_vals = ws.get_all_values()
-        if len(all_vals) < 2:
-            return []
-        headers = all_vals[0]
-        records = []
-        for row in all_vals[1:]:
-            record = {}
-            for ci, h in enumerate(headers):
-                if ci < len(row) and h:
-                    record[h] = row[ci]
-            records.append(record)
-        return records
-
 def _with_retry(fn, retries: int = 3, delay: float = 1.0, stop_on: tuple = ()):
     """일시적인 Google Sheets API 오류(429 등)에 견고하도록 짧게 재시도한다.
     safe_get_all_values가 이미 쓰던 패턴을 시트/워크시트 열기 등 다른 호출에도 재사용.
@@ -78,69 +57,6 @@ def _with_retry(fn, retries: int = 3, delay: float = 1.0, stop_on: tuple = ()):
                 time.sleep(delay)
     raise last_err
 
-
-def safe_get_all_values(ws) -> List[List[Any]]:
-    """
-    Safely fetch all values from a worksheet.
-    """
-    try:
-        # Retry logic for transient errors
-        retries = 3
-        for i in range(retries):
-            try:
-                return ws.get_all_values()
-            except SheetUnavailable:
-                raise
-            except Exception as e:
-                if i == retries - 1: raise e
-                time.sleep(1)
-        return [] # Fallback
-    except SheetUnavailable:
-        # Surface as 503 (or let the caller decide) instead of looking like an empty sheet.
-        raise
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        print(f"safe_get_all_values failed: {e}")
-        return []
-
-_sheets_client = None
-
-def get_sheets_client():
-    """
-    Authenticates with Google Sheets API and returns the client.
-    Prioritizes 'GOOGLE_SERVICE_ACCOUNT_JSON' env var (for Production/Render).
-    Fallbacks to 'service_account.json' file (for Local Dev).
-    Note: Token logic handles refresh automatically.
-    """
-    global _sheets_client
-    if _sheets_client is not None:
-        return _sheets_client
-
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-
-    # 1. Try Environment Variable (Production)
-    env_creds = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-    if env_creds:
-        try:
-            creds_dict = json.loads(env_creds)
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            _sheets_client = ResilientClient(gspread.authorize(creds))
-            return _sheets_client
-        except SheetUnavailable:
-            raise
-        except Exception as e:
-            print(f"Error loading credentials from env: {e}")
-            return None
-
-    # 2. Try Local File (Development)
-    if os.path.exists(settings.GOOGLE_CREDENTIALS_FILE):
-        creds = ServiceAccountCredentials.from_json_keyfile_name(settings.GOOGLE_CREDENTIALS_FILE, scope)
-        _sheets_client = ResilientClient(gspread.authorize(creds))
-        return _sheets_client
-
-    print(f"Warning: Credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
-    return None
 
 def get_main_worksheet():
     client = get_sheets_client()
