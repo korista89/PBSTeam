@@ -93,6 +93,12 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
 
     const handleCreate = async () => {
         if (!newForm.definition.trim()) { alert("표적행동 정의를 입력하세요."); return; }
+        // 예시 문구를 그대로 저장하면 학생과 무관한 정의·기저선이 계획서에 인쇄된다.
+        const isExample = (v: string, pool: Record<string, string[]>) => Object.values(pool).flat().some(e => e !== "직접 입력" && e === v.trim());
+        if (isExample(newForm.definition, EXAMPLE_DEFINITIONS) || isExample(newForm.baseline, EXAMPLE_BASELINES)) {
+            alert("예시 문구가 그대로 들어 있습니다. 이 학생의 실제 행동과 관찰 결과에 맞게 고친 뒤 등록해 주세요.");
+            return;
+        }
         try {
             await axios.post(`${apiUrl}/api/v1/target-behaviors/students/${encodeURIComponent(studentCode)}`, newForm);
             setNewForm({ type: "문제행동", definition: "", measurement_type: "빈도", baseline: "", bip_start_date: defaultStart, bip_end_date: "" });
