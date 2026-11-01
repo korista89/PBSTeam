@@ -55,6 +55,7 @@ class SheetUnavailable(Exception):
 class _RequestState:
     allow_stale: bool
     stale_sources: Set[str] = field(default_factory=set)
+    reads: int = 0  # 이 요청이 실제로 보낸 시트 API 읽기 수(캐시 적중은 세지 않음)
 
 
 _request_state: ContextVar[Optional[_RequestState]] = ContextVar("pbst_sheet_request", default=None)
@@ -64,6 +65,11 @@ def begin_request(allow_stale: bool):
     """Called by the HTTP middleware. The state object is shared by reference with the
     endpoint's threadpool context, so stale marks made there are visible afterwards."""
     return _request_state.set(_RequestState(allow_stale=allow_stale))
+
+
+def request_reads() -> int:
+    state = _request_state.get()
+    return state.reads if state else 0
 
 
 def end_request(token) -> Set[str]:
@@ -100,7 +106,10 @@ def resilient_call(key: Hashable, source: str, fn: Callable[[], Any], mark_stale
     last_exc: Optional[BaseException] = None
     if not in_failure_window:
         attempts = 1 if good else 2  # with a copy on hand, don't make the user wait
+        state = _request_state.get()
         for attempt in range(attempts):
+            if state is not None:
+                state.reads += 1
             try:
                 value = fn()
                 with _lock:

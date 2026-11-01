@@ -2144,6 +2144,43 @@ def get_cico_raw_sheet_values(month: int) -> List[List[Any]]:
         return []
 
 
+def prefetch_cico_raw_months(months) -> None:
+    """여러 달 CICO 탭을 한 번의 batch 읽기로 가져와 get_cico_raw_sheet_values 캐시를 채운다.
+    달마다 탭 찾기+읽기를 따로 하면 8개월에 16번 읽던 것이 2번(탭 목록·batch)으로 준다.
+    실패하면 아무것도 채우지 않고, 각 달은 평소대로 하나씩 읽는다."""
+    from gspread.utils import fill_gaps
+    from app.adapters.sheets.resilience import resilient_call
+    year = now_kst().year
+    todo = [m for m in months if get_cached(f"sheet:cico:raw:{year}:{m:02d}", ttl=60) is None]
+    if len(todo) < 2:
+        return
+    client = get_sheets_client()
+    if not client or not current_sheet_url():
+        return
+    try:
+        sheet = open_main_sheet(client)
+        titles = {ws.title for ws in sheet.worksheets()}
+        pick = {}
+        for m in todo:
+            for v in (f"{m}월", str(m), f"{m:02d}", f"{m} Month"):
+                if v in titles:
+                    pick[m] = v
+                    break
+        if len(pick) < 2:
+            return
+        ranges = ["'" + t.replace("'", "''") + "'" for t in pick.values()]
+        res = resilient_call(("cico-batch", tuple(ranges)), "CICO 월별",
+                             lambda: sheet.values_batch_get(ranges))
+        for m, vr in zip(pick, res.get("valueRanges", [])):
+            values = vr.get("values") or []
+            if values:
+                set_cached(f"sheet:cico:raw:{year}:{m:02d}", fill_gaps(values))
+    except SheetUnavailable:
+        raise
+    except Exception:
+        logger.warning("CICO 월별 batch 읽기 실패, 달마다 따로 읽음", exc_info=True)
+
+
 def get_monthly_cico_data(month: int):
     """
     Get all student data from a monthly sheet for the CICO grid view.
@@ -3841,7 +3878,7 @@ def get_board_worksheet():
 
 def fetch_board_posts():
     cached = get_cached("svc:board")
-    if cached:
+    if cached is not None:  # 글이 0개여도 캐시로 본다(빈 게시판을 매번 다시 읽지 않게)
         return cached
 
     ws = get_board_worksheet()

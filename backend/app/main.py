@@ -34,7 +34,7 @@ from starlette.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from urllib.parse import quote
 from app.core.config import settings
-from app.adapters.sheets.resilience import SheetUnavailable, begin_request, end_request
+from app.adapters.sheets.resilience import SheetUnavailable, begin_request, end_request, request_reads
 
 app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
 
@@ -147,7 +147,12 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
     try:
         response = await call_next(request)
     finally:
+        reads = request_reads()
         stale_sources = end_request(sheet_ctx)
+    if reads:
+        # 시트 읽기 한도(분당) 관리를 위해 요청마다 실제 읽기 수를 남긴다.
+        logger.info("sheet_reads=%d %s %s", reads, request.method, request.url.path)
+        response.headers["X-PBST-Sheet-Reads"] = str(reads)
     if stale_sources:
         response.headers["X-PBST-Data-Stale"] = ",".join(quote(s) for s in sorted(stale_sources))
     if is_api:
