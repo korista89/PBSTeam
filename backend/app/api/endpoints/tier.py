@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.adapters.sheets.resilience import SheetUnavailable
 from app.services.sheets import (
-    fetch_student_status, update_student_tier, fetch_cico_daily, add_cico_daily,
+    fetch_student_status, update_student_tier,
     update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
-    reset_tier_status_sheet, update_student_tier_unified
+    update_student_tier_unified
 )
 from pydantic import BaseModel
 from typing import Optional, Union, Dict, Any
@@ -149,77 +149,4 @@ def get_beable_mapping(current_user: Dict[str, Any] = Depends(require_authentica
     mapping = get_beable_code_mapping()
     return mapping
 
-@router.post("/reset-sheet")
-def reset_sheet(current_admin: Dict[str, Any] = Depends(require_admin)):
-    """Reset TierStatus sheet with all 210 students (Admin only & DEV only)"""
-    from app.core.config import settings
-    if settings.ENVIRONMENT.lower() != "development":
-        raise HTTPException(
-            status_code=403,
-            detail="Destructive reset endpoints are strictly disabled in production environment."
-        )
-    result = reset_tier_status_sheet()
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
 
-
-# =============================
-# CICO Daily Tracking Endpoints
-# =============================
-
-class CICODailyInput(BaseModel):
-    date: Optional[str] = None
-    student_code: Union[str, int]
-    target1: str  # O or X
-    target2: str  # O or X
-    achievement_rate: Optional[int] = 0
-    memo: Optional[str] = ""
-    entered_by: Optional[str] = ""
-
-@router.get("/cico")
-def get_cico_records(
-    student_code: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """Get CICO daily records with student scope enforcement"""
-    if student_code:
-        check_student_scope(str(student_code), current_user)
-
-    records = fetch_cico_daily(student_code, start_date, end_date)
-    role = str(current_user.get("role", "")).lower()
-
-    if role not in ["admin", "superadmin"] and not student_code:
-        # Filter all records to students within teacher's class
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        from app.api.deps import get_student_class_code
-        records = [r for r in records if get_student_class_code(str(r.get("student_code", ""))) == user_class]
-
-    return records
-
-@router.post("/cico")
-def add_cico_record(data: CICODailyInput, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
-    """Add a new CICO daily record with write scope verification"""
-    check_student_scope(str(data.student_code), current_user)
-
-    rate = data.achievement_rate
-    if rate == 0 and (data.target1 or data.target2):
-         achieved = sum([1 for x in [data.target1, data.target2] if x.upper() == 'O'])
-         rate = int((achieved / 2) * 100)
-
-    record_data = {
-        "date": data.date,
-        "student_code": str(data.student_code),
-        "target1": data.target1,
-        "target2": data.target2,
-        "achievement_rate": rate,
-        "memo": data.memo,
-        "entered_by": data.entered_by or current_user.get("name", "")
-    }
-
-    result = add_cico_daily(record_data)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result

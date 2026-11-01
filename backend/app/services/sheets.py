@@ -1,9 +1,6 @@
 import logging
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from app.core.config import settings
-import os
-import json
 import pandas as pd
 import re
 import datetime
@@ -867,54 +864,6 @@ def _generate_teacher_id(class_name: str) -> str:
     except:
         return class_name + "관리자"
 
-def reset_users_sheet():
-    """
-    Re-initialize Users sheet.
-    Admin: admin (System Admin)
-    Teachers: Korean Style IDs (e.g., 초1-1관리자)
-    """
-    client = get_sheets_client()
-    if not client: return {"error": "Cannot access Google Sheets"}
-    if not current_sheet_url():
-        return {"error": "Cannot access Google Sheets"}
-
-    try:
-        sheet = open_main_sheet(client)
-
-        # Delete old if exists
-        try:
-            old_ws = sheet.worksheet("Users")
-            sheet.del_worksheet(old_ws)
-        except gspread.WorksheetNotFound:
-            pass
-
-        logger.info("Creating new 'Users' worksheet...")
-        ws = sheet.add_worksheet(title="Users", rows=150, cols=6)
-        ws.append_row(["ID", "Password", "Role", "LastLogin", "ClassID", "ClassName"])
-
-        all_rows = []
-
-        # 1. System Admin
-        all_rows.append(["admin", "admin123", "admin", "", "", "전체관리자"])
-
-        # 2. Class Teachers
-        class_info = get_unique_class_info()
-        sorted_ids = sorted(class_info.keys())
-
-        for cid in sorted_ids:
-            cname = class_info[cid]
-            korean_id = _generate_teacher_id(cname)
-            all_rows.append([korean_id, "teacher123", "class_teacher", "", cid, cname])
-
-        ws.update(all_rows, 'A2')
-        clear_cache("users")
-        return {"message": f"Users sheet reset. {len(all_rows)} users created. (Admin: 'admin', Teachers: '초1-1관리자' style)"}
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error resetting Users sheet: {e}")
-        return {"error": str(e)}
-
 
 def get_student_status_worksheet():
     client = get_sheets_client()
@@ -941,46 +890,6 @@ def get_student_status_worksheet():
     except Exception as e:
         logger.error(f"Error accessing TierStatus worksheet: {e}")
         return None
-
-
-
-def reset_tier_status_sheet():
-    """Delete and recreate TierStatus sheet with all 210 students (5 tier columns)"""
-    client = get_sheets_client()
-    if not client: return {"error": "Cannot access Google Sheets"}
-    if not current_sheet_url():
-        return {"error": "Cannot access Google Sheets"}
-
-    try:
-        sheet = open_main_sheet(client)
-
-        # Try to delete existing TierStatus sheet
-        try:
-            old_ws = sheet.worksheet("TierStatus")
-            sheet.del_worksheet(old_ws)
-            logger.info("Deleted old TierStatus worksheet")
-        except gspread.WorksheetNotFound:
-            logger.info("No existing TierStatus worksheet to delete")
-
-        # Create new sheet with 210 students and 14 columns
-        logger.info(f"Creating new TierStatus worksheet with {len(STUDENT_CODES)} students...")
-        ws = sheet.add_worksheet(title="TierStatus", rows=220, cols=14)
-
-        # Prepare all data at once for batch update
-        all_data = [["번호", "학급", "학생코드", "학생이름", "재학여부", "BeAble코드", "그림말인증", "Tier1", "Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+", "변경일", "메모"]]
-        for idx, code in enumerate(STUDENT_CODES):
-            class_name = code_to_class_name(code)
-            all_data.append([idx + 1, class_name, code, code, "O", "", 0, "O", "X", "X", "X", "X", "", ""])
-
-        # Batch update all rows at once
-        ws.update(all_data, 'A1')
-
-        return {"message": f"TierStatus sheet reset with {len(STUDENT_CODES)} students", "count": len(STUDENT_CODES)}
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error resetting TierStatus sheet: {e}")
-        return {"error": str(e)}
 
 
 def fetch_student_status():
@@ -1266,100 +1175,7 @@ def get_enrolled_student_count():
 # =============================
 # CICO Daily Tracking Worksheet
 # =============================
-def get_cico_daily_worksheet():
-    client = get_sheets_client()
-    if not client or not current_sheet_url():
-        return None
 
-    try:
-        sheet = open_main_sheet(client)
-        try:
-            return sheet.worksheet("CICODaily")
-        except gspread.WorksheetNotFound:
-            logger.info("Creating 'CICODaily' worksheet...")
-            ws = sheet.add_worksheet(title="CICODaily", rows=1000, cols=8)
-            ws.append_row(["Date", "StudentCode", "TargetBehavior1", "TargetBehavior2", "AchievementRate", "TeacherMemo", "EnteredBy"])
-            return ws
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error accessing CICODaily worksheet: {e}")
-        return None
-
-def fetch_cico_daily(student_code: str = None, start_date: str = None, end_date: str = None):
-    records = get_cached("svc:daily_cico")
-    if not records:
-        ws = get_cico_daily_worksheet()
-        if not ws:
-            return []
-
-        try:
-            records = safe_get_all_records(ws)
-            set_cached("svc:daily_cico", records)
-        except SheetUnavailable:
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching CICO daily: {e}")
-            return []
-
-    # apply filters
-    filtered = records
-    if student_code:
-        filtered = [r for r in filtered if str(r.get('StudentCode')) == str(student_code)]
-    if start_date:
-        filtered = [r for r in filtered if r.get('Date', '') >= start_date]
-    if end_date:
-        filtered = [r for r in filtered if r.get('Date', '') <= end_date]
-
-    return filtered
-
-def add_cico_daily(data: dict):
-    ws = get_cico_daily_worksheet()
-    if not ws:
-        return {"error": "Sheet not accessible"}
-
-    try:
-        from datetime import datetime
-        date_str = data.get('date', now_kst().replace(tzinfo=None).strftime("%Y-%m-%d"))
-        row = [
-            date_str,
-            data.get('student_code'),
-            data.get('target1', ''),
-            data.get('target2', ''),
-            data.get('achievement_rate', 0),
-            data.get('memo', ''),
-            data.get('entered_by', '')
-        ]
-        ws.append_row(row)
-        # Trigger recalculation
-        try:
-            sync_result = sync_daily_entry_to_monthly(
-                student_code=str(data.get('student_code')),
-                date_str=date_str,
-                target1=data.get('target1', ''),
-                target2=data.get('target2', '')
-            )
-            if settings.ENVIRONMENT.lower() != "production":
-                logger.debug(f"Sync result: {sync_result}")
-        except SheetUnavailable:
-            raise
-        except Exception as e:
-            if settings.ENVIRONMENT.lower() != "production":
-                logger.error(f"Error syncing CICO daily to monthly (continuing): {e}")
-            else:
-                logger.error("Error syncing CICO daily to monthly (continuing)")
-
-        clear_cache("daily_cico")
-
-        return {"message": "CICO daily record added"}
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        if settings.ENVIRONMENT.lower() != "production":
-            logger.error(f"Error adding CICO daily: {e}")
-        else:
-            logger.error("Error adding CICO daily")
-        return {"error": str(e)}
 
 def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, target2: str):
     """
@@ -2751,87 +2567,6 @@ def _col_letter(col_num: int) -> str:
         col_num, remainder = divmod(col_num - 1, 26)
         result = chr(65 + remainder) + result
     return result
-
-
-
-def get_student_dashboard_analysis(student_code: str):
-    """
-    Fetch monthly CICO analysis data from 'Tier2_대시보드' (Fast & Optimized).
-    Returns a list of dicts: [{ "month": "3월", "rate": "80%" }, ...]
-    And current status/team talk.
-    """
-    client = get_sheets_client()
-    if not client: return {"error": "Sheet not accessible"}
-    try:
-        sheet = open_main_sheet(client)
-        # Try to open "Tier2_대시보드"
-        try:
-            ws = sheet.worksheet("Tier2_대시보드")
-        except gspread.WorksheetNotFound:
-            return {"error": "Dashboard sheet not found"}
-
-        # Fetch all values
-        # Headers are in Row 5, Data starts Row 6
-        all_values = safe_get_all_values(ws)
-        if not all_values:
-            return {"error": "Empty dashboard sheet"}
-
-        rows = all_values
-
-        # Find Student Row
-        # Column D (index 3) is Student Code
-        student_row = None
-        for r in rows:
-            if len(r) > 3 and str(r[3]).strip() == str(student_code).strip():
-                student_row = r
-                break
-
-        if not student_row:
-            return {"error": "Student not found in dashboard"}
-
-        # Extract Monthly Data (Columns J to S -> Indices 9 to 18)
-        months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-        history = []
-
-        for i, month_name in enumerate(months):
-            col_idx = 9 + i
-            val = student_row[col_idx] if col_idx < len(student_row) else ""
-
-            # Format value
-            # It might be empty, "-", or a number (0.8 or "80%")
-            if not val or val == "":
-                formatted_rate = "-"
-            else:
-                formatted_rate = str(val)
-                # If it's a raw float like 0.8, convert to 80%
-                try:
-                    f_val = float(val)
-                    if 0 <= f_val <= 1:
-                        formatted_rate = f"{int(f_val * 100)}%"
-                    elif f_val > 1: # Already percent-like number e.g. 80
-                         formatted_rate = f"{int(f_val)}%"
-                except ValueError:
-                    pass
-
-            history.append({
-                "month": month_name,
-                "rate": formatted_rate
-            })
-
-        # Extract Text Data
-        # Team Talk: Column U (Index 20)
-        team_talk = student_row[20] if 20 < len(student_row) else ""
-
-        return {
-            "history": history,
-            "team_talk": team_talk
-        }
-
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching dashboard analysis: {e}")
-        return {"error": str(e)}
 
 
 def get_cico_report_data(month: int):

@@ -216,17 +216,3 @@ def update_role(user_id: str, request: UserRoleUpdateRequest, current_admin: Dic
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
-@router.post("/reset-users")
-def reset_users_db(current_admin: Dict[str, Any] = Depends(require_admin)):
-    """DEV ONLY: Reset Users sheet to default Admin + 34 Class Teachers"""
-    from app.core.config import settings
-    if settings.ENVIRONMENT.lower() != "development":
-        raise HTTPException(
-            status_code=403,
-            detail="Destructive reset endpoints are strictly disabled in production environment."
-        )
-    from app.services.sheets import reset_users_sheet
-    result = reset_users_sheet()
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
