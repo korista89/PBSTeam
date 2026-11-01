@@ -22,7 +22,8 @@ class CicoMonthAdapter:
         try:
             sheet = open_main_sheet(client)
             month_name = f"{month}월"
-            return sheet.worksheet(month_name)
+            from app.services.sheets import get_worksheet_fuzzy
+            return get_worksheet_fuzzy(sheet, month_name)
         except SheetUnavailable:
             raise
         except Exception as e:

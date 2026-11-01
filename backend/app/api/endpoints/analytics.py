@@ -563,11 +563,10 @@ def get_tier3_report(
 
 @router.post("/dashboard/refresh")
 def refresh_dashboard(current_admin: Dict[str, Any] = Depends(require_admin)):
-    from app.services.sheets import initialize_monthly_sheets
-    result = initialize_monthly_sheets()
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
+    # 예전에는 월별 탭(3~12월)을 새로 만들었다. CICO가 표 3개로 바뀐 뒤(2026-11-01)에는 캐시만 비운다.
+    from app.services.sheets import clear_cache
+    clear_cache()
+    return {"message": "데이터를 새로 읽었습니다."}
 
 
 @router.get("/debug-ai")

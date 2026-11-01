@@ -1993,43 +1993,20 @@ def create_monthly_cico_sheet(year: int, month: int):
             row += ["-", "-", "", "", "", ""]
             rows.append(row)
 
-        # 3. Create Sheet
-        ws = sheet.add_worksheet(title=month_name, rows=len(rows)+20, cols=len(headers)+2)
-        ws.update(rows)
-
-        # 4. Add Dropdowns (Data Validation) matching v3 indices
-        try:
-            from gspread.utils import ValidationConditionType, rowcol_to_a1
-            import re as _re
-
-            start_row = 2
-            end_row = len(rows)
-            # 차월대상 is the last tail header; its column shifts with the (now variable)
-            # session-column count, so its letter must be computed, not hardcoded.
-            last_col_num = len(headers)
-            last_col_letter = _re.match(r"[A-Z]+", rowcol_to_a1(1, last_col_num)).group()
-
-            # Column D: Tier2 (O/X)
-            ws.add_validation(f'D{start_row}:D{end_row}', ValidationConditionType.one_of_list, ['O', 'X'], showCustomUi=True)
-            # Column E: Tier3 (O/X)
-            ws.add_validation(f'E{start_row}:E{end_row}', ValidationConditionType.one_of_list, ['O', 'X'], showCustomUi=True)
-            # Column G: 유형
-            ws.add_validation(f'G{start_row}:G{end_row}', ValidationConditionType.one_of_list, ['증가 목표행동', '감소 목표행동'], showCustomUi=True)
-            # Column H: 척도
-            ws.add_validation(f'H{start_row}:H{end_row}', ValidationConditionType.one_of_list, ['O/X(발생)', '0점/1점/2점', '0~5', '0~7교시', '1~100회', '1~100분'], showCustomUi=True)
-            # Column J: 달성기준
-            ws.add_validation(f'J{start_row}:J{end_row}', ValidationConditionType.one_of_list,
-                             ['90% 이상', '80% 이상', '70% 이상', '60% 이상', '50% 이상',
-                              '50% 이하', '40% 이하', '30% 이하', '20% 이하', '10% 이하'], showCustomUi=True)
-            # 차월대상 (last column)
-            ws.add_validation(f'{last_col_letter}{start_row}:{last_col_letter}{end_row}', ValidationConditionType.one_of_list, ['유지', '종료', '상향', '하향'], showCustomUi=True)
-
-        except SheetUnavailable:
-            raise
-        except Exception as e:
-            logger.warning(f"Failed to set data validation: {e}")
-            import traceback
-            traceback.print_exc()
+        # 3. CICO_설정에 이 달 학생 줄을, CICO_달력에 기록일을 만든다(월별 탭을 새로 만들지 않음)
+        from app.adapters.sheets.cico_store import open_store, school_year
+        sy = school_year()
+        set_rows = []
+        for r in rows[1:]:
+            s = cico_students[int(r[0]) - 1]
+            set_rows.append({
+                "학년도": sy, "월": month, "번호": r[0], "학급": r[1], "학생코드": s.get("학생코드", ""),
+                "학생명": s.get("학생이름", ""), "Tier2": r[3], "Tier3": r[4], "목표행동": r[5],
+                "목표": 1, "목표행동 유형": r[6], "척도": r[7], "입력 기준(베이스라인)": r[8], "목표 달성 기준": r[9],
+                "수행/발생률": "-", "목표 달성 여부": "-",
+            })
+        open_store(sheet).add_month(sy, month, set_rows, list(business_days) if business_days else [])
+        invalidate_cache(f"sheet:cico:raw:{now_kst().year}:{month:02d}")
 
         return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
 
@@ -2074,6 +2051,12 @@ def get_worksheet_fuzzy(sheet, name):
     e.g., if name is "3월", tries "3월", "3", "03", "3 Month".
     """
     import gspread
+    from app.adapters.sheets.cico_store import is_month_title, open_store, MonthSheet, school_year
+    month = is_month_title(name)
+    if month:
+        # CICO 월별 자료는 CICO_설정·CICO_기록 표에서 월별 탭 모양으로 만들어 준다(2026-11-01)
+        store = open_store(sheet)
+        return MonthSheet(store, month) if store.has_month(school_year(), month) else None
     try:
         return sheet.worksheet(name)
     except gspread.WorksheetNotFound:
@@ -2142,43 +2125,6 @@ def get_cico_raw_sheet_values(month: int) -> List[List[Any]]:
     except Exception as e:
         logger.error(f"Error fetching raw CICO values for {month}월: {e}")
         return []
-
-
-def prefetch_cico_raw_months(months) -> None:
-    """여러 달 CICO 탭을 한 번의 batch 읽기로 가져와 get_cico_raw_sheet_values 캐시를 채운다.
-    달마다 탭 찾기+읽기를 따로 하면 8개월에 16번 읽던 것이 2번(탭 목록·batch)으로 준다.
-    실패하면 아무것도 채우지 않고, 각 달은 평소대로 하나씩 읽는다."""
-    from gspread.utils import fill_gaps
-    from app.adapters.sheets.resilience import resilient_call
-    year = now_kst().year
-    todo = [m for m in months if get_cached(f"sheet:cico:raw:{year}:{m:02d}", ttl=60) is None]
-    if len(todo) < 2:
-        return
-    client = get_sheets_client()
-    if not client or not current_sheet_url():
-        return
-    try:
-        sheet = open_main_sheet(client)
-        titles = {ws.title for ws in sheet.worksheets()}
-        pick = {}
-        for m in todo:
-            for v in (f"{m}월", str(m), f"{m:02d}", f"{m} Month"):
-                if v in titles:
-                    pick[m] = v
-                    break
-        if len(pick) < 2:
-            return
-        ranges = ["'" + t.replace("'", "''") + "'" for t in pick.values()]
-        res = resilient_call(("cico-batch", tuple(ranges)), "CICO 월별",
-                             lambda: sheet.values_batch_get(ranges))
-        for m, vr in zip(pick, res.get("valueRanges", [])):
-            values = vr.get("values") or []
-            if values:
-                set_cached(f"sheet:cico:raw:{year}:{m:02d}", fill_gaps(values))
-    except SheetUnavailable:
-        raise
-    except Exception:
-        logger.warning("CICO 월별 batch 읽기 실패, 달마다 따로 읽음", exc_info=True)
 
 
 def get_monthly_cico_data(month: int):
@@ -2638,9 +2584,8 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         sh = open_main_sheet(client)
         month_name = f"{month}월"
 
-        try:
-            ws = sh.worksheet(month_name)
-        except gspread.WorksheetNotFound:
+        ws = get_worksheet_fuzzy(sh, month_name)
+        if not ws:
             return {"error": f"'{month_name}' 시트가 없습니다."}
 
         all_values = safe_get_all_values(ws)
@@ -2710,9 +2655,8 @@ def toggle_tier2_status(month: int, student_code: str, status: str):
         sh = open_main_sheet(client)
         month_name = f"{month}월"
 
-        try:
-            ws = sh.worksheet(month_name)
-        except gspread.WorksheetNotFound:
+        ws = get_worksheet_fuzzy(sh, month_name)
+        if not ws:
             return {"error": f"'{month_name}' 시트가 없습니다."}
 
         all_values = safe_get_all_values(ws)
@@ -3623,234 +3567,6 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
             "avg_intensity": overall_avg,
         },
     }
-
-
-def initialize_dashboard_if_missing():
-    """
-    Checks if 'Tier2_대시보드' exists. If not, creates it and populates it.
-    This mimics the Apps Script 'createDashboard' and 'loadTier2Data' behavior.
-    """
-    client = get_sheets_client()
-    if not client or not current_sheet_url():
-        return {"error": "Sheet not accessible"}
-
-    try:
-        sheet = open_main_sheet(client)
-
-        try:
-            ws = sheet.worksheet("Tier2_대시보드")
-            # If exists, assume it's fine for now.
-            return {"message": "Dashboard exists"}
-        except gspread.WorksheetNotFound:
-            pass # Create it
-
-        logger.info("Creating Tier2_대시보드...")
-        # Add worksheet
-        ws = sheet.add_worksheet(title="Tier2_대시보드", rows=1000, cols=26)
-
-        # 1. Setup Headers & Formatting
-        months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-
-        # Row 2: Month Config
-        ws.update_acell("B2", "월 선택:")
-        ws.update_acell("C2", "3월") # Default
-
-        # Row 4: Title
-        ws.update_acell("B4", "📋 Tier2 CICO 학생 통합 대시보드")
-
-        # Row 5: Headers
-        headers = ["번호", "학급", "학생코드", "목표행동", "목표행동 유형", "척도", "입력 기준", "현재 상태"]
-        headers.extend(months)
-        headers.extend(["연간 추세(Trend)", "팀 협의 내용", "비고"])
-
-        # Update range B5:V5
-        # 1-based index: B is col 2.
-        # Starting Cell: (5, 2)
-        # Ending Cell: (5, 2 + len(headers) - 1)
-
-        end_col = 2 + len(headers) - 1
-        ws.update(range_name=f"B5", values=[headers])
-
-        # 2. Load Data from Monthly Sheets
-        refresh_dashboard_data(sheet, ws)
-
-        return {"message": "Dashboard created and populated"}
-
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error initializing dashboard: {e}")
-        return {"error": str(e)}
-
-def refresh_dashboard_data(sheet, dashboard_ws):
-    # Mimic loadTier2Data
-    # 1. Get Target Month
-    try:
-        target_month_str = dashboard_ws.acell("C2").value or "3월"
-    except:
-        target_month_str = "3월"
-
-    # 2. Get Student History (Monthly Rates)
-    months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-    student_history = {} # {code: [rate, rate, ...]}
-
-    for i, m_name in enumerate(months):
-        try:
-            m_ws = sheet.worksheet(m_name)
-            m_rows = safe_get_all_values(m_ws)
-            if len(m_rows) < 2: continue
-
-            headers = m_rows[0]
-            try: tier_idx = headers.index("Tier2")
-            except: tier_idx = -1
-            try: code_idx = headers.index("학생코드")
-            except: code_idx = -1
-
-            rate_idx = -1
-            if "수행/발생률" in headers: rate_idx = headers.index("수행/발생률")
-            elif "성취율" in headers: rate_idx = headers.index("성취율")
-
-            if tier_idx != -1 and code_idx != -1 and rate_idx != -1:
-                for row in m_rows[1:]:
-                    if len(row) > max(tier_idx, code_idx, rate_idx):
-                        code = str(row[code_idx]).strip()
-                        is_tier2 = row[tier_idx]
-                        rate = row[rate_idx]
-
-                        if is_tier2 == "O":
-                            if code not in student_history:
-                                student_history[code] = [""] * 10
-                            student_history[code][i] = rate
-        except gspread.WorksheetNotFound:
-            continue
-
-    # 3. Get Current Month Data & Merge
-    try:
-        t_ws = sheet.worksheet(target_month_str)
-        t_rows = safe_get_all_values(t_ws)
-
-        output_rows = []
-        if len(t_rows) > 1:
-            t_headers = t_rows[0]
-            try: team_idx = t_headers.index("팀 협의 내용")
-            except: team_idx = -1
-
-            for row in t_rows[1:]:
-                # Check Tier2 column (Index 3 usually)
-                if len(row) > 3 and row[3] == "O":
-                    code = str(row[2]).strip()
-                    # Basic Info: No, Class, Code, Target, Type, Scale, Standard, Status(CICO)
-                    # New indices based on fixed_headers:
-                    # 5: 목표행동, 6: 목표행동 유형, 7: 척도, 8: 입력 기준
-                    basic_info = [
-                        row[0], row[1], row[2],
-                        row[5] if len(row)>5 else "",
-                        row[6] if len(row)>6 else "",
-                        row[7] if len(row)>7 else "",
-                        row[8] if len(row)>8 else "",
-                        "CICO" # Status
-                    ]
-
-                    # History
-                    history = student_history.get(code, [""] * 10)
-
-                    # Team Talk
-                    team_talk = row[team_idx] if team_idx != -1 and len(row) > team_idx else ""
-
-                    # Full Row
-                    full_row = basic_info + history + ["", team_talk, ""]
-                    output_rows.append(full_row)
-
-        # 4. Write to Dashboard (starting Row 6)
-        if output_rows:
-            dashboard_ws.update(range_name="B6", values=output_rows)
-            logger.info(f"Updated Dashboard with {len(output_rows)} rows.")
-
-    except gspread.WorksheetNotFound:
-        logger.warning(f"Target month sheet {target_month_str} not found.")
-
-def initialize_monthly_sheets():
-    """
-    Creates monthly sheets (3월~12월) and populates them with roster from TierStatus.
-    """
-    client = get_sheets_client()
-    if not client: return {"error": "Sheet not accessible"}
-    try:
-        sheet = open_main_sheet(client)
-
-        # 1. Get Roster from TierStatus
-        try:
-            status_ws = sheet.worksheet("TierStatus")
-            status_rows = safe_get_all_values(status_ws)
-        except gspread.WorksheetNotFound:
-            return {"error": "TierStatus sheet not found"}
-
-        # Parse Roster: [No, Class, Code, ..., Tier2(CICO), ...]
-        students = []
-        if len(status_rows) > 1:
-            for r in status_rows[1:]:
-                if len(r) > 2:
-                    no = r[0]
-                    cls = r[1]
-                    code = r[2]
-                    is_cico = "X"
-                    # Tier2(CICO) is index 6
-                    if len(r) > 6 and r[6] == "O":
-                        is_cico = "O"
-
-                    students.append({
-                        "no": no, "class": cls, "code": code, "cico": is_cico
-                    })
-
-        if not students:
-            return {"error": "No students found in TierStatus"}
-
-        logger.info(f"Found {len(students)} students in TierStatus.")
-
-        # 2. Create/Update Monthly Sheets
-        months = ["3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-
-        for m_name in months: # Using strings directly
-            ws = get_worksheet_fuzzy(sheet, m_name)
-            if ws:
-                continue
-
-            ws = sheet.add_worksheet(title=m_name, rows=1000, cols=45)
-
-            # Setup Headers
-            days = [str(d) for d in range(1, 32)]
-            headers = ["번호", "학급", "학생코드", "Tier2", "목표행동", "목표행동 유형", "척도", "입력 기준", "목표 달성 기준"]
-            headers.extend(days)
-            headers.extend(["수행/발생률", "성취도(추세)", "교사메모", "입력자", "목표 달성 여부", "팀 협의 내용", "차월 대상여부"])
-
-            ws.update(range_name="A1", values=[headers])
-
-            # Write Students
-            rows_to_write = []
-            for s in students:
-                row = [
-                    s['no'], s['class'], s['code'], s['cico'],
-                    "", "증가 목표행동", "O/X(발생)", "", "80% 이상" # Defaults
-                ]
-                # Pad for days (31)
-                row.extend([""] * 31)
-                # Pad for stats
-                row.extend(["-", "", "", "", "-", "", ""])
-                rows_to_write.append(row)
-
-            if rows_to_write:
-                ws.update(range_name="A2", values=rows_to_write)
-
-            logger.info(f"Initialized {m_name}")
-
-        clear_cache() # Invalidate all caches after refresh
-        return {"message": "Monthly sheets initialized"}
-
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error initializing monthly sheets: {e}")
-        return {"error": str(e)}
 
 
 # =============================

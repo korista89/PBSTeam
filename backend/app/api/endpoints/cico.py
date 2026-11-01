@@ -153,8 +153,6 @@ def get_cico_achievement_trend(
     start_month = max(3, min(12, start_month))
     end_month = max(start_month, min(12, end_month))
 
-    from app.services.sheets import prefetch_cico_raw_months
-    prefetch_cico_raw_months(range(start_month, end_month + 1))
     trend = []
     for m in range(start_month, end_month + 1):
         try:
