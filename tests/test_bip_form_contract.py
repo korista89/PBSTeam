@@ -27,3 +27,11 @@ def test_intensity_read_from_sheet_column_named_강도():
     from app.services.normalize import normalize_behavior_log
     log = normalize_behavior_log({"학생코드": "S01", "강도": "4(위기행동): 강한 공격"}, {})
     assert log["intensity"] == 4
+
+
+def test_tier_label_from_status_flags():
+    # TierStatus에는 'Tier' 칸이 없고 단계별 O/X 칸만 있다 — 가장 높은 단계를 골라야 한다(예전엔 모두 Tier 1).
+    from app.services.sheets import tier_label
+    assert tier_label({"Tier1": "O", "Tier2(CICO)": "O", "Tier3": "O", "Tier3+": "X"}) == "Tier3"
+    assert tier_label({"Tier3": "O", "Tier3+": "O"}) == "Tier3+"
+    assert tier_label({"Tier1": "O"}) == "Tier1"

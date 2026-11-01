@@ -1,3 +1,4 @@
+from app.services.sheets import tier_label
 import logging
 from datetime import datetime
 from app.adapters.sheets.client import open_main_sheet
@@ -63,7 +64,7 @@ def _get_normalized_records(start_date: str = None, end_date: str = None) -> Lis
         name = str(s.get("학생명", s.get("name", ""))).strip()
         meta = {
             "class": s.get("학급", ""),
-            "tier": s.get("Tier", s.get("지원단계", 1))
+            "tier": tier_label(s)
         }
         if code:
             tier_info_map[code] = meta
@@ -418,7 +419,7 @@ def ai_student_analysis(
                 "code": target_code,
                 "name": s.get("학생명", req.student_name or target_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", s.get("지원단계", 1)),
+                "tier": tier_label(s),
             }
             break
     if not student_info:

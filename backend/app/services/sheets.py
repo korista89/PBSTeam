@@ -892,6 +892,17 @@ def get_student_status_worksheet():
         return None
 
 
+def tier_label(r: dict) -> str:
+    """TierStatus 한 행의 O/X 칸에서 가장 높은 지원 단계를 고른다(시트에 'Tier' 칸은 없다)."""
+    on = lambda k: str(r.get(k, "")).strip().upper() == "O"
+    if on("Tier3+"): return "Tier3+"
+    if on("Tier3"): return "Tier3"
+    if on("Tier2(CICO)"): return "Tier2(CICO)"
+    if on("Tier2(SST)"): return "Tier2(SST)"
+    legacy = str(r.get("Tier", r.get("지원단계", ""))).strip()
+    return legacy or "Tier1"
+
+
 def fetch_student_status():
     """Fetch all student tier status records with caching and fallback for duplicate headers"""
     cached = get_cached("svc:tierstatus")

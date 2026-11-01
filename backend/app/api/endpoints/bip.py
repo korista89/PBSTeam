@@ -1,3 +1,4 @@
+from app.services.sheets import tier_label
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Literal
@@ -77,11 +78,13 @@ def _filter_student_logs(records: list, student_code: str, beable_code: str = ""
 def _build_student_info(student_code: str, status_records: list) -> Dict[str, Any]:
     for s in status_records:
         if str(s.get("학생코드", "")).strip() == student_code:
+            from app.services.normalize import resolve_course_level
             return {
                 "code": student_code,
                 "name": s.get("학생명", student_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", s.get("지원단계", 1)),
+                "course_level": resolve_course_level(student_code, s.get("학급", "")),
+                "tier": tier_label(s),
             }
     return {"code": student_code, "name": student_code, "class": "", "tier": 1}
 
@@ -168,7 +171,7 @@ def ai_bip_hypothesis(
                 "code": student_code,
                 "name": s.get("학생명", student_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", s.get("지원단계", 1)),
+                "tier": tier_label(s),
             }
             break
             
@@ -228,7 +231,7 @@ def ai_bip_strategies(
                 "code": student_code,
                 "name": s.get("학생명", student_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", 1)
+                "tier": tier_label(s)
             }
             break
 
@@ -321,7 +324,7 @@ def ai_bip_full(
                 "code": student_code,
                 "name": s.get("학생명", student_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", 1)
+                "tier": tier_label(s)
             }
             break
             
@@ -388,7 +391,7 @@ def ai_decision_recommendation(
                 "code": student_code,
                 "name": s.get("학생명", student_code),
                 "class": s.get("학급", ""),
-                "tier": s.get("Tier", 1)
+                "tier": tier_label(s)
             }
             break
 

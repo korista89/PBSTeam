@@ -1,3 +1,4 @@
+from app.services.sheets import tier_label
 import logging
 import os
 from app.adapters.sheets.resilience import SheetUnavailable
@@ -833,7 +834,7 @@ def generate_bcba_section_analysis(
             for s in status_records:
                 code = str(s.get("학생코드", "")).strip()
                 if code:
-                    tier_info_map[code] = {"class": s.get("학급", ""), "tier": s.get("Tier", 1)}
+                    tier_info_map[code] = {"class": s.get("학급", ""), "tier": tier_label(s)}
             for r in fetch_all_records():
                 rc = str(r.get("학생코드", r.get("코드번호", ""))).strip()
                 if rc in codes:
