@@ -13,3 +13,10 @@ def test_bip_headers_match_request_model():
 def test_form_rows_are_saved():
     for k in ("PlanStart", "OperationalDefinition", "MeasurementMethod", "CrisisNotify", "FBAReport", "ProgressReport"):
         assert k in BIP_REQUIRED_HEADERS
+
+
+def test_function_read_from_sheet_column_named_기능():
+    # 운영 시트의 추정 기능 칸 이름은 '기능' — 이 칸을 못 읽으면 FBA 근거·AI 초안에서 기능이 전부 '미상'이 된다.
+    from app.services.normalize import normalize_behavior_log
+    log = normalize_behavior_log({"학생코드": "S01", "기능": "과제 회피(사회적 부적강화)", "행동유형": "방해행동"}, {})
+    assert log["function_labels"] and "미상" not in log["function_labels"][0]

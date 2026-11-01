@@ -429,7 +429,15 @@ def normalize_behavior_log(raw_row: dict, tier_info_map: dict = None) -> dict:
     loc_val = str(raw_row.get("location", raw_row.get("행동 발생 장소", raw_row.get("장소", "")))).strip()
     type_val = str(raw_row.get("behavior_type", raw_row.get("행동유형(핵심행동으로택1)", raw_row.get("행동유형", "")))).strip()
     int_val = str(raw_row.get("intensity", raw_row.get("강도(1~5)", raw_row.get("강도(1~5점 척도)", "1")))).strip()
-    func_val = str(raw_row.get("function", raw_row.get("추정기능(이번 행동을 통해 파악된 기능)", raw_row.get("추정기능", "")))).strip()
+    # 운영 시트 칸 이름은 '기능'(2026-11-01 머리글 정리). 옛 이름도 함께 읽는다.
+    func_val = str(
+        raw_row.get("function")
+        or raw_row.get("추정기능(이번 행동을 통해 파악된 기능)")
+        or raw_row.get("기능(이번 행동을 통해 파악된 기능)")
+        or raw_row.get("추정기능")
+        or raw_row.get("기능")
+        or ""
+    ).strip()
     restr_val = str(raw_row.get("restraint_report", raw_row.get("물리적제지여부", raw_row.get("방어 및 보호를 위한 제지 / 개별학생교육지원 / 본인·타인 상해 발생 여부", raw_row.get("물리적제지, 3/4호분리지도,본인/타인상해 발생 여부", raw_row.get("물리적제지", "X")))))).strip()
     freq_val = str(raw_row.get("frequency", raw_row.get("발생횟수(한 에피소드 당 1회로 입력 권장)", raw_row.get("발생횟수", "1")))).strip()
     notes_val = str(raw_row.get("notes", raw_row.get("특기사항(기타)", raw_row.get("특기사항", "")))).strip()
