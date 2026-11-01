@@ -549,7 +549,8 @@ function refreshReport_(sy) {
   var w = rows[0].length;
   var old = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(sh.getLastColumn(), 1)).getValues() : [];
   var same = old.length === rows.length && old[0] && old[0].length === w &&
-    old.every(function (r, i) { return r.join('\u0001') === rows[i].join('\u0001'); });
+    old.every(function (r, i) { return r.join('\u0001') === rows[i].join('\u0001'); }) &&
+    PropertiesService.getDocumentProperties().getProperty('report:fmt') === '2';
   if (same) return;
   sh.clear();
   sh.getRange(1, 1).setValue('위기행동 보고서 — 흰 칸을 고치거나 결재 칸을 체크하면 바로 Log_Main·Approvals에 저장됩니다.').setFontWeight('bold');
@@ -558,8 +559,12 @@ function refreshReport_(sy) {
   if (rows.length > 1) {
     sh.getRange(3, 1, rows.length - 1, 6).setBackground('#f1f5f9');
     sh.getRange(3, 7, rows.length - 1, 3).insertCheckboxes();
-    sh.getRange(3, 10, rows.length - 1, w - 9).setWrap(true).setVerticalAlignment('top');
+    // 긴 경위도 한 줄로 잘라 보여 행 높이를 일정하게(전체 내용은 칸을 누르면 입력줄에 보임)
+    sh.getRange(3, 1, rows.length - 1, w).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP).setVerticalAlignment('middle');
+    sh.setRowHeights(3, rows.length - 1, 24);
+    sh.setColumnWidths(10, w - 9, 160);
   }
+  PropertiesService.getDocumentProperties().setProperty('report:fmt', '2');
   sh.hideColumns(1);
   sh.setFrozenRows(2); sh.setFrozenColumns(4);
 }
