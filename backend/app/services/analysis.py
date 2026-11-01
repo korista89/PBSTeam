@@ -1,3 +1,4 @@
+import logging
 from app.services.sheets import fetch_all_records, fetch_student_codes, get_beable_code_mapping, fetch_student_status, get_enrolled_student_count
 from app.adapters.sheets.resilience import SheetUnavailable
 from app.schemas import BehaviorRecord
@@ -5,6 +6,8 @@ import pandas as pd
 import re
 from typing import List, Dict
 from app.services.ai_insight import generate_ai_insight, generate_meeting_agent_report
+
+logger = logging.getLogger(__name__)
 
 # ── 행동 기능 6개 표준 카테고리 정규화 ────────────────────────────────
 _FUNCTION_CATEGORIES = [
@@ -247,7 +250,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     except SheetUnavailable:
         raise
     except Exception as e:
-        print(f"weekly_trends_compare error: {e}")
+        logger.error(f"weekly_trends_compare error: {e}")
         weekly_trends_compare = None
 
     # --- Tier 1: Big 5 Analysis ---

@@ -1,5 +1,6 @@
 # backend/app/adapters/sheets/log_main.py
 
+import logging
 from datetime import date, datetime
 from typing import List, Dict, Any, Optional
 import re
@@ -15,6 +16,8 @@ from app.services.normalize import (
     normalize_function,
     parse_occurrence
 )
+
+logger = logging.getLogger(__name__)
 
 CACHE_KEY_LOG_MAIN = "sheet:log-main"
 
@@ -38,11 +41,12 @@ class LogMainAdapter:
                 try:
                     return sheet.worksheet(title)
                 except Exception:
+                    logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
                     pass
-            print("CRITICAL_DATA_CONTRACT_ERROR: Log_Main worksheet not found.")
+            logger.error("CRITICAL_DATA_CONTRACT_ERROR: Log_Main worksheet not found.")
             return None
         except Exception as e:
-            print(f"Error opening spreadsheet for Log_Main: {e}")
+            logger.error(f"Error opening spreadsheet for Log_Main: {e}")
             return None
 
     @classmethod

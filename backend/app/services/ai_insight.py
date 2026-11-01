@@ -1,3 +1,4 @@
+import logging
 import os
 from app.adapters.sheets.resilience import SheetUnavailable
 import json
@@ -12,6 +13,8 @@ from app.services.fba_evidence import (
     build_fba_evidence_summary,
     fba_data_gate,
 )
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -328,6 +331,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
             except SheetUnavailable:
                 raise
             except Exception:
+                logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
                 pass
 
             payload = {
@@ -371,6 +375,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
         except SheetUnavailable:
             raise
         except Exception:
+            logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
             continue
             
     # 2. Ollama 네이티브 API (:11434/api/chat) — localhost only reachable off-serverless
@@ -404,6 +409,7 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
         except SheetUnavailable:
             raise
         except Exception:
+            logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
             continue
             
     return None
@@ -507,6 +513,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                 except SheetUnavailable:
                     raise
                 except Exception as e:
+                    logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
                     last_error = f"{g_model} 예외: {str(e)[:100]}"
                     continue
 
@@ -552,6 +559,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
             except SheetUnavailable:
                 raise
             except Exception as e:
+                logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
                 last_error = f"Groq {g_model}: {str(e)}"
                 continue
 

@@ -1,4 +1,5 @@
 """관리자 브리핑 API — 한 번의 호출로 브리핑 전체를 돌려준다(5분 캐시, 시트 읽기 한도 보호)."""
+import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
@@ -9,6 +10,8 @@ from app.adapters.sheets.tier_status import TierStatusAdapter
 from app.core.time import today_kst
 from app.services.briefing import build_briefing, semester_range
 from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config, fetch_approval_states
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 CACHE_KEY = "briefing:"
@@ -41,7 +44,7 @@ def _cico_trend(today, current_admin) -> list:
         res = get_cico_achievement_trend(start_month=max(3, start.month), end_month=today.month, current_user=current_admin)
         return (res or {}).get("trend", []) if isinstance(res, dict) else []
     except Exception as e:
-        print(f"briefing: CICO trend skipped: {e}")
+        logger.warning(f"briefing: CICO trend skipped: {e}")
         return []
 
 

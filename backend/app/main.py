@@ -7,6 +7,27 @@ _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
+import logging
+
+
+def _setup_logging():
+    # Vercel은 stderr 줄을 error로 표시한다. 정보는 stdout, 경고 이상만 stderr로 보낸다.
+    fmt = logging.Formatter("%(levelname)s %(name)s: %(message)s")
+    out = logging.StreamHandler(sys.stdout)
+    out.setLevel(logging.INFO)
+    out.addFilter(lambda r: r.levelno < logging.WARNING)
+    err = logging.StreamHandler(sys.stderr)
+    err.setLevel(logging.WARNING)
+    for h in (out, err):
+        h.setFormatter(fmt)
+    root = logging.getLogger()
+    root.handlers[:] = [out, err]
+    root.setLevel(logging.INFO)
+
+
+_setup_logging()
+logger = logging.getLogger("app.main")
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
@@ -73,6 +94,7 @@ POLL_MAX_AGE_SECONDS = 20
 
 @app.exception_handler(SheetUnavailable)
 async def sheet_unavailable_handler(request: Request, exc: SheetUnavailable):
+    logger.warning("시트 응답 없음 → 503: %s %s (%s)", request.method, request.url.path, exc)
     return JSONResponse(
         status_code=503,
         content={"detail": "구글 시트 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "source": exc.source},

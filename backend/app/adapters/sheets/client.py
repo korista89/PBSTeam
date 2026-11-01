@@ -1,5 +1,6 @@
 # backend/app/adapters/sheets/client.py
 
+import logging
 import os
 import json
 import time
@@ -9,6 +10,8 @@ from gspread.utils import extract_id_from_url
 from oauth2client.service_account import ServiceAccountCredentials
 from app.core.config import settings
 from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable
+
+logger = logging.getLogger(__name__)
 
 _sheets_client = None
 _cache: Dict[str, Dict[str, Any]] = {}
@@ -36,7 +39,7 @@ def get_sheets_client() -> Optional[gspread.Client]:
         except SheetUnavailable:
             raise
         except Exception as e:
-            print(f"Error loading credentials from env: {e}")
+            logger.error(f"Error loading credentials from env: {e}")
             return None
 
     # 2. Local credentials file (Development)
@@ -48,10 +51,10 @@ def get_sheets_client() -> Optional[gspread.Client]:
         except SheetUnavailable:
             raise
         except Exception as e:
-            print(f"Error loading credentials file: {e}")
+            logger.error(f"Error loading credentials file: {e}")
             return None
         
-    print(f"Warning: Google credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
+    logger.warning(f"Warning: Google credentials not found (Env var or {settings.GOOGLE_CREDENTIALS_FILE})")
     return None
 
 
@@ -115,7 +118,7 @@ def safe_get_all_records(ws) -> List[Dict[str, Any]]:
     except SheetUnavailable:
         raise
     except Exception as e:
-        print(f"safe_get_all_records fallback: {e}")
+        logger.warning(f"safe_get_all_records fallback: {e}")
         all_vals = ws.get_all_values()
         if len(all_vals) < 2:
             return []
@@ -141,7 +144,7 @@ def safe_get_all_values(ws, retries: int = 3) -> List[List[Any]]:
             raise
         except Exception as e:
             if i == retries - 1:
-                print(f"safe_get_all_values failed after {retries} retries: {e}")
+                logger.error(f"safe_get_all_values failed after {retries} retries: {e}")
                 return []
             time.sleep(0.5)
     return []

@@ -1,5 +1,6 @@
 # backend/app/adapters/sheets/tier_status.py
 
+import logging
 from typing import List, Dict, Any, Optional
 from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.adapters.sheets.resilience import SheetUnavailable
@@ -7,6 +8,8 @@ import gspread
 from app.core.config import settings
 from app.domain.models import StudentProfile, TierSnapshot, TierCode
 from app.adapters.sheets.client import get_sheets_client, safe_get_all_records, get_cached, set_cached
+
+logger = logging.getLogger(__name__)
 
 CACHE_KEY_TIER_STATUS = "sheet:tier-status"
 
@@ -22,7 +25,7 @@ class TierStatusAdapter:
         except SheetUnavailable:
             raise
         except Exception as e:
-            print(f"Error opening TierStatus worksheet: {e}")
+            logger.error(f"Error opening TierStatus worksheet: {e}")
             return None
 
     @classmethod

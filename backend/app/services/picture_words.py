@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.adapters.sheets.resilience import SheetUnavailable
@@ -9,6 +10,8 @@ from app.services.sheets import (
 from app.core.picture_word_data import DOMAINS, VBS, VOCAB_DATA, LESSON_DATA
 import time
 import threading
+
+logger = logging.getLogger(__name__)
 
 # ── 상수 ──────────────────────────────────────────────────────
 VB_COLS = {'청자': 7, '모방': 8, '명명': 9, '매칭': 10, '대화': 11, '요구': 12}
@@ -44,7 +47,7 @@ def get_pw_spreadsheet():
     except SheetUnavailable:
         raise
     except Exception as e:
-        print(f"[PW] 시트 접근 오류: {e}")
+        logger.error(f"[PW] 시트 접근 오류: {e}")
         return None
 
 def get_or_create_worksheet(ss, title: str, rows=200, cols=20):
@@ -99,7 +102,7 @@ def fetch_global_vocab_records():
     except SheetUnavailable:
         raise
     except Exception as e:
-        print(f"[PW] Error fetching global vocab: {e}")
+        logger.error(f"[PW] Error fetching global vocab: {e}")
         return []
 
 
@@ -466,7 +469,7 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
     max_retries = 2
     last_error = None
     
-    print(f"[PW] update_minute_entry(source_type={source_type}, row_index={row_index}, updates_keys={list(updates.keys())})")
+    logger.info(f"[PW] update_minute_entry(source_type={source_type}, row_index={row_index}, updates_keys={list(updates.keys())})")
     
     for attempt in range(max_retries + 1):
         try:
@@ -487,7 +490,7 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
                     records = get_all_records_with_row_index(ws)
                     target_row = next((r["_row_index"] for r in records if str(r.get("차시")).strip() == str(lesson_num).strip()), None)
                     if not target_row:
-                        print(f"[PW] Lesson {lesson_num} not found. Fallback to row_index {row_index}")
+                        logger.warning(f"[PW] Lesson {lesson_num} not found. Fallback to row_index {row_index}")
                         target_row = row_index
                 else:
                     target_row = row_index
@@ -497,15 +500,15 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
             if not target_row or target_row < 2:
                 return {"error": f"유효하지 않은 행 번호입니다: {target_row}"}
 
-            print(f"[PW] Updating {source_type} at absolute row {target_row}...")
+            logger.info(f"[PW] Updating {source_type} at absolute row {target_row}...")
             
             for key, val in updates.items():
                 if key in col_map:
                     col_idx = col_map[key]
                     if settings.ENVIRONMENT.lower() != "production":
-                        print(f"[PW]   -> col {col_idx} ({key}) = '{val}'")
+                        logger.info(f"[PW]   -> col {col_idx} ({key}) = '{val}'")
                     else:
-                        print(f"[PW]   -> updating col {col_idx} ({key})")
+                        logger.info(f"[PW]   -> updating col {col_idx} ({key})")
                     ws.update_cell(target_row, col_idx, str(val))
             
             clear_pw_cache()
@@ -516,9 +519,9 @@ def update_minute_entry(source_type: str, row_index: int, updates: dict) -> dict
         except Exception as e:
             last_error = e
             if settings.ENVIRONMENT.lower() != "production":
-                print(f"[PW] Update Error (Attempt {attempt+1}): {e}")
+                logger.error(f"[PW] Update Error (Attempt {attempt+1}): {e}")
             else:
-                print(f"[PW] Update Error (Attempt {attempt+1})")
+                logger.error(f"[PW] Update Error (Attempt {attempt+1})")
             if attempt < max_retries:
                 time.sleep(1)
                 continue

@@ -16,6 +16,7 @@ get_sheets_client(); wrapping that client here covers all call sites at once:
   could overwrite newer values in the sheet.
 """
 
+import logging
 import copy
 import threading
 import time
@@ -25,6 +26,8 @@ from typing import Any, Callable, Dict, Hashable, Optional, Set, Tuple
 
 import gspread
 from gspread.utils import extract_id_from_url
+
+logger = logging.getLogger(__name__)
 
 RETRY_DELAY_SECONDS = 1.0
 FAILURE_WINDOW_SECONDS = 10.0
@@ -84,6 +87,7 @@ def _is_transient(exc: BaseException) -> bool:
         import requests
         return isinstance(exc, (requests.ConnectionError, requests.Timeout))
     except Exception:
+        logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
         return False
 
 
@@ -111,7 +115,7 @@ def resilient_call(key: Hashable, source: str, fn: Callable[[], Any], mark_stale
                     time.sleep(RETRY_DELAY_SECONDS)
         with _lock:
             _failed_until[key] = time.time() + FAILURE_WINDOW_SECONDS
-        print(f"Sheets read failed for '{source}': {last_exc}")
+        logger.error(f"Sheets read failed for '{source}': {last_exc}")
 
     state = _request_state.get()
     if good and state is not None and state.allow_stale and (now - good[0]) < LAST_GOOD_MAX_AGE_SECONDS:

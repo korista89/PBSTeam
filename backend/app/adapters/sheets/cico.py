@@ -1,5 +1,6 @@
 # backend/app/adapters/sheets/cico.py
 
+import logging
 from datetime import date
 from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.adapters.sheets.resilience import SheetUnavailable
@@ -9,6 +10,8 @@ import pandas as pd
 from app.core.config import settings
 from app.domain.models import CicoObservation
 from app.adapters.sheets.client import get_sheets_client, safe_get_all_values, get_cached, set_cached
+
+logger = logging.getLogger(__name__)
 
 class CicoMonthAdapter:
     @staticmethod
@@ -23,7 +26,7 @@ class CicoMonthAdapter:
         except SheetUnavailable:
             raise
         except Exception as e:
-            print(f"Error opening CICO worksheet for month {month}: {e}")
+            logger.error(f"Error opening CICO worksheet for month {month}: {e}")
             return None
 
     @classmethod

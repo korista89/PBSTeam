@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from app.adapters.sheets.client import open_main_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
@@ -26,6 +27,8 @@ from app.services.ai_insight import (
 )
 from app.services.fba_evidence import fba_data_gate
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -492,6 +495,7 @@ def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
         except SheetUnavailable:
             raise
         except Exception as e:
+            logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
             worksheets_info.append({
                 "title": ws.title,
                 "error": str(e)
