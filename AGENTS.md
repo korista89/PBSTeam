@@ -15,7 +15,7 @@
 | `backend/app/` | FastAPI 애플리케이션. `main.py`, `schemas.py`, `api/`, `services/`, `core/`, `domain/`, `adapters/`, `data/` |
 | `frontend/src/` | Next.js 14.2.0 + TypeScript 클라이언트 |
 | `tests/` | `test_ai_fba_contract.py`, `test_sheet_sync.py` |
-| `scripts/`, `backend/*.py` | 일회성 마이그레이션·점검 스크립트 (`recreate_dashboard.py`, `fix_cico_empties.py` 등) |
+| `scripts/` | 운영 스크립트(`anonymize_sheet.py`, `daily_briefing_telegram.py`). 일회성 스크립트는 `scripts/_archive/` |
 | `docs/` | 설계 문서 |
 | 루트 `01.~12. *.txt` | PBSTeam 2.0 재설계 기획 문서. 코드가 아니라 사양서다 |
 
