@@ -89,6 +89,21 @@ def patch_target_behavior(
     return result
 
 
+@router.delete("/{behavior_id}")
+def remove_target_behavior(
+    behavior_id: str,
+    student_code: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """표적행동 삭제(목록에서 빼기). 측정·실행 기록은 시트에 남아 되돌릴 수 있다."""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import delete_target_behavior
+    result = delete_target_behavior(behavior_id, student_code)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
 class DataPointRequest(BaseModel):
     student_code: str  # 스코프 확인용
     date: str

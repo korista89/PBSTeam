@@ -174,6 +174,16 @@ export default function TargetBehaviorPage() {
         }
     };
 
+    const handleDelete = async (id: string, definition: string) => {
+        if (!confirm(`'${definition}' 표적행동을 삭제할까요?\n목록에서 사라지며, 기록은 시트에 남아 관리자가 되돌릴 수 있습니다.`)) return;
+        try {
+            await axios.delete(`${apiUrl}/api/v1/target-behaviors/${id}`, { params: { student_code: studentCode } });
+            fetchBehaviors();
+        } catch (err: any) {
+            alert("삭제 실패: " + (err.response?.data?.detail || err.message));
+        }
+    };
+
     const handleSubmitData = async () => {
         if (!selectedId || !dataForm.value.trim()) return;
         try {
@@ -420,9 +430,12 @@ export default function TargetBehaviorPage() {
                                                         측정: {selected.MeasurementType} · 기저선: {selected.Baseline || '-'} · 기간: {selected.BIPStartDate || '?'} ~ {selected.BIPEndDate || '?'} · {selected.Status}
                                                     </div>
                                                 </div>
-                                                {selected.Status !== '종료' && (
-                                                    <button onClick={() => handleEnd(selected.BehaviorID)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>종료 처리</button>
-                                                )}
+                                                <div style={{ display: 'flex', gap: 6 }}>
+                                                    {selected.Status !== '종료' && (
+                                                        <button onClick={() => handleEnd(selected.BehaviorID)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>종료 처리</button>
+                                                    )}
+                                                    <button onClick={() => handleDelete(selected.BehaviorID, selected.Definition)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.72rem', color: '#dc2626', borderColor: '#fecaca' }}>삭제</button>
+                                                </div>
                                             </div>
 
                                             <div style={{ height: 280 }}>

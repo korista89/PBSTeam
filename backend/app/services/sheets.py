@@ -4004,7 +4004,8 @@ def get_target_behaviors(student_code: str) -> list:
     clean = str(student_code).strip()
     try:
         records = safe_get_all_records(ws)
-        return [r for r in records if str(r.get("StudentCode", "")).strip() == clean]
+        # 삭제한 표적행동은 행을 남기고(되돌릴 수 있게) 목록에서만 뺀다
+        return [r for r in records if str(r.get("StudentCode", "")).strip() == clean and str(r.get("Status", "")).strip() != "삭제"]
     except SheetUnavailable:
         raise
     except Exception as e:
@@ -4062,6 +4063,23 @@ def update_target_behavior_status(behavior_id: str, status: str) -> dict:
     except Exception as e:
         logger.error(f"Error updating target behavior status: {e}")
         return {"error": str(e)}
+
+
+def delete_target_behavior(behavior_id: str, student_code: str) -> dict:
+    """표적행동 삭제: 행은 지우지 않고 Status='삭제'로 바꾼다. 측정·실행 기록도 그대로 남는다.
+    다른 학생의 표적행동을 지우지 않도록 학생코드가 맞을 때만 바꾼다."""
+    ws = ensure_target_behavior_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    all_vals = ws.get_all_values()
+    if len(all_vals) < 2:
+        return {"error": "Behavior ID not found"}
+    headers = all_vals[0]
+    id_idx, code_idx, status_idx = headers.index("BehaviorID"), headers.index("StudentCode"), headers.index("Status")
+    for i, row in enumerate(all_vals[1:]):
+        if row[id_idx] == behavior_id and str(row[code_idx]).strip() == str(student_code).strip():
+            ws.update_cell(i + 2, status_idx + 1, "삭제")
+            return {"message": "Deleted", "behavior_id": behavior_id}
+    return {"error": "Behavior ID not found"}
 
 
 def add_target_behavior_data(behavior_id: str, date_str: str, value: str, recorded_by: str = "", memo: str = "") -> dict:
