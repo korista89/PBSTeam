@@ -5,6 +5,7 @@ import json
 import time
 from typing import Optional, List, Dict, Any
 import gspread
+from gspread.utils import extract_id_from_url
 from oauth2client.service_account import ServiceAccountCredentials
 from app.core.config import settings
 from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable
@@ -54,44 +55,54 @@ def get_sheets_client() -> Optional[gspread.Client]:
     return None
 
 
-def get_cached(key: str, ttl: int = CACHE_TTL) -> Optional[Any]:
+def current_sheet_url() -> str:
+    """이번 요청이 쓰는 스프레드시트 주소. 시트 접근은 모두 이 함수를 거친다.
+    지금은 경은 시트 하나(SHEET_URL)뿐이다. 기관별 시트가 생기면 여기만 바꾼다."""
+    return settings.SHEET_URL
+
+
+def open_main_sheet(client=None):
+    """현재 스프레드시트를 연다. 열린 객체는 ResilientClient가 인스턴스마다 재사용한다."""
+    client = client or get_sheets_client()
+    return client.open_by_url(current_sheet_url())
+
+
+def _scope() -> str:
+    # 캐시 열쇠 앞에 시트 ID를 붙여, 시트가 여러 개여도 서로의 캐시를 읽지 않게 한다.
+    url = current_sheet_url() or ""
     try:
-        now = time.time()
-        entry = _cache.get(key)
-        if entry and (now - float(entry.get("timestamp", 0)) < ttl):
-            return entry.get("data")
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        print(f"get_cached error: {e}")
+        return extract_id_from_url(url)
+    except Exception:
+        return url
+
+
+def _scoped(key: str) -> str:
+    return f"{_scope()}|{key}"
+
+
+def get_cached(key: str, ttl: int = CACHE_TTL) -> Optional[Any]:
+    entry = _cache.get(_scoped(key))
+    if entry and (time.time() - float(entry.get("timestamp", 0)) < ttl):
+        return entry.get("data")
     return None
 
 
 def set_cached(key: str, data: Any):
-    try:
-        _cache[key] = {
-            "data": data,
-            "timestamp": time.time()
-        }
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        print(f"set_cached error: {e}")
+    _cache[_scoped(key)] = {"data": data, "timestamp": time.time()}
 
 
-def invalidate_cache(key_prefix: str = ""):
-    global _cache
-    try:
-        if not key_prefix:
-            _cache.clear()
-        else:
-            keys_to_remove = [k for k in _cache if k.startswith(key_prefix)]
-            for k in keys_to_remove:
-                _cache.pop(k, None)
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        print(f"invalidate_cache error: {e}")
+def invalidate_cache(key_prefix: str = "", keep: tuple = (), max_age: Optional[float] = None):
+    """현재 시트의 캐시 중 key_prefix로 시작하는 것을 지운다.
+    keep에 든 접두어는 남기고, max_age를 주면 그보다 오래된 것만 지운다."""
+    scope = _scope() + "|"
+    cutoff = time.time() - max_age if max_age is not None else None
+    for k in [k for k in _cache if k.startswith(scope + key_prefix)]:
+        bare = k[len(scope):]
+        if keep and bare.startswith(keep):
+            continue
+        if cutoff is not None and float(_cache[k].get("timestamp", 0) or 0) >= cutoff:
+            continue
+        _cache.pop(k, None)
 
 
 def safe_get_all_records(ws) -> List[Dict[str, Any]]:

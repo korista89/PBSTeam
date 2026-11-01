@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.adapters.sheets.client import open_main_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -477,7 +478,7 @@ def debug_sheets(current_admin: Dict[str, Any] = Depends(require_admin)):
     client = get_sheets_client()
     if not client:
         return {"error": "Failed to connect to Google Spreadsheet"}
-    spreadsheet = client.open_by_url(settings.SHEET_URL)
+    spreadsheet = open_main_sheet(client)
     worksheets_info = []
     for ws in spreadsheet.worksheets():
         try:

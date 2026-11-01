@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import List, Dict, Any, Optional
 import re
 import pandas as pd
+from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.core.config import settings
 from app.domain.models import BehaviorEvent, SafetyFlags, FunctionEstimate, FunctionCode
 from app.adapters.sheets.client import get_sheets_client, safe_get_all_records, get_cached, set_cached
@@ -29,10 +30,10 @@ class LogMainAdapter:
     @staticmethod
     def get_worksheet():
         client = get_sheets_client()
-        if not client or not settings.SHEET_URL:
+        if not client or not current_sheet_url():
             return None
         try:
-            sheet = client.open_by_url(settings.SHEET_URL)
+            sheet = open_main_sheet(client)
             for title in ["Log_Main", "BehaviorLogs1", "BehaviorLogs", "설문지 응답 시트1"]:
                 try:
                     return sheet.worksheet(title)

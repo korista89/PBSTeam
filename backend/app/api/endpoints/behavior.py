@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
+from app.adapters.sheets.client import open_main_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
 from typing import Optional, List, Dict, Any
 from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records, clear_cache, normalize_date_string, FORM_REPORT_HEADERS
@@ -134,7 +135,7 @@ def _load_log_row(log_id: str):
     client = get_sheets_client()
     if not client:
         raise HTTPException(status_code=500, detail="Cannot access Google Sheets")
-    ws = client.open_by_url(settings.SHEET_URL).worksheet("Log_Main")
+    ws = open_main_sheet(client).worksheet("Log_Main")
     all_vals = ws.get_all_values()
     headers = all_vals[0] if all_vals else []
     for col in ("Log_ID", "Status", "Approval_Meta"):

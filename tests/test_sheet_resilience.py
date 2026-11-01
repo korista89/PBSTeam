@@ -129,7 +129,7 @@ class EndpointBehaviourTests(unittest.TestCase):
 
         resilience.reset_for_tests()
         settings.AUTH_SECRET = os.environ["AUTH_SECRET"]
-        sheets._cache["users"] = {"data": [], "timestamp": 0.0}
+        sheets.clear_cache("users")
         sheets._users_last_good = [{"ID": "admin", "Role": "admin", "Active": "true", "Name": "관리자"}]
         self.client = TestClient(app)
         self.client.cookies.set(settings.AUTH_COOKIE_NAME, create_access_token({"sub": "admin", "role": "admin"}))
@@ -168,11 +168,11 @@ class EndpointBehaviourTests(unittest.TestCase):
     def test_poll_refresh_only_clears_old_entries(self):
         from app.adapters.sheets import client as adapter_client
         now = time.time()
-        adapter_client._cache["sheet:fresh"] = {"data": [1], "timestamp": now}
-        adapter_client._cache["sheet:old"] = {"data": [1], "timestamp": now - 120}
+        adapter_client._cache[adapter_client._scoped("sheet:fresh")] = {"data": [1], "timestamp": now}
+        adapter_client._cache[adapter_client._scoped("sheet:old")] = {"data": [1], "timestamp": now - 120}
         self.client.get("/api/v1/auth/me", headers={"X-PBST-Sheet-Refresh": "poll"})
-        self.assertIn("sheet:fresh", adapter_client._cache)
-        self.assertNotIn("sheet:old", adapter_client._cache)
+        self.assertIn(adapter_client._scoped("sheet:fresh"), adapter_client._cache)
+        self.assertNotIn(adapter_client._scoped("sheet:old"), adapter_client._cache)
 
 
 class TeacherScopingDoesNotMutateCacheTests(unittest.TestCase):

@@ -55,7 +55,7 @@ class AuthUserStoreTests(unittest.TestCase):
         self._reset_user_store()
 
     def _reset_user_store(self):
-        self.sheets._cache["users"] = {"data": [], "timestamp": 0.0}
+        self.sheets.clear_cache("users")
         self.sheets._users_last_good = None
 
     def _me(self, **kw):
@@ -66,7 +66,7 @@ class AuthUserStoreTests(unittest.TestCase):
         with mock.patch.object(self.sheets, "get_users_worksheet", return_value=_OkWorksheet()):
             self.assertEqual(self._me().status_code, 200)
         # Live-refresh / TTL expiry wipes the cache, then Sheets answers 429.
-        self.sheets._cache["users"] = {"data": [], "timestamp": 0.0}
+        self.sheets.clear_cache("users")
         with mock.patch.object(self.sheets, "get_users_worksheet", return_value=_FailingWorksheet()):
             res = self._me()
         self.assertEqual(res.status_code, 200, res.text)

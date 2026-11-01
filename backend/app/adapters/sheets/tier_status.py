@@ -1,6 +1,7 @@
 # backend/app/adapters/sheets/tier_status.py
 
 from typing import List, Dict, Any, Optional
+from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.adapters.sheets.resilience import SheetUnavailable
 import gspread
 from app.core.config import settings
@@ -13,10 +14,10 @@ class TierStatusAdapter:
     @staticmethod
     def get_worksheet():
         client = get_sheets_client()
-        if not client or not settings.SHEET_URL:
+        if not client or not current_sheet_url():
             return None
         try:
-            sheet = client.open_by_url(settings.SHEET_URL)
+            sheet = open_main_sheet(client)
             return sheet.worksheet("TierStatus")
         except SheetUnavailable:
             raise

@@ -1,6 +1,7 @@
 # backend/app/adapters/sheets/cico.py
 
 from datetime import date
+from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.adapters.sheets.resilience import SheetUnavailable
 from typing import List, Dict, Any, Optional
 import re
@@ -13,10 +14,10 @@ class CicoMonthAdapter:
     @staticmethod
     def get_worksheet(month: int):
         client = get_sheets_client()
-        if not client or not settings.SHEET_URL:
+        if not client or not current_sheet_url():
             return None
         try:
-            sheet = client.open_by_url(settings.SHEET_URL)
+            sheet = open_main_sheet(client)
             month_name = f"{month}월"
             return sheet.worksheet(month_name)
         except SheetUnavailable:
