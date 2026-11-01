@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from app.core.privacy import anonymize_text, build_alias_map, mask_name  # noqa: E402
 
 SHEET_ID = "1pMQIowYYBIk-6owcJqCNK5mA8GtssEEr6XdUq8gC9Cs"
+PW_SHEET_ID = "1ItIEu6UzF_IIpYJoQgp0Bmsd6ANR8BCCdK06aiTD_5c"  # 그림말누리제 파일(2026-11-01 분리)
 MAP_PATH = os.path.expanduser("~/data/pbst_alias_map.json")
 SKIP_TABS = {"Users", "날짜 관리", "평가문장"}
 SKIP_COLS = {"입력교사명", "Author", "RecordedBy", "입력자", "ID", "Password", "작성자", "UpdatedBy"}
@@ -44,14 +45,15 @@ def retry(fn, *a, **k):
     raise RuntimeError("API 재시도 초과")
 
 
-def connect(write):
+def connect(write, sheet_id=SHEET_ID):
     scope = "https://www.googleapis.com/auth/spreadsheets" + ("" if write else ".readonly")
     creds = Credentials.from_service_account_file("service_account.json", scopes=[scope])
-    return gspread.authorize(creds).open_by_key(SHEET_ID)
+    return gspread.authorize(creds).open_by_key(sheet_id)
 
 
 # 새 실명이 들어올 수 있는 탭(구글폼·자유서술). 월별·그림말 탭은 사이트가 TierStatus 별칭으로 만든다.
-INCREMENTAL_TABS = ["Log_Main", "TierStatus", "BIP", "MeetingNotes", "PW_협의록"]
+INCREMENTAL_TABS = ["Log_Main", "TierStatus", "BIP", "MeetingNotes"]
+PW_INCREMENTAL_TABS = ["PW_협의록"]
 
 
 def read_all(sh, only=None):
@@ -170,6 +172,11 @@ def main():
         if ids:
             print(f"[{stamp}] Log_ID 채움: {len([c for c in ids['Log_Main'] if c[1] == data['Log_Main'][1][0].index('Log_ID')])}행")
             apply(sh, ids)
+        pw = connect(True, PW_SHEET_ID)
+        pw_changes = plan(read_all(pw, PW_INCREMENTAL_TABS), saved["alias"], mask_unknown=True)
+        if pw_changes:
+            print(f"[{stamp}] 그림말 파일 새 실명 셀:", {t: len(c) for t, c in pw_changes.items()})
+            apply(pw, pw_changes)
         return
     if mode in ("dry", "apply") and os.path.exists(MAP_PATH) and "--rebuild" not in sys.argv:
         sys.exit(f"대응표 {MAP_PATH} 가 이미 있습니다. 새 실명만 가리려면 --incremental, 전체 재작성은 --rebuild 를 붙이세요.")
@@ -177,6 +184,7 @@ def main():
         saved = json.load(open(MAP_PATH))
         data = read_all(sh)
         left = plan(data, saved["alias"])
+        left.update({f"그림말:{t}": c for t, c in plan(read_all(connect(False, PW_SHEET_ID)), saved["alias"]).items()})
         bad = {t: len(c) for t, c in left.items()}
         print("잔존 실명 셀:", bad or "없음")
         # 교사 이름 열에 학생 동명이인이 있는 건 의도적으로 남긴다(별도 집계)

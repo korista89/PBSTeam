@@ -70,6 +70,12 @@ def open_main_sheet(client=None):
     return client.open_by_url(current_sheet_url())
 
 
+def open_pw_sheet(client=None):
+    """그림말누리제 파일(PW_*·평가문장 탭)을 연다."""
+    client = client or get_sheets_client()
+    return client.open_by_url(settings.PW_SHEET_URL)
+
+
 def _scope() -> str:
     # 캐시 열쇠 앞에 시트 ID를 붙여, 시트가 여러 개여도 서로의 캐시를 읽지 않게 한다.
     url = current_sheet_url() or ""

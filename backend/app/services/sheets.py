@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Any, Union
 from app.adapters.sheets.client import (
     get_cached, set_cached, invalidate_cache,
     get_sheets_client, safe_get_all_records, safe_get_all_values,
-    current_sheet_url, open_main_sheet,
+    current_sheet_url, open_main_sheet, open_pw_sheet,
 )
 from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable, invalidate_worksheet_lookups
 from app.core.time import now_kst
@@ -82,7 +82,7 @@ def fetch_evaluation_sentences():
     if not client:
         return []
     try:
-        sheet = open_main_sheet(client)
+        sheet = open_pw_sheet(client)
         ws = sheet.worksheet(settings.DAILY_LOG_SHEET)
         records = safe_get_all_records(ws)
         set_cached("svc:evaluation_sentences", records)

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     GOOGLE_CREDENTIALS_FILE: str = str(BACKEND_DIR / "service_account.json")
     SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1pMQIowYYBIk-6owcJqCNK5mA8GtssEEr6XdUq8gC9Cs/edit"
     DAILY_LOG_SHEET: str = "평가문장"
+    # 그림말누리제(PW_*·평가문장) 탭은 별도 파일에 둔다(2026-11-01 분리)
+    PW_SHEET_URL: str = "https://docs.google.com/spreadsheets/d/1ItIEu6UzF_IIpYJoQgp0Bmsd6ANR8BCCdK06aiTD_5c/edit"
     GEMINI_API_KEY: str = ""
     GAS_WEB_APP_URL: str = ""
     LOCAL_LLM_URL: str = "http://localhost:1234/v1"

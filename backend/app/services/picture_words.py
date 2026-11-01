@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from app.adapters.sheets.client import open_main_sheet, current_sheet_url
+from app.adapters.sheets.client import open_pw_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
 import gspread
 from app.services.sheets import (
@@ -40,10 +40,10 @@ def get_all_records_with_row_index(ws) -> list[dict]:
 
 def get_pw_spreadsheet():
     client = get_sheets_client()
-    if not client or not current_sheet_url():
+    if not client:
         return None
     try:
-        return open_main_sheet(client)
+        return open_pw_sheet(client)
     except SheetUnavailable:
         raise
     except Exception as e:
