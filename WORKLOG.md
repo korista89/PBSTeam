@@ -20,3 +20,5 @@
 - 2026-10-30 추가: 서명란 담임교사만(배포 bffe1e6), Codex 운영보고 접속 재시도 3회. 감시 워크플로(.github/workflows/uptime.yml)는 PAT에 workflow 권한 없어 미푸시.
 - 2026-11-01: 효율화 E·B·A·C·D 로컬 커밋(9415a6a~5a18455, 미푸시). 시트 접근 단일화·기관별 캐시, logging, 시트 읽기 계측·CICO batch. F(sheets.py 분할)는 패치 의미 변화 위험으로 승인 대기.
   다음: 승인 후 방과 후 배포 → Vercel 로그에서 sheet_reads·오류 확인.
+- 2026-11-01: 효율화 E·B·A·C·D 운영 배포(74518f1). 배포 전 운영 시트 쓰기 왕복 시험(게시판·회의록·사용자·휴일·행동기록·CICO·Tier) 통과, 시험 후 시트가 백업(~/data/pbst_backup_20261101)과 동일함 확인. GET 45개 응답 리팩터 전과 동일. F 보류.
+  다음: 평일 첫 수업일에 Vercel 로그 sheet_reads·오류 확인.
