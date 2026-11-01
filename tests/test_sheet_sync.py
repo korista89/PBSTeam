@@ -100,7 +100,7 @@ class SheetSyncTests(unittest.TestCase):
 
         with mock.patch("app.services.sheets.get_sheets_client", return_value=client), mock.patch(
             "app.services.sheets.safe_get_all_values", return_value=values
-        ):
+        ), mock.patch("app.services.sheets.get_worksheet_fuzzy", return_value=worksheet):
             result = toggle_tier2_status(8, "2111", "X")
 
         self.assertNotIn("error", result)
