@@ -659,6 +659,7 @@ function refreshSummary_(sy, month) {
 // ───────────────────────── 차트 탭 ─────────────────────────
 
 var CHART_PICK = 'B3';
+var CHART_MONTH = 'D3';  // 볼 달(비우면 이번 달)
 var DATA_COL = 27;  // 차트용 자료는 AA열부터(화면 오른쪽 밖)
 
 function chartSheet_() {
@@ -667,6 +668,7 @@ function chartSheet_() {
     sh = ss_().insertSheet(TAB.CHART, 0);
     sh.getRange('A1').setValue('PBST 차트 — 학생을 고르면 위쪽 차트가 바뀝니다. 캡처해서 담임에게 보내세요.').setFontWeight('bold');
     sh.getRange('A3').setValue('학생 선택').setFontWeight('bold');
+    sh.getRange('C3').setValue('월').setFontWeight('bold');
     sh.getRange('A22').setValue('분포도기록지(교시별, 분포도 학생만)').setFontWeight('bold');
     sh.getRange('A34').setValue('학교 전체 행동 통계(이번 학년도 누적)').setFontWeight('bold');
     sh.setColumnWidth(2, 260);
@@ -686,7 +688,8 @@ function chart_(sh, key, type, range, anchorRow, anchorCol, title) {
   var props = PropertiesService.getDocumentProperties();
   var id = props.getProperty('chart:' + key);
   var found = sh.getCharts().filter(function (c) { return String(c.getChartId()) === id; })[0];
-  if (found) { sh.updateChart(found.modify().setOption('title', title).build()); return; }
+  // 범위를 다시 지정해야 빈 자료로 처음 만든 차트도 자료가 생기면 계열을 다시 잡는다
+  if (found) { sh.updateChart(found.modify().clearRanges().addRange(range).setNumHeaders(1).setOption('title', title).build()); return; }
   var c = sh.newChart().setChartType(type).addRange(range).setPosition(anchorRow, anchorCol, 0, 0)
     .setOption('title', title).setOption('width', 470).setOption('height', 280).setOption('legend', { position: 'none' })
     .setNumHeaders(1).build();
@@ -711,6 +714,13 @@ function refreshCharts_(sy, month) {
 
 function refreshStudentChart_(sy, month) {
   var sh = chartSheet_();
+  if (!sh.getRange('C3').getDisplayValue()) sh.getRange('C3').setValue('월').setFontWeight('bold');
+  var months = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2].slice(0, [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2].indexOf(month) + 1)
+    .map(function (m) { return m + '월'; });
+  var picked = sh.getRange(CHART_MONTH).getDisplayValue();
+  if (months.indexOf(picked) < 0) { picked = month + '월'; sh.getRange(CHART_MONTH).setValue(picked); }
+  sh.getRange(CHART_MONTH).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(months.slice().reverse(), true).build());
+  month = parseInt(picked, 10);
   var setAll = read_(TAB.SET), calRows = read_(TAB.CAL), idx = recordIndex_(read_(TAB.REC), sy);
   var cur = setAll.filter(function (r) { return r['학년도'] === String(sy) && r['월'] === String(month) && r['Tier2'].toUpperCase() === 'O'; });
   var labels = cur.map(function (r) { return r['학생명'] + '(' + r['학생코드'] + ') #' + (r['목표'] || '1') + ' ' + r['목표행동']; });
@@ -746,7 +756,9 @@ function onEdit(e) {
   var sh = e.range.getSheet(), name = sh.getName();
   if (name === TAB.INPUT) saveCico_(sh, e.range);
   else if (name === TAB.REPORT) saveReport_(sh, e.range);
-  else if (name === TAB.CHART && e.range.getA1Notation() === CHART_PICK) { var c = current_(); refreshStudentChart_(c.sy, c.month); }
+  else if (name === TAB.CHART && (e.range.getA1Notation() === CHART_PICK || e.range.getA1Notation() === CHART_MONTH)) {
+    var c = current_(); refreshStudentChart_(c.sy, c.month);
+  }
 }
 
 if (typeof module !== 'undefined') {  // 로컬 시험(node)용
