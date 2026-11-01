@@ -626,7 +626,7 @@ export default function BIPEditor() {
                             onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(studentCode)}`)}
                             className="btn btn-secondary"
                         >
-                            📉 표적행동기록 데이터 보기
+                            🧩 개별학생 행동중재 화면으로
                         </button>
                     </div>
 
