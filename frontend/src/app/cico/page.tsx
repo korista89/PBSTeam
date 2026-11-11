@@ -8,7 +8,7 @@ import ReadableAIResult from "../components/ReadableAIResult";
 import { maskName } from "../utils";
 import { requestSheetLiveRefresh, useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import {
-  ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, LabelList,
 } from "recharts";
 import { API_BASE_URL } from "@/app/lib/api";
 
@@ -536,6 +536,8 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
   // X축을 3~12월로 고정: 데이터가 없는 달은 null로 비워 축 범위만 유지한다.
   const trendData = ALL_MONTHS.map(month => ({ month, rate: rateByMonth.get(month) ?? null, goal }));
   const hasTrendData = trendData.some(d => d.rate !== null);
+  const rated = trendData.filter(d => d.rate !== null) as { month: string; rate: number; goal: number }[];
+  const cicoShift = rated.length >= 2 ? { first: rated[0], last: rated[rated.length - 1], met: rated.filter(d => d.rate >= d.goal).length } : null;
 
   return (
     <>
@@ -731,7 +733,14 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
         <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#94a3b8", marginBottom: 6, letterSpacing: 0.3 }}>📊 다른 달과 비교</div>
         <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div className="card" style={{ padding: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>📈 월별 수행률 추이</div>
+            <div style={{ fontWeight: 700, fontSize: "0.78rem", marginBottom: 8, color: "#0f172a" }}>📈 월별 수행률 추이 <span style={{ fontWeight: 500, color: "#94a3b8" }}>(초록 영역 = 목표 이상)</span></div>
+            {cicoShift && (
+              <div style={{ marginBottom: 8, padding: "7px 10px", borderRadius: 10, background: cicoShift.last.rate >= cicoShift.first.rate ? "#f0fdf4" : "#f8fafc", border: `1px solid ${cicoShift.last.rate >= cicoShift.first.rate ? "#bbf7d0" : "#e2e8f0"}`, fontSize: "0.74rem", color: "#475569" }}>
+                {cicoShift.first.month} <b>{cicoShift.first.rate}%</b> → {cicoShift.last.month} <b style={{ color: cicoShift.last.rate >= cicoShift.first.rate ? "#16a34a" : "#0f172a" }}>{cicoShift.last.rate}%</b>
+                {cicoShift.last.rate !== cicoShift.first.rate && <b style={{ marginLeft: 6, color: cicoShift.last.rate > cicoShift.first.rate ? "#16a34a" : "#475569" }}>{cicoShift.last.rate > cicoShift.first.rate ? "▲" : "▼"} {Math.abs(cicoShift.last.rate - cicoShift.first.rate)}%p</b>}
+                <span style={{ marginLeft: 8 }}>· 목표 달성 {cicoShift.met}/{rated.length}개월</span>
+              </div>
+            )}
             {hasTrendData ? (
               <ResponsiveContainer width="100%" height={140}>
                 <ComposedChart data={trendData}>
@@ -739,8 +748,11 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
                   <XAxis dataKey="month" style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
                   <YAxis domain={[0, 100]} style={{ fontSize: "8px" }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(v: any) => [`${v}%`, ""]} />
+                  <ReferenceArea y1={goal} y2={100} fill="#10b981" fillOpacity={0.08} />
                   <Area type="monotone" dataKey="rate" fill="#f59e0b10" stroke="none" />
-                  <Line type="monotone" dataKey="rate" name="수행률" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="rate" name="수행률" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4 }} connectNulls>
+                    <LabelList dataKey="rate" position="top" formatter={(v: any) => (v === null || v === undefined ? "" : `${v}%`)} style={{ fontSize: "9px", fill: "#475569" }} />
+                  </Line>
                   <Line type="monotone" dataKey="goal" name="목표" stroke="#ef4444" strokeWidth={1} strokeDasharray="4 2" dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>

@@ -8,6 +8,7 @@ import {
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
 import DropdownTextarea from "../components/DropdownTextarea";
+import { phaseEffect } from "../lib/progress";
 
 const MEASUREMENT_TYPES = ["빈도", "지속시간", "강도", "퍼센트"];
 
@@ -238,6 +239,18 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
         return Object.values(byDate).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
     })();
 
+    // 국면별 평균선·효과 요약(문제행동은 줄수록, 목표행동은 늘수록 개선). 원자료는 그대로 두고 비교 기준만 더한다.
+    const lowerIsBetter = selected?.Type !== "목표행동";
+    const phaseVals = (ph: string) => (chart?.data_points || [])
+        .filter((d: any) => !isNaN(Number(d.Value)) && phaseOf(String(d.Date)) === ph)
+        .map((d: any) => ({ date: String(d.Date), v: Number(d.Value) }));
+    const baseP = phaseVals("baseline"), treatP = phaseVals("treatment");
+    const effect = phaseEffect(baseP.map((x: any) => x.v), treatP.map((x: any) => x.v), lowerIsBetter);
+    const meanSegment = (arr: { date: string; v: number }[], m: number) =>
+        arr.length ? [{ x: arr[0].date, y: m }, { x: arr[arr.length - 1].date, y: m }] : null;
+    const baseSeg = effect && meanSegment(baseP, effect.baseMean);
+    const treatSeg = effect && meanSegment(treatP, effect.treatMean);
+
     // 대시보드 요약 카드
     const activeCount = behaviors.filter(b => b.Status !== '종료').length;
     const problemCount = behaviors.filter(b => b.Type === '문제행동').length;
@@ -343,17 +356,34 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                                 </div>
                                             </div>
 
+                                            {effect ? (
+                                                <div style={{ padding: "10px 14px", borderRadius: 12, background: effect.improved ? "#f0fdf4" : "#f8fafc", border: `1px solid ${effect.improved ? "#bbf7d0" : "#e2e8f0"}`, display: "flex", flexWrap: "wrap", gap: "6px 16px", alignItems: "baseline", fontSize: "0.8rem", color: "#475569" }}>
+                                                    <span>기초선 평균 <b style={{ color: "#0f172a" }}>{effect.baseMean}</b> ({effect.nBase}회)</span>
+                                                    <span style={{ color: "#94a3b8" }}>→</span>
+                                                    <span>중재 평균 <b style={{ color: effect.improved ? "#16a34a" : "#0f172a" }}>{effect.treatMean}</b> ({effect.nTreat}회)</span>
+                                                    {effect.pct !== null && effect.pct !== 0 && (
+                                                        <b style={{ fontSize: "1rem", color: effect.improved ? "#16a34a" : "#475569" }}>{effect.pct < 0 ? "▼" : "▲"} {Math.abs(effect.pct)}% {effect.pct < 0 ? "감소" : "증가"}</b>
+                                                    )}
+                                                    <span>최근 3회 평균 <b style={{ color: effect.lastImproved ? "#16a34a" : "#0f172a" }}>{effect.lastMean}</b>{effect.lastPct !== null && effect.nTreat >= 3 ? ` (${effect.lastPct <= 0 ? "▼" : "▲"}${Math.abs(effect.lastPct)}%)` : ""}</span>
+                                                    <span title="기초선 최선값보다 나아진 중재 자료점의 비율(비중첩 비율)">개선 자료점 <b style={{ color: "#0f172a" }}>{effect.pnd}%</b></span>
+                                                    {fidelityRate !== null && <span>중재 실행 <b style={{ color: "#7c3aed" }}>{fidelityRate}%</b></span>}
+                                                </div>
+                                            ) : (
+                                                <div style={{ fontSize: "0.78rem", color: "#94a3b8" }}>기초선과 중재 자료가 각각 1회 이상 쌓이면 평균 변화와 개선 정도를 보여줍니다.</div>
+                                            )}
                                             <div style={{ height: 280 }}>
                                                 <ResponsiveContainer>
                                                     <ComposedChart data={mergedChartData} margin={{ top: 14, right: 24, left: 0, bottom: 0 }}>
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                                         <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                                                        <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                                                        <YAxis yAxisId="left" domain={[0, "auto"]} tick={{ fontSize: 10 }} />
                                                         <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} />
                                                         <Tooltip />
                                                         <Legend wrapperStyle={{ fontSize: '0.72rem' }} />
                                                         {phaseStart && <ReferenceLine yAxisId="left" x={phaseStart} stroke="#0f172a" strokeDasharray="5 4" label={{ value: "중재 시작", position: "insideTopRight", fontSize: 10, fill: "#0f172a" }} />}
                                                         {phaseEnd && <ReferenceLine yAxisId="left" x={phaseEnd} stroke="#0f172a" strokeDasharray="5 4" label={{ value: "중재 종료", position: "insideTopRight", fontSize: 10, fill: "#0f172a" }} />}
+                                                        {baseSeg && <ReferenceLine yAxisId="left" segment={baseSeg as any} stroke="#64748b" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: `기초선 평균 ${effect!.baseMean}`, position: "insideTopLeft", fontSize: 10, fill: "#64748b" }} />}
+                                                        {treatSeg && <ReferenceLine yAxisId="left" segment={treatSeg as any} stroke="#4f46e5" strokeDasharray="6 3" strokeWidth={1.5} label={{ value: `중재 평균 ${effect!.treatMean}`, position: "insideBottomRight", fontSize: 10, fill: "#4f46e5" }} />}
                                                         <Line yAxisId="left" type="linear" dataKey="baseline" name={`기초선(${selected.MeasurementType})`} stroke="#64748b" strokeWidth={2} dot={{ r: 4, fill: "#64748b" }} connectNulls isAnimationActive={false} />
                                                         <Line yAxisId="left" type="linear" dataKey="treatment" name={`중재(${selected.MeasurementType})`} stroke="#4f46e5" strokeWidth={2} dot={{ r: 4, fill: "#4f46e5" }} connectNulls isAnimationActive={false} />
                                                         <Line yAxisId="left" type="linear" dataKey="after" name="중재 종료 후" stroke="#0891b2" strokeWidth={2} dot={{ r: 4, fill: "#0891b2" }} connectNulls isAnimationActive={false} />

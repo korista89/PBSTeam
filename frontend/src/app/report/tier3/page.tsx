@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { WeeklyTrendChart, ChangeBanner } from "../../components/ProgressCharts";
 import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
@@ -203,17 +204,12 @@ function StudentFBAFrame({ student: s }: { student: Tier3Student }) {
             중복 편집 화면을 없애기 위해 /student/{code}/bip 통합 페이지로 이동했습니다. */}
         <div className="responsive-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
           <div style={{ background: '#fafafa', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 발생빈도 추이</div>
+            <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 발생빈도 추이 <span style={{ fontWeight: 400, color: "#94a3b8", fontSize: "0.7rem" }}>(굵은 선 = 4주 평균)</span></div>
             {s.weekly_trend_freq && s.weekly_trend_freq.length > 0 ? (
-              <ResponsiveContainer width="100%" height={150}>
-                <LineChart data={s.weekly_trend_freq}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="week" style={{ fontSize: '8px' }} axisLine={false} tickLine={false} interval="preserveStartEnd" tickFormatter={formatWeek} />
-                  <YAxis allowDecimals={false} style={{ fontSize: '8px' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="count" name="발생빈도" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <>
+                <ChangeBanner weekly={s.weekly_trend_freq} />
+                <div style={{ marginTop: 8 }}><WeeklyTrendChart weekly={s.weekly_trend_freq} height={170} weekLabel={formatWeek} /></div>
+              </>
             ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}
           </div>
 

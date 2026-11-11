@@ -3,7 +3,7 @@
 // 개별학생 행동중재 단계 화면: ② 자료 차트 ③ FBA 결과 보고서 ④ 행동중재계획 ⑥ 중재 결과 보고서
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { WeeklyTrendChart, ChangeBanner } from "../components/ProgressCharts";
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
@@ -121,20 +121,12 @@ export function DataStep({ studentCode, logs, planStart }: { studentCode: string
                 {kpis.map(([k, v]) => <div key={k} style={card}><div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#64748b" }}>{k}</div><div style={{ fontSize: "1.5rem", fontWeight: 900, marginTop: 4 }}>{v}</div></div>)}
             </div>
             <div style={card}>
-                <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: 8 }}>주별 행동기록 건수(최근 80주) {planStart && <span style={{ fontWeight: 400, color: "#7c3aed", fontSize: "0.78rem" }}>(보라 선: 중재 시작 {kDate(planStart)})</span>}</div>
+                <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: 8 }}>주별 행동기록 건수(최근 80주) <span style={{ fontWeight: 400, color: "#94a3b8", fontSize: "0.76rem" }}>연한 막대 = 그 주 건수 · 굵은 선 = 4주 평균 · 점선 = 처음 4주 평균</span> {planStart && <span style={{ fontWeight: 400, color: "#7c3aed", fontSize: "0.78rem" }}>(보라 선: 중재 시작 {kDate(planStart)})</span>}</div>
                 {weekly.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>행동기록이 없습니다. 행동기록 탭에서 입력한 자료가 여기에 쌓입니다.</div> : (
-                    <div style={{ height: 240 }}>
-                        <ResponsiveContainer>
-                            <LineChart data={weekly}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={(w: string) => `${w.slice(2, 4)}.${+w.slice(5, 7)}.${+w.slice(8, 10)}`} />
-                                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                <Tooltip labelFormatter={(w: any) => `${kDate(String(w))} 주`} />
-                                {planStart && <ReferenceLine x={mondayOf(planStart)} stroke="#7c3aed" strokeDasharray="4 4" />}
-                                <Line type="monotone" dataKey="count" name="행동기록(건)" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
+                    <>
+                        <ChangeBanner weekly={weekly} />
+                        <div style={{ marginTop: 10 }}><WeeklyTrendChart weekly={weekly} planStart={planStart || undefined} height={240} /></div>
+                    </>
                 )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }} className="responsive-grid-2">

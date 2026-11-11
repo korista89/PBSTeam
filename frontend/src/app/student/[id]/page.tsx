@@ -4,9 +4,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
-import {
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Bar, Line, ComposedChart,
-} from "recharts";
+import { WeeklyTrendChart, CumulativeChart, IntensityShiftChart, ChangeBanner } from "../../components/ProgressCharts";
+import { baselineVsRecent, quietStreaks, intensityByMonth, schoolYearStart, calmWeeks } from "../../lib/progress";
 import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
@@ -189,17 +188,20 @@ export default function StudentDetail() {
     const prev14 = logs.filter(l => dOf(l) > addDays(today, -28) && dOf(l) <= addDays(today, -14)).length;
     const lastDate = logs.map(dOf).filter(Boolean).sort().pop() || "";
     const ints = inRange.map(intensity).filter((v): v is number => v !== null);
+    // 성과 차트는 분석기간 필터(기본 최근 28일)와 무관하게 학년도 시작(3월 1일)부터 오늘까지 전체를 쓴다.
+    const yearStart = schoolYearStart(today);
+    const yearLogs = logs.filter(l => { const d = dOf(l); return d && d >= yearStart && d <= today; });
     const weeks = new Map<string, { count: number; sum: number; n: number }>();
-    inRange.forEach(l => {
+    yearLogs.forEach(l => {
       const w = mondayOf(dOf(l)); const e = weeks.get(w) || { count: 0, sum: 0, n: 0 };
       const i = intensity(l); e.count += 1; if (i !== null) { e.sum += i; e.n += 1; } weeks.set(w, e);
     });
-    const firstW = mondayOf(startDate || [...weeks.keys()].sort()[0] || today);
-    const lastW = mondayOf(endDate && endDate < today ? endDate : today);
+    const firstW = mondayOf(yearStart);
+    const lastW = mondayOf(today);
     const weekly: { week: string; count: number; avg: number | null }[] = [];
     for (let w = firstW; w <= lastW && weekly.length < 60; w = addDays(w, 7)) {
       const e = weeks.get(w);
-      weekly.push({ week: kd(w), count: e?.count || 0, avg: e && e.n ? +(e.sum / e.n).toFixed(1) : null });
+      weekly.push({ week: w, count: e?.count || 0, avg: e && e.n ? +(e.sum / e.n).toFixed(1) : null });
     }
     return {
       total: inRange.length, last14, prev14, lastDate,
@@ -211,8 +213,12 @@ export default function StudentDetail() {
       places: countBy(inRange, l => short(l["장소"])),
       slotsTop: countBy(inRange, l => slots(l).map(slotLabel)),
       weekly,
+      yearStart, yearTotal: yearLogs.length, calm: calmWeeks(weekly.map(w => w.count)),
+      quiet: quietStreaks(yearLogs.map(dOf), today),
+      shift: baselineVsRecent(weekly.map(w => w.count)),
+      months: intensityByMonth(yearLogs.map(l => ({ date: dOf(l), intensity: intensity(l) }))),
     };
-  }, [logs, inRange, startDate, endDate]);
+  }, [logs, inRange]);
 
   if (loading || error || !data) return (
     <AuthCheck>
@@ -237,7 +243,7 @@ export default function StudentDetail() {
   const functions = (data.functions || []).map(f => [short(f.name), f.value] as [string, number]);
   const fnTotal = functions.reduce((a, f) => a + f[1], 0);
   const diff = stats.last14 - stats.prev14;
-  const trendTone = diff > 0 ? C.red : diff < 0 ? C.green : C.sub;
+  const trendTone = diff > 0 ? C.amber : diff < 0 ? C.green : C.sub;
   const recent = [...inRange].filter(l => !crisisOnly || isCrisis(l))
     .sort((a, b) => (dOf(b) + String(b["타임스탬프"] || "")).localeCompare(dOf(a) + String(a["타임스탬프"] || ""))).slice(0, 10);
 
@@ -304,28 +310,70 @@ export default function StudentDetail() {
             </section>
           )}
 
-          {/* 4. 주별 추이 */}
-          <section style={card}>
-            <h3 style={h3}>📈 주별 발생 추이</h3>
-            <p style={hint}>막대 = 주별 건수, 선 = 그 주 평균 강도</p>
-            <div style={{ height: 260, marginTop: 12 }}>
-              {stats.total === 0 ? <div style={{ color: C.mute, paddingTop: 100, textAlign: "center" }}>기간 내 기록이 없습니다.</div> : (
-                <ResponsiveContainer>
-                  <ComposedChart data={stats.weekly} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: C.sub }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="c" allowDecimals={false} tick={{ fontSize: 11, fill: C.sub }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="i" orientation="right" domain={[0, 5]} tick={{ fontSize: 11, fill: C.sub }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v: any, n: any) => [n === "count" ? `${v}건` : v, n === "count" ? "건수" : "평균 강도"]} labelFormatter={(l) => `${l} 주`} />
-                    <Bar yAxisId="c" dataKey="count" fill={C.blue} radius={[6, 6, 0, 0]} maxBarSize={28} />
-                    <Line yAxisId="i" dataKey="avg" stroke={C.red} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
+          {/* 4. 3월부터 지금까지 */}
+          {stats.yearTotal > 0 && (
+            <section style={{ ...card, background: "linear-gradient(135deg,#f0fdf4,#eff6ff)", borderColor: "#bbf7d0" }}>
+              <h3 style={{ ...h3, color: "#166534" }}>🌱 3월부터 지금까지, 선생님들과 함께한 {stats.weekly.length}주</h3>
+              <ul style={{ margin: "10px 0 0", paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6, color: C.ink, fontSize: "0.95rem", lineHeight: 1.6 }}>
+                <li>{kd(stats.yearStart)}부터 지금까지 <b>{stats.yearTotal}건</b>을 빠짐없이 기록해, 변화를 볼 수 있는 근거가 쌓였습니다.</li>
+                {stats.shift && stats.shift.recent < stats.shift.base && <li>주당 평균이 처음 {stats.shift.weeks}주 <b>{stats.shift.base}건</b>에서 최근 {stats.shift.weeks}주 <b style={{ color: C.green }}>{stats.shift.recent}건</b>으로 줄었습니다{stats.shift.pct !== null ? ` (${Math.abs(stats.shift.pct)}% 감소)` : ""}.</li>}
+                {stats.calm && stats.calm.zero > 0 && <li>위기행동이 한 건도 없던 주가 <b>{stats.calm.total}주 중 {stats.calm.zero}주</b>입니다{stats.calm.recentPct > stats.calm.firstPct ? ` (앞쪽 ${stats.calm.firstPct}% → 최근 ${stats.calm.recentPct}%)` : ""}.</li>}
+                {stats.quiet && stats.quiet.since >= 7 && <li>마지막 기록 이후 <b style={{ color: C.green }}>{stats.quiet.since}일째</b> 위기행동 없이 지내고 있습니다.</li>}
+              </ul>
+            </section>
+          )}
+
+          {/* 4-1. 지금까지의 변화(성과 요약) */}
+          {(stats.quiet || stats.shift) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
+              {stats.shift && (
+                <Kpi label="처음 대비 최근" value={stats.shift.pct === null ? `주 ${stats.shift.recent}` : `${stats.shift.pct > 0 ? "+" : ""}${stats.shift.pct}%`}
+                  unit={stats.shift.pct === null ? "건" : ""} tone={stats.shift.recent < stats.shift.base ? C.green : C.ink}
+                  note={`처음 ${stats.shift.weeks}주 평균 주 ${stats.shift.base}건 → 최근 ${stats.shift.weeks}주 주 ${stats.shift.recent}건`} />
               )}
+              {stats.quiet && (
+                <Kpi label="위기행동 없이 지낸 날" value={stats.quiet.since} unit="일" tone={stats.quiet.since >= 7 ? C.green : C.ink}
+                  note={stats.quiet.since === 0 ? "오늘 기록이 있습니다" : "마지막 기록 이후 이어지는 중"} />
+              )}
+              {stats.quiet && (
+                <Kpi label="가장 길었던 무발생" value={stats.quiet.longest} unit="일" tone={C.green}
+                  note={`${kd(stats.quiet.from)} ~ ${kd(stats.quiet.to)}${stats.quiet.isCurrent ? " (현재 진행 중)" : ""}`} />
+              )}
+              {stats.months.length >= 2 && (() => {
+                const f = stats.months[0], l = stats.months[stats.months.length - 1];
+                return <Kpi label="강한 행동(강도 4~5) 비율" value={`${l.highPct}%`} tone={l.highPct < f.highPct ? C.green : C.ink}
+                  note={`${+f.month.slice(5)}월 ${f.highPct}% → ${+l.month.slice(5)}월 ${l.highPct}%`} />;
+              })()}
             </div>
+          )}
+
+          {/* 5. 주별 추이 */}
+          <section style={card}>
+            <h3 style={h3}>📈 주별 발생 추이 <span style={{ fontWeight: 600, color: C.mute, fontSize: "0.8rem" }}>({kd(stats.yearStart)} 학년도 시작 ~ 오늘)</span></h3>
+            <p style={hint}>연한 막대 = 그 주 건수, 굵은 선 = 4주 평균(흐름), 점선 = 처음 4주 평균. 세로축은 0부터입니다.</p>
+            {stats.yearTotal === 0 ? <div style={{ color: C.mute, padding: "100px 0", textAlign: "center" }}>올해 3월 이후 기록이 없습니다.</div> : (
+              <>
+                <ChangeBanner weekly={stats.weekly} />
+                <div style={{ marginTop: 12 }}><WeeklyTrendChart weekly={stats.weekly} intensity /></div>
+                <p style={{ ...hint, marginTop: 6 }}>붉은 점선 = 그 주 평균 강도(오른쪽 축 0~5)</p>
+              </>
+            )}
           </section>
 
-          {/* 5. 언제·어디서 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+            <section style={card}>
+              <h3 style={h3}>📉 누적 기록 곡선</h3>
+              <p style={hint}>선이 완만해질수록 새로 일어나는 속도가 줄어든 것입니다.</p>
+              <div style={{ marginTop: 12 }}>{stats.yearTotal === 0 ? null : <CumulativeChart weekly={stats.weekly} />}</div>
+            </section>
+            <section style={card}>
+              <h3 style={h3}>🎚️ 월별 강도 구성</h3>
+              <p style={hint}>초록(약함) 비율이 늘고 빨강(강함)이 줄수록 행동이 가벼워진 것입니다.</p>
+              <div style={{ marginTop: 12 }}><IntensityShiftChart rows={logs.filter(l => dOf(l) >= stats.yearStart).map(l => ({ date: dOf(l), intensity: intensity(l) }))} /></div>
+            </section>
+          </div>
+
+          {/* 6. 언제·어디서 */}
           <section style={card}>
             <h3 style={h3}>🗺️ 언제·어디서 일어나나</h3>
             <p style={hint}>칸이 진할수록 그 장소·시간대에 자주 일어납니다.</p>
