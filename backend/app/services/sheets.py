@@ -259,6 +259,11 @@ def map_log_row(row: dict, code: str = "") -> dict:
 
     return mapped_row
 
+def is_blank_log_row(name: str, code: str, date_val: str, ts_val: str) -> bool:
+    """학생·코드·날짜·입력시각이 모두 비면 실제 기록이 아니다(폼 응답 삭제·정리로 남은 빈 행, Log_ID만 남은 행)."""
+    return not (name or code or date_val or ts_val)
+
+
 def fetch_all_records(force_refresh: bool = False):
     cached = None if force_refresh else get_cached("svc:records")
     if cached:
@@ -322,6 +327,9 @@ def fetch_all_records(force_refresh: bool = False):
                     behavior_type = str(row.get("행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)", row.get("행동유형", row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("주요행동유형", "")))))).strip()
                     ts_val = str(row.get("타임스탬프", row.get("Timestamp", row.get("입력일", "")))).strip()
                     log_id = str(row.get("Log_ID", "")).strip()
+
+                    if is_blank_log_row(name, code, date_val, ts_val):  # 빈 행은 기록 수·학생 화면에 섞이지 않게 건너뛴다
+                        continue
 
                     # Deduplicate across multiple worksheets
                     if log_id:
