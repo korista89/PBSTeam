@@ -163,12 +163,15 @@ FORM_REPORT_HEADERS = {
 }
 
 
+from app.services.log_normalize import StudentIndex, canonical_slots, parse_occurrence_count
+
+
 def map_log_row(row: dict, code: str = "") -> dict:
     """Log_Main 한 행(헤더→값) → 사이트 전체가 쓰는 기록 dict. 보고서 미리보기도 이 함수를 거쳐 저장본과 같게 만든다."""
     name = str(row.get("학생명", row.get("이름", row.get("학생", "")))).strip()
     code = code or str(row.get("학생코드", row.get("코드번호", row.get("코드", "")))).strip()
     date_val = str(row.get("발생날짜", row.get("행동발생날짜", row.get("행동발생 날짜", row.get("날짜", ""))))).strip()
-    time_val = str(row.get("시간대(위기행동 시작 시간 기준)", row.get("시간대", row.get("시간대 (복수)", row.get("시간대(복수)", ""))))).strip()
+    time_val = canonical_slots(row.get("시간대(위기행동 시작 시간 기준)", row.get("시간대", row.get("시간대 (복수)", row.get("시간대(복수)", "")))))
     behavior_type = str(row.get("행동 유형(핵심 행동으로 택1, 추가 설명 필요 시 특기사항란 기입)", row.get("행동유형", row.get("행동유형(핵심행동으로택1)", row.get("(주요)행동유형", row.get("주요행동유형", "")))))).strip()
     ts_val = str(row.get("타임스탬프", row.get("Timestamp", row.get("입력일", "")))).strip()
     log_id = str(row.get("Log_ID", "")).strip()
@@ -297,7 +300,7 @@ def fetch_all_records(force_refresh: bool = False):
                     target_worksheets.append(ws)
 
         seen_keys = set()
-        beable_map_cache = None
+        student_index = None
         mapped_values = []
 
         for ws in target_worksheets:
@@ -343,17 +346,14 @@ def fetch_all_records(force_refresh: bool = False):
                         continue
                     seen_keys.add(dedup_key)
 
-                    # Auto-populate student code if missing
-                    if not code and name:
-                        if beable_map_cache is None:
-                            beable_map_cache = get_beable_code_mapping()
-                        clean_name = name.replace(" ", "")
-                        for k, v in (beable_map_cache or {}).items():
-                            if isinstance(v, dict) and str(v.get('student_name', '')).strip().replace(" ", "") == clean_name:
-                                code = v.get('student_code', k)
-                                break
+                    # 폼 행은 학생코드 칸이 비어 있다 → 명단으로 연결(이름이 겹치면 첫 학생에게 붙이지 않고 비워 둔다)
+                    if student_index is None:
+                        student_index = StudentIndex(fetch_student_status())
+                    code, link = student_index.resolve(name, code)
 
-                    mapped_values.append(map_log_row(row, code))
+                    mapped = map_log_row(row, code)
+                    mapped["학생연결"] = link
+                    mapped_values.append(mapped)
             except SheetUnavailable:
                 raise
             except Exception as ws_err:
@@ -3253,14 +3253,7 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                     s_copy['발생횟수'] = 1
                     freq_col = '발생횟수'
                 def _extract_val(v):
-                    if pd.isna(v) or v == '': return 1
-                    try:
-                        match = re.search(r'(\d+)', str(v))
-                        return int(match.group(1)) if match else 1
-                    except SheetUnavailable:
-                        raise
-                    except Exception:
-                        return 1
+                    return parse_occurrence_count(v, 1)
                 s_copy['발생빈도_num'] = s_copy[freq_col].apply(_extract_val)
                 f_counts = s_copy.groupby(['year', 'week'])['발생빈도_num'].sum().reset_index(name='freq')
                 f_counts_dict = {f"{int(r['year'])}-W{int(r['week']):02d}": int(r['freq']) for _, r in f_counts.iterrows()}

@@ -82,6 +82,12 @@ def submit_behavior_log(
         except Exception:
             pass
 
+        # 시간대는 폼과 같은 형식(구간 번호순·'/' 공백 없음)으로 저장한다 — 누른 순서로 저장하면 같은 조합이 다른 값으로 집계된다
+        from app.services.log_normalize import canonical_slots
+        for k in FIELD_HEADER_CANDIDATES["시간대"]:
+            if isinstance(payload.get(k), str):
+                payload[k] = canonical_slots(payload[k])
+
         # 컬럼 순서를 코드에 하드코딩해서 구글 폼이 바뀔 때마다 밀리는 사고를 막기 위해,
         # 매번 시트의 실제 헤더 행을 읽어 그 순서·이름 그대로 채운다(위치 하드코딩 금지).
         real_headers = log_main_ws.row_values(1)
@@ -545,3 +551,17 @@ def remove_no_incident(student_code: str, date_str: str, current_user: Dict[str,
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
+
+
+@router.get("/unlinked")
+def list_unlinked_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
+    """학생코드가 연결되지 않은 기록(이름 겹침·명단에 없음 등). 학생 화면·분석에서 빠지므로
+    시트의 '학생코드' 칸에 코드를 적어 주면 연결된다."""
+    out = []
+    for r in fetch_all_records(force_refresh=True):
+        if str(r.get("학생코드", "")).strip():
+            continue
+        out.append({"Log_ID": r.get("Log_ID", ""), "행동발생날짜": r.get("행동발생날짜", ""),
+                    "학생명": r.get("학생명", ""), "사유": r.get("학생연결", ""), "출처": r.get("Source", "")})
+    out.sort(key=lambda x: str(x["행동발생날짜"]), reverse=True)
+    return {"count": len(out), "logs": out}

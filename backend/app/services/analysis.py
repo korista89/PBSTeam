@@ -59,6 +59,8 @@ def aggregate_functions(series) -> list:
         result.append({"name": "기타", "value": counts["기타"]})
     return result
 
+from app.services.log_normalize import parse_occurrence_count
+
 def extract_numeric(val, default=0):
     if pd.isna(val):
         return default
@@ -174,7 +176,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     if '강도' in df.columns:
         df['강도'] = df['강도'].apply(lambda x: extract_numeric(x, 0))
     if '발생횟수' in df.columns:
-        df['발생횟수'] = df['발생횟수'].apply(lambda x: extract_numeric(x, 1))
+        df['발생횟수'] = df['발생횟수'].apply(parse_occurrence_count)
     else:
         df['발생횟수'] = 1
 
@@ -614,7 +616,7 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
     if '강도' in student_df.columns:
         student_df['강도'] = student_df['강도'].apply(lambda x: extract_numeric(x, 0))
     if '발생횟수' in student_df.columns:
-        student_df['발생횟수'] = student_df['발생횟수'].apply(lambda x: extract_numeric(x, 1))
+        student_df['발생횟수'] = student_df['발생횟수'].apply(parse_occurrence_count)
     else:
         student_df['발생횟수'] = 1
     
