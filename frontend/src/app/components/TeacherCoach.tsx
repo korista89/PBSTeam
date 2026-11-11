@@ -16,6 +16,7 @@ export type CoachFacts = {
   histBefore8: number;    // 올해 3월~최근 8주 이전 기록 건수
   tier3: boolean;
   linked: boolean;        // 위기행동 기록을 표적행동으로 모니터링 중인지
+  confirmed?: number;     // 최근 28일 '무발생' 직접 확인 일수
 };
 
 export default function TeacherCoach({ state, facts, onRecord, onTarget, onBip }: {
@@ -31,6 +32,7 @@ export default function TeacherCoach({ state, facts, onRecord, onTarget, onBip }
   if (state === "good") {
     lines.push(<>꾸준히 기록해 주신 덕분에 <b>변화가 눈에 보입니다.</b></>);
     if (facts.change) lines.push(<>{facts.change}</>);
+    if (facts.confirmed) lines.push(<>최근 4주 동안 <b>{facts.confirmed}일</b>을 ‘위기행동 없음’으로 직접 확인해 주셨습니다.</>);
     lines.push(<>지금 하고 계신 지도 방법을 그대로 이어가셔도 좋습니다. 선생님의 노력이 학생의 변화로 나타나고 있습니다.</>);
   } else if (state === "building") {
     lines.push(<>기록이 4주 이상 쌓이면 처음과 지금을 비교해 보여드립니다.</>);
@@ -45,7 +47,7 @@ export default function TeacherCoach({ state, facts, onRecord, onTarget, onBip }
     lines.push(<>바쁘고 힘드시겠지만 <b>모두를 위해 위기행동을 한 번만 기록</b>해 주세요. 기록이 있어야 학생에게 필요한 지원과 인력을 요청할 수 있고, 선생님의 노력도 함께 드러납니다.</>);
     lines.push(<>기록이 어렵다면 학교행동중재전문교사가 방법을 도와드립니다.</>);
   } else {
-    lines.push(<>최근 8주 동안 기록된 위기행동이 없습니다. 행동이 줄었다면 선생님의 노력의 결과입니다.</>);
+    lines.push(<>{facts.confirmed ? <>최근 4주 중 <b>{facts.confirmed}일</b>을 ‘위기행동 없음’으로 확인해 주셨습니다.</> : <>최근 8주 동안 기록된 위기행동이 없습니다.</>} 행동이 줄었다면 선생님의 노력의 결과입니다.</>);
     lines.push(<>다시 나타나면 바로 기록해 주세요. 기록이 학생을 지키는 근거가 됩니다.</>);
   }
   return (

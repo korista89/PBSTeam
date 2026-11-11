@@ -111,6 +111,7 @@ export type CoachState = "good" | "building" | "effort" | "nudge" | "stable" | "
 export type CoachInput = {
   rec8: number;            // 최근 8주 위기행동 기록 건수
   eff28: number;           // 최근 28일 표적행동 측정·실행 입력 건수(수동 입력만)
+  confirmed: number;       // 최근 28일 교사가 '위기행동 없었음'으로 직접 확인한 날 수
   histBefore8: number;     // 최근 8주 이전 위기행동 기록 건수(올해 3월~)
   tier3: boolean;          // 현재 Tier 3 지정
   shift: ReturnType<typeof baselineVsRecent>;
@@ -124,8 +125,10 @@ export type CoachInput = {
  * 기록이 없다는 이유만으로 질책하지 않는다(독려 문구도 비난하지 않는다).
  */
 export function coachState(i: CoachInput): CoachState {
-  const recording = i.rec8 > 0 || i.eff28 > 0;
+  const recording = i.rec8 > 0 || i.eff28 > 0 || i.confirmed > 0;
   if (recording) {
+    // 위기행동·표적행동 기록 없이 '없었음'만 확인한 경우: 과거에 있었다면 줄어든 것을 확인한 것(good), 원래 없었다면 안정적(stable)
+    if (i.rec8 === 0 && i.eff28 === 0) return i.histBefore8 > 0 ? "good" : "stable";
     const improving = (!!i.shift && i.shift.recent < i.shift.base) || (!!i.calm && i.calm.recentPct > i.calm.firstPct) || i.targetImproved === true;
     if (improving) return "good";
     if (!i.shift && i.targetImproved === null) return "building";
@@ -152,7 +155,7 @@ if (typeof process !== "undefined" && process.argv?.[1]?.endsWith("progress.ts")
   eq(schoolYearStart("2027-02-10"), "2026-03-01", "sy2");
   eq(calmWeeks([3, 2, 1, 0, 0, 0, 0, 1]), { zero: 4, total: 8, firstPct: 25, recentPct: 75 }, "calm");
   eq(intensityByMonth([{ date: "2026-03-01", intensity: 5 }, { date: "2026-03-02", intensity: 1 }, { date: "2026-04-01", intensity: null }])[0].highPct, 50, "intensity");
-  const base: CoachInput = { rec8: 0, eff28: 0, histBefore8: 0, tier3: false, shift: null, calm: null, targetImproved: null };
+  const base: CoachInput = { rec8: 0, eff28: 0, confirmed: 0, histBefore8: 0, tier3: false, shift: null, calm: null, targetImproved: null };
   const dn = { base: 4, recent: 1, pct: -75, weeks: 4 }, up = { base: 1, recent: 3, pct: 200, weeks: 4 };
   eq(coachState({ ...base, rec8: 3, shift: dn }), "good", "good");
   eq(coachState({ ...base, rec8: 3, shift: up }), "effort", "effort");
@@ -163,5 +166,7 @@ if (typeof process !== "undefined" && process.argv?.[1]?.endsWith("progress.ts")
   eq(coachState({ ...base, histBefore8: 6 }), "nudge", "nudge many");
   eq(coachState({ ...base, histBefore8: 2 }), "stable", "stable");
   eq(coachState(base), "none", "none");
+  eq(coachState({ ...base, histBefore8: 8, tier3: true, confirmed: 5 }), "good", "confirmed zero after history");
+  eq(coachState({ ...base, confirmed: 5 }), "stable", "confirmed zero no history");
   console.log("progress.ts OK");
 }

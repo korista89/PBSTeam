@@ -179,6 +179,33 @@ export default function StudentDetail() {
     axios.get(`${apiUrl}/api/v1/bip/students/${studentCode}/fba-evidence`).then(r => setFbaEvidence(r.data)).catch(() => setFbaEvidence(null));
   }, [apiUrl, studentCode]);
 
+  // 무발생 확인일: 위기행동 기록은 일이 생겼을 때만 남으므로, '없었던 날'을 교사가 직접 확인해 둔다.
+  const [calmDays, setCalmDays] = useState<string[]>([]);
+  const [calmFrom, setCalmFrom] = useState(todayIso());
+  const [calmTo, setCalmTo] = useState(todayIso());
+  const [calmMsg, setCalmMsg] = useState("");
+  const loadCalm = useCallback(async () => {
+    if (!studentCode) return;
+    try {
+      const r = await axios.get(`${apiUrl}/api/v1/behavior-log/no-incident/${encodeURIComponent(studentCode)}`);
+      setCalmDays((r.data?.dates || []) as string[]);
+    } catch { setCalmDays([]); }
+  }, [apiUrl, studentCode]);
+  useEffect(() => { void loadCalm(); }, [loadCalm]);
+  const saveCalm = async (from: string, to: string) => {
+    try {
+      const r = await axios.post(`${apiUrl}/api/v1/behavior-log/no-incident/${encodeURIComponent(studentCode || "")}`, { start_date: from, end_date: to });
+      const n = (r.data?.added || []).length, skip = (r.data?.skipped_has_incident || []).length, dup = (r.data?.already || []).length;
+      setCalmMsg(`${n}일을 ‘위기행동 없음’으로 기록했습니다.${dup ? ` (이미 기록된 ${dup}일 제외)` : ""}${skip ? ` 위기행동이 기록된 ${skip}일은 제외했습니다.` : ""}`);
+      await loadCalm();
+    } catch (e: any) {
+      setCalmMsg(e?.response?.data?.detail || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  };
+  const removeCalm = async (d: string) => {
+    try { await axios.delete(`${apiUrl}/api/v1/behavior-log/no-incident/${encodeURIComponent(studentCode || "")}/${d}`); await loadCalm(); } catch { setCalmMsg("삭제하지 못했습니다."); }
+  };
+
   // 표적행동 목록과 차트(최대 3개): 선생님이 별도 표적행동을 정해 기록하는지, 위기행동 기록을 표적행동으로 모니터링하는지 구분한다.
   const [tbs, setTbs] = useState<{ b: any; chart: any }[]>([]);
   useEffect(() => {
@@ -265,13 +292,14 @@ export default function StudentDetail() {
     const eff28 = tbInfo.reduce((n, t) => n + [...t.manual, ...t.fidelity].filter(x => String(x.Date) > d28).length, 0);
     const withEffect = tbInfo.filter(t => !t.auto && t.effect);
     const targetImproved = withEffect.length ? withEffect.every(t => t.effect!.improved && t.effect!.lastImproved) : null;
+    const confirmed = calmDays.filter(d => d > d28 && d <= today).length;
     const tier3 = String(data?.profile?.tier || "").includes("3");
-    const state = coachState({ rec8, eff28, histBefore8, tier3, shift: stats.shift, calm: stats.calm, targetImproved });
+    const state = coachState({ rec8, eff28, confirmed, histBefore8, tier3, shift: stats.shift, calm: stats.calm, targetImproved });
     const change = stats.shift && stats.shift.recent < stats.shift.base
       ? `주당 평균 ${stats.shift.base}건(처음 ${stats.shift.weeks}주) → ${stats.shift.recent}건(최근 ${stats.shift.weeks}주)${stats.shift.pct !== null ? `, ${Math.abs(stats.shift.pct)}% 감소` : ""}`
       : withEffect[0]?.effect?.improved ? `표적행동 평균 ${withEffect[0].effect.baseMean} → ${withEffect[0].effect.treatMean}` : "";
-    return { state, change, histBefore8, tier3, linked: tbInfo.some(t => t.auto) };
-  }, [logs, tbInfo, stats, data]);
+    return { state, change, histBefore8, tier3, confirmed, linked: tbInfo.some(t => t.auto) };
+  }, [logs, tbInfo, stats, data, calmDays]);
 
   if (loading || error || !data) return (
     <AuthCheck>
@@ -343,10 +371,37 @@ export default function StudentDetail() {
           </section>
 
           {/* 1-1. 선생님께 드리는 메시지 */}
-          <TeacherCoach state={coach.state} facts={{ change: coach.change, histBefore8: coach.histBefore8, tier3: coach.tier3, linked: coach.linked }}
+          <TeacherCoach state={coach.state} facts={{ change: coach.change, histBefore8: coach.histBefore8, tier3: coach.tier3, linked: coach.linked, confirmed: coach.confirmed }}
             onRecord={() => router.push(`/behavior?student=${encodeURIComponent(code)}`)}
             onTarget={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)}
             onBip={() => router.push(`/student/${encodeURIComponent(code)}/bip`)} />
+
+          {/* 1-1b. 무발생 입력 */}
+          <section style={card}>
+            <h3 style={h3}>✅ 위기행동이 없었던 날 기록</h3>
+            <p style={hint}>행동이 없었던 것도 소중한 기록입니다. 기록이 없는 날이 ‘없었음’인지 ‘기록 안 함’인지 구분하는 근거가 됩니다. (평일만 기록됩니다)</p>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button onClick={() => saveCalm(todayIso(), todayIso())} className="btn btn-primary" style={{ fontSize: "0.85rem" }}>🌤️ 오늘은 위기행동이 없었어요</button>
+              <span style={{ color: C.mute, fontSize: "0.8rem" }}>또는 기간 선택</span>
+              <input type="date" value={calmFrom} max={todayIso()} onChange={e => { setCalmFrom(e.target.value); if (e.target.value > calmTo) setCalmTo(e.target.value); }} style={{ padding: 6, borderRadius: 8, border: `1px solid ${C.line}` }} />
+              <span>~</span>
+              <input type="date" value={calmTo} min={calmFrom} max={todayIso()} onChange={e => setCalmTo(e.target.value)} style={{ padding: 6, borderRadius: 8, border: `1px solid ${C.line}` }} />
+              <button onClick={() => saveCalm(calmFrom, calmTo)} className="btn btn-secondary" style={{ fontSize: "0.82rem" }}>이 기간 기록</button>
+            </div>
+            {calmMsg && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: C.sub }}>{calmMsg}</p>}
+            <div style={{ marginTop: 10, fontSize: "0.82rem", color: C.sub }}>
+              올해 확인한 무발생 <b style={{ color: C.green }}>{calmDays.filter(d => d >= stats.yearStart).length}일</b>
+              {calmDays.length > 0 && (
+                <span style={{ marginLeft: 10, display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                  {[...calmDays].reverse().slice(0, 6).map(d => (
+                    <span key={d} style={{ background: C.greenSoft, color: C.green, borderRadius: 99, padding: "2px 10px", fontSize: "0.74rem", fontWeight: 700 }}>
+                      {kd(d)} <button onClick={() => removeCalm(d)} title="이 날짜 기록 취소" style={{ border: "none", background: "none", cursor: "pointer", color: C.mute, padding: 0 }}>✕</button>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </div>
+          </section>
 
           {/* 1-2. 표적행동 모니터링 방식 */}
           <section style={card}>
@@ -406,6 +461,7 @@ export default function StudentDetail() {
                 <li>{kd(stats.yearStart)}부터 지금까지 <b>{stats.yearTotal}건</b>을 빠짐없이 기록해, 변화를 볼 수 있는 근거가 쌓였습니다.</li>
                 {stats.shift && stats.shift.recent < stats.shift.base && <li>주당 평균이 처음 {stats.shift.weeks}주 <b>{stats.shift.base}건</b>에서 최근 {stats.shift.weeks}주 <b style={{ color: C.green }}>{stats.shift.recent}건</b>으로 줄었습니다{stats.shift.pct !== null ? ` (${Math.abs(stats.shift.pct)}% 감소)` : ""}.</li>}
                 {stats.calm && stats.calm.zero > 0 && <li>위기행동이 한 건도 없던 주가 <b>{stats.calm.total}주 중 {stats.calm.zero}주</b>입니다{stats.calm.recentPct > stats.calm.firstPct ? ` (앞쪽 ${stats.calm.firstPct}% → 최근 ${stats.calm.recentPct}%)` : ""}.</li>}
+                {calmDays.filter(d => d >= stats.yearStart).length > 0 && <li>위기행동이 없었던 날을 <b>{calmDays.filter(d => d >= stats.yearStart).length}일</b> 직접 확인해 기록해 주셨습니다.</li>}
                 {stats.quiet && stats.quiet.since >= 7 && <li>마지막 기록 이후 <b style={{ color: C.green }}>{stats.quiet.since}일째</b> 위기행동 없이 지내고 있습니다.</li>}
               </ul>
             </section>

@@ -4244,6 +4244,78 @@ def delete_target_behavior_fidelity(row_uuid: str) -> dict:
     return _delete_row_by_uuid(ws, row_uuid)
 
 
+# ── 무발생 기록: "이 날은 위기행동이 없었다"고 교사가 확인한 날 ─────────────────────────
+# 위기행동 기록은 일이 생겼을 때만 남아서, '없었음'과 '기록 안 함'을 구분할 수 없다. 학생코드·날짜만 저장한다(이름 없음).
+NO_INCIDENT_SHEET = "NoIncidentDays"
+
+
+def ensure_no_incident_sheet():
+    client = get_sheets_client()
+    if not client: return None
+    try:
+        sheet = _with_retry(lambda: open_main_sheet(client))
+        try:
+            return _with_retry(lambda: sheet.worksheet(NO_INCIDENT_SHEET), stop_on=(gspread.WorksheetNotFound,))
+        except gspread.WorksheetNotFound:
+            ws = sheet.add_worksheet(title=NO_INCIDENT_SHEET, rows=2000, cols=4)
+            ws.append_row(["StudentCode", "Date", "RecordedBy", "UUID"])
+            return ws
+    except SheetUnavailable:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking {NO_INCIDENT_SHEET} sheet: {e}")
+        return None
+
+
+def get_no_incident_dates(student_code: str) -> list:
+    ws = ensure_no_incident_sheet()
+    if not ws: return []
+    clean = str(student_code).strip()
+    try:
+        return sorted({str(r.get("Date", "")).strip() for r in safe_get_all_records(ws)
+                       if str(r.get("StudentCode", "")).strip() == clean and str(r.get("Date", "")).strip()})
+    except SheetUnavailable:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting no-incident dates: {e}")
+        return []
+
+
+def add_no_incident_dates(student_code: str, dates: list, recorded_by: str = "") -> dict:
+    """이미 있는 날짜는 건너뛰고 새 날짜만 한 번에 추가한다."""
+    ws = ensure_no_incident_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    try:
+        import uuid
+        have = set(get_no_incident_dates(student_code))
+        new = [d for d in dates if d not in have]
+        if new:
+            ws.append_rows([[str(student_code).strip(), d, recorded_by, str(uuid.uuid4())] for d in new])
+        return {"added": new, "existing": [d for d in dates if d in have]}
+    except SheetUnavailable:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding no-incident dates: {e}")
+        return {"error": str(e)}
+
+
+def delete_no_incident_date(student_code: str, date_str: str) -> dict:
+    ws = ensure_no_incident_sheet()
+    if not ws: return {"error": "Sheet access failed"}
+    try:
+        vals = ws.get_all_values()
+        clean = str(student_code).strip()
+        rows = [i + 2 for i, r in enumerate(vals[1:]) if len(r) > 1 and r[0].strip() == clean and r[1].strip() == date_str]
+        for n in sorted(rows, reverse=True):
+            ws.delete_rows(n)
+        return {"deleted": len(rows)} if rows else {"error": "Not found"}
+    except SheetUnavailable:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting no-incident date: {e}")
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     # _with_retry 자가 점검 — 재시도 후 성공, stop_on 즉시 재발생 두 경로만 확인.
     calls = {"n": 0}

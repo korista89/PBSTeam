@@ -479,3 +479,69 @@ def get_all_logs(
     records = sorted(records, key=lambda r: str(r.get("타임스탬프", "")), reverse=True)
 
     return {"logs": records, "total": len(records)}
+
+
+# ── 무발생 기록 ─────────────────────────────────────────────
+NO_INCIDENT_MAX_DAYS = 31
+
+
+def expand_school_days(start: str, end: str, today: datetime.date) -> List[str]:
+    """start~end 중 평일만(주말 제외). 미래·31일 초과·역순은 거부한다."""
+    try:
+        a = datetime.date.fromisoformat(start)
+        b = datetime.date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다.")
+    if b < a:
+        raise HTTPException(status_code=400, detail="끝 날짜가 시작 날짜보다 빠릅니다.")
+    if b > today:
+        raise HTTPException(status_code=400, detail="오늘 이후 날짜는 입력할 수 없습니다.")
+    if (b - a).days >= NO_INCIDENT_MAX_DAYS:
+        raise HTTPException(status_code=400, detail=f"한 번에 {NO_INCIDENT_MAX_DAYS}일까지만 입력할 수 있습니다.")
+    days = [a + datetime.timedelta(days=i) for i in range((b - a).days + 1)]
+    return [d.isoformat() for d in days if d.weekday() < 5]
+
+
+@router.get("/no-incident/{student_code}")
+def list_no_incident(student_code: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import get_no_incident_dates
+    return {"dates": get_no_incident_dates(student_code)}
+
+
+@router.post("/no-incident/{student_code}")
+def add_no_incident(
+    student_code: str,
+    payload: dict = Body(...),
+    current_user: Dict[str, Any] = Depends(require_authenticated_user),
+):
+    """'이 기간에는 위기행동이 없었다'를 평일 단위로 기록한다. 위기행동이 기록된 날은 건너뛴다."""
+    check_student_scope(student_code, current_user)
+    start = str(payload.get("start_date") or "").strip()
+    end = str(payload.get("end_date") or start).strip()
+    days = expand_school_days(start, end, today_kst())
+    if not days:
+        raise HTTPException(status_code=400, detail="평일이 포함된 기간을 선택해 주세요.")
+    from app.services.sheets import add_no_incident_dates
+    clean = str(student_code).strip()
+    with_incident = {
+        normalize_date_string(r.get("행동발생날짜", ""))
+        for r in fetch_all_records(force_refresh=False)
+        if str(r.get("학생코드") or r.get("코드번호") or "").strip() == clean
+    }
+    skipped = [d for d in days if d in with_incident]
+    ok = [d for d in days if d not in with_incident]
+    result = add_no_incident_dates(clean, ok, current_user.get("name") or current_user.get("id") or "") if ok else {"added": [], "existing": []}
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return {"added": result["added"], "already": result["existing"], "skipped_has_incident": skipped}
+
+
+@router.delete("/no-incident/{student_code}/{date_str}")
+def remove_no_incident(student_code: str, date_str: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import delete_no_incident_date
+    result = delete_no_incident_date(student_code, date_str)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
