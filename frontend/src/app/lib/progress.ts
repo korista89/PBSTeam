@@ -106,6 +106,36 @@ export function changeText(pct: number | null) {
   return pct === 0 ? "변화 없음" : `${Math.abs(pct)}% ${pct < 0 ? "감소" : "증가"}`;
 }
 
+// ── 선생님께 드리는 메시지 판단 ──
+export type CoachState = "good" | "building" | "effort" | "nudge" | "stable" | "none";
+export type CoachInput = {
+  rec8: number;            // 최근 8주 위기행동 기록 건수
+  eff28: number;           // 최근 28일 표적행동 측정·실행 입력 건수(수동 입력만)
+  histBefore8: number;     // 최근 8주 이전 위기행동 기록 건수(올해 3월~)
+  tier3: boolean;          // 현재 Tier 3 지정
+  shift: ReturnType<typeof baselineVsRecent>;
+  calm: ReturnType<typeof calmWeeks>;
+  targetImproved: boolean | null; // 표적행동 자료 기준 개선 여부(자료가 부족하면 null)
+};
+
+/**
+ * 기록 근거가 있으면 효과 여부로 격려/지지(good·effort·building), 기록 근거가 없는데 과거 위기행동이 많고
+ * Tier 3이 유지되면 기록 독려(nudge), 그 외 과거 기록만 있으면 안정 추정(stable). 기록이 줄어든 것은 '효과'일 수 있어
+ * 기록이 없다는 이유만으로 질책하지 않는다(독려 문구도 비난하지 않는다).
+ */
+export function coachState(i: CoachInput): CoachState {
+  const recording = i.rec8 > 0 || i.eff28 > 0;
+  if (recording) {
+    const improving = (!!i.shift && i.shift.recent < i.shift.base) || (!!i.calm && i.calm.recentPct > i.calm.firstPct) || i.targetImproved === true;
+    if (improving) return "good";
+    if (!i.shift && i.targetImproved === null) return "building";
+    return "effort";
+  }
+  if (i.histBefore8 > 0 && (i.tier3 || i.histBefore8 >= 5)) return "nudge";
+  if (i.histBefore8 > 0) return "stable";
+  return "none";
+}
+
 // ── 자체 점검(개발용): node --experimental-strip-types lib/progress.ts ──
 if (typeof process !== "undefined" && process.argv?.[1]?.endsWith("progress.ts")) {
   const eq = (a: unknown, b: unknown, m: string) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${m}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`); };
@@ -122,5 +152,16 @@ if (typeof process !== "undefined" && process.argv?.[1]?.endsWith("progress.ts")
   eq(schoolYearStart("2027-02-10"), "2026-03-01", "sy2");
   eq(calmWeeks([3, 2, 1, 0, 0, 0, 0, 1]), { zero: 4, total: 8, firstPct: 25, recentPct: 75 }, "calm");
   eq(intensityByMonth([{ date: "2026-03-01", intensity: 5 }, { date: "2026-03-02", intensity: 1 }, { date: "2026-04-01", intensity: null }])[0].highPct, 50, "intensity");
+  const base: CoachInput = { rec8: 0, eff28: 0, histBefore8: 0, tier3: false, shift: null, calm: null, targetImproved: null };
+  const dn = { base: 4, recent: 1, pct: -75, weeks: 4 }, up = { base: 1, recent: 3, pct: 200, weeks: 4 };
+  eq(coachState({ ...base, rec8: 3, shift: dn }), "good", "good");
+  eq(coachState({ ...base, rec8: 3, shift: up }), "effort", "effort");
+  eq(coachState({ ...base, rec8: 1 }), "building", "building");
+  eq(coachState({ ...base, eff28: 5, shift: up, targetImproved: true }), "good", "target improved");
+  eq(coachState({ ...base, eff28: 5, shift: up, targetImproved: false }), "effort", "target not improved");
+  eq(coachState({ ...base, histBefore8: 8, tier3: true }), "nudge", "nudge tier3");
+  eq(coachState({ ...base, histBefore8: 6 }), "nudge", "nudge many");
+  eq(coachState({ ...base, histBefore8: 2 }), "stable", "stable");
+  eq(coachState(base), "none", "none");
   console.log("progress.ts OK");
 }

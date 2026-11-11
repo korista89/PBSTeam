@@ -10,7 +10,8 @@ import ReadableAIResult from "../components/ReadableAIResult";
 import DropdownTextarea from "../components/DropdownTextarea";
 import { phaseEffect } from "../lib/progress";
 
-const MEASUREMENT_TYPES = ["빈도", "지속시간", "강도", "퍼센트"];
+const AUTO_CRISIS = "위기행동 기록(자동)";  // 별도 입력 없이 위기행동 기록(Log_Main)을 표적행동 자료로 쓴다
+const MEASUREMENT_TYPES = ["빈도", "지속시간", "강도", "퍼센트", AUTO_CRISIS];
 
 // 측정유형별 기저선/조작적 정의 작성 예시 — BehaviorForm의 DropdownTextarea 패턴 재사용.
 const EXAMPLE_DEFINITIONS: Record<string, string[]> = {
@@ -239,6 +240,7 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
         return Object.values(byDate).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
     })();
 
+    const isAuto = selected?.MeasurementType === AUTO_CRISIS;
     // 국면별 평균선·효과 요약(문제행동은 줄수록, 목표행동은 늘수록 개선). 원자료는 그대로 두고 비교 기준만 더한다.
     const lowerIsBetter = selected?.Type !== "목표행동";
     const phaseVals = (ph: string) => (chart?.data_points || [])
@@ -388,12 +390,17 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                                         <Line yAxisId="left" type="linear" dataKey="treatment" name={`중재(${selected.MeasurementType})`} stroke="#4f46e5" strokeWidth={2} dot={{ r: 4, fill: "#4f46e5" }} connectNulls isAnimationActive={false} />
                                                         <Line yAxisId="left" type="linear" dataKey="after" name="중재 종료 후" stroke="#0891b2" strokeWidth={2} dot={{ r: 4, fill: "#0891b2" }} connectNulls isAnimationActive={false} />
                                                         <Line yAxisId="right" type="linear" dataKey="fidelity" name="중재 실행(O=100)" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: "#10b981", stroke: "#10b981" }} legendType="square" isAnimationActive={false} />
-                                                        <Bar yAxisId="left" dataKey="crisis" name="위기행동 발생(건)" fill="#ef4444" fillOpacity={0.5} barSize={12} isAnimationActive={false} />
+                                                        {!isAuto && <Bar yAxisId="left" dataKey="crisis" name="위기행동 발생(건)" fill="#ef4444" fillOpacity={0.5} barSize={12} isAnimationActive={false} />}
                                                     </ComposedChart>
                                                 </ResponsiveContainer>
                                             </div>
 
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }} className="responsive-grid-2">
+                                                {isAuto ? (
+                                                    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '10px', fontSize: '0.78rem', color: '#075985', lineHeight: 1.6 }}>
+                                                        <b>위기행동 기록이 자동으로 쓰입니다.</b><br />행동기록 화면에서 위기행동을 기록하면 이 그래프에 날짜별 건수로 반영됩니다. 따로 입력하지 않아도 됩니다.
+                                                    </div>
+                                                ) : (
                                                 <div style={{ background: '#fafafa', borderRadius: '10px', padding: '10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                                                     <div style={{ fontSize: '0.76rem', fontWeight: 700 }}>오늘 데이터 입력</div>
                                                     <div style={{ display: 'flex', gap: 6 }}>
@@ -402,6 +409,7 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                                         <button onClick={handleSubmitData} className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.72rem' }}>기록</button>
                                                     </div>
                                                 </div>
+                                                )}
                                                 <div style={{ background: '#fafafa', borderRadius: '10px', padding: '10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                                                     <div style={{ fontSize: '0.76rem', fontWeight: 700 }}>오늘 중재 실행기록 (O/X)</div>
                                                     <div style={{ display: 'flex', gap: 6 }}>

@@ -18,6 +18,9 @@ from app.services.ai_insight import generate_data_based_decision_recommendation,
 
 router = APIRouter()
 
+# 측정 방식이 이것이면 별도 입력 없이 위기행동 기록(Log_Main)을 표적행동 자료로 쓴다(시트 구조 변경 없음).
+AUTO_CRISIS_MEASUREMENT = "위기행동 기록(자동)"
+
 
 def _build_student_info(student_code: str) -> Dict[str, Any]:
     for s in fetch_student_status():
@@ -236,8 +239,18 @@ def get_chart_data(
             continue
         crisis_by_date[d] = crisis_by_date.get(d, 0) + 1
 
+    auto = any(
+        str(b.get("BehaviorID", "")).strip() == str(behavior_id).strip()
+        and str(b.get("MeasurementType", "")).strip() == AUTO_CRISIS_MEASUREMENT
+        for b in get_target_behaviors(student_code)
+    )
+    if auto:
+        data_points = [{"BehaviorID": behavior_id, "Date": d, "Value": c, "auto": True}
+                       for d, c in sorted(crisis_by_date.items())]
+
     return {
         "behavior_id": behavior_id,
+        "auto_from_crisis": auto,
         "data_points": sorted(data_points, key=lambda r: str(r.get("Date", ""))),
         "fidelity_points": sorted(fidelity_points, key=lambda r: str(r.get("Date", ""))),
         "crisis_by_date": [{"date": d, "count": c} for d, c in sorted(crisis_by_date.items())],

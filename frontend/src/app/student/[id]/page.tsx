@@ -5,7 +5,10 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import { WeeklyTrendChart, CumulativeChart, IntensityShiftChart, ChangeBanner } from "../../components/ProgressCharts";
-import { baselineVsRecent, quietStreaks, intensityByMonth, schoolYearStart, calmWeeks } from "../../lib/progress";
+import { baselineVsRecent, quietStreaks, intensityByMonth, schoolYearStart, calmWeeks, phaseEffect, coachState } from "../../lib/progress";
+import TeacherCoach from "../../components/TeacherCoach";
+
+const AUTO_CRISIS = "위기행동 기록(자동)";
 import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
@@ -176,6 +179,39 @@ export default function StudentDetail() {
     axios.get(`${apiUrl}/api/v1/bip/students/${studentCode}/fba-evidence`).then(r => setFbaEvidence(r.data)).catch(() => setFbaEvidence(null));
   }, [apiUrl, studentCode]);
 
+  // 표적행동 목록과 차트(최대 3개): 선생님이 별도 표적행동을 정해 기록하는지, 위기행동 기록을 표적행동으로 모니터링하는지 구분한다.
+  const [tbs, setTbs] = useState<{ b: any; chart: any }[]>([]);
+  useEffect(() => {
+    if (!studentCode) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await axios.get(`${apiUrl}/api/v1/target-behaviors/students/${encodeURIComponent(studentCode)}`);
+        const active = ((r.data?.behaviors || []) as any[]).filter(b => String(b.Status || "") !== "종료").slice(0, 3);
+        const out = await Promise.all(active.map(async b => {
+          try {
+            const c = await axios.get(`${apiUrl}/api/v1/target-behaviors/${b.BehaviorID}/chart`, { params: { student_code: studentCode } });
+            return { b, chart: c.data };
+          } catch { return { b, chart: null }; }
+        }));
+        if (alive) setTbs(out);
+      } catch { if (alive) setTbs([]); }
+    })();
+    return () => { alive = false; };
+  }, [apiUrl, studentCode]);
+
+  // 표적행동별 국면 효과(기초선 vs 중재) — 대시보드 카드와 격려 메시지가 함께 쓴다.
+  const tbInfo = useMemo(() => tbs.map(({ b, chart }) => {
+    const auto = String(b.MeasurementType || "") === AUTO_CRISIS;
+    const st = String(b.BIPStartDate || ""), en = String(b.BIPEndDate || "");
+    const pts = ((chart?.data_points || []) as any[]).map(d => ({ date: String(d.Date), v: Number(d.Value) })).filter(d => !isNaN(d.v));
+    const lowerIsBetter = b.Type !== "목표행동";
+    const base = pts.filter(d => !st || d.date < st).map(d => d.v);
+    const treat = st ? pts.filter(d => d.date >= st && (!en || d.date <= en)).map(d => d.v) : [];
+    return { b, auto, lowerIsBetter, effect: phaseEffect(base, treat, lowerIsBetter), points: pts.length,
+      fidelity: (chart?.fidelity_points || []) as any[], manual: auto ? [] : (chart?.data_points || []) as any[] };
+  }), [tbs]);
+
   // 분석기간 안의 기록만 쓴다(상단 기간 필터와 일치)
   const inRange = useMemo(() => logs.filter(l => {
     const d = dOf(l);
@@ -219,6 +255,23 @@ export default function StudentDetail() {
       months: intensityByMonth(yearLogs.map(l => ({ date: dOf(l), intensity: intensity(l) }))),
     };
   }, [logs, inRange]);
+
+  const coach = useMemo(() => {
+    const today = todayIso();
+    const d56 = addDays(today, -56), d28 = addDays(today, -28);
+    const yearStart = schoolYearStart(today);
+    const rec8 = logs.filter(l => dOf(l) > d56).length;
+    const histBefore8 = logs.filter(l => dOf(l) >= yearStart && dOf(l) <= d56).length;
+    const eff28 = tbInfo.reduce((n, t) => n + [...t.manual, ...t.fidelity].filter(x => String(x.Date) > d28).length, 0);
+    const withEffect = tbInfo.filter(t => !t.auto && t.effect);
+    const targetImproved = withEffect.length ? withEffect.every(t => t.effect!.improved && t.effect!.lastImproved) : null;
+    const tier3 = String(data?.profile?.tier || "").includes("3");
+    const state = coachState({ rec8, eff28, histBefore8, tier3, shift: stats.shift, calm: stats.calm, targetImproved });
+    const change = stats.shift && stats.shift.recent < stats.shift.base
+      ? `주당 평균 ${stats.shift.base}건(처음 ${stats.shift.weeks}주) → ${stats.shift.recent}건(최근 ${stats.shift.weeks}주)${stats.shift.pct !== null ? `, ${Math.abs(stats.shift.pct)}% 감소` : ""}`
+      : withEffect[0]?.effect?.improved ? `표적행동 평균 ${withEffect[0].effect.baseMean} → ${withEffect[0].effect.treatMean}` : "";
+    return { state, change, histBefore8, tier3, linked: tbInfo.some(t => t.auto) };
+  }, [logs, tbInfo, stats, data]);
 
   if (loading || error || !data) return (
     <AuthCheck>
@@ -287,6 +340,41 @@ export default function StudentDetail() {
                 <button onClick={() => router.push(`/logs?q=${encodeURIComponent(code)}`)} className="btn btn-secondary">🗂️ 전체 로그</button>
               </div>
             </div>
+          </section>
+
+          {/* 1-1. 선생님께 드리는 메시지 */}
+          <TeacherCoach state={coach.state} facts={{ change: coach.change, histBefore8: coach.histBefore8, tier3: coach.tier3, linked: coach.linked }}
+            onRecord={() => router.push(`/behavior?student=${encodeURIComponent(code)}`)}
+            onTarget={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)}
+            onBip={() => router.push(`/student/${encodeURIComponent(code)}/bip`)} />
+
+          {/* 1-2. 표적행동 모니터링 방식 */}
+          <section style={card}>
+            <h3 style={h3}>🎯 표적행동 모니터링</h3>
+            {tbInfo.length === 0 ? (
+              <p style={{ margin: "8px 0 0", fontSize: "0.9rem", color: C.sub, lineHeight: 1.7 }}>
+                별도 표적행동을 정하지 않아도 됩니다. <b>위기행동 기록이 곧 추이 모니터링</b>이므로 아래 주별 추이를 보시면 됩니다.<br />
+                중재 시작일을 표시해 효과를 따로 보고 싶다면 <b>개별 행동중재</b>에서 측정 방식을 <b>‘{AUTO_CRISIS}’</b>으로 등록하세요. 별도 입력 없이 위기행동 기록이 자동으로 쓰입니다.
+              </p>
+            ) : (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                {tbInfo.map(t => (
+                  <div key={t.b.BehaviorID} style={{ padding: "10px 14px", borderRadius: 12, border: `1px solid ${C.line}`, background: C.soft }}>
+                    <div style={{ fontWeight: 800, fontSize: "0.9rem", color: C.ink }}>{t.b.Type === "문제행동" ? "🚩" : "🎯"} {String(t.b.Definition || "").slice(0, 60)}</div>
+                    <div style={{ marginTop: 2, fontSize: "0.78rem", color: C.mute }}>
+                      {t.auto ? "위기행동 기록을 자동으로 사용(별도 입력 없음)" : `측정: ${t.b.MeasurementType} · 입력 ${t.points}회`}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: "0.85rem", color: C.sub }}>
+                      {t.effect ? (
+                        <>기초선 평균 <b>{t.effect.baseMean}</b> → 중재 평균 <b style={{ color: t.effect.improved ? C.green : C.ink }}>{t.effect.treatMean}</b>
+                          {t.effect.pct !== null && t.effect.pct !== 0 && <b style={{ marginLeft: 6, color: t.effect.improved ? C.green : C.sub }}>{t.effect.pct < 0 ? "▼" : "▲"} {Math.abs(t.effect.pct)}%</b>}</>
+                      ) : "기초선과 중재 기간 자료가 각각 쌓이면 변화를 보여줍니다. BIP 적용 시작일을 입력했는지 확인해 주세요."}
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)} className="btn btn-secondary" style={{ alignSelf: "flex-start", fontSize: "0.8rem" }}>그래프·기록 입력 열기</button>
+              </div>
+            )}
           </section>
 
           {/* 2. 핵심 지표 */}
