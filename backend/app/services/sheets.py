@@ -163,7 +163,7 @@ FORM_REPORT_HEADERS = {
 }
 
 
-from app.services.log_normalize import StudentIndex, canonical_slots, parse_occurrence_count
+from app.services.log_normalize import StudentIndex, canonical_slots, parse_occurrence_count, is_vacation_week
 
 
 def map_log_row(row: dict, code: str = "") -> dict:
@@ -3262,15 +3262,19 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
                     # X축 시작: 기간 내 해당 학생의 최초 행동 발생 주차
                     first_data_week = min(w_counts_dict.keys())
                     # 최초 발생 주차부터 end_date까지 모든 주차 포함 (데이터 없는 주차는 0)
-                    student_weeks = [wk for wk in all_weeks_in_range if wk >= first_data_week]
+                    student_weeks = [wk for wk in all_weeks_in_range if wk >= first_data_week and not is_vacation_week(wk)]
                     for wk in student_weeks:
                         weekly_trend.append({"week": wk, "count": w_counts_dict.get(wk, 0)})
                         weekly_trend_freq.append({"week": wk, "count": f_counts_dict.get(wk, 0)})
                 else:
                     # start/end 없거나 데이터 없으면 데이터 있는 주차만
                     for wk_key, cnt in sorted(w_counts_dict.items()):
+                        if is_vacation_week(wk_key):
+                            continue
                         weekly_trend.append({"week": wk_key, "count": cnt})
                     for wk_key, cnt in sorted(f_counts_dict.items()):
+                        if is_vacation_week(wk_key):
+                            continue
                         weekly_trend_freq.append({"week": wk_key, "count": cnt})
         # 행동 데이터 없는 경우 → 빈 목록 유지 (최초 발생 주차 기준 불가, 차트에 "데이터 없음" 표시)
 

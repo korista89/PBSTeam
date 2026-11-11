@@ -30,3 +30,8 @@ def test_student_link_never_guesses_for_namesakes():
     assert idx.resolve("김O서-3316") == ("3316", LINK_BY_SUFFIX)
     assert idx.resolve("없O름") == ("", LINK_NONE)
     assert idx.resolve("누구든", "2513") == ("2513", "코드")      # 코드가 있으면 그대로
+
+
+def test_vacation_weeks():
+    from app.services.log_normalize import is_vacation_week
+    assert [is_vacation_week(k) for k in ("2026-W30", "2026-W31", "2026-W32", "2026-W33", "2026-W34")] == [False, True, True, True, False]

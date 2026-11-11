@@ -3,6 +3,7 @@
 원칙: 시트 원자료는 고치지 않는다. 읽는 쪽(map_log_row·분석)에서 한 번만 같은 기준으로 정리한다.
 """
 import re
+from datetime import date
 from typing import Dict, Iterable, List, Optional, Tuple
 
 
@@ -95,6 +96,17 @@ class StudentIndex:
         return "", LINK_NONE
 
 
+# ── 방학 주 제외 ─────────────────────────────────────────────
+def is_vacation_week(week_key: str) -> bool:
+    """'2026-W31' 형식 ISO 주가 방학(7/25~8/16)에 월~금이 모두 들어가면 True. 프런트 lib/progress.ts 의 isVacationWeek 와 같은 규칙."""
+    try:
+        y, w = week_key.split("-W")
+        mon = date.fromisocalendar(int(y), int(w), 1)
+    except Exception:
+        return False
+    return "07-25" <= mon.strftime("%m-%d") <= "08-12"
+
+
 # ── 자체 점검: python -m app.services.log_normalize ──
 if __name__ == "__main__":
     assert parse_occurrence_count("5회") == 5
@@ -120,4 +132,5 @@ if __name__ == "__main__":
     assert idx.resolve("김O서-3316") == ("3316", LINK_BY_SUFFIX)
     assert idx.resolve("", "2513") == ("2513", LINK_BY_CODE)
     assert idx.resolve("") == ("", LINK_BLANK)
+    assert [is_vacation_week(k) for k in ("2026-W30", "2026-W31", "2026-W33", "2026-W34", "x")] == [False, True, True, False, False]
     print("log_normalize OK")

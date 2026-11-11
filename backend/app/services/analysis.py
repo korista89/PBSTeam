@@ -59,7 +59,7 @@ def aggregate_functions(series) -> list:
         result.append({"name": "기타", "value": counts["기타"]})
     return result
 
-from app.services.log_normalize import parse_occurrence_count
+from app.services.log_normalize import parse_occurrence_count, is_vacation_week
 
 def extract_numeric(val, default=0):
     if pd.isna(val):
@@ -235,7 +235,7 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             curr_year = pd.to_datetime(end_date).year if end_date else pd.Timestamp.now().year
             prev1_year, prev2_year = curr_year - 1, curr_year - 2
 
-            curr_weeks = sorted({w for (y, w) in by_year_week.index if y == curr_year})
+            curr_weeks = sorted({w for (y, w) in by_year_week.index if y == curr_year and not is_vacation_week(f"{curr_year}-W{w:02d}")})
             compare_rows = [
                 {
                     "week": f"{curr_year}-W{w:02d}",
@@ -270,6 +270,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             w_grouped = valid_df.groupby(['year', 'week']).size()  # count rows
             for (y, w), count in w_grouped.items():
                 label = f"{y}-W{w:02d}"
+                if is_vacation_week(label):
+                    continue  # 방학 주 제외
                 weekly_counts[label] = int(count)
 
         # 주별 제지 및 개별지원(물리적 제지 O) 실시 추이 - 선택된 기간/학급 범위 그대로 사용
@@ -278,7 +280,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             restraint_df = df[df['물리적제지여부'].astype(str).str.startswith('O', na=False) & (df['year'] > 0)]
             r_grouped = restraint_df.groupby(['year', 'week']).size()
             for (y, w), count in r_grouped.items():
-                weekly_restraint_counts[f"{y}-W{w:02d}"] = int(count)
+                if not is_vacation_week(f"{y}-W{w:02d}"):
+                    weekly_restraint_counts[f"{y}-W{w:02d}"] = int(count)
     else:
         date_counts = {}
         weekly_counts = {}
