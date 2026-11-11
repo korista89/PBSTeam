@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { WeeklyTrendChart, ChangeBanner } from "../components/ProgressCharts";
+import { isVacationWeek } from "../lib/progress";
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
@@ -107,7 +108,7 @@ export function DataStep({ studentCode, logs, planStart }: { studentCode: string
         const last = mondayOf(today());
         const from = keys[0] > addDays(last, -7 * 79) ? keys[0] : addDays(last, -7 * 79);  // 최근 80주까지만
         const out: { week: string; count: number }[] = [];
-        for (let w = from; w <= last; w = addDays(w, 7)) out.push({ week: w, count: m.get(w) || 0 });
+        for (let w = from; w <= last; w = addDays(w, 7)) if (!isVacationWeek(w)) out.push({ week: w, count: m.get(w) || 0 });
         return out;
     }, [logs]);
     const dm = ev?.deterministic_metrics || {};

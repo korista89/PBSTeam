@@ -3,6 +3,10 @@
 
 export const BASE_WEEKS = 4;
 
+/** 방학(7월 25일~8월 16일) 주 제외. 월~금이 모두 방학 안에 들어가는 주(월요일 기준 7/27~8/10)는 차트·평균 계산에서 뺀다. */
+export const isVacationWeek = (monday: string) => monday.slice(5) >= "07-25" && monday.slice(5) <= "08-12";
+export const withoutVacation = <T extends { week: string }>(rows: T[]) => rows.filter(r => !isVacationWeek(r.week));
+
 export type WeekPoint = { week: string; count: number };
 
 /** 값 배열의 k개 이동평균(앞쪽은 있는 만큼만 평균). 주별 들쭉날쭉함을 줄여 흐름을 보여준다. */
@@ -151,6 +155,7 @@ if (typeof process !== "undefined" && process.argv?.[1]?.endsWith("progress.ts")
   eq([q.since, q.longest, q.from, q.to, q.isCurrent], [10, 30, "2026-03-04", "2026-04-04", false], "streak");
   const e = phaseEffect([5, 6, 4], [3, 2, 4, 1], true)!;
   eq([e.baseMean, e.treatMean, e.pct, e.pnd, e.improved], [5, 2.5, -50, 75, true], "phase");
+  eq([isVacationWeek("2026-07-20"), isVacationWeek("2026-07-27"), isVacationWeek("2026-08-10"), isVacationWeek("2026-08-17")], [false, true, true, false], "vacation");
   eq(schoolYearStart("2026-11-11"), "2026-03-01", "sy1");
   eq(schoolYearStart("2027-02-10"), "2026-03-01", "sy2");
   eq(calmWeeks([3, 2, 1, 0, 0, 0, 0, 1]), { zero: 4, total: 8, firstPct: 25, recentPct: 75 }, "calm");

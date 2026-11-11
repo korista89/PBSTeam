@@ -7,6 +7,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 import { WeeklyTrendChart, ChangeBanner } from "../../components/ProgressCharts";
+import { withoutVacation } from "../../lib/progress";
 import AppShell from "../../components/AppShell";
 import { useDateRange } from "../../components/GlobalNav";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
@@ -207,7 +208,7 @@ function StudentFBAFrame({ student: s }: { student: Tier3Student }) {
             <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '10px', color: '#0f172a' }}>📈 주간 발생빈도 추이 <span style={{ fontWeight: 400, color: "#94a3b8", fontSize: "0.7rem" }}>(굵은 선 = 4주 평균)</span></div>
             {s.weekly_trend_freq && s.weekly_trend_freq.length > 0 ? (
               <>
-                <ChangeBanner weekly={s.weekly_trend_freq} />
+                <ChangeBanner weekly={withoutVacation(s.weekly_trend_freq)} />
                 <div style={{ marginTop: 8 }}><WeeklyTrendChart weekly={s.weekly_trend_freq} height={170} weekLabel={formatWeek} /></div>
               </>
             ) : <p style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'center', padding: '20px 0' }}>데이터 없음</p>}

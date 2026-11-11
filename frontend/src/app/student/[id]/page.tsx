@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
 import { WeeklyTrendChart, CumulativeChart, IntensityShiftChart, ChangeBanner } from "../../components/ProgressCharts";
-import { baselineVsRecent, quietStreaks, intensityByMonth, schoolYearStart, calmWeeks, phaseEffect, coachState } from "../../lib/progress";
+import { baselineVsRecent, quietStreaks, intensityByMonth, schoolYearStart, calmWeeks, phaseEffect, coachState, isVacationWeek } from "../../lib/progress";
 import TeacherCoach from "../../components/TeacherCoach";
 
 const AUTO_CRISIS = "위기행동 기록(자동)";
@@ -263,6 +263,7 @@ export default function StudentDetail() {
     const lastW = mondayOf(today);
     const weekly: { week: string; count: number; avg: number | null }[] = [];
     for (let w = firstW; w <= lastW && weekly.length < 60; w = addDays(w, 7)) {
+      if (isVacationWeek(w)) continue; // 방학 주 제외
       const e = weeks.get(w);
       weekly.push({ week: w, count: e?.count || 0, avg: e && e.n ? +(e.sum / e.n).toFixed(1) : null });
     }
