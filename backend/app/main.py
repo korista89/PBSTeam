@@ -8,6 +8,7 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import logging
+import time
 
 
 def _setup_logging():
@@ -111,6 +112,7 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
     on the same cache.  Live-refresh requests therefore clear the local cache
     of whichever instance receives the GET before the endpoint reads Sheets.
     """
+    t0 = time.perf_counter()
     is_api = request.url.path.startswith("/api/")
     refresh_mode = request.headers.get("x-pbst-sheet-refresh", "").strip()
     is_sheet_get = request.method == "GET" and request.url.path.startswith("/api/v1/")
@@ -160,6 +162,10 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+    # 접속 불량 원인 추적: 점검 요청(/health)은 항상, 나머지는 2초 넘게 걸린 요청만 처리 시간을 남긴다.
+    ms = int((time.perf_counter() - t0) * 1000)
+    if request.url.path.endswith("/health") or ms >= 2000:
+        logger.info("req_ms=%d status=%s %s %s", ms, response.status_code, request.method, request.url.path)
     return response
 
 from app.api.endpoints import analytics
