@@ -162,6 +162,7 @@ async def sheet_sync_and_api_cache_control(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        response.headers["X-Content-Type-Options"] = "nosniff"
     # 접속 불량 원인 추적: 점검 요청(/health)은 항상, 나머지는 2초 넘게 걸린 요청만 처리 시간을 남긴다.
     ms = int((time.perf_counter() - t0) * 1000)
     if request.url.path.endswith("/health") or ms >= 2000:
