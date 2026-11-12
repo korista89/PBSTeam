@@ -7,6 +7,7 @@ from app.core.security import (
     delete_session_cookie, hash_password
 )
 from app.api.deps import require_authenticated_user
+from app.core import login_throttle
 
 router = APIRouter()
 
@@ -20,6 +21,13 @@ class PasswordUpdateRequest(BaseModel):
 
 @router.post("/login")
 def login(request: LoginRequest, response: Response):
+    wait = login_throttle.retry_after(request.user_id)
+    if wait:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"로그인에 여러 번 실패해 잠시 막았습니다. {(wait + 59) // 60}분 뒤에 다시 시도해 주세요.",
+            headers={"Retry-After": str(wait)},
+        )
     try:
         user = get_user_by_id(request.user_id, strict=True) if request.user_id else None
     except UserStoreUnavailable:
@@ -33,11 +41,14 @@ def login(request: LoginRequest, response: Response):
     ver_res = verify_password_compat(request.password, stored_pw)
 
     if not user or not ver_res.verified:
+        login_throttle.record_failure(request.user_id)
         # Uniform 401 response to prevent user enumeration
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
+
+    login_throttle.record_success(request.user_id)
 
     # Login-time Progressive Rehash (Silent migration to Argon2id with CAS protection)
     if ver_res.needs_rehash:
