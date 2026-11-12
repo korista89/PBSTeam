@@ -41,7 +41,7 @@ app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
 
 def get_allowed_origins() -> list:
     """Exact allowlist of trusted origins (no wildcard or preview regex in production)."""
-    origins = ["https://pbs-team.vercel.app"]
+    origins = ["https://pbs-team.vercel.app", "https://gespbs.com", "https://www.gespbs.com"]
     frontend_env = os.environ.get("FRONTEND_URL") or getattr(settings, "FRONTEND_URL", None)
     if frontend_env and frontend_env not in origins:
         origins.append(frontend_env)
