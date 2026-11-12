@@ -3,7 +3,7 @@
 # 학생 정보는 다루지 않는다. 등록·해석: docs/connection/근본대책_비교.md 의 '접속 점검' 절.
 #   한 번 실행:   powershell -ExecutionPolicy Bypass -File .\net_probe.ps1
 #   요약 보기:    powershell -ExecutionPolicy Bypass -File .\net_probe.ps1 -Summary
-param([switch]$Summary, [string]$HostName = "pbs-team.vercel.app")
+param([switch]$Summary, [string]$HostName = "gespbs.com")
 
 $log = Join-Path $PSScriptRoot "pbst_netlog.csv"
 
