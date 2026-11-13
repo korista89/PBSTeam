@@ -10,7 +10,7 @@ import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
 import {
     Bip, BIP_ROWS, FBA_SECTIONS, PROGRESS_SECTIONS, BehaviorSummary, StudentHead,
-    parseJson, splitNumbered, today, kDate,
+    parseJson, splitNumbered, today, kDate, Inp, Area, DateRange, BipSheet, SectionSheet, SummaryTable, sheetBox,
 } from "./shared";
 
 export const card: React.CSSProperties = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 18 };
@@ -170,32 +170,27 @@ export function FbaStep({ head, bip, setBip, save }: { head: StudentHead; bip: B
         setBip({ ...bip, Hypothesis: cur ? `${cur}\n\n[FBA 결과] ${h}` : h });
         alert("행동중재계획의 '기능평가 결과' 칸에 넣었습니다. 4단계에서 확인 후 저장하세요.");
     };
-    const meta: [string, string][] = [["평가 기간", fba.start ? `${kDate(fba.start)} ~ ${kDate(fba.end)}` : ""], ["작성일", kDate(fba.date)], ["작성자", fba.author || ""]];
+    const printMeta: [string, string][] = [["평가 기간", fba.start ? `${kDate(fba.start)} ~ ${kDate(fba.end)}` : ""], ["작성일", kDate(fba.date)], ["작성자", fba.author || ""]];
+    const meta: [string, React.ReactNode][] = [
+        ["평가 기간", <DateRange key="p" a={fba.start || ""} b={fba.end || ""} onA={v => setF({ start: v })} onB={v => setF({ end: v })} />],
+        ["작성일", <Inp key="d" type="date" value={fba.date || today()} onChange={v => setF({ date: v })} />],
+        ["작성자", <Inp key="a" value={fba.author || ""} onChange={v => setF({ author: v })} />],
+    ];
+    const sections: [string, React.ReactNode][] = FBA_SECTIONS.map((t, i) => [`${i + 1}. ${t}`, <Area key={t} value={secs[t] || ""} onChange={v => setSec(t, v)} rows={4} />]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }} className="grid-responsive">
-                    <div><label style={lab}>평가 시작일</label><input type="date" style={inp} value={fba.start || ""} onChange={e => setF({ start: e.target.value })} /></div>
-                    <div><label style={lab}>평가 종료일</label><input type="date" style={inp} value={fba.end || ""} onChange={e => setF({ end: e.target.value })} /></div>
-                    <div><label style={lab}>작성일</label><input type="date" style={inp} value={fba.date || ""} onChange={e => setF({ date: e.target.value })} /></div>
-                    <div><label style={lab}>작성자</label><input style={inp} value={fba.author || ""} onChange={e => setF({ author: e.target.value })} /></div>
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 지금까지 자료로 FBA 초안 받기</button>
                     <button className="btn btn-secondary" onClick={toBip}>➡️ 기능 가설을 BIP에 반영</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "fba", s: head, meta, sections: FBA_SECTIONS.map(t => [t, secs[t] || ""]) })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "fba", s: head, meta: printMeta, sections: FBA_SECTIONS.map(t => [t, secs[t] || ""]) })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, FBAReport: JSON.stringify({ ...fba, date: fba.date || today() }) })}>💾 저장</button>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>기간을 비우면 모든 행동기록을 씁니다. 기록이 3건 미만이면 초안을 만들지 않습니다.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>아래 양식 칸에 바로 입력하면 인쇄본과 같은 모양으로 나옵니다. 평가 기간을 비우면 모든 행동기록을 씁니다(3건 미만이면 초안 없음).</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            {FBA_SECTIONS.map((t, i) => (
-                <div key={t} style={card}>
-                    <label style={{ ...lab, fontSize: "0.88rem", color: "#0f172a" }}>{i + 1}. {t}</label>
-                    <AutoArea value={secs[t] || ""} onChange={v => setSec(t, v)} rows={4} />
-                </div>
-            ))}
+            <div style={sheetBox}><SectionSheet heading="기능적 행동평가(FBA) 결과 보고서" s={head} meta={meta} sections={sections} /></div>
         </div>
     );
 }
@@ -237,61 +232,32 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
         const line = `- [${s.name}] `;
         set(key, (bip[key] || "").trim() ? `${bip[key].trim()}\n${line}` : line);
     };
-    const head2: [string, string, string?][] = [
-        ["PlanName", "중재계획명"], ["Teacher", "담당교사"], ["Gender", "성별"], ["DisabilityType", "장애 유형"],
-    ];
+    const extra = (key: string) => {
+        const ebp = EBP_COLS.find(c => c[0] === key);
+        if (ebp) return (
+            <select style={{ marginTop: 4, fontSize: "8.5pt", padding: "2px 4px", maxWidth: 320 }} value="" onChange={e => addEbp(key, e.target.value)}>
+                <option value="">＋ Be-Able EBP 넣기 ({ebp[1]})</option>
+                {catalog.filter(c => ebp[2].includes(c.category)).sort((x, y) => (x.official_no || 99) - (y.official_no || 99))
+                    .map(c => <option key={c.code} value={c.code}>{c.official_no ? `${c.official_no}. ` : ""}{c.name}</option>)}
+            </select>
+        );
+        if (key === "MeasurementMethod") return <button className="btn btn-secondary no-print" style={{ marginTop: 6, fontSize: "0.76rem", padding: "4px 10px" }} onClick={goTracker}>＋ 표적행동·모니터링 지표 추가하러 가기</button>;
+        return null;
+    };
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }} className="grid-responsive">
-                    {head2.map(([k, l]) => <div key={k}><label style={lab}>{l}</label><input style={inp} value={bip[k] || ""} onChange={e => set(k, e.target.value)} /></div>)}
-                    <div><label style={lab}>중재 시작일</label><input type="date" style={inp} value={bip.PlanStart || ""} onChange={e => set("PlanStart", e.target.value)} /></div>
-                    <div><label style={lab}>중재 종료일 (비우면 진행 중)</label><input type="date" style={inp} value={bip.PlanEnd || ""} onChange={e => set("PlanEnd", e.target.value)} /></div>
-                    <div><label style={lab}>표적행동(요약)</label><input style={inp} value={bip.TargetBehavior || ""} onChange={e => set("TargetBehavior", e.target.value)} placeholder="예: 공격 행동, 자해 행동" /></div>
-                    <div><label style={lab}>약물복용 여부</label>
-                        <select style={inp} value={bip.MedicationYN || ""} onChange={e => set("MedicationYN", e.target.value)}>
-                            <option value="">선택</option><option value="복용">복용</option><option value="미복용">미복용</option>
-                        </select>
-                    </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 Be-Able EBP 기반 BIP 초안 받기</button>
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "bip", s: head, b: bip, behaviors })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save(bip)}>💾 저장</button>
                 </div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>아래 양식 칸에 바로 입력하면 인쇄본과 같은 모양으로 나옵니다.</div>
                 {bip.Source && <div style={{ fontSize: "0.75rem", color: "#b45309", marginTop: 6 }}>ℹ️ {bip.Source}</div>}
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            {BIP_ROWS.map(r => {
-                const ebp = EBP_COLS.find(c => c[0] === r.key);
-                return (
-                    <div key={r.key} style={card}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                            <label style={{ ...lab, fontSize: "0.88rem", color: "#0f172a", margin: 0 }}>{r.label.replace(/\n/g, " ")}</label>
-                            {ebp && (
-                                <select style={{ ...inp, width: "auto", maxWidth: 320, fontSize: "0.76rem", padding: "4px 6px" }} value="" onChange={e => addEbp(r.key, e.target.value)}>
-                                    <option value="">＋ Be-Able EBP 넣기 ({ebp[1]})</option>
-                                    {catalog.filter(c => ebp[2].includes(c.category)).sort((a, b) => (a.official_no || 99) - (b.official_no || 99))
-                                        .map(c => <option key={c.code} value={c.code}>{c.official_no ? `${c.official_no}. ` : ""}{c.name}</option>)}
-                                </select>
-                            )}
-                        </div>
-                        {r.hint && <div style={{ fontSize: "0.74rem", color: "#94a3b8", marginBottom: 4 }}>{r.hint}</div>}
-                        <AutoArea value={bip[r.key] || ""} onChange={v => set(r.key, v)} />
-                        {r.key === "MeasurementMethod" && (
-                            <div style={{ marginTop: 8, background: "#f8fafc", borderRadius: 8, padding: 10, fontSize: "0.8rem" }}>
-                                <div style={{ fontWeight: 700, marginBottom: 4 }}>이 계획의 표적행동 (인쇄본에 함께 나옵니다)</div>
-                                {behaviors.filter(b => b.Status !== "삭제").map(b => (
-                                    <div key={b.BehaviorID}>· [{b.Type}] {b.Definition} — {b.MeasurementType}{b.Baseline ? `, 기저선 ${b.Baseline}` : ""}{b.Status === "종료" ? " (종료)" : ""}</div>
-                                ))}
-                                {behaviors.length === 0 && <div style={{ color: "#94a3b8" }}>아직 없습니다.</div>}
-                                <button className="btn btn-secondary" style={{ marginTop: 6, fontSize: "0.76rem", padding: "4px 10px" }} onClick={goTracker}>＋ 표적행동 추가·기록하러 가기</button>
-                            </div>
-                        )}
-                    </div>
-                );
-            })}
+            <div style={sheetBox}><BipSheet s={head} b={bip} behaviors={behaviors} edit={{ set, extra }} /></div>
         </div>
     );
 }
@@ -351,55 +317,41 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
     const runAI = async () => {
         setAi({ loading: true, text: "" });
         try {
-            const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-decision-recommendation`,
-                { start_date: start || undefined, end_date: end }, { timeout: 240000 });
+            const ctx = ["[중재 전·후 수치]", ...rows.map(r => `- [${r.type}] ${r.label}: 중재 전 ${r.preN ? Math.round((r.preMean || 0) * 10) / 10 : (r.baseline || "기록 없음")} → 중재 중 ${r.postN ? Math.round((r.postMean || 0) * 10) / 10 : "기록 없음"}(${r.unit}), 실행충실도 ${r.fidelity === null ? "기록 없음" : r.fidelity + "%"}`),
+                `- 위기행동 기록: 중재 전 같은 기간 ${crisis.pre}건 → 중재 중 ${crisis.post}건`,
+                ...["Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : "")].filter(Boolean).join("\n");
+            const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
+                { kind: "progress", context: ctx, start_date: start || undefined, end_date: end }, { timeout: 240000 });
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => setP({ sections: mergeInto(secs, { "종합 의견": ai.text.replace(/\*\*/g, "") }, mode) });
-    const meta: [string, string][] = [["중재계획명", bip.PlanName || ""], ["보고 기간", `${kDate(start)} ~ ${kDate(end)}`], ["작성일", kDate(pr.date || today())], ["작성자", pr.author || bip.Teacher || ""]];
+    const apply = (mode: "empty" | "append") => {
+        const parsed = splitNumbered(ai.text, PROGRESS_SECTIONS);
+        if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
+        setP({ sections: mergeInto(secs, parsed, mode) });
+    };
+    const printMeta: [string, string][] = [["중재계획명", bip.PlanName || ""], ["보고 기간", `${kDate(start)} ~ ${kDate(end)}`], ["작성일", kDate(pr.date || today())], ["작성자", pr.author || bip.Teacher || ""]];
+    const meta: [string, React.ReactNode][] = [
+        ["중재계획명", bip.PlanName || ""],
+        ["보고 기간", <DateRange key="p" a={start} b={end} onA={v => setP({ start: v })} onB={v => setP({ end: v })} />],
+        ["작성일", <Inp key="d" type="date" value={pr.date || today()} onChange={v => setP({ date: v })} />],
+        ["작성자", <Inp key="a" value={pr.author ?? bip.Teacher ?? ""} onChange={v => setP({ author: v })} />],
+    ];
+    const sections: [string, React.ReactNode][] = PROGRESS_SECTIONS.map(t => [t, <Area key={t} value={secs[t] || ""} onChange={v => setP({ sections: { ...secs, [t]: v } })} rows={4} />]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }} className="grid-responsive">
-                    <div><label style={lab}>보고 시작일 (기본: 중재 시작일)</label><input type="date" style={inp} value={start} onChange={e => setP({ start: e.target.value })} /></div>
-                    <div><label style={lab}>보고 종료일</label><input type="date" style={inp} value={end} onChange={e => setP({ end: e.target.value })} /></div>
-                    <div><label style={lab}>작성일</label><input type="date" style={inp} value={pr.date || today()} onChange={e => setP({ date: e.target.value })} /></div>
-                    <div><label style={lab}>작성자</label><input style={inp} value={pr.author ?? bip.Teacher ?? ""} onChange={e => setP({ author: e.target.value })} /></div>
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-secondary" onClick={autoText}>📊 수치로 &lsquo;중재 실행 현황&rsquo; 채우기</button>
-                    <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 종합 의견 초안 받기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "progress", s: head, meta, sections: PROGRESS_SECTIONS.map(t => [t, secs[t] || ""]), rows, crisis })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 보고서 초안 받기(실행 현황·종합 의견·향후 계획)</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "progress", s: head, meta: printMeta, sections: PROGRESS_SECTIONS.map(t => [t, secs[t] || ""]), rows, crisis })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...pr, start, end, date: pr.date || today() }) })}>💾 저장</button>
                 </div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>표의 중재 전·후 수치는 ④ 자료에서 자동으로 계산됩니다.</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            <div style={card}>
-                <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: 8 }}>표적행동 중재 전·후 (자동 계산)</div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                    <thead><tr style={{ background: "#f8fafc" }}>{["표적행동", "측정", "중재 전 평균(n)", "중재 중 평균(n)", "실행충실도"].map(h => <th key={h} style={{ textAlign: "left", padding: 6 }}>{h}</th>)}</tr></thead>
-                    <tbody>
-                        {rows.map(r => (
-                            <tr key={r.id} style={{ borderTop: "1px solid #f1f5f9" }}>
-                                <td style={{ padding: 6 }}>[{r.type}] {r.label}</td><td style={{ padding: 6 }}>{r.unit}</td>
-                                <td style={{ padding: 6 }}>{r.preN ? `${Math.round((r.preMean || 0) * 10) / 10} (${r.preN})` : (r.baseline || "-")}</td>
-                                <td style={{ padding: 6 }}>{r.postN ? `${Math.round((r.postMean || 0) * 10) / 10} (${r.postN})` : "-"}</td>
-                                <td style={{ padding: 6 }}>{r.fidelity === null ? "-" : `${r.fidelity}% (${r.fidelityN}회)`}</td>
-                            </tr>
-                        ))}
-                        {rows.length === 0 && <tr><td colSpan={5} style={{ padding: 10, color: "#94a3b8" }}>등록된 표적행동이 없습니다.</td></tr>}
-                    </tbody>
-                </table>
-                <div style={{ fontSize: "0.78rem", color: "#475569", marginTop: 8 }}>위기행동 기록: 중재 전 같은 길이 기간 {crisis.pre}건 → 중재 중 {crisis.post}건</div>
-            </div>
-            {PROGRESS_SECTIONS.map(t => (
-                <div key={t} style={card}>
-                    <label style={{ ...lab, fontSize: "0.88rem", color: "#0f172a" }}>{t}</label>
-                    <AutoArea value={secs[t] || ""} onChange={v => setP({ sections: { ...secs, [t]: v } })} rows={4} />
-                </div>
-            ))}
+            <div style={sheetBox}><SectionSheet heading="개별학생 행동중재 결과 보고서" s={head} meta={meta} sections={sections} extra={<SummaryTable rows={rows} crisis={crisis} />} /></div>
         </div>
     );
 }

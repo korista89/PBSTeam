@@ -67,7 +67,27 @@ const title: React.CSSProperties = { textAlign: "center", fontSize: "16pt", marg
 
 export type StudentHead = { name: string; className: string; code: string };
 
-export function BipSheet({ s, b, behaviors }: { s: StudentHead; b: Bip; behaviors: any[] }) {
+// ── 입력 칸: 인쇄 양식 칸 안에 바로 쓰는 입력 요소(위기행동 보고서 입력 방식과 같다) ──
+const cellBox: React.CSSProperties = { width: "100%", boxSizing: "border-box", font: "inherit", fontSize: "9.5pt", padding: "3px 5px", border: "1px dashed #93c5fd", background: "#f8fbff", borderRadius: 3 };
+export function Inp({ value, onChange, type = "text", placeholder, width }: { value: string; onChange: (v: string) => void; type?: string; placeholder?: string; width?: number | string }) {
+    return <input type={type} value={value || ""} placeholder={placeholder} onChange={e => onChange(e.target.value)} style={{ ...cellBox, ...(width ? { width } : {}) }} />;
+}
+export function Area({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+    return <textarea value={value || ""} placeholder={placeholder} onChange={e => onChange(e.target.value)} rows={Math.max(rows, (value || "").split("\n").length + 1)} style={{ ...cellBox, resize: "vertical", lineHeight: 1.6 }} />;
+}
+export function Sel({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+    return <select value={value || ""} onChange={e => onChange(e.target.value)} style={cellBox}><option value="">선택</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>;
+}
+export function DateRange({ a, b, onA, onB }: { a: string; b: string; onA: (v: string) => void; onB: (v: string) => void }) {
+    return <span style={{ display: "flex", gap: 4, alignItems: "center" }}><Inp type="date" value={a} onChange={onA} /> ~ <Inp type="date" value={b} onChange={onB} /></span>;
+}
+// 작성 화면에서 인쇄 양식과 같은 칸 모양으로 보여 주는 바깥 틀
+export const sheetBox: React.CSSProperties = { background: "#fff", border: "1px solid #cbd5e1", borderRadius: 10, padding: "22px 24px", color: "#000", fontFamily: "'Malgun Gothic', sans-serif", overflowX: "auto" };
+
+export type BipEdit = { set: (k: string, v: string) => void; extra?: (key: string) => React.ReactNode };
+
+export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; behaviors: any[]; edit?: BipEdit }) {
+    const F = (k: string, ph?: string) => (edit ? <Inp value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} /> : b[k]);
     const period = b.PlanStart ? `${kDate(b.PlanStart)} ~ ${b.PlanEnd ? kDate(b.PlanEnd) : "진행 중"}` : "";
     const tb = behaviors.filter(x => x.Status !== "삭제");
     return (
@@ -77,15 +97,16 @@ export function BipSheet({ s, b, behaviors }: { s: StudentHead; b: Bip; behavior
                 <colgroup><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /></colgroup>
                 <tbody>
                     <tr><th style={th}>학생명</th><td style={td}>{s.name}</td><th style={th}>소속 학교</th><td style={td}>경은학교</td></tr>
-                    <tr><th style={th}>학년</th><td style={td}>{s.className}</td><th style={th}>성별</th><td style={td}>{b.Gender}</td></tr>
-                    <tr><th style={th}>장애 유형</th><td style={td}>{b.DisabilityType}</td><th style={th}>담당교사</th><td style={td}>{b.Teacher}</td></tr>
-                    <tr><th style={th}>중재계획명</th><td style={td}>{b.PlanName}</td><th style={th}>중재기간</th><td style={td}>{period}</td></tr>
-                    <tr><th style={th}>표적행동</th><td style={td}>{b.TargetBehavior}</td><th style={th}>약물복용 여부</th><td style={td}>{b.MedicationYN}</td></tr>
+                    <tr><th style={th}>학년</th><td style={td}>{s.className}</td><th style={th}>성별</th><td style={td}>{F("Gender")}</td></tr>
+                    <tr><th style={th}>장애 유형</th><td style={td}>{F("DisabilityType")}</td><th style={th}>담당교사</th><td style={td}>{F("Teacher")}</td></tr>
+                    <tr><th style={th}>중재계획명</th><td style={td}>{F("PlanName")}</td><th style={th}>중재기간</th><td style={td}>{edit ? <DateRange a={b.PlanStart} b={b.PlanEnd} onA={v => edit.set("PlanStart", v)} onB={v => edit.set("PlanEnd", v)} /> : period}</td></tr>
+                    <tr><th style={th}>표적행동</th><td style={td}>{F("TargetBehavior", "예: 공격 행동, 자해 행동")}</td><th style={th}>약물복용 여부</th><td style={td}>{edit ? <Sel value={b.MedicationYN} onChange={v => edit.set("MedicationYN", v)} options={["복용", "미복용"]} /> : b.MedicationYN}</td></tr>
                     {BIP_ROWS.map(r => (
                         <tr key={r.key}>
                             <th style={th}>{r.label}</th>
                             <td style={td} colSpan={3}>
-                                {b[r.key]}
+                                {edit ? <Area value={b[r.key]} onChange={v => edit.set(r.key, v)} placeholder={r.hint} /> : b[r.key]}
+                                {edit?.extra?.(r.key)}
                                 {r.key === "MeasurementMethod" && tb.length > 0 && (
                                     <div style={{ marginTop: b[r.key] ? 4 : 0 }}>
                                         {tb.map(x => <div key={x.BehaviorID}>· [{x.Type}] {x.Definition} — {x.MeasurementType} 기록{x.Baseline ? `, 기저선 ${x.Baseline}` : ""}</div>)}
@@ -101,7 +122,7 @@ export function BipSheet({ s, b, behaviors }: { s: StudentHead; b: Bip; behavior
 }
 
 export function SectionSheet({ heading, s, meta, sections, extra }: {
-    heading: string; s: StudentHead; meta: [string, string][]; sections: [string, string][]; extra?: React.ReactNode;
+    heading: string; s: StudentHead; meta: [string, React.ReactNode][]; sections: [string, React.ReactNode][]; extra?: React.ReactNode;
 }) {
     return (
         <>
@@ -123,8 +144,8 @@ export function SectionSheet({ heading, s, meta, sections, extra }: {
     );
 }
 
-function chunk(a: [string, string][]) {
-    const out: [string, string][][] = [];
+function chunk(a: [string, React.ReactNode][]) {
+    const out: [string, React.ReactNode][][] = [];
     for (let i = 0; i < a.length; i += 2) out.push(a.slice(i, i + 2));
     return out;
 }

@@ -6,8 +6,8 @@ import React, { useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
-import { Bip, StudentHead, parseJson, today, kDate } from "./shared";
-import { AIBox, AutoArea, card, dOf, err, inp, lab, mergeInto, openPrint } from "./Steps";
+import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox } from "./shared";
+import { AIBox, card, dOf, err, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
 
@@ -52,35 +52,31 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
     const apply = (mode: "empty" | "append") => set(mergeInto(cur, { rationale: ai.text.replace(/\*\*/g, "") }, mode));
-    const sections: [string, string][] = [["자료 요약", summary], ["결정", cur.choice || ""], ["판단 근거", cur.rationale || ""], ["다음 점검일·후속 조치", `${cur.nextReview ? kDate(cur.nextReview) + " · " : ""}${cur.actions || ""}`]];
-    const meta: [string, string][] = [["결정일", kDate(cur.date || today())], ["작성자", cur.author || bip.Teacher || ""]];
+    const printMeta: [string, string][] = [["결정일", kDate(cur.date || today())], ["다음 점검일", kDate(cur.nextReview || "")], ["작성자", cur.author ?? bip.Teacher ?? ""]];
+    const printSections: [string, string][] = [["자료 요약", summary], ["결정", cur.choice || ""], ["판단 근거", cur.rationale || ""], ["후속 조치", cur.actions || ""]];
+    const meta: [string, React.ReactNode][] = [
+        ["결정일", <Inp key="d" type="date" value={cur.date || today()} onChange={v => set({ date: v })} />],
+        ["다음 점검일", <Inp key="n" type="date" value={cur.nextReview || ""} onChange={v => set({ nextReview: v })} />],
+        ["작성자", <Inp key="a" value={cur.author ?? bip.Teacher ?? ""} onChange={v => set({ author: v })} />],
+    ];
+    const sections: [string, React.ReactNode][] = [
+        ["자료 요약\n(자동)", <div key="s" style={{ whiteSpace: "pre-wrap" }}>{summary}</div>],
+        ["결정", <Sel key="c" value={cur.choice || ""} onChange={v => set({ choice: v })} options={CHOICES} />],
+        ["판단 근거", <Area key="r" value={cur.rationale || ""} onChange={v => set({ rationale: v })} placeholder="자료의 어느 수치를 보고 결정했는지" rows={4} />],
+        ["후속 조치", <Area key="x" value={cur.actions || ""} onChange={v => set({ actions: v })} placeholder="누가·언제·무엇을" rows={3} />],
+    ];
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
-                <div style={{ fontWeight: 800, fontSize: "0.88rem", marginBottom: 6 }}>지금까지의 자료 (자동)</div>
-                <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.83rem", lineHeight: 1.7 }}>{summary}</pre>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>④에서 입력한 표적행동 차트도 함께 보고 판단하세요. 2주 이상 개선이 없으면 전략 수정, 4주 연속 목표 달성이면 하향·종료를 검토합니다.</div>
-                <div style={{ marginTop: 10 }}><button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 의사결정 의견 초안 받기</button></div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 의사결정 의견 초안 받기(판단 근거)</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "데이터 기반 의사결정 기록", s: head, meta: printMeta, sections: printSections })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), decision: { ...cur, date: cur.date || today(), author: cur.author ?? bip.Teacher ?? "" } }) })}>💾 저장</button>
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>④ 모니터링 차트와 함께 보고 판단하세요. 2주 이상 개선이 없으면 전략 수정, 4주 연속 목표 달성이면 하향·종료를 검토합니다.</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            <div style={card}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }} className="grid-responsive">
-                    <div><label style={lab}>결정</label>
-                        <select style={inp} value={cur.choice || ""} onChange={e => set({ choice: e.target.value })}>
-                            <option value="">선택</option>{CHOICES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select></div>
-                    <div><label style={lab}>결정일</label><input type="date" style={inp} value={cur.date || today()} onChange={e => set({ date: e.target.value })} /></div>
-                    <div><label style={lab}>다음 점검일</label><input type="date" style={inp} value={cur.nextReview || ""} onChange={e => set({ nextReview: e.target.value })} /></div>
-                </div>
-                <label style={{ ...lab, marginTop: 10 }}>판단 근거 (자료의 어느 수치를 보고 결정했는지)</label>
-                <AutoArea value={cur.rationale || ""} onChange={v => set({ rationale: v })} rows={4} />
-                <label style={{ ...lab, marginTop: 10 }}>후속 조치 (누가·언제·무엇을)</label>
-                <AutoArea value={cur.actions || ""} onChange={v => set({ actions: v })} rows={3} />
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "데이터 기반 의사결정 기록", s: head, meta, sections })}>🖨️ 미리보기·인쇄</button>
-                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), decision: { ...cur, date: cur.date || today(), author: cur.author || bip.Teacher || "" } }) })}>💾 저장</button>
-                </div>
-            </div>
+            <div style={sheetBox}><SectionSheet heading="데이터 기반 의사결정 기록" s={head} meta={meta} sections={sections} /></div>
             <MeetingNotesSection apiUrl={API_BASE_URL} meetingType="tier3" title="이 학생 사례 협의 기록 (누적)" studentCode={head.code} />
         </div>
     );
@@ -116,42 +112,58 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
 }) {
     const [kind, setKind] = useState<"medical" | "support">("medical");
+    const [ai, setAi] = useState({ loading: false, text: "" });
     const d = DOCS[kind];
     const { cur, set } = useStore(bip, setBip, d.key);
+    const titles = d.sections.map(x => x[0]);
     const fill = () => {
         const patch: Record<string, string> = { behavior: dataSummary(logs, behaviors, bip.PlanStart || "") };
         if (kind === "medical" && bip.MedicationStatus) patch.health = bip.MedicationStatus;
         set(mergeInto(cur, patch, "empty"));
     };
-    const meta: [string, string][] = d.meta.map(([k, f]) => [k, f === "date" ? kDate(cur.date || today()) : cur[f] || (f === "author" ? bip.Teacher || "" : "")]);
+    const runAI = async () => {
+        setAi({ loading: true, text: "" });
+        const decision = parseJson<any>(bip.ProgressReport, {}).decision || {};
+        const ctx = [dataSummary(logs, behaviors, bip.PlanStart || ""),
+            ...["Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "MedicationStatus", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : ""),
+            decision.choice ? `의사결정: ${decision.choice} — ${decision.rationale || ""}` : ""].filter(Boolean).join("\n");
+        try {
+            const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
+                { kind, context: ctx, start_date: bip.PlanStart || undefined, end_date: today() }, { timeout: 240000 });
+            setAi({ loading: false, text: r.data.analysis || "" });
+        } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
+    };
+    const apply = (mode: "empty" | "append") => {
+        const parsed = splitNumbered(ai.text, titles);
+        if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
+        const patch: Record<string, string> = {};
+        d.sections.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
+        set(mergeInto(cur, patch, mode));
+    };
+    const dateVal = cur.date || today();
+    const printMeta: [string, string][] = d.meta.map(([k, f]) => [k, f === "date" ? kDate(dateVal) : cur[f] ?? (f === "author" ? bip.Teacher || "" : "")]);
     const printSections: [string, string][] = d.sections.map(([k, f]) => [k, cur[f] || ""]);
+    const meta: [string, React.ReactNode][] = d.meta.map(([k, f]) => [k,
+        <Inp key={f} type={f === "date" ? "date" : "text"} value={f === "date" ? dateVal : cur[f] ?? (f === "author" ? bip.Teacher || "" : "")} onChange={v => set({ [f]: v })} />]);
+    const sections: [string, React.ReactNode][] = d.sections.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={4} />]);
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", gap: 6 }}>
                 {(Object.keys(DOCS) as ("medical" | "support")[]).map(k => (
-                    <button key={k} onClick={() => setKind(k)} style={{ padding: "7px 14px", borderRadius: 8, fontWeight: 800, fontSize: "0.83rem", cursor: "pointer", border: kind === k ? "2px solid #7c3aed" : "1px solid #cbd5e1", background: kind === k ? "#f5f3ff" : "#fff" }}>{DOCS[k].label}</button>
+                    <button key={k} onClick={() => { setKind(k); setAi({ loading: false, text: "" }); }} style={{ padding: "7px 14px", borderRadius: 8, fontWeight: 800, fontSize: "0.83rem", cursor: "pointer", border: kind === k ? "2px solid #7c3aed" : "1px solid #cbd5e1", background: kind === k ? "#f5f3ff" : "#fff" }}>{DOCS[k].label}</button>
                 ))}
             </div>
             <div style={card}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }} className="grid-responsive">
-                    {d.meta.map(([k, f]) => (
-                        <div key={f}><label style={lab}>{k}</label>
-                            <input style={inp} type={f === "date" ? "date" : "text"} value={f === "date" ? cur.date || today() : cur[f] ?? (f === "author" ? bip.Teacher || "" : "")} onChange={e => set({ [f]: e.target.value })} /></div>
-                    ))}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 {d.label} 초안 받기</button>
+                    <button className="btn btn-secondary" onClick={fill}>📊 자료로 &lsquo;행동 요약&rsquo;만 채우기</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: d.heading, s: head, meta: printMeta, sections: printSections })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), [d.key]: { ...cur, date: dateVal, author: cur.author ?? bip.Teacher ?? "" } }) })}>💾 저장</button>
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                    <button className="btn btn-secondary" onClick={fill}>📊 자료로 &lsquo;행동 요약&rsquo; 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: d.heading, s: head, meta, sections: printSections })}>🖨️ 미리보기·인쇄</button>
-                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), [d.key]: { ...cur, date: cur.date || today(), author: cur.author ?? bip.Teacher ?? "" } }) })}>💾 저장</button>
-                </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>학생 실명·진단 정보는 보호자 동의 범위 안에서만 적고, 외부로 보내기 전에 담당 부장·관리자 확인을 받으세요.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>학생 실명·진단 정보는 보호자 동의 범위 안에서만 적고, 외부로 보내기 전에 담당 부장·관리자 확인을 받으세요. AI 초안의 &lsquo;확인 필요&rsquo; 표시는 직접 채워 주세요.</div>
+                <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            {d.sections.map(([t, f, ph]) => (
-                <div key={f} style={card}>
-                    <label style={{ ...lab, fontSize: "0.88rem", color: "#0f172a" }}>{t}</label>
-                    <AutoArea value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={4} />
-                </div>
-            ))}
+            <div style={sheetBox}><SectionSheet heading={d.heading} s={head} meta={meta} sections={sections} /></div>
         </div>
     );
 }

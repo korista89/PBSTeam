@@ -289,6 +289,37 @@ def ai_fba_report(
     return {"analysis": generate_fba_report(student_info, evidence, req.teacher_context, len(norm_logs)), **gate}
 
 
+class AIDocumentDraftRequest(BaseModel):
+    kind: Literal["medical", "support", "progress"]
+    context: str = ""
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+@router.post("/students/{student_code}/ai-document-draft")
+def ai_document_draft(
+    student_code: str,
+    req: AIDocumentDraftRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """의료협력의뢰서·추가지원신청서·중재 결과 보고서 초안 — 누적 행동기록 근거 요약 + 화면의 계획·수치."""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
+    from app.services.ai_insight import generate_document_draft
+
+    raw_logs = _filter_student_logs(fetch_all_records(), student_code, _resolve_beable_code(student_code))
+    if req.start_date and req.end_date:
+        sd, ed = normalize_date_string(req.start_date), normalize_date_string(req.end_date)
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
+    student_info = _build_student_info(student_code, fetch_student_status())
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+    gate = fba_data_gate(len(norm_logs))
+    if not gate["eligible"]:
+        return {"analysis": gate["notice"], **gate}
+    evidence = build_fba_evidence_summary(student_info, norm_logs)
+    return {"analysis": generate_document_draft(req.kind, student_info, evidence, req.context, len(norm_logs)), **gate}
+
+
 class AIBIPFullRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None

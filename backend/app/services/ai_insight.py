@@ -2181,6 +2181,39 @@ FBA_REPORT_SECTIONS = [
 ]
 
 
+DOCUMENT_SPECS = {
+    "medical": ("의료협력 의뢰서", ["의뢰 사유", "행동 요약", "지금까지의 중재와 반응", "복용 약물·건강 상태", "의료진께 요청하는 사항"],
+                "의사가 읽는 문서다. 약물·진단은 교사 입력에 있는 것만 쓰고, 없으면 '확인 필요'로 쓴다. 5절은 의료진이 판단할 질문 2~3개를 번호 없이 줄로 쓴다."),
+    "support": ("추가 지원 신청서", ["신청 사유", "행동 요약", "지금까지의 중재와 결과", "필요한 지원 내용", "기대 효과와 평가 방법"],
+                "관리자·교육청이 읽는 문서다. 4절은 인력·공간·전문가 자문·교구 중 근거가 있는 것만 구체적으로(누가·언제·얼마나) 쓰고, 5절에는 지원을 줄이거나 끝낼 수치 기준을 쓴다."),
+    "progress": ("개별학생 행동중재 결과 보고서", ["중재 실행 현황", "종합 의견", "향후 계획"],
+                 "1절은 교사가 준 중재 전·후 수치를 그대로 옮기고 해석을 덧붙이지 않는다. 2절은 효과·실행충실도·한계를 쓴다. 3절은 유지·수정·종료·의뢰 중 근거 있는 방향 1개와 다음 점검 시점을 쓴다."),
+}
+
+
+def generate_document_draft(kind: str, student_info: dict, evidence_summary: dict, context: str = "", sample_size: int = 0) -> str:
+    """의료협력의뢰서·추가지원신청서·중재 결과 보고서 초안 — 누적 행동기록 요약과 교사 입력만으로 쓴다."""
+    gate = fba_data_gate(sample_size)
+    if not gate["eligible"]:
+        return gate["notice"]
+    title, secs, extra = DOCUMENT_SPECS[kind]
+    sections = "\n".join(f"{i}. {t}" for i, t in enumerate(secs, 1))
+    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
+[누적 행동기록 근거 요약(결정론적 집계)] {json.dumps(evidence_summary, ensure_ascii=False)[:10000]}
+[교사가 입력한 계획·수치·맥락] {context[:6000] or '없음'}
+
+[지시사항]
+위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 2~5줄로 쓴다.
+{sections}
+
+[작성 규칙]
+1. 자료에 없는 사실·수치·진단명·약물명은 만들지 않고 '확인 필요'로 쓴다.
+2. 행동은 관찰·측정 가능한 용어와 숫자(건수, 기간, 강도)로 쓴다.
+3. {extra}
+4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2000)
+
+
 def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_context: str = "", sample_size: int = 0) -> str:
     """FBA 결과 보고서 초안 — 누적 행동기록 근거 요약만으로 6개 절을 쓴다(없는 사실은 만들지 않는다)."""
     gate = fba_data_gate(sample_size)
