@@ -159,7 +159,7 @@ function getCICODecisionDetail(s: ReportStudent): { msg: string; color: string; 
   const rate = s.rate_num;
   const parsedGoal = parseInt(s.goal_criteria);
   const goal = s.goal_num ?? (Number.isNaN(parsedGoal) ? 80 : parsedGoal);
-  const trendVals = s.trend.map(t => { let r = parseFloat(t.rate.replace("%", "")); return r <= 1 ? r * 100 : r; }).filter(r => !isNaN(r));
+  const trendVals = s.trend.map(t => { let r = parseFloat(t.rate.replace("%", "")); return t.rate.includes("%") || r > 1 ? r : r * 100; }).filter(r => !isNaN(r));
   const lastTwo = trendVals.slice(-2);
   const isRising = lastTwo.length >= 2 && lastTwo[1] > lastTwo[0];
   const isFalling = lastTwo.length >= 2 && lastTwo[1] < lastTwo[0];
