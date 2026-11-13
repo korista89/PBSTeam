@@ -288,7 +288,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         {mode === 'data'
           ? '보고서 사안이 아닌 위기행동의 데이터만 저장합니다. 제지·개별학생교육지원·상해가 있었다면 위의 "🚨 보고서 작성"을 고르세요.'
           : '제지·개별학생교육지원·상해가 있었던 위기행동입니다. 데이터와 함께 위기행동 발생 보고서를 작성해야 제출됩니다(관리자 승인 필요).'}
-        {mode === 'report' && <> 제출 뒤 결재함·전체 로그의 &lsquo;📄 보고서 보기·인쇄&rsquo;에서 PDF로 인쇄해 서명합니다. <a href={`${API_BASE_URL}/api/v1/behavior-log/report-template.hwpx`}>⬇️ 빈 양식(hwpx)</a></>}
+        {mode === 'report' && <> 제출 뒤 결재함·전체 로그의 &lsquo;📄 보고서 보기·인쇄&rsquo;에서 PDF로 인쇄합니다. <a href={`${API_BASE_URL}/api/v1/behavior-log/report-template.hwpx`}>⬇️ 빈 양식(hwpx)</a></>}
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '20px' }}>

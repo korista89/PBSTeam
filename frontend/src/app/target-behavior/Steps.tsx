@@ -13,13 +13,13 @@ import {
     parseJson, splitNumbered, today, kDate,
 } from "./shared";
 
-const card: React.CSSProperties = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 18 };
-const lab: React.CSSProperties = { fontSize: "0.78rem", fontWeight: 700, color: "#475569", display: "block", marginBottom: 4 };
-const inp: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.85rem", boxSizing: "border-box", fontFamily: "inherit" };
-const err = (e: any) => e?.response?.data?.detail || e?.message || "요청 실패";
+export const card: React.CSSProperties = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 18 };
+export const lab: React.CSSProperties = { fontSize: "0.78rem", fontWeight: 700, color: "#475569", display: "block", marginBottom: 4 };
+export const inp: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.85rem", boxSizing: "border-box", fontFamily: "inherit" };
+export const err = (e: any) => e?.response?.data?.detail || e?.message || "요청 실패";
 
 type Log = Record<string, any>;
-const dOf = (l: Log) => String(l["행동발생날짜"] || "").slice(0, 10);
+export const dOf = (l: Log) => String(l["행동발생날짜"] || "").slice(0, 10);
 const mondayOf = (iso: string) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
 const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
@@ -41,7 +41,7 @@ export function openPrint(payload: any) {
     window.open("/target-behavior/print", "_blank");
 }
 
-function AutoArea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+export function AutoArea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
     return <textarea value={value || ""} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={Math.max(rows, (value || "").split("\n").length + 1)} style={{ ...inp, resize: "vertical", lineHeight: 1.6 }} />;
 }
 
@@ -62,7 +62,7 @@ function Bars({ title, items }: { title: string; items: { item: string; count: n
 }
 
 // AI 결과를 절별로 반영: 빈 칸만 채우거나 뒤에 덧붙인다.
-function mergeInto(base: Record<string, string>, add: Record<string, string>, mode: "empty" | "append") {
+export function mergeInto(base: Record<string, string>, add: Record<string, string>, mode: "empty" | "append") {
     const next = { ...base };
     for (const [k, v] of Object.entries(add)) {
         if (!v) continue;
@@ -73,7 +73,7 @@ function mergeInto(base: Record<string, string>, add: Record<string, string>, mo
     return next;
 }
 
-function AIBox({ text, loading, onApply }: { text: string; loading: boolean; onApply?: (mode: "empty" | "append") => void }) {
+export function AIBox({ text, loading, onApply }: { text: string; loading: boolean; onApply?: (mode: "empty" | "append") => void }) {
     if (loading) return <div style={{ padding: 16, color: "#7c3aed", fontWeight: 700, fontSize: "0.85rem" }}>⏳ AI가 자료를 분석하고 있습니다… (1~2분)</div>;
     if (!text) return null;
     return (
@@ -90,7 +90,7 @@ function AIBox({ text, loading, onApply }: { text: string; loading: boolean; onA
     );
 }
 
-// ② 자료 차트 ───────────────────────────────────────────
+// ① 자료 분석 ───────────────────────────────────────────
 export function DataStep({ studentCode, logs, planStart }: { studentCode: string; logs: Log[]; planStart: string }) {
     const [ev, setEv] = useState<any>(null);
     useEffect(() => {

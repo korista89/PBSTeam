@@ -415,7 +415,7 @@ export default function EBPLibraryPage() {
                                         닫기
                                     </button>
                                     <button
-                                        onClick={() => router.push("/report/tier3")}
+                                        onClick={() => router.push("/target-behavior")}
                                         title="개별행동중재계획(FBA/BIP)에서 이 전략을 학생에게 선택·적용하고 충실도를 기록할 수 있습니다"
                                         style={{
                                             padding: "10px 24px",

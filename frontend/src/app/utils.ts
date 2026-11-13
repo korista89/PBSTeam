@@ -97,7 +97,7 @@ export function formatWeek(weekStr: string): string {
 
 /**
  * AI BIP 전문(생성 텍스트, 1~11번 형식)을 BIPData 11개 필드로 파싱합니다.
- * `/student/[id]/bip`와 `/report/tier3`(FBA/BIP관리) 양쪽에서 공유합니다.
+ * `/student/[id]/bip`와 `/target-behavior`(개별학생 행동중재) 양쪽에서 공유합니다.
  */
 export function parseBIPAIResult(text: string): Record<string, string> {
   const sections: Record<string, string> = {};

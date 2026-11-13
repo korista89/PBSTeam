@@ -96,7 +96,6 @@ export function BipSheet({ s, b, behaviors }: { s: StudentHead; b: Bip; behavior
                     ))}
                 </tbody>
             </table>
-            <SignLine />
         </>
     );
 }
@@ -120,7 +119,6 @@ export function SectionSheet({ heading, s, meta, sections, extra }: {
                     ))}
                 </tbody>
             </table>
-            <SignLine />
         </>
     );
 }
@@ -129,14 +127,6 @@ function chunk(a: [string, string][]) {
     const out: [string, string][][] = [];
     for (let i = 0; i < a.length; i += 2) out.push(a.slice(i, i + 2));
     return out;
-}
-
-function SignLine() {
-    return (
-        <div style={{ textAlign: "right", fontSize: "10pt", marginTop: 18 }}>
-            담임교사: <span style={{ display: "inline-block", minWidth: 120, borderBottom: "1px solid #000" }}>&nbsp;</span> (서명)
-        </div>
-    );
 }
 
 // 표적행동별 중재 전·후 요약 표(결과 보고서용)

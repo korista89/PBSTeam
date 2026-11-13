@@ -296,7 +296,7 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                             </button>
                                         ))}
                                         <button onClick={() => setShowNewForm(v => !v)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
-                                            ＋ 새 표적행동
+                                            ＋ 표적행동·모니터링 지표 추가
                                         </button>
                                     </div>
 

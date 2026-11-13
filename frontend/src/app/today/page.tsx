@@ -29,7 +29,7 @@ const SIGNAL_ROUTE: Record<string, string> = {
   MORE_DATA: "student",
   MEETING_ACTION: "student",
   DATA_MISSING: "student",
-  FIDELITY_LOW: "report-tier3",
+  FIDELITY_LOW: "target-behavior",
   REVIEW_DUE: "student",
 };
 
@@ -102,7 +102,7 @@ export default function TodayPage() {
   const goTo = (kind: string, code?: string | null) => {
     if (kind === "student" && code) router.push(`/student/${encodeURIComponent(code)}`);
     else if (kind === "cico") router.push(code ? `/cico?student=${encodeURIComponent(code)}` : "/cico");
-    else if (kind === "report-tier3") router.push("/report/tier3");
+    else if (kind === "target-behavior") router.push("/target-behavior");
     else if (code) router.push(`/student/${encodeURIComponent(code)}`);
   };
 

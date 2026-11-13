@@ -26,6 +26,10 @@ const nextConfig = {
     // Local dev only: frontend (:3000) and backend (:8000) are separate servers,
     // unlike production where vercel.json routes /api/* to the backend on the same domain.
     // Without this, every relative "/api/v1/..." call (login included) 404s locally.
+    // 옛 주소(개별행동중재계획)는 대시보드·행동중재 화면으로 합쳐졌다.
+    async redirects() {
+        return [{ source: "/report/tier3", destination: "/target-behavior", permanent: false }];
+    },
     async rewrites() {
         if (process.env.NODE_ENV !== "development") return [];
         return [

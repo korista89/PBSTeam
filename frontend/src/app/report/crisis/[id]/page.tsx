@@ -1,7 +1,7 @@
 "use client";
 
 // 위기행동 지원 및 개별학생교육지원 보고서 — 학교 양식과 같은 칸 배치로 기록을 채워 보여주고,
-// 브라우저 인쇄(PDF 저장)·한글(hwpx) 내려받기를 한다. 인쇄 뒤 서명해 담당자에게 제출한다.
+// 브라우저 인쇄(PDF 저장)·한글(hwpx) 내려받기를 한다. 인쇄해 담당자에게 제출한다.
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
@@ -53,7 +53,7 @@ export default function CrisisReportPage() {
           {!draft && <a href={hwpx} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 한글 파일(기록 채움)</a>}
           {draft && <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#b45309" }}>저장 전 미리보기입니다 — 제출해야 기록이 남습니다.</span>}
           <a href={blank} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 빈 양식(hwpx)</a>
-          <span style={{ fontSize: "0.8rem", color: "#475569" }}>인쇄 창에서 &lsquo;PDF로 저장&rsquo;을 고르면 PDF가 됩니다. 인쇄 후 서명해 담당자에게 제출하세요.</span>
+          <span style={{ fontSize: "0.8rem", color: "#475569" }}>인쇄 창에서 &lsquo;PDF로 저장&rsquo;을 고르면 PDF가 됩니다. 인쇄해 담당자에게 제출하세요.</span>
         </div>
         {f && (() => {
           const empty = [["A 배경/선행", f.A], ["C 후속결과", f.C], ["경위", f.경위], ["관찰기록", f.관찰기록], ["발생 시 지도교사", f.지도교사]].filter(([, v]) => !String(v || "").trim()).map(([k]) => k);

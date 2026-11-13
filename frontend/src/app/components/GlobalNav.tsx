@@ -39,7 +39,7 @@ export default function GlobalNav({ currentPage }: GlobalNavProps) {
         { href: "/tier-status", label: "📋 Tier현황", key: "tier-status" },
         { href: "/cico", label: "📝 CICO 관리", key: "cico" },
         { href: "/class-rules", label: "🪙 학급규칙/토큰", key: "class-rules" },
-        { href: "/report/tier3", label: "🧩 FBA/BIP관리", key: "report-tier3" },
+        { href: "/target-behavior", label: "🧩 개별학생 행동중재", key: "target-behavior" },
         { href: "/protocol", label: "📜 프로토콜", key: "protocol" },
         { href: "/picture-word", label: "🎨 경은그림말", key: "picture-word" },
     ];

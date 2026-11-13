@@ -33,6 +33,7 @@ export default function InterventionPrint() {
                     <div className="sheet" style={{ background: "#fff", maxWidth: 794, margin: "0 auto", padding: "28px 30px", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", color: "#000", fontFamily: "'Malgun Gothic', sans-serif" }}>
                         {p.doc === "bip" && <BipSheet s={p.s} b={p.b || {}} behaviors={p.behaviors || []} />}
                         {p.doc === "fba" && <SectionSheet heading="기능적 행동평가(FBA) 결과 보고서" s={p.s} meta={p.meta} sections={p.sections} />}
+                        {p.doc === "sections" && <SectionSheet heading={p.heading} s={p.s} meta={p.meta} sections={p.sections} />}
                         {p.doc === "progress" && (
                             <SectionSheet heading="개별학생 행동중재 결과 보고서" s={p.s} meta={p.meta} sections={p.sections}
                                 extra={<SummaryTable rows={p.rows || []} crisis={p.crisis || { pre: 0, post: 0, preWeeks: 0, postWeeks: 0 }} />} />
