@@ -39,3 +39,5 @@
   다음: 학교 PC 점검 스크립트를 새 버전으로 교체해 며칠 실패 0건 확인, Vercel 신고, 교사에게 새 주소 공지, 도메인 자동갱신 끔 확인.
 - 2026-11-13: 이전 학년도 원자료 폐기 — Log_Main 2024·2025학년도 627행과 Approvals 1881행 삭제(백업 ~/data/private/prior_years_raw_*.json, 권한 600), 연도 비교용 숨김 탭 '학년도_요약' 506행 기록. 비식별 CSV 3종은 ~/data/archive(scripts/build_year_archive.py, 누출 점검 통과). /student·학생 대시보드 기본 기간 3월~현재.
   다음: 2027-02-28 이후 2026학년도 최종본 생성(build_year_archive.py → retire_prior_years.py --year 2026 --apply). 옛 백업(~/data/pbst_backup_2026*, 위 prior_years_raw 백업)에 이전 연도 원자료가 남아 있음 — 폐기 시점 정하기.
+- 2026-11-13: 인수인계 자료 체계 — build_year_archive.py --final --handover 가 인수인계 JSON(2024~2026, 가명 ID) 생성, Tier 현황 '인수인계 연결'(관리자)과 학생 대시보드 '과거 학년도 비교'(브라우저에서만 파일 읽음), 연결표는 숨김 탭 '인수인계_연결'(처음 연결할 때 자동 생성). 안내 docs/인수인계_자료_안내.md.
+  다음: 2027-02-28 이후 마감 절차 실행. 동의 효력(2026-03-02~2027-02-28) 안의 2026학년도 기록은 지금 그대로 활용.

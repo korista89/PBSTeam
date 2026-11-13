@@ -9,6 +9,7 @@ import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
+import HandoverMatch from "./HandoverMatch";
 
 interface StudentStatus {
     번호: number;
@@ -207,6 +208,8 @@ export default function TierStatusPage() {
                             <span>🔒</span> 담임교사는 배정 학급 학생의 데이터 조회가 가능하며, Tier 수정은 관리자 권한으로 수행됩니다.
                         </div>
                     )}
+
+                    {isAdmin() && <HandoverMatch students={students} />}
 
                     {errorMsg && (
                         <div className="card" style={{ padding: '16px 20px', background: 'var(--tier3-bg)', borderColor: '#fca5a5', color: 'var(--tier3-text)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

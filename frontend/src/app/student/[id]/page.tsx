@@ -1,6 +1,7 @@
 "use client";
 
 // 개별학생대시보드 — 위에서 아래로 "누구인가 → 지금 어떤가 → 언제·어디서·왜 → 최근 기록 → 지원 도구" 순서로 읽힌다.
+import PastYears from "../PastYears";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
@@ -610,6 +611,7 @@ export default function StudentDetail() {
               {tab === "med" && <MedicationResponseReport studentCode={code} apiUrl={apiUrl} />}
             </div>
           </section>
+          <PastYears studentCode={code} logs={logs} />
         </div>
       </AppShell>
     </AuthCheck>

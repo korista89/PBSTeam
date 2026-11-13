@@ -3,6 +3,7 @@
 사용법 (backend/ 에서, backend 가상환경):
   python ../scripts/build_year_archive.py            # ~/data/archive/ 에 학년도별 CSV 생성 + 누출 점검
   python ../scripts/build_year_archive.py --year 2025 # 한 학년도만
+  python ../scripts/build_year_archive.py --final --handover   # 학년도 마감: '잠정' 표시 없이 + 인수인계 파일(JSON) 생성
 
 비식별 원칙 (위기행동 기록 Log_Main 기준)
 - 뺀다: 학생명·학생코드·코드번호·입력교사명·Log_ID·타임스탬프·특기사항·승인 메타·정확한 날짜.
@@ -88,7 +89,7 @@ def main():
     for y, rs in sorted(rows.items()):
         rs.sort(key=lambda o: (o["연월"], o["학년도주차"], o["학생ID"]))
         last = max(o["연월"] for o in rs)
-        name = f"{y}학년도 경은PBS 데이터" + ("" if y < date.today().year - (0 if date.today().month >= 3 else 1) else f"(잠정, {last}까지)")
+        name = f"{y}학년도 경은PBS 데이터" + ("" if "--final" in sys.argv or y < date.today().year - (0 if date.today().month >= 3 else 1) else f"(잠정, {last}까지)")
         path = os.path.join(OUT, name + ".csv")
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=cols)
@@ -116,6 +117,30 @@ def main():
         sys.exit(f"누출 점검 실패({leaks}건) — 파일을 모두 지웠습니다.")
     for path, n, s in made:
         print(f"{os.path.basename(path)}: {n}행, 학생 {s}명 — 누출 점검 통과")
+    if "--handover" in sys.argv:
+        handover()
+
+
+def handover():
+    """~/data/archive 의 학년도별 CSV(이미 점검 통과)를 모아 인수인계 파일 하나로 묶는다.
+    시트에서 폐기된 이전 학년도는 CSV 에서 가져오므로, 매년 CSV 를 지우지 말고 보관한다."""
+    best = {}
+    for fn in sorted(os.listdir(OUT)):
+        m = re.match(r"(\d{4})학년도 경은PBS 데이터(\(잠정.*\))?\.csv$", fn)
+        if m and (m.group(1) not in best or not m.group(2)):  # 최종본이 잠정본보다 우선
+            best[m.group(1)] = fn
+    recs = []
+    for y in sorted(best):
+        recs += list(csv.DictReader(open(os.path.join(OUT, best[y]), encoding="utf-8-sig")))
+    ys = sorted(best)
+    doc = {"형식": "경은PBS-인수인계", "버전": 1, "생성일": date.today().isoformat(), "학년도": [int(y) for y in ys],
+           "안내": "학생ID(P+영문6자)는 가명입니다. 사이트 '학생 Tier 현황 → 인수인계 연결'에서 현재 학생과 짝지어 쓰세요. 이 파일은 외부 서버·메신저에 올리지 말고 학교 관리 저장소에만 두세요.",
+           "기록": recs}
+    path = os.path.join(OUT, f"경은PBS 인수인계 자료({ys[0]}~{ys[-1]}학년도).json")
+    with open(path, "w", encoding="utf8") as f:
+        json.dump(doc, f, ensure_ascii=False)
+    os.chmod(path, 0o600)
+    print(f"{os.path.basename(path)}: 학년도 {', '.join(ys)}, 기록 {len(recs)}행")
 
 
 if __name__ == "__main__":
