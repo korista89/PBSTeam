@@ -536,7 +536,7 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                     )}
 
                                     {behaviors.length === 0 && !showNewForm && (
-                                        <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>등록된 표적행동이 없습니다. &ldquo;＋ 새 표적행동&rdquo;으로 추가하세요.</p>
+                                        <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>추가 지표가 없어도 됩니다 — 위의 위기행동 모니터링만으로 운영할 수 있습니다. 대체행동·과제 수행 등을 따로 재려면 &ldquo;＋ 표적행동·모니터링 지표 추가&rdquo;를 누르세요.</p>
                                     )}
                                 </div>
                             </div>

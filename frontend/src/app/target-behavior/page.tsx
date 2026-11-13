@@ -12,7 +12,7 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 import Tracker from "./Tracker";
 import { DecisionStep, ReferralStep } from "./Docs";
-import { DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
+import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
 import { Bip, StudentHead, kDate, today } from "./shared";
 
 const STEPS = [
@@ -182,6 +182,7 @@ export default function InterventionPage() {
                                 {step === "data" && <DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} />}
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}
                                 {step === "bip" && <BipStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} goTracker={() => setStep("track")} />}
+                                {step === "track" && <CrisisMonitor logs={logs} planStart={bip.PlanStart || ""} />}
                                 {step === "track" && <Tracker key={code} studentCode={code} behaviors={behaviors} refresh={fetchBehaviors} defaultStart={bip.PlanStart || ""} />}
                                 {step === "decision" && <DecisionStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "refer" && <ReferralStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}

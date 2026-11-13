@@ -179,7 +179,7 @@ export function SummaryTable({ rows, crisis }: { rows: BehaviorSummary[]; crisis
                             </tr>
                         );
                     })}
-                    {rows.length === 0 && <tr><td style={c} colSpan={6}>등록된 표적행동이 없습니다.</td></tr>}
+                    {rows.length === 0 && <tr><td style={c} colSpan={6}>추가 지표 없음 — 위기행동 기록만으로 평가합니다.</td></tr>}
                 </tbody>
             </table>
             <div style={{ fontSize: "8.5pt", marginTop: 4 }}>

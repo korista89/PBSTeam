@@ -90,6 +90,37 @@ export function AIBox({ text, loading, onApply }: { text: string; loading: boole
     );
 }
 
+// 위기행동 기록을 주별 건수로(최근 80주, 방학 주 제외)
+function weeklyCounts(logs: Log[]) {
+    const m = new Map<string, number>();
+    logs.forEach(l => { const d = dOf(l); if (d) { const w = mondayOf(d); m.set(w, (m.get(w) || 0) + 1); } });
+    const keys = [...m.keys()].sort();
+    if (!keys.length) return [];
+    const last = mondayOf(today());
+    const from = keys[0] > addDays(last, -7 * 79) ? keys[0] : addDays(last, -7 * 79);
+    const out: { week: string; count: number }[] = [];
+    for (let w = from; w <= last; w = addDays(w, 7)) if (!isVacationWeek(w)) out.push({ week: w, count: m.get(w) || 0 });
+    return out;
+}
+
+// ④ 모니터링 기본: 위기행동 기록(자동). 표적행동·지표 추가 없이도 Tier3 운영·보고가 가능하다.
+export function CrisisMonitor({ logs, planStart }: { logs: Log[]; planStart: string }) {
+    const weekly = useMemo(() => weeklyCounts(logs), [logs]);
+    const t = today(), recent = logs.filter(l => dOf(l) > addDays(t, -56)).length;
+    return (
+        <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>🚨 위기행동 모니터링 <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.78rem" }}>(기본·자동 — 행동기록 탭에 입력한 위기행동이 그대로 쌓입니다)</span></div>
+            <div style={{ fontSize: "0.8rem", color: "#475569", margin: "4px 0 8px" }}>누적 {logs.length}건 · 최근 8주 {recent}건{planStart ? ` · 중재 시작 ${kDate(planStart)}` : ""}. 이 자료만으로도 ⑤ 의사결정과 ⑦ 결과 보고서를 쓸 수 있습니다. 대체행동·과제 수행 같은 <b>추가 지표는 필요할 때만</b> 아래에서 더하세요.</div>
+            {weekly.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>아직 위기행동 기록이 없습니다.</div> : (
+                <>
+                    <ChangeBanner weekly={weekly} />
+                    <div style={{ marginTop: 8 }}><WeeklyTrendChart weekly={weekly} planStart={planStart || undefined} height={220} /></div>
+                </>
+            )}
+        </div>
+    );
+}
+
 // ① 자료 분석 ───────────────────────────────────────────
 export function DataStep({ studentCode, logs, planStart }: { studentCode: string; logs: Log[]; planStart: string }) {
     const [ev, setEv] = useState<any>(null);
@@ -100,17 +131,7 @@ export function DataStep({ studentCode, logs, planStart }: { studentCode: string
         axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(studentCode)}/fba-evidence`).then(r => { if (alive) setEv(r.data); }).catch(() => { if (alive) setEv(null); });
         return () => { alive = false; };
     }, [studentCode]);
-    const weekly = useMemo(() => {
-        const m = new Map<string, number>();
-        logs.forEach(l => { const d = dOf(l); if (d) { const w = mondayOf(d); m.set(w, (m.get(w) || 0) + 1); } });
-        const keys = [...m.keys()].sort();
-        if (!keys.length) return [];
-        const last = mondayOf(today());
-        const from = keys[0] > addDays(last, -7 * 79) ? keys[0] : addDays(last, -7 * 79);  // 최근 80주까지만
-        const out: { week: string; count: number }[] = [];
-        for (let w = from; w <= last; w = addDays(w, 7)) if (!isVacationWeek(w)) out.push({ week: w, count: m.get(w) || 0 });
-        return out;
-    }, [logs]);
+    const weekly = useMemo(() => weeklyCounts(logs), [logs]);
     const dm = ev?.deterministic_metrics || {};
     const kpis = [
         ["누적 행동기록", `${dm.total_episodes_n ?? logs.length}건`], ["관찰일수", `${dm.observation_days_count ?? "-"}일`],
