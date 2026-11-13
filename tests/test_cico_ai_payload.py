@@ -26,3 +26,11 @@ def test_ox_unchanged_and_decrease_inverted():
     assert (inc["recorded_days"], inc["overall_rate_pct"]) == (3, 66.7)
     dec = _build_cico_summary_payload([_student(["X", "X", "O"], "O/X(발생)", "감소 목표행동")])["students"][0]["metrics"]
     assert (dec["overall_rate_pct"], dec["consec_fail"]) == (66.7, 1)
+
+
+def test_ai_rule_follows_screen_decision():
+    s = _student(["1점"] * 20, "0점/1점/2점", rate="50%")
+    s["decision"] = "Tier1 하향 권장"
+    assert _build_cico_summary_payload([s])["students"][0]["decision"]["rule_result"].startswith("Tier1 하향 권장")
+    s["decision"] = "CICO 유지 (양호)"
+    assert _build_cico_summary_payload([s])["students"][0]["decision"]["rule_result"].startswith("CICO 유지 (양호")

@@ -992,9 +992,10 @@ def _build_cico_summary_payload(
             except (ValueError, AttributeError):
                 all_rates_parsed.append(None)
 
-        # 클라이언트가 보낸 추이만으로는 같은 목표와 연속 월을 보장할 수 없다.
-        # 단계 하향은 원자료를 확인한 팀이 결정한다.
-        last2_high = False
+        # 클라이언트 추이만으로는 같은 목표·연속 월을 보장할 수 없으므로 직접 계산하지 않고,
+        # 같은 목표·연속 월을 확인한 get_cico_report_data()의 판정(decision)을 그대로 따른다.
+        # 화면의 "CICO 의사결정 제안" 카드도 같은 값을 쓰므로 둘이 어긋나지 않는다.
+        last2_high = str(s.get("decision") or "").strip() in ("Tier1 하향 권장", "CICO 유지 (T3/SST 병행)")
 
         ts = tier_map.get(code, {})
         has_sst = str(ts.get("Tier2(SST)", "")).strip() == "O"

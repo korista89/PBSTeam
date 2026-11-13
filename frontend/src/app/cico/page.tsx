@@ -350,7 +350,7 @@ export default function CICOPage() {
         month,
         students_data: [{
           code: student.code, class: student.class, target_behavior: student.target_behavior, behavior_type: student.behavior_type,
-          scale: student.scale, goal_criteria: student.goal_criteria, rate: student.rate, achieved: student.achieved,
+          scale: student.scale, goal_criteria: student.goal_criteria, rate: student.rate, rate_num: student.rate_num, achieved: student.achieved, decision: student.decision,
           daily_data: student.daily_data, trend: student.trend,
         }]
       }, { timeout: 240000 });
