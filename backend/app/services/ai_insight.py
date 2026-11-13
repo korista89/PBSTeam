@@ -570,6 +570,17 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
+def _scrub_prompt(text: str) -> str:
+    """국외 AI 전송 직전: 자유서술에 섞인 실명(별칭 패턴)·전화·주민번호를 가린다. 실패해도 호출은 막지 않는다."""
+    try:
+        from app.core.privacy import scrub_free_text
+        from app.services.sheets import fetch_student_status
+        aliases = [r.get("학생이름", "") for r in fetch_student_status()]
+        return scrub_free_text(text, aliases)
+    except Exception:
+        return text
+
+
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> str:
     """Primary LLM dispatcher: tries Local Ollama/LM Studio first, falls back to Gemini API.
 
@@ -582,6 +593,7 @@ def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> s
     deliberately turned on), and we cap that attempt tightly so a dead
     tunnel fails fast instead of eating the request budget.
     """
+    user_prompt = _scrub_prompt(user_prompt)
     should_try_local = True
     if _is_serverless_runtime():
         raw_url = os.getenv("LOCAL_LLM_URL", "").strip().lower()

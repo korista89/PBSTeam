@@ -62,3 +62,24 @@ def anonymize_text(text: str, alias_map: Dict[str, str]) -> str:
     if not parts:
         return text
     return re.compile("|".join(parts)).sub(lambda m: alias_map[m.group()], text)
+
+
+_PHONE = re.compile(r"01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}")
+_RRN = re.compile(r"\d{6}[-\s]?[1-4]\d{6}")
+
+
+def scrub_free_text(text: str, aliases: Iterable[str]) -> str:
+    """AI(국외)로 보내기 직전 자유서술 보호. 서버에는 실명이 없으므로 별칭(김O준)의 가린 자리를
+    한글 한 글자로 되살린 패턴(김[가-힣]준)을 찾아 별칭으로 바꾼다. 3글자 이상 별칭만 대상(2글자는 오탐이 커서 제외).
+    전화번호·주민번호 형태도 지운다."""
+    if not text:
+        return text
+    out = _RRN.sub("[주민번호]", text)
+    out = _PHONE.sub("[전화번호]", out)
+    pats = {}
+    for a in set(str(x).split("-")[0] for x in aliases if x):
+        if len(a) >= 3 and a[1] == "O":
+            pats[re.compile(re.escape(a[0]) + "[가-힣]" + re.escape(a[2:]) + r"")] = a
+    for p, a in pats.items():
+        out = p.sub(lambda m, a=a: m.group() if m.group() == a else a, out)
+    return out
