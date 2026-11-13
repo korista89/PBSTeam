@@ -37,3 +37,5 @@
   다음: 교사 사용 후 피드백, 결과 보고서 hwpx(양식 받으면).
 - 2026-11-12: 간헐 접속 실패 원인 확정 — pbs-team.vercel.app의 IP 216.198.79.3 무응답(점검 CSV·직접 시험). 새 도메인 gespbs.com 구매·연결(A 76.76.21.21 추가), CORS 허용(dab1218), /health 처리시간 로그(dea6410), 안내문·net_probe 주소 변경.
   다음: 학교 PC 점검 스크립트를 새 버전으로 교체해 며칠 실패 0건 확인, Vercel 신고, 교사에게 새 주소 공지, 도메인 자동갱신 끔 확인.
+- 2026-11-13: 이전 학년도 원자료 폐기 — Log_Main 2024·2025학년도 627행과 Approvals 1881행 삭제(백업 ~/data/private/prior_years_raw_*.json, 권한 600), 연도 비교용 숨김 탭 '학년도_요약' 506행 기록. 비식별 CSV 3종은 ~/data/archive(scripts/build_year_archive.py, 누출 점검 통과). /student·학생 대시보드 기본 기간 3월~현재.
+  다음: 2027-02-28 이후 2026학년도 최종본 생성(build_year_archive.py → retire_prior_years.py --year 2026 --apply). 옛 백업(~/data/pbst_backup_2026*, 위 prior_years_raw 백업)에 이전 연도 원자료가 남아 있음 — 폐기 시점 정하기.
