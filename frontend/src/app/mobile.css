@@ -8,6 +8,13 @@ img, canvas, svg, video { max-width: 100%; }
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)) !important;
   }
   .app-content [style*="grid-template-columns"] > * { min-width: 0; }
+  /* 위 자동 열 규칙은 globals.css의 "휴대폰 1열" 클래스 규칙보다 우선순위가 높아 덮어쓴다(위기행동 화면이 2열로 찌그러진 원인).
+     같은 우선순위로 뒤에 다시 1열을 지정한다. 목록은 globals.css와 같아야 한다. */
+  .app-content .behavior-outer-grid, .app-content .behavior-split-grid, .app-content .minutes-form-grid,
+  .app-content .responsive-grid-2, .app-content .responsive-grid-3, .app-content .responsive-grid-4,
+  .app-content .grid-responsive, .app-content .cico-report-chart-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
   /* 좌우 고정 폭 flex 줄은 줄바꿈 허용 */
   .app-content [style*="display: flex"]:not([style*="flex-direction: column"]):not(.no-wrap) { flex-wrap: wrap; }
 
@@ -40,7 +47,7 @@ img, canvas, svg, video { max-width: 100%; }
   /* flex 자식이 내용 때문에 부모보다 커지지 않게 */
   .app-content [style*="display: flex"] > :not(button):not(svg):not(img):not(input):not(a) { min-width: 0; }
   /* 긴 문자열(URL·코드)이 카드를 밀어내지 않게 */
-  .app-content .card, .app-content p, .app-content td { overflow-wrap: anywhere; }
+  .app-content .card, .app-content p { overflow-wrap: break-word; }
 }
 
 @media (max-width: 480px) {
