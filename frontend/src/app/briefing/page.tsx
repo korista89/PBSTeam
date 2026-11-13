@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { API_BASE_URL } from "../constants";
 import AppShell from "../components/AppShell";
+import { maskName } from "../utils";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 
 type Pair = [string, number];
@@ -86,9 +87,11 @@ function DayCard({ title, day }: { title: string; day: Day }) {
 }
 
 export default function BriefingPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const [data, setData] = useState<Briefing | null>(null);
   const [cico, setCico] = useState<{ month: string; ratio: number | null }[]>([]);
+  const [cicoReview, setCicoReview] = useState<{ status: string; students: any[] }>({ status: "loading", students: [] });
+  const [classSupport, setClassSupport] = useState<{ status: string; rule?: any; students?: any[] }>({ status: "loading" });
   const [tab, setTab] = useState<(typeof PERIOD_KEYS)[number]>("week");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -109,6 +112,25 @@ export default function BriefingPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    const month = Number(new Date(Date.now() + 9 * 3600000).toISOString().slice(5, 7));
+    axios.get(`${API_BASE_URL}/api/v1/cico/report`, { params: { month } }).then(r => {
+      if (active) setCicoReview({ status: "ready", students: (r.data.students || []) });
+    }).catch(e => { if (active) setCicoReview({ status: e.response?.status === 404 ? "empty" : "error", students: [] }); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    if (isAdmin() || !user.class_id) { setClassSupport({ status: "choose" }); return; }
+    let active = true;
+    const base = `${API_BASE_URL}/api/v1/class-rules/${encodeURIComponent(user.class_id)}`;
+    Promise.all([axios.get(base), axios.get(`${base}/tokens`)]).then(([rule, tokens]) => {
+      if (active) setClassSupport({ status: "ready", rule: rule.data.rule, students: tokens.data.students || [] });
+    }).catch(() => { if (active) setClassSupport({ status: "error" }); });
+    return () => { active = false; };
+  }, [user, isAdmin]);
 
   const p = data?.periods[tab];
 
@@ -259,6 +281,29 @@ export default function BriefingPage() {
               </div>
             </div>
 
+            <div className="card" style={{ padding: 16 }}>
+              <h3>📝 이번 달 CICO 목표별 현황</h3>
+              {cicoReview.status === "loading" && <p>불러오는 중입니다.</p>}
+              {cicoReview.status === "error" && <p>불러오지 못했습니다. CICO 관리에서 다시 확인하세요.</p>}
+              {(cicoReview.status === "empty" || (cicoReview.status === "ready" && !cicoReview.students.length)) && <p>이번 달 CICO 목표가 없거나 자료가 없습니다.</p>}
+              {cicoReview.students.map((s, i) => <div key={`${s.code}-${i}`} style={{ margin: "8px 0" }}>
+                <a href={`/cico?student=${encodeURIComponent(s.code)}`}>{s.class} · {maskName(s.name) || s.code}</a> · {s.target_behavior || "목표 미입력"} · {s.rate || "기록 없음"}
+              </div>)}
+              <p style={{ color: "#64748b", fontSize: "0.8rem" }}>2개월 연속 달성 여부와 병행 지원, 기록량을 확인하고 팀이 결정합니다.</p>
+              <a href="/cico">CICO 관리 →</a>
+            </div>
+            <div className="card" style={{ padding: 16 }}>
+              <h3>🪙 Tier 1 학급규칙·토큰 운영</h3>
+              {classSupport.status === "loading" && <p>불러오는 중입니다.</p>}
+              {classSupport.status === "choose" && <p>학급규칙/토큰 화면에서 학급을 선택해 현황을 확인하세요.</p>}
+              {classSupport.status === "error" && <p>현황을 불러오지 못했습니다. 학급규칙/토큰 화면에서 다시 확인하세요.</p>}
+              {classSupport.status === "ready" && <>
+                <p>학급 기대행동: {classSupport.rule ? `${classSupport.rule.place} · ${classSupport.rule.text}` : "설정되지 않음"}</p>
+                <p>학급 학생 {classSupport.students?.length || 0}명 · 현재 보유 토큰 합계 {(classSupport.students || []).reduce((n, s) => n + (Number(s.token_count) || 0), 0)}개</p>
+                <p style={{ color: "#64748b", fontSize: "0.8rem" }}>현재 잔액이며 수여 횟수나 중재 효과를 뜻하지 않습니다.</p>
+              </>}
+              <a href="/class-rules">학급규칙·토큰 관리 →</a>
+            </div>
             <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
               기준: {Object.values(data.rules).join(" · ")}
             </div>

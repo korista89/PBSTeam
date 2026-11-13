@@ -247,7 +247,7 @@ export default function CICOPage() {
       setReportData(overview.report);
       setSelectedCode(prev => {
         const wanted = prev || studentParam;
-        if (wanted && monthlyData.students.some(s => s.학생코드 === wanted)) return wanted;
+        if (wanted) return monthlyData.students.some(s => s.학생코드 === wanted) ? wanted : null;
         return monthlyData.students[0]?.학생코드 || null;
       });
     } catch (err: any) {
@@ -453,8 +453,14 @@ export default function CICOPage() {
                 {/* 선택된 학생 상세 */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {!gridStudent ? (
-                    <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>왼쪽에서 학생을 선택하세요.</div>
+                    <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>요청한 학생의 이달 기록이 없거나 선택되지 않았습니다. 왼쪽에서 확인하세요.</div>
                   ) : (
+                    <>
+                    <div className="card" style={{ padding: 12, display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      <a href={`/student/${encodeURIComponent(gridStudent.학생코드)}`}>학생 대시보드 →</a>
+                      <a href={`/target-behavior?student=${encodeURIComponent(gridStudent.학생코드)}`}>개별 행동중재 검토 →</a>
+                      <span style={{ color: "#64748b", fontSize: "0.8rem" }}>이동만 하며 지원 단계는 자동 변경되지 않습니다.</span>
+                    </div>
                     <StudentCICOPanel
                       gridStudent={gridStudent}
                       reportStudent={reportStudent}
@@ -464,6 +470,7 @@ export default function CICOPage() {
                       aiState={aiState}
                       onRequestAI={() => reportStudent && requestAIAnalysis(reportStudent)}
                     />
+                    </>
                   )}
                 </div>
               </div>

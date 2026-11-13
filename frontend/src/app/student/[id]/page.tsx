@@ -8,6 +8,7 @@ import { useParams, useRouter } from "next/navigation";
 import { WeeklyTrendChart, CumulativeChart, IntensityShiftChart, ChangeBanner } from "../../components/ProgressCharts";
 import { baselineVsRecent, quietStreaks, intensityByMonth, schoolYearStart, calmWeeks, phaseEffect, coachState, isVacationWeek } from "../../lib/progress";
 import TeacherCoach from "../../components/TeacherCoach";
+import StudentCicoSummary from "../../components/StudentCicoSummary";
 
 const AUTO_CRISIS = "위기행동 기록(자동)";
 import { StudentData } from "../../types";
@@ -371,6 +372,8 @@ export default function StudentDetail() {
               </div>
             </div>
           </section>
+
+          <StudentCicoSummary studentCode={code} />
 
           {/* 1-1. 선생님께 드리는 메시지 */}
           <TeacherCoach state={coach.state} facts={{ change: coach.change, histBefore8: coach.histBefore8, tier3: coach.tier3, linked: coach.linked, confirmed: coach.confirmed }}

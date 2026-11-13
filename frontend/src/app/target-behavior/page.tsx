@@ -2,11 +2,12 @@
 
 // 개별학생 행동중재 — 학생 선택부터 자료 확인, FBA 보고서, 행동중재계획(BIP), 중재 자료 입력, 결과 보고서까지 한 화면에서 한다.
 // Tier3 학생이 목록 위에 오고, 담임은 자기 반 학생 누구나 골라 개별 중재를 시작할 수 있다.
-// 옛 BIP 화면(/student/[id]/bip)은 당분간 그대로 둔다(같은 BIP 시트 행을 쓴다). 의사결정·의뢰서는 ProgressReport JSON에 함께 저장한다.
+// 의사결정·의뢰서는 ProgressReport JSON에 함께 저장한다.
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import AppShell from "../components/AppShell";
+import StudentCicoSummary from "../components/StudentCicoSummary";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
@@ -179,7 +180,7 @@ export default function InterventionPage() {
                                         }}>{s.label}</button>
                                     ))}
                                 </div>
-                                {step === "data" && <DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} />}
+                                {step === "data" && <><StudentCicoSummary studentCode={code} /><DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} /></>}
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}
                                 {step === "bip" && <BipStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} goTracker={() => setStep("track")} />}
                                 {step === "track" && <CrisisMonitor logs={logs} planStart={bip.PlanStart || ""} />}
