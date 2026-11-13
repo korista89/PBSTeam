@@ -94,6 +94,7 @@ const BEHAVIOR_PRESETS = [
   { label: "[감소] 방해행동", behavior: "방해행동", type: "감소 목표행동", scale: "O/X(발생)", criteria: "10% 이하" },
 ];
 
+// 원본: backend sheets.py CICO_MID_RATE (tests/test_cico_rule_alignment.py)
 const RATE_THRESHOLDS = { mid: 50 };
 
 function getInputOptions(scale: string): string[] {

@@ -6,6 +6,7 @@ import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 
 // 이 화면의 기준은 코드(analysis.py 의사결정 알고리즘, CICO 의사결정 제안, target-behavior 7단계)와 같다.
+// CICO 수치(50%·기본 80%)는 backend sheets.py CICO_MID_RATE·CICO_DEFAULT_GOAL이 원본이다. tests/test_cico_rule_alignment.py가 어긋남을 잡는다.
 // 기준을 바꾸면 코드와 이 화면을 함께 고친다.
 
 const box = (c: string, bg: string): React.CSSProperties => ({ borderLeft: `4px solid ${c}`, background: bg, padding: 14 });

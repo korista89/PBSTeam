@@ -1,4 +1,4 @@
-from app.services.sheets import tier_label
+from app.services.sheets import tier_label, CICO_MID_RATE, CICO_DEFAULT_GOAL
 import logging
 import os
 from app.adapters.sheets.resilience import SheetUnavailable
@@ -894,7 +894,7 @@ def _build_cico_summary_payload(
 
     student_summaries = []
     total_recorded_days = 0
-    total_success_days = 0
+    total_rate_weighted = 0.0
     total_goals_met = 0
 
     for s in students_data:
@@ -902,20 +902,20 @@ def _build_cico_summary_payload(
         class_name = str(s.get("class") or s.get("class_name") or "").strip()
         target_behavior = str(s.get("target_behavior") or s.get("목표행동") or "").strip()
         behavior_type = str(s.get("behavior_type") or s.get("목표행동 유형") or "증가 목표행동").strip()
-        goal_str = str(s.get("goal") or s.get("goal_criteria") or s.get("목표달성기준") or "80% 이상").strip()
+        goal_str = str(s.get("goal") or s.get("goal_criteria") or s.get("목표달성기준") or f"{CICO_DEFAULT_GOAL}% 이상").strip()
         is_decrease = "감소" in behavior_type
 
         # Parse goal number. rate_num below is always attainment (higher =
         # better, X/미발생 counts as success for 감소 목표행동), so a "이하"
         # criterion (e.g. "10% 이하" occurrence) needs its attainment
         # equivalent (90%) to compare against.
-        goal_num = 80.0
+        goal_num = float(CICO_DEFAULT_GOAL)
         gm = re.search(r"(\d+(?:\.\d+)?)", goal_str)
         if gm:
             try:
                 goal_num = float(gm.group(1))
             except ValueError:
-                goal_num = 80.0
+                goal_num = float(CICO_DEFAULT_GOAL)
         effective_goal_num = (100 - goal_num) if "이하" in goal_str else goal_num
 
         # get_cico_report_data() (the usual source of students_data) names this
@@ -936,7 +936,6 @@ def _build_cico_summary_payload(
         recorded_days = len(valid_days)
         success_days = sum(success_flags)
         total_recorded_days += recorded_days
-        total_success_days += success_days
 
         # 화면(get_cico_report_data)이 계산한 수행률이 있으면 그대로 써서 화면과 AI 수치를 맞춘다.
         shown_rate = s.get("rate_num")
@@ -948,6 +947,7 @@ def _build_cico_summary_payload(
         else:
             rate_num = round(sum(sc for _, sc in day_scores) / recorded_days * 100, 1) if recorded_days else 0.0
         is_goal_achieved = rate_num >= effective_goal_num
+        total_rate_weighted += rate_num * recorded_days
         if is_goal_achieved:
             total_goals_met += 1
 
@@ -1011,7 +1011,7 @@ def _build_cico_summary_payload(
             decision_rule = "CICO 유지 (T3/SST 병행 지원 지속)"
         elif rate_num >= effective_goal_num:
             decision_rule = "CICO 유지 (양호, 현재 강화제 및 피드백 유지)"
-        elif rate_num >= 50:
+        elif rate_num >= CICO_MID_RATE:
             decision_rule = "CICO 수정 검토 (중재 충실도 점검 및 피드백 주기 단축)"
         else:
             decision_rule = "Tier3 상향 검토 (정식 FBA/BIP 의뢰 검토)"
@@ -1049,7 +1049,7 @@ def _build_cico_summary_payload(
     crisis_logs_count = len(matching_logs)
     high_intensity_count = len([l for l in matching_logs if int(l.get("intensity") or l.get("강도") or 0) >= 4])
 
-    avg_overall_rate = round(total_success_days / total_recorded_days * 100, 1) if total_recorded_days > 0 else 0.0
+    avg_overall_rate = round(total_rate_weighted / total_recorded_days, 1) if total_recorded_days > 0 else 0.0
 
     return {
         "evaluation_period": f"{selected_month}월" if selected_month else "당월",
@@ -1120,11 +1120,11 @@ def generate_bcba_cico_analysis(
    특정 시점에 꺾인 지점이 있는지, 지금 추세가 계속되면 다음 달엔 어떨지 한두 문장으로 짚는다.
    데이터가 1~2개월뿐이면 "아직 추이를 판단하기엔 기록이 부족하다"고 명시한다.
 4. **Tier 이동 의사결정 매트릭스**:
-   - 목표(기본 80%) 이상 2개월 연속 + CICO만 받는 학생: Tier 1 하향(졸업) 검토 (하향 후 4주 모니터링 명시).
+   - 목표(기본 {CICO_DEFAULT_GOAL}%) 이상 2개월 연속 + CICO만 받는 학생: Tier 1 하향(졸업) 검토 (하향 후 4주 모니터링 명시).
    - SST·Tier 3 병행 학생은 목표를 달성해도 CICO 유지.
    - 목표 달성 1개월: 현행 유지 및 강화제 선호도 재평가.
-   - 수행률 50% 이상~목표 미만: CICO 수정 검토(충실도 점검, 피드백 주기 단축).
-   - 수행률 50% 미만 또는 위기행동 강도 5: Tier 3 상향 및 정식 FBA·BIP 의뢰 검토.
+   - 수행률 {CICO_MID_RATE}% 이상~목표 미만: CICO 수정 검토(충실도 점검, 피드백 주기 단축).
+   - 수행률 {CICO_MID_RATE}% 미만 또는 위기행동 강도 5: Tier 3 상향 및 정식 FBA·BIP 의뢰 검토.
 5. **위기행동 기록 교차 확인**: 하루 목표 달성률이 높은데도 위기행동 기록이 많다면, CICO
    목표행동과 실제 문제행동이 서로 다른 것을 가리키고 있지 않은지 짚는다.
 6. **강화제(보상) 점검**: 3~4주 차에 달성률이 떨어진 학생은 보상(강화제)을 바꿔볼 것을 제안한다.

@@ -34,3 +34,8 @@ def test_ai_rule_follows_screen_decision():
     assert _build_cico_summary_payload([s])["students"][0]["decision"]["rule_result"].startswith("Tier1 하향 권장")
     s["decision"] = "CICO 유지 (양호)"
     assert _build_cico_summary_payload([s])["students"][0]["decision"]["rule_result"].startswith("CICO 유지 (양호")
+
+
+def test_cohort_average_matches_student_rate():
+    p = _build_cico_summary_payload([_student(["1점"] * 20, "0점/1점/2점", rate="50%")])
+    assert p["cohort"]["avg_achievement_rate_pct"] == 50.0

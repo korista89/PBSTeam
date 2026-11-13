@@ -1477,6 +1477,13 @@ def get_business_days(year: int, month: int, holidays: list = None):
     return dates
 
 
+# CICO 의사결정 기준(단일 출처). 화면 카드·AI 판정·AI 프롬프트·운영 기준(protocol) 화면이 이 값을 따른다.
+# 바꾸면 frontend cico/page.tsx RATE_THRESHOLDS와 protocol/page.tsx 문구도 함께 바꾼다
+# (tests/test_cico_rule_alignment.py가 어긋남을 잡는다).
+CICO_MID_RATE = 50       # 이 수행률 미만이면 Tier3 상향 검토, 이상~목표 미만이면 CICO 수정 검토
+CICO_DEFAULT_GOAL = 80   # 목표 달성 기준이 비어 있을 때 기본값(%)
+
+
 def _calculate_cico_rate(student: dict) -> dict:
     """
     Calculate 수행/발생률 and 달성여부 from daily input data.
@@ -2744,7 +2751,7 @@ def get_cico_report_data(month: int):
             # better) after _calculate_cico_rate(), so translate a "이하"
             # criterion (e.g. "10% 이하" occurrence) to its attainment
             # equivalent (90%) so every comparison below stays on one scale.
-            goal_num = 80.0
+            goal_num = float(CICO_DEFAULT_GOAL)
             try:
                 gm = _re.search(r"(\d+(?:\.\d+)?)", goal_str)
                 if gm:
@@ -2784,7 +2791,7 @@ def get_cico_report_data(month: int):
                 elif rate_num >= effective_goal_num:
                     decision = "CICO 유지 (양호)"
                     decision_color = "#3b82f6"
-                elif rate_num >= 50:
+                elif rate_num >= CICO_MID_RATE:
                     decision = "CICO 수정 검토"
                     decision_color = "#f59e0b"
                 else:
