@@ -7,8 +7,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 import { WeeklyTrendChart, ChangeBanner } from "../components/ProgressCharts";
-import { withoutVacation } from "../lib/progress";
-import { useDateRange } from "../components/GlobalNav";
+import { withoutVacation, schoolYearStart } from "../lib/progress";
 import { useAuth } from "../components/AuthProvider";
 import { maskName, formatWeek } from "../utils";
 import { API_BASE_URL } from "@/app/lib/api";
@@ -60,7 +59,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function Tier3Overview() {
   const { user, isAdmin } = useAuth();
-  const { startDate, endDate } = useDateRange();
+  // 기본 기간: 그 학년도 3월 1일 ~ 오늘(날짜 필터와 무관하게 고정)
+  const endDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const startDate = schoolYearStart(endDate);
   const [data, setData] = useState<Tier3ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

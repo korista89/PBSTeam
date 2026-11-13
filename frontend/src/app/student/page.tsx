@@ -35,7 +35,7 @@ export default function StudentPickerPage() {
 
     return (
         <AuthCheck>
-            <AppShell currentPage="student" title="👤 개별학생대시보드" subtitle="Tier3 학생 현황을 한눈에 보고, 학생을 고르면 개별 대시보드가 열립니다 · 중재 작성은 '개별학생 행동중재'에서">
+            <AppShell currentPage="student" title="👤 개별학생대시보드" subtitle="Tier3 학생 현황(3월~현재)을 한눈에 보고, 학생을 고르면 개별 대시보드가 열립니다 · 중재 작성은 '개별학생 행동중재'에서" hideDateFilter={true}>
                 <Tier3Overview />
                 <h2 style={{ margin: "0 0 10px", fontSize: "1.05rem" }}>👤 전체 학생</h2>
                 <input value={q} onChange={e => setQ(e.target.value)} placeholder="이름 · 학생코드 · 학급 검색"
