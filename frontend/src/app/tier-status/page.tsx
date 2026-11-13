@@ -259,7 +259,6 @@ export default function TierStatusPage() {
                                     <th style={{ width: '80px', textAlign: 'center' }}>변경일</th>
                                     <th style={{ width: '140px' }}>메모</th>
                                     <th style={{ width: '60px', textAlign: 'center' }}>상세분석</th>
-                                    <th style={{ width: '50px', textAlign: 'center' }}>BIP</th>
                                     {isAdmin() && <th style={{ width: '80px', textAlign: 'center' }}>관리</th>}
                                 </tr>
                             </thead>
@@ -361,9 +360,6 @@ export default function TierStatusPage() {
                                             </td>
                                             <td style={{ textAlign: 'center' }}>
                                                 <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>📊</button>
-                                            </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}/bip`)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>📋</button>
                                             </td>
                                             {isAdmin() && (
                                                 <td style={{ textAlign: 'center' }}>

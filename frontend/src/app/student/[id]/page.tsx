@@ -366,7 +366,6 @@ export default function StudentDetail() {
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button onClick={() => router.push(`/behavior?student=${encodeURIComponent(code)}`)} className="btn" style={{ background: C.red, color: "#fff" }}>🚨 위기행동 기록</button>
-                <button onClick={() => router.push(`/student/${encodeURIComponent(code)}/bip`)} className="btn btn-ai">🧩 행동중재계획(BIP)</button>
                 <button onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)} className="btn btn-secondary">🧩 개별 행동중재</button>
                 <button onClick={() => router.push(`/logs?q=${encodeURIComponent(code)}`)} className="btn btn-secondary">🗂️ 전체 로그</button>
               </div>
@@ -377,7 +376,7 @@ export default function StudentDetail() {
           <TeacherCoach state={coach.state} facts={{ change: coach.change, histBefore8: coach.histBefore8, tier3: coach.tier3, linked: coach.linked, confirmed: coach.confirmed }}
             onRecord={() => router.push(`/behavior?student=${encodeURIComponent(code)}`)}
             onTarget={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)}
-            onBip={() => router.push(`/student/${encodeURIComponent(code)}/bip`)} />
+            onBip={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)} />
 
           {/* 1-1b. 무발생 입력 */}
           <section style={card}>
@@ -430,7 +429,6 @@ export default function StudentDetail() {
                     </div>
                   </div>
                 ))}
-                <button onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(code)}`)} className="btn btn-secondary" style={{ alignSelf: "flex-start", fontSize: "0.8rem" }}>그래프·기록 입력 열기</button>
               </div>
             )}
           </section>

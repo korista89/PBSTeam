@@ -123,7 +123,6 @@ function StudentFBAFrame({ student: s }: { student: Tier3Student }) {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={() => window.location.href = `/student/${encodeURIComponent(s.code)}`} style={{ padding: "5px 12px", background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}>개별 대시보드</button>
-          <button onClick={() => window.location.href = `/target-behavior?student=${encodeURIComponent(s.code)}`} style={{ padding: "5px 12px", background: "#8b5cf6", color: "white", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}>행동중재 →</button>
         </div>
       </div>
 

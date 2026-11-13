@@ -124,7 +124,7 @@ export default function ProtocolPage() {
                                 <div key={s} className="card" style={{ padding: "8px 12px", fontSize: "0.82rem" }}><b>{["①", "②", "③", "④", "⑤", "⑥", "⑦"][i]}</b> {s}</div>
                             ))}
                         </div>
-                        <div style={{ ...small, marginTop: 8 }}>각 단계의 문서는 인쇄 양식과 같은 칸에 입력하고 AI 초안을 받을 수 있습니다. 개별 대시보드는 <Link href="/student">/student</Link>입니다.</div>
+                        <div style={{ ...small, marginTop: 8 }}>각 단계의 문서는 인쇄 양식과 같은 칸에 입력하고 AI 초안을 받을 수 있습니다.</div>
                     </Card>
 
                     <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, alignItems: "start" }}>
