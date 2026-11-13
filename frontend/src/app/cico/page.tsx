@@ -155,13 +155,15 @@ function getRateColor(rate: number | null): string {
 
 // CICO 전문가 의사결정 메시지 생성
 function getCICODecisionDetail(s: ReportStudent): { msg: string; color: string; bg: string; icon: string } {
-  const rate = s.rate_num ?? 0;
-  const goal = s.goal_num || parseInt(s.goal_criteria) || 80;
+  if (s.rate_num == null) return { msg: "기록이 부족해 판단할 수 없습니다.", color: "#475569", bg: "#f1f5f9", icon: "ℹ️" };
+  const rate = s.rate_num;
+  const parsedGoal = parseInt(s.goal_criteria);
+  const goal = s.goal_num ?? (Number.isNaN(parsedGoal) ? 80 : parsedGoal);
   const trendVals = s.trend.map(t => { let r = parseFloat(t.rate.replace("%", "")); return r <= 1 ? r * 100 : r; }).filter(r => !isNaN(r));
   const lastTwo = trendVals.slice(-2);
   const isRising = lastTwo.length >= 2 && lastTwo[1] > lastTwo[0];
   const isFalling = lastTwo.length >= 2 && lastTwo[1] < lastTwo[0];
-  const allHighLast2 = lastTwo.every(r => r >= goal);
+  const allHighLast2 = s.decision === "Tier1 하향 권장";
 
   if (rate >= goal && allHighLast2)
     return { msg: `수행률 ${rate}% — 목표 달성 2개월 연속. Tier1 하향을 적극 검토하세요.`, color: "#065f46", bg: "#d1fae5", icon: "🟢" };

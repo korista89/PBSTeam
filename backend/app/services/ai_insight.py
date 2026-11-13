@@ -1097,10 +1097,9 @@ def _build_cico_summary_payload(
             except (ValueError, AttributeError):
                 all_rates_parsed.append(None)
 
-        last2_high = (
-            len(all_rates_parsed) >= 2 and
-            all(r is not None and r >= effective_goal_num for r in all_rates_parsed[-2:])
-        )
+        # 클라이언트가 보낸 추이만으로는 같은 목표와 연속 월을 보장할 수 없다.
+        # 단계 하향은 원자료를 확인한 팀이 결정한다.
+        last2_high = False
 
         ts = tier_map.get(code, {})
         has_sst = str(ts.get("Tier2(SST)", "")).strip() == "O"
@@ -1108,7 +1107,9 @@ def _build_cico_summary_payload(
         cico_only = not (has_sst or has_t3)
 
         # Existing CICO Decision Rule Reuse
-        if last2_high and cico_only:
+        if not recorded_days:
+            decision_rule = "기록 부족: 단계 판단 보류"
+        elif last2_high and cico_only:
             decision_rule = "Tier1 하향 권장 (2개월 연속 목표 달성, CICO 졸업 검토)"
         elif last2_high and not cico_only:
             decision_rule = "CICO 유지 (T3/SST 병행 지원 지속)"

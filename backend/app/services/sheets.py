@@ -2667,7 +2667,7 @@ def get_cico_report_data(month: int):
         month_idx = months_list.index(month_name) if month_name in months_list else -1
 
         # Collect rates from previous months using cached raw values
-        prev_rates = {}  # {code: [rate_list]}
+        prev_rates = {}  # {(code, goal, type, scale, criterion, baseline): [rate_list]}
         if month_idx >= 0:
             start_m = 0
             for mi in range(start_m, month_idx):
@@ -2682,6 +2682,7 @@ def get_cico_report_data(month: int):
                     # (see create_monthly_cico_sheet's fixed_headers), never a bare
                     # "학생코드" column - an exact "학생코드" lookup never matches, so
                     # this always found 0 previous months regardless of student/month.
+                    m_target_idx = find_col_fuzzy(m_headers, ["목표행동", "Target"])
                     m_tier_idx = find_col_fuzzy(m_headers, ["Tier2", "CICO"])
                     m_code_idx = find_col_fuzzy(m_headers, ["학생코드", "Code", "학생명(코드)"])
                     m_rate_idx = find_col_fuzzy(m_headers, ["수행/발생률", "수행률", "발생률", "성취율", "Rate"])
@@ -2729,12 +2730,13 @@ def get_cico_report_data(month: int):
                                             "목표 달성 기준": row[m_goal_idx] if m_goal_idx >= 0 and m_goal_idx < len(row) else "",
                                             "입력 기준": row[m_baseline_idx] if m_baseline_idx >= 0 and m_baseline_idx < len(row) else 0,
                                         })
-                                        if m_calc["rate_num"] is not None:
-                                            rate = m_calc["rate_str"]
+                                        rate = m_calc["rate_str"] if m_calc["rate_num"] is not None else "-"
 
-                                    if code not in prev_rates:
-                                        prev_rates[code] = []
-                                    prev_rates[code].append({"month": m_name, "rate": rate})
+                                    def cell(idx):
+                                        return str(row[idx]).strip() if 0 <= idx < len(row) else ""
+                                    goal_key = (code, cell(m_target_idx), cell(m_type_idx), cell(m_scale_idx), cell(m_goal_idx), cell(m_baseline_idx))
+                                    if all(goal_key[:5]):
+                                        prev_rates.setdefault(goal_key, []).append({"month": m_name, "rate": rate})
                 except SheetUnavailable:
                     raise
                 except Exception:
@@ -2881,11 +2883,13 @@ def get_cico_report_data(month: int):
                     rate_num = calc_result["rate_num"]
                     rate_str = calc_result["rate_str"]
                     achieved = calc_result["achieved"] or achieved
+                else:
+                    rate_str, achieved = "-", ""
 
             if rate_num is None and rate_str and rate_str != "-":
                 try:
                     r = float(rate_str.replace("%", ""))
-                    rate_num = r * 100 if r <= 1 else r
+                    rate_num = r if "%" in rate_str else (r * 100 if r <= 1 else r)
                 except ValueError:
                     pass
 
@@ -2896,7 +2900,19 @@ def get_cico_report_data(month: int):
             if achieved == "O":
                 achieved_count += 1
 
-            trend = list(prev_rates.get(code, []))
+            target_val = str(row[col_idx["목표행동"]]).strip() if "목표행동" in col_idx and col_idx["목표행동"] < len(row) else ""
+            baseline_val = str(row[col_idx["입력 기준"]]).strip() if "입력 기준" in col_idx and col_idx["입력 기준"] < len(row) else ""
+            goal_key = (code, target_val, str(behavior_type_val).strip(), str(scale_val).strip(), str(goal_str).strip(), baseline_val)
+            same_current = sum(1 for candidate in all_values[1:] if (
+                col_idx.get("학생코드", 2) < len(candidate)
+                and str(candidate[col_idx.get("학생코드", 2)]).strip() == code_cell
+                and all(str(candidate[col_idx[k]]).strip() == str(row[col_idx[k]]).strip()
+                        for k in ("목표행동", "목표행동 유형", "척도", "목표 달성 기준", "입력 기준")
+                        if k in col_idx and col_idx[k] < len(candidate) and col_idx[k] < len(row))
+            ))
+            history = prev_rates.get(goal_key, []) if all(goal_key[:5]) and same_current == 1 else []
+            # 같은 목표가 한 달에 중복되면 어느 행이 같은 목표인지 알 수 없다.
+            trend = [t for t in history if sum(1 for x in history if x["month"] == t["month"]) == 1]
             trend.append({"month": month_name, "rate": rate_str})
 
             # Daily data (current month)
@@ -2939,20 +2955,22 @@ def get_cico_report_data(month: int):
             effective_goal_num = (100 - goal_num) if "이하" in goal_str else goal_num
 
             # Decision logic
-            decision = "CICO 유지"
+            decision = "기록 부족: 판단 보류"
             decision_color = "#3b82f6"
 
             if rate_num is not None:
                 all_rates_parsed = []
                 for t in trend:
                     try:
-                        r = float(t["rate"].replace("%", ""))
-                        all_rates_parsed.append(r * 100 if r <= 1 else r)
+                        raw_rate = str(t["rate"]).strip()
+                        r = float(raw_rate.replace("%", ""))
+                        all_rates_parsed.append(r if "%" in raw_rate else (r * 100 if r <= 1 else r))
                     except (ValueError, AttributeError):
                         all_rates_parsed.append(None)
 
                 last2_high = (
-                    len(all_rates_parsed) >= 2 and
+                    len(all_rates_parsed) >= 2 and month_idx > 0 and
+                    trend[-2]["month"] == months_list[month_idx - 1] and
                     all(r is not None and r >= effective_goal_num for r in all_rates_parsed[-2:])
                 )
 

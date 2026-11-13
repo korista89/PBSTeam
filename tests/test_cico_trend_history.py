@@ -67,3 +67,47 @@ class CicoTrendHistoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_missing_month_and_other_goal_do_not_trigger_downgrade():
+    from app.services import sheets
+    other = _row("100%")
+    other[5] = "다른 목표"
+    data = {3: [HEADERS, _row("100%")], 5: [HEADERS, other], 6: [HEADERS, _row("100%")], 7: [HEADERS, _row("100%")], 8: [HEADERS, _row("100%")]}
+    def report(month):
+        with mock.patch.object(sheets, "get_cached", return_value=None), \
+             mock.patch.object(sheets, "get_cico_raw_sheet_values", side_effect=lambda m: data.get(m, [])), \
+             mock.patch.object(sheets, "fetch_student_status", return_value=[]), \
+             mock.patch.object(sheets, "get_beable_code_mapping", return_value={}), \
+             mock.patch.object(sheets, "set_cached", return_value=None):
+            return sheets.get_cico_report_data(month)["students"][0]
+    june = report(6)
+    assert [x["month"] for x in june["trend"]] == ["3월", "6월"]
+    assert june["decision"] != "Tier1 하향 권장"
+    assert report(7)["decision"] == "Tier1 하향 권장"
+
+
+def test_duplicate_goal_history_does_not_trigger_downgrade():
+    from app.services import sheets
+    data = {6: [HEADERS, _row("100%"), _row("100%")], 7: [HEADERS, _row("100%")]}
+    with mock.patch.object(sheets, "get_cached", return_value=None), \
+         mock.patch.object(sheets, "get_cico_raw_sheet_values", side_effect=lambda m: data.get(m, [])), \
+         mock.patch.object(sheets, "fetch_student_status", return_value=[]), \
+         mock.patch.object(sheets, "get_beable_code_mapping", return_value={}), \
+         mock.patch.object(sheets, "set_cached", return_value=None):
+        result = sheets.get_cico_report_data(7)["students"][0]
+    assert result["decision"] != "Tier1 하향 권장"
+
+
+def test_empty_daily_records_do_not_reuse_stale_rate():
+    from app.services import sheets
+    data = {6: [HEADERS, _row("100%", ("", ""))], 7: [HEADERS, _row("100%", ("", "")), [""]]}
+    with mock.patch.object(sheets, "get_cached", return_value=None), \
+         mock.patch.object(sheets, "get_cico_raw_sheet_values", side_effect=lambda m: data.get(m, [])), \
+         mock.patch.object(sheets, "fetch_student_status", return_value=[]), \
+         mock.patch.object(sheets, "get_beable_code_mapping", return_value={}), \
+         mock.patch.object(sheets, "set_cached", return_value=None):
+        result = sheets.get_cico_report_data(7)["students"][0]
+    assert result["rate_num"] is None
+    assert result["decision"] == "기록 부족: 판단 보류"
+    assert all(t["rate"] == "-" for t in result["trend"])
