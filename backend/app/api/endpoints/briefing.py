@@ -9,7 +9,7 @@ from app.api.deps import require_authenticated_user, normalize_class_identifier
 from app.adapters.sheets.tier_status import TierStatusAdapter
 from app.core.time import today_kst
 from app.services.briefing import build_briefing, semester_range
-from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config, fetch_approval_states
+from app.services.sheets import fetch_all_records, fetch_student_status, get_holidays_from_config, fetch_approval_states, fetch_prior_daily_totals
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ def get_admin_briefing(refresh: bool = False, current_user: Dict[str, Any] = Dep
         holidays=get_holidays_from_config() or [],
         today=today,
         signoffs=fetch_approval_states(),
+        prior_daily=None if cls else fetch_prior_daily_totals(),  # 학급 범위에는 학교 전체 합계를 섞지 않는다
     )
     data["scope"] = cls or "전교"
     set_cached(key, data)

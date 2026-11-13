@@ -86,6 +86,14 @@ def main():
     for (y, ym) in sorted(groups):
         for (c, v), (n, st) in sorted(groups[(y, ym)].items()):
             out.append([y, ym, c, v, n, len(st)])
+    # 날짜별 전체 합계(학교 전체, 학생 식별 없음) — 연도 비교 차트·브리핑 '작년 같은 기간'이 원자료 없이 계속 동작하게 한다
+    daily = collections.defaultdict(lambda: [0, set()])
+    for r in rows.values():
+        d = S.normalize_date_string(r[di])
+        daily[d][0] += 1
+        daily[d][1].add(r[si])
+    for d in sorted(daily):
+        out.append([hak_year(d), d[:7], "일별전체", d, daily[d][0], len(daily[d][1])])
     print(f"요약 {len(out) - 1}행 생성(연월 {len(groups)}개, 항목 {len({(r[2], r[3]) for r in out[1:]})}종)")
     if not apply:
         print("점검만 했습니다(쓰기 없음). 실제 반영은 --apply")

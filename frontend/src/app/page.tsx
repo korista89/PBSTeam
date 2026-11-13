@@ -431,11 +431,13 @@ export default function Home() {
   const weeklyTrendsCompare = (data as any)?.weekly_trends_compare || null;
   const hasYearlyCompare = !!(weeklyTrendsCompare?.data?.length);
   const weeklyTrendChartData = hasYearlyCompare ? weeklyTrendsCompare.data : weeklyTrends;
+  // 원자료가 폐기된 해는 집계 요약으로 채우고, 값이 전혀 없는 해(null)는 선·범례에서 뺀다(0으로 평평하게 그려지던 문제).
+  const hasSeries = (k: string) => !!weeklyTrendsCompare?.data?.some((r: any) => r[k] !== null && r[k] !== undefined);
   const weeklyTrendSeries = hasYearlyCompare ? [
     { dataKey: "count_prev2", name: `${weeklyTrendsCompare.prev2_year}년`, color: "#facc15" },
     { dataKey: "count_prev1", name: `${weeklyTrendsCompare.prev1_year}년`, color: "#84cc16" },
     { dataKey: "count_curr", name: `${weeklyTrendsCompare.curr_year}년`, color: "#6366f1" },
-  ] : undefined;
+  ].filter(x => x.dataKey === "count_curr" || hasSeries(x.dataKey)) : undefined;
   // Tier현황 페이지와 동일한 raw 배정 카운트 사용 (donut용 tierDist는 세그먼트 중복 배제된 값이라 다름)
   const tier1Count = summary.tier1_count ?? 0;
   const tier2CicoCount = summary.tier2_cico_count ?? 0;

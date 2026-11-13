@@ -85,6 +85,7 @@ class _Ctx:
             if code:
                 self.info[code] = {"name": str(s.get("학생이름", "")).strip() or code,
                                    "class": str(s.get("학급", "")).strip(), "tier": _tier(s)}
+        self.prior: Dict[date, int] = {}  # 폐기된 이전 학년도의 날짜별 전체 건수(비교용 집계). 전교 범위에서만 쓴다.
         self.rows = []
         for r in records:
             d = _d(r.get("행동발생날짜", ""))
@@ -136,8 +137,10 @@ def _monthly(rows) -> List[Dict[str, Any]]:
 
 def _period(ctx: _Ctx, label: str, a: date, b: date, pa: date, pb: date, prev_label: str, series: str) -> Dict[str, Any]:
     cur, prev = ctx.between(a, b), ctx.between(pa, pb)
+    raw_days = {d for d, _, _ in ctx.rows}
+    prev_n = len(prev) + sum(n for d, n in ctx.prior.items() if pa <= d <= pb and d not in raw_days)  # 원자료가 없는 날은 집계 요약으로
     out = {"label": label, "start": a.isoformat(), "end": b.isoformat(), **_summary(ctx, cur),
-           "prev_label": prev_label, "prev_count": len(prev), "change_pct": _pct(len(cur), len(prev))}
+           "prev_label": prev_label, "prev_count": prev_n, "change_pct": _pct(len(cur), prev_n)}
     out["series"] = _daily(cur, a, b) if series == "daily" else _monthly(cur)
     return out
 
@@ -225,9 +228,14 @@ def _signed(p: Optional[int]) -> str:
 
 def build_briefing(records: List[dict], students: List[dict], holidays: Iterable[str], today: date,
                    cico_trend: Optional[List[dict]] = None,
-                   signoffs: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+                   signoffs: Optional[Dict[str, Dict[str, Any]]] = None,
+                   prior_daily: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """signoffs: 결재함 단계 기록 {Log_ID: {단계: ...}}. 있으면 '결재 대기'를 3단계 확인(담당자·교감·학교장)이 끝나지 않은 보고서(최근 30일)로 센다."""
     ctx = _Ctx(records, students)
+    for k, v in (prior_daily or {}).items():
+        dd = _d(k)
+        if dd:
+            ctx.prior[dd] = v
     holidays = list(holidays)
     d1, d2 = prev_school_days(today, holidays, 2)
     sem_label, s_a, s_b = semester_range(today)

@@ -4410,3 +4410,31 @@ def add_approval_step(log_id: str, step: str, by: str, cancel: bool = False, mem
     ws.append_row([log_id, step, "취소" if cancel else "확인", by,
                    now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"), memo], value_input_option="RAW")
     invalidate_cache("approvals:")
+
+
+_PRIOR_DAILY_CACHE: Dict[str, Any] = {"at": 0.0, "data": {}}
+
+
+def fetch_prior_daily_totals(ttl: int = 1800) -> Dict[str, int]:
+    """폐기된 이전 학년도의 날짜별 전체 위기행동 건수 {'YYYY-MM-DD': n}.
+    숨김 탭 '학년도_요약'의 '일별전체' 행에서 읽는다(학생·학급 정보 없는 학교 전체 합계).
+    연도 비교 차트·브리핑의 '작년 같은 기간'이 원자료 없이도 계속 동작하게 한다."""
+    import time
+    now = time.time()
+    if now - _PRIOR_DAILY_CACHE["at"] < ttl:
+        return _PRIOR_DAILY_CACHE["data"]
+    out: Dict[str, int] = {}
+    try:
+        ws = get_main_worksheet()
+        if ws is not None:
+            for r in ws.spreadsheet.worksheet("학년도_요약").get_all_values()[1:]:
+                if len(r) >= 5 and r[2] == "일별전체":
+                    try:
+                        out[r[3]] = int(r[4])
+                    except ValueError:
+                        pass
+    except Exception as e:  # 탭이 없거나 읽기 실패 → 비교만 빠지고 나머지는 정상
+        logger.warning(f"학년도_요약 읽기 실패: {e}")
+        return _PRIOR_DAILY_CACHE["data"]
+    _PRIOR_DAILY_CACHE.update(at=now, data=out)
+    return out

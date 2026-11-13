@@ -235,19 +235,42 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             curr_year = pd.to_datetime(end_date).year if end_date else pd.Timestamp.now().year
             prev1_year, prev2_year = curr_year - 1, curr_year - 2
 
+            # 폐기된 이전 학년도는 '학년도_요약'의 날짜별 전체 합계로 보충한다(원자료 없음).
+            # 요약은 학교 전체 합계뿐이라 학급 범위(class_id)에는 쓰지 않는다 → 그 해 선은 비운다.
+            prior_by_yw = {}
+            if not class_id:
+                from datetime import date as _date
+                from app.services.sheets import fetch_prior_daily_totals
+                for iso, n in fetch_prior_daily_totals().items():
+                    try:
+                        iy, iw, _ = _date.fromisoformat(iso).isocalendar()
+                    except ValueError:
+                        continue
+                    prior_by_yw[(iy, iw)] = prior_by_yw.get((iy, iw), 0) + n
+            raw_years = {y for (y, _w) in by_year_week.index}
+
+            def _count(y, w):
+                """(그 해에 원자료도 요약도 없으면 None = 차트에서 선을 그리지 않음)"""
+                if y in raw_years:
+                    return int(by_year_week.get((y, w), 0))
+                if any(k[0] == y for k in prior_by_yw):
+                    return int(prior_by_yw.get((y, w), 0))
+                return None
+
             curr_weeks = sorted({w for (y, w) in by_year_week.index if y == curr_year and not is_vacation_week(f"{curr_year}-W{w:02d}")})
             compare_rows = [
                 {
                     "week": f"{curr_year}-W{w:02d}",
                     "count_curr": int(by_year_week.get((curr_year, w), 0)),
-                    "count_prev1": int(by_year_week.get((prev1_year, w), 0)),
-                    "count_prev2": int(by_year_week.get((prev2_year, w), 0)),
+                    "count_prev1": _count(prev1_year, w),
+                    "count_prev2": _count(prev2_year, w),
                 }
                 for w in curr_weeks
             ]
             weekly_trends_compare = {
                 "curr_year": int(curr_year), "prev1_year": int(prev1_year), "prev2_year": int(prev2_year),
-                "data": compare_rows
+                "data": compare_rows,
+                "prior_source": "비식별 집계 요약(학교 전체 합계)" if prior_by_yw else "",
             }
     except SheetUnavailable:
         raise

@@ -797,7 +797,8 @@ def generate_bcba_section_analysis(
             yc = raw_summary["yearly_compare"]
             compare_note = f"""
 [동일 주차 기준 연도별 비교 데이터 ({yc.get('prev2_year')}년/{yc.get('prev1_year')}년/{yc.get('curr_year')}년)]
-{json.dumps(yc.get('data', []), ensure_ascii=False, indent=2)}"""
+{json.dumps(yc.get('data', []), ensure_ascii=False, indent=2)}
+※ 이전 연도 값은 원자료 폐기 후 남긴 비식별 집계 요약(학교 전체 합계)이다. null은 그 해 자료 없음이며 0건과 다르다. 개별 학생·학급 단위 연도 비교는 하지 않는다."""
         prompt = f"""[분석 영역: 주별 위기행동 발생 추이(Weekly Trend) 분석]
 [주차별 건수 데이터 (시간 순)]
 {data_str}
