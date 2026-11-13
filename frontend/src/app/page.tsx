@@ -483,7 +483,8 @@ export default function Home() {
               .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
               .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
               @media (max-width: 1400px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
-              @media (max-width: 768px) { .grid-2, .grid-4 { grid-template-columns: 1fr; } }
+              .grid-span-2 { grid-column: span 2; min-width: 0; }
+              @media (max-width: 768px) { .grid-2, .grid-4 { grid-template-columns: minmax(0, 1fr); } .grid-span-2 { grid-column: auto; } }
               .section-heading { font-size: 1.05rem; font-weight: 800; color: var(--text-primary); margin: 24px 0 12px 0; display: flex; align-items: center; gap: 8px; }
               .section-heading::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
             `}</style>
@@ -580,7 +581,7 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <div style={{ gridColumn: 'span 2' }}>
+              <div className="grid-span-2">
                 <WeeklyAnalysisChart
                   data={weeklyTrendChartData}
                   series={weeklyTrendSeries}
