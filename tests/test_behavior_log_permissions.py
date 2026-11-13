@@ -104,8 +104,22 @@ def test_admin_revise_then_sign_all_fills_missing_steps():
         assert status(ws, "a") == "Revision Requested"
         r = B.sign_all_behavior_logs({"log_ids": ["a", "c"]}, current_admin=ADMIN)
     assert status(ws, "a") == "Approved" and status(ws, "c") == "Approved"
-    assert r == {"success": True, "steps_added": 5, "status_changed": 2}   # c는 교감확인이 이미 있어 2단계만
-    assert {(x[0], x[1]) for x in added} >= {("a", "담당자확인"), ("c", "학교장확인")}
+    # a는 데이터만 입력이라 담당자확인 1단계, c는 보고서인데 교감확인이 이미 있어 2단계
+    assert r == {"success": True, "steps_added": 3, "status_changed": 2}
+    assert sorted((x[0], x[1]) for x in added) == [("a", "담당자확인"), ("c", "담당자확인"), ("c", "학교장확인")]
+
+
+def test_data_only_log_completes_with_staff_check_only():
+    ws = WS([["d", "", "", "초1-1", "1011", "X - 보고서 작성 불필요", ""]])
+    signed = {}
+
+    def add(log_id, step, by, cancel=False, memo=""):
+        (signed.pop(step, None) if cancel else signed.__setitem__(step, {"by": by}))
+
+    with _patch(ws), mock.patch("app.services.sheets.add_approval_step", side_effect=add), \
+         mock.patch("app.services.sheets.fetch_approval_states", side_effect=lambda force_refresh=False: {"d": dict(signed)}):
+        r = B.sign_behavior_log({"log_id": "d", "step": "담당자확인"}, current_admin=ADMIN)
+    assert r["complete"] and status(ws, "d") == "Approved"
 
 
 def test_crisis_without_report_rejected_and_author_from_session():

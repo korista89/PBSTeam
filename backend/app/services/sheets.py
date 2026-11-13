@@ -4172,12 +4172,20 @@ if __name__ == "__main__":
 # 행은 추가만 한다(누가·언제 눌렀는지 이력 보존). 같은 Log_ID·단계의 마지막 행이 현재 상태다.
 # =============================
 APPROVAL_STEPS = ["담당자확인", "교감확인", "학교장확인", "학교장보고요청"]
-# 이 셋이 모두(순서 무관) 확인되어야 결재 완료다
+# 보고서는 이 셋이 모두(순서 무관) 확인되어야 결재 완료다
 FINAL_STEPS = ["담당자확인", "교감확인", "학교장확인"]
 
 
-def is_fully_signed(signed: Optional[Dict[str, Any]]) -> bool:
-    return all(s in (signed or {}) for s in FINAL_STEPS)
+# '데이터만 입력'(보고서 없는 기록)은 담당자확인 하나로 결재 완료다
+DATA_STEPS = ["담당자확인"]
+
+
+def required_steps(is_report: bool = True) -> List[str]:
+    return FINAL_STEPS if is_report else DATA_STEPS
+
+
+def is_fully_signed(signed: Optional[Dict[str, Any]], is_report: bool = True) -> bool:
+    return all(s in (signed or {}) for s in required_steps(is_report))
 APPROVAL_HEADERS = ["Log_ID", "Step", "Action", "By", "At", "Memo"]
 
 

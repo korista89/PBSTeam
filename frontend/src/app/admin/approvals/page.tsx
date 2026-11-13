@@ -26,11 +26,13 @@ const KINDS = [
   { key: "report", label: "🚨 보고서" },
   { key: "data", label: "📝 데이터만 입력" },
 ] as const;
-// 결재 상태는 3단계 확인 완료 여부가 기준이다(구글폼 보고서는 시트 Status 가 비어 있어 Status 만으로는 알 수 없다).
+// 결재 상태는 확인 단계 완료 여부가 기준이다(구글폼 보고서는 시트 Status 가 비어 있어 Status 만으로는 알 수 없다).
+// 보고서는 담당자·교감·학교장 3단계, '데이터만 입력'은 담당자확인 1단계다(백엔드 required_steps와 같아야 한다).
+const stepsOf = (r: Row) => (r.kind === "report" ? STEPS : STEPS.slice(0, 1));
 const stateOf = (r: Row) =>
   r.Status === "Revision Requested" ? { label: "재작성 요청", bg: "#ffedd5", fg: "#c2410c" }
   : r.complete ? { label: "결재 완료", bg: "#dcfce7", fg: "#15803d" }
-  : { label: `${STEPS.filter(s => r.signoffs?.[s.key]).length}/3 확인`, bg: r.kind === "report" ? "#fef3c7" : "#f1f5f9", fg: r.kind === "report" ? "#b45309" : "#475569" };
+  : { label: `${stepsOf(r).filter(s => r.signoffs?.[s.key]).length}/${stepsOf(r).length} 확인`, bg: r.kind === "report" ? "#fef3c7" : "#f1f5f9", fg: r.kind === "report" ? "#b45309" : "#475569" };
 const short = (v: unknown) => String(v ?? "").split(":")[0].split("(")[0].trim() || "-";
 const kdate = (s: string) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${+m[2]}. ${+m[3]}.` : s || "-"; };
 const hm = (at: string) => String(at || "").slice(5, 16).replace("-", ".").replace(" ", " ");
@@ -118,7 +120,7 @@ export default function ApprovalsPage() {
   return (
     <AuthCheck>
       <AppShell currentPage="approvals" title={admin ? "✅ 결재함" : "✅ 결재함 (우리 반)"}
-        subtitle={admin ? "담당자·교감·학교장 확인 3개가 모두 끝나야 결재 완료됩니다 (순서 무관)" : "우리 반 기록의 결재 진행 상황입니다 · 재작성 요청을 받은 기록은 '상세·수정'에서 고치면 다시 결재가 올라갑니다"} hideDateFilter={true}
+        subtitle={admin ? "보고서는 담당자·교감·학교장 확인 3개(순서 무관), 데이터만 입력은 담당자확인 1개로 결재 완료됩니다" : "우리 반 기록의 결재 진행 상황입니다 · 재작성 요청을 받은 기록은 '상세·수정'에서 고치면 다시 결재가 올라갑니다"} hideDateFilter={true}
         headerActions={<button onClick={() => void load()} className="btn btn-secondary" disabled={loading}>🔄 새로고침</button>}>
         {(
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -159,7 +161,7 @@ export default function ApprovalsPage() {
               {admin && pendingIds.length > 0 && (
                 confirmAll ? (
                   <span style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <b style={{ fontSize: "0.85rem", color: "#b45309" }}>보이는 {pendingIds.length}건을 3단계 모두 확인 처리합니다</b>
+                    <b style={{ fontSize: "0.85rem", color: "#b45309" }}>보이는 {pendingIds.length}건의 남은 확인 단계를 모두 처리합니다</b>
                     <button onClick={() => setConfirmAll(false)} className="btn btn-secondary" disabled={!!busy}>취소</button>
                     <button onClick={() => void signAll()} className="btn btn-primary" disabled={!!busy}>{busy === "all" ? "처리 중..." : "결재 완료"}</button>
                   </span>
@@ -194,7 +196,7 @@ export default function ApprovalsPage() {
 
                       {/* 결재 단계 */}
                       <div style={{ padding: "10px 16px", background: "#f8fafc", borderTop: "1px solid #eef2f7", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        {STEPS.map((s, i) => {
+                        {stepsOf(r).map((s, i) => {
                           const done = r.signoffs?.[s.key];
                           return (
                             <React.Fragment key={s.key}>

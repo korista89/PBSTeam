@@ -178,9 +178,9 @@ def sign_all_behavior_logs(
     payload: dict = Body(...),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
-    """일괄 결재(관리자): 고른 기록의 남은 확인 단계(담당자·교감·학교장)를 한 번에 채워 결재 완료로 만든다.
+    """일괄 결재(관리자): 고른 기록의 남은 확인 단계(보고서는 담당자·교감·학교장, 데이터만 입력은 담당자)를 한 번에 채워 결재 완료로 만든다.
     누적된 결재를 종결하거나 목록을 한꺼번에 처리할 때 쓴다. 단계 이력은 Approvals 탭에 남는다."""
-    from app.services.sheets import FINAL_STEPS, append_approval_rows, fetch_approval_states
+    from app.services.sheets import required_steps, append_approval_rows, fetch_approval_states
     ids = {str(x).strip() for x in (payload.get("log_ids") or []) if str(x).strip()}
     if not ids:
         raise HTTPException(status_code=400, detail="log_ids 가 비었습니다.")
@@ -188,14 +188,18 @@ def sign_all_behavior_logs(
     memo = str(payload.get("memo") or "일괄 결재").strip()
     try:
         states = fetch_approval_states(force_refresh=True)
-        rows = [[lid, step, "확인", by, at, memo] for lid in sorted(ids) for step in FINAL_STEPS
-                if step not in states.get(lid, {})]
         ws = open_main_sheet(get_sheets_client()).worksheet("Log_Main")
         all_vals = ws.get_all_values()
         headers = all_vals[0] if all_vals else []
-        cells = []
+        rows, cells = [], []
         for i, row in enumerate(all_vals[1:]):
-            if _cell(row, headers, "Log_ID") in ids and _cell(row, headers, "Status") not in ("Approved", "Deleted"):
+            lid = _cell(row, headers, "Log_ID")
+            if lid not in ids or _cell(row, headers, "Status") == "Deleted":
+                continue
+            is_report = _cell(row, headers, ACTION_HEADER) not in NO_REPORT_ACTIONS
+            rows += [[lid, step, "확인", by, at, memo] for step in required_steps(is_report)
+                     if step not in states.get(lid, {})]
+            if _cell(row, headers, "Status") != "Approved":
                 cells += [gspread.Cell(row=i + 2, col=headers.index("Status") + 1, value="Approved"),
                           gspread.Cell(row=i + 2, col=headers.index("Approval_Meta") + 1, value=f"Approved by {by} (일괄 결재) on {at}")]
         if rows:
@@ -234,7 +238,7 @@ def sign_behavior_log(
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
     """결재 단계 확인(관리자): 담당자확인·교감확인·학교장확인·학교장보고요청. cancel=true 면 취소.
-    담당자·교감·학교장 확인이 모두(순서 무관) 되면 보고서는 최종 승인(Approved),
+    보고서는 담당자·교감·학교장 확인이 모두(순서 무관), 데이터만 입력은 담당자확인만 되면 승인(Approved),
     승인 뒤 셋 중 하나라도 취소하면 다시 결재 대기(Pending)로 돌아간다."""
     from app.services.sheets import APPROVAL_STEPS, add_approval_step, fetch_approval_states, is_fully_signed
     step = str(payload.get("step", "")).strip()
@@ -244,11 +248,11 @@ def sign_behavior_log(
     try:
         ws, headers, row_num, row = _load_log_row(payload.get("log_id"))
         add_approval_step(payload["log_id"], step, _author_label(current_admin), cancel=cancel, memo=str(payload.get("memo", "")))
-        complete = is_fully_signed(fetch_approval_states(force_refresh=True).get(payload["log_id"]))
         status = _cell(row, headers, "Status")
         is_report = _cell(row, headers, ACTION_HEADER) not in NO_REPORT_ACTIONS
+        complete = is_fully_signed(fetch_approval_states(force_refresh=True).get(payload["log_id"]), is_report)
         if complete and status != "Approved":
-            _set_status(ws, headers, row_num, "Approved", f"Approved by {_author_label(current_admin)} (3단계 확인 완료) on {_now_str()}")
+            _set_status(ws, headers, row_num, "Approved", f"Approved by {_author_label(current_admin)} ({'3단계' if is_report else '담당자'} 확인 완료) on {_now_str()}")
         elif not complete and is_report and status == "Approved":
             _set_status(ws, headers, row_num, "Pending", f"Reopened by {_author_label(current_admin)} ({step} 취소) on {_now_str()}")
         return {"success": True, "step": step, "cancel": cancel, "complete": complete}
@@ -288,7 +292,7 @@ def get_approval_inbox(
         # 결재 대기·재작성 요청은 기간과 무관하게 보이고, 나머지는 최근 기간만
         if status not in ("Pending", "Revision Requested") and normalize_date_string(r.get("행동발생날짜", "")) < since:
             continue
-        complete = is_fully_signed(signed)
+        complete = is_fully_signed(signed, is_report)
         if pending_only and complete:
             continue
         out.append({**r, "학급": cls, "kind": "report" if is_report else "data", "signoffs": signed, "complete": complete})
