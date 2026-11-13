@@ -851,6 +851,26 @@ def generate_bcba_section_analysis(
 # §2.5 P0 AI Structured Summary Builders (계산은 Python, 해석은 AI)
 # ==============================================================================
 
+_CICO_SCALE_MAX = {"0점/1점/2점": 2.0, "0~5": 5.0, "0~7교시": 7.0, "1~100회": 100.0, "1~100분": 100.0}
+
+
+def _cico_day_attainment(value, scale: str, is_decrease: bool):
+    """하루 칸 값을 0~1 달성도로 바꾼다(높을수록 좋음). 빈칸·판독 불가는 None.
+    sheets._calculate_cico_rate()와 같은 규칙: 점수/최댓값, 감소 목표행동은 뒤집는다."""
+    v = str(value or "").strip()
+    if not v or v in ("-", "·"):
+        return None
+    if v.upper() in ("O", "V", "X"):
+        hit = 1.0 if v.upper() in ("O", "V") else 0.0
+    else:
+        try:
+            num = float(v.replace("점", "").replace("회", "").replace("분", "").replace("교시", "").strip())
+        except ValueError:
+            return None
+        hit = max(0.0, min(1.0, num / _CICO_SCALE_MAX.get(scale, 2.0 if "점" in v else 100.0)))
+    return 1.0 - hit if is_decrease else hit
+
+
 def _build_cico_summary_payload(
     students_data: list,
     behavior_logs: list = None,
@@ -903,30 +923,40 @@ def _build_cico_summary_payload(
         # empty and every student showed up as "0 recorded days" regardless of
         # how much data actually existed.
         daily_records = s.get("daily_data") or s.get("daily") or []
-        valid_days = [
-            d for d in daily_records
-            if isinstance(d, dict) and str(d.get("value", "")).strip() in ["O", "o", "V", "v", "X", "x"]
+        scale = str(s.get("scale") or s.get("척도") or "").strip()
+        # 점수 척도(0점/1점/2점·0~5·0~7교시·회/분)도 기록일로 센다. 예전에는 O/V/X만
+        # 세어 "1점"만 입력된 달이 "기록 0일"로 AI에 넘어갔다.
+        day_scores = [
+            (d, sc) for d in daily_records if isinstance(d, dict)
+            for sc in [_cico_day_attainment(d.get("value"), scale, is_decrease)] if sc is not None
         ]
-        success_values = ["X", "x"] if is_decrease else ["O", "o", "V", "v"]
+        valid_days = [d for d, _ in day_scores]
+        success_flags = [sc * 100 >= effective_goal_num for _, sc in day_scores]
 
         recorded_days = len(valid_days)
-        success_days = len([d for d in valid_days if str(d.get("value", "")).strip() in success_values])
+        success_days = sum(success_flags)
         total_recorded_days += recorded_days
         total_success_days += success_days
 
-        rate_num = round(success_days / recorded_days * 100, 1) if recorded_days > 0 else 0.0
+        # 화면(get_cico_report_data)이 계산한 수행률이 있으면 그대로 써서 화면과 AI 수치를 맞춘다.
+        shown_rate = s.get("rate_num")
+        if shown_rate is None:
+            m = re.search(r"(\d+(?:\.\d+)?)", str(s.get("rate") or ""))
+            shown_rate = float(m.group(1)) if m else None
+        if shown_rate is not None and recorded_days:
+            rate_num = round(float(shown_rate), 1)
+        else:
+            rate_num = round(sum(sc for _, sc in day_scores) / recorded_days * 100, 1) if recorded_days else 0.0
         is_goal_achieved = rate_num >= effective_goal_num
         if is_goal_achieved:
             total_goals_met += 1
 
         # Recent 5-day and previous 5-day rates
-        recent_5 = valid_days[-5:] if len(valid_days) >= 5 else valid_days
-        recent_5_success = len([d for d in recent_5 if str(d.get("value", "")).strip() in success_values])
-        recent_5day_rate = round(recent_5_success / len(recent_5) * 100, 1) if recent_5 else rate_num
+        recent_5 = success_flags[-5:]
+        recent_5day_rate = round(sum(recent_5) / len(recent_5) * 100, 1) if recent_5 else rate_num
 
-        prev_5 = valid_days[-10:-5] if len(valid_days) >= 10 else []
-        prev_5_success = len([d for d in prev_5 if str(d.get("value", "")).strip() in success_values])
-        previous_5day_rate = round(prev_5_success / len(prev_5) * 100, 1) if prev_5 else None
+        prev_5 = success_flags[-10:-5] if len(success_flags) >= 10 else []
+        previous_5day_rate = round(sum(prev_5) / len(prev_5) * 100, 1) if prev_5 else None
 
         # Trend direction
         if previous_5day_rate is not None:
@@ -944,18 +974,13 @@ def _build_cico_summary_payload(
         # Consecutive success/failure count
         consecutive_success = 0
         consecutive_failure = 0
-        for d in reversed(valid_days):
-            val = str(d.get("value", "")).strip()
-            if val in success_values:
-                if consecutive_failure == 0:
-                    consecutive_success += 1
-                else:
-                    break
-            elif val in ["O", "o", "V", "v", "X", "x"]:
-                if consecutive_success == 0:
-                    consecutive_failure += 1
-                else:
-                    break
+        for ok in reversed(success_flags):
+            if ok and consecutive_failure == 0:
+                consecutive_success += 1
+            elif not ok and consecutive_success == 0:
+                consecutive_failure += 1
+            else:
+                break
 
         # Historical multi-month trend
         historical_trend = s.get("trend", [])
