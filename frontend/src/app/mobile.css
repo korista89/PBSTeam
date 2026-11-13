@@ -7,6 +7,10 @@ img, canvas, svg, video { max-width: 100%; }
   .app-content [style*="grid-template-columns"] {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)) !important;
   }
+  /* 작성자가 이미 자동 열(최소 폭 지정)로 만든 그리드는 150px로 덮어쓰면 카드가 반쪽으로 눌린다. 최소 폭만 260px로 낮춘다 */
+  .app-content [style*="auto-fit"], .app-content [style*="auto-fill"] {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)) !important;
+  }
   .app-content [style*="grid-template-columns"] > * { min-width: 0; }
   /* 위 자동 열 규칙은 globals.css의 "휴대폰 1열" 클래스 규칙보다 우선순위가 높아 덮어쓴다(위기행동 화면이 2열로 찌그러진 원인).
      같은 우선순위로 뒤에 다시 1열을 지정한다. 목록은 globals.css와 같아야 한다. */
