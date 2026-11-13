@@ -13,7 +13,6 @@ import { StudentData } from "../../types";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
 import { useSheetLiveSync } from "../../hooks/useSheetLiveSync";
-import { useDateRange } from "../../components/GlobalNav";
 import ReadableAIResult from "../../components/ReadableAIResult";
 import LogDetailPanel from "../../components/LogDetailPanel";
 import { maskName } from "../../utils";
@@ -135,7 +134,9 @@ export default function StudentDetail() {
   const params = useParams();
   const router = useRouter();
   const studentKey = decodeURIComponent(params.id as string);
-  const { startDate, endDate } = useDateRange();
+  // 기본 기간: 그 학년도 3월 1일 ~ 오늘(전역 날짜 필터 대신 고정)
+  const endDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const startDate = schoolYearStart(endDate);
   const apiUrl = API_BASE_URL;
 
   const [data, setData] = useState<StudentData | null>(null);
@@ -338,7 +339,7 @@ export default function StudentDetail() {
 
   return (
     <AuthCheck>
-      <AppShell currentPage="student" title="👤 개별학생대시보드" subtitle={`분석기간 ${startDate || "처음"} ~ ${endDate || "오늘"} 기준`}>
+      <AppShell currentPage="student" title="👤 개별학생대시보드" subtitle={`분석기간 ${startDate} ~ ${endDate} (3월~현재) 기준`} hideDateFilter={true}>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
           {/* 1. 학생 헤더 */}
