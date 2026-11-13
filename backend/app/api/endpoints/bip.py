@@ -394,6 +394,46 @@ def ai_bip_full(
 class AIDecisionRecommendationRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    summary: Optional[str] = None   # 화면이 계산한 자료 요약(표적행동 기록 포함) — 협의록 초안에 씀
+    choice: Optional[str] = None    # 화면에서 고른 결정 선택지
+
+
+def _decision_context(student_code: str, req: AIDecisionRecommendationRequest):
+    """의사결정 제안·팀 협의록 초안 공통 자료: (학생정보, 기간자료 JSON, BIP, EBP, 팀 협의 기록, 기록 수 게이트)."""
+    import json
+    from app.services.sheets import fetch_all_records, fetch_student_status, fetch_meeting_notes, get_bip, normalize_date_string
+
+    beable_code = _resolve_beable_code(student_code)
+    raw_logs = _filter_student_logs(fetch_all_records(), student_code, beable_code)
+    if req.start_date and req.end_date:
+        sd = normalize_date_string(req.start_date)
+        ed = normalize_date_string(req.end_date)
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
+
+    student_info = {"code": student_code}
+    for s in fetch_student_status():
+        if str(s.get("학생코드", "")).strip() == student_code:
+            student_info = {"code": student_code, "name": s.get("학생명", student_code), "class": s.get("학급", ""), "tier": tier_label(s)}
+            break
+
+    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
+    gate = fba_data_gate(len(norm_logs))
+    evidence_summary = build_fba_evidence_summary(student_info, norm_logs)
+    period_data = json.dumps({
+        "period": f"{req.start_date or '전체'} ~ {req.end_date or '전체'}",
+        "metrics": evidence_summary["deterministic_metrics"],
+        "narrative_coverage": evidence_summary["narrative_and_abc_coverage"],
+        "representative_evidence": evidence_summary["representative_evidence_samples"],
+    }, ensure_ascii=False, separators=(",", ":"))
+
+    bip = get_bip(student_code) or {}
+    current_bip = "\n".join(f"- {k}: {v}" for k, v in bip.items() if k not in ("StudentCode", "UpdatedAt", "Author") and v)
+    ebp = "\n".join(f"- {k}: {bip.get(k)}" for k in ("PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP") if bip.get(k))
+    # 이 학생 사례 협의 기록(개별학생 행동중재 ⑤ 탭에 누적 저장되는 meeting_type)
+    notes = fetch_meeting_notes("tier3", student_code)
+    team_notes = "\n".join(f"[{n.get('date','')}] {n.get('content','')}" for n in notes[:10])
+    return student_info, period_data, current_bip, ebp, team_notes, gate
+
 
 @router.post("/students/{student_code}/ai-decision-recommendation")
 def ai_decision_recommendation(
@@ -403,64 +443,28 @@ def ai_decision_recommendation(
 ):
     """⑩ 🤖 데이터기반 의사결정(DBDM) 제안 — 기간 데이터 + 현재 BIP + EBP 실행충실도 + 팀 협의 기록 종합"""
     check_student_scope(student_code, current_user)
-    from app.services.sheets import fetch_all_records, fetch_student_status, fetch_meeting_notes, get_bip, normalize_date_string
-
-    beable_code = _resolve_beable_code(student_code)
-    records = fetch_all_records()
-    raw_logs = _filter_student_logs(records, student_code, beable_code)
-
-    if req.start_date and req.end_date:
-        sd = normalize_date_string(req.start_date)
-        ed = normalize_date_string(req.end_date)
-        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
-
-    status_records = fetch_student_status()
-    student_info = {"code": student_code}
-    for s in status_records:
-        if str(s.get("학생코드", "")).strip() == student_code:
-            student_info = {
-                "code": student_code,
-                "name": s.get("학생명", student_code),
-                "class": s.get("학급", ""),
-                "tier": tier_label(s)
-            }
-            break
-
-    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
-    gate = fba_data_gate(len(norm_logs))
+    student_info, period_data, current_bip, ebp, team_notes, gate = _decision_context(student_code, req)
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
-    import json
-    evidence_summary = build_fba_evidence_summary(student_info, norm_logs)
-    period_data = json.dumps(
-        {
-            "period": f"{req.start_date or '전체'} ~ {req.end_date or '전체'}",
-            "metrics": evidence_summary["deterministic_metrics"],
-            "narrative_coverage": evidence_summary["narrative_and_abc_coverage"],
-            "representative_evidence": evidence_summary["representative_evidence_samples"],
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-
-    bip = get_bip(student_code) or {}
-    current_bip_str = "\n".join(
-        f"- {k}: {v}" for k, v in bip.items()
-        if k not in ("StudentCode", "UpdatedAt", "Author") and v
-    )
-    ebp_str = "\n".join(
-        f"- {k}: {bip.get(k)}" for k in ("PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP")
-        if bip.get(k)
-    )
-
-    notes = fetch_meeting_notes("fba_bip_team", student_code)
-    team_notes_str = "\n".join(f"[{n.get('date','')}] {n.get('content','')}" for n in notes)
-
     result = generate_data_based_decision_recommendation(
-        student_info=student_info,
-        period_data=period_data,
-        current_bip=current_bip_str,
-        ebp_selections=ebp_str,
-        team_notes=team_notes_str
-    )
+        student_info=student_info, period_data=period_data, current_bip=current_bip,
+        ebp_selections=ebp, team_notes=team_notes)
     return {"analysis": result, **gate}
+
+
+@router.post("/students/{student_code}/ai-team-minutes-draft")
+def ai_team_minutes_draft(
+    student_code: str,
+    req: AIDecisionRecommendationRequest,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """개별화교육지원팀 협의회 실시 전 협의록 초안 — 지금까지의 이 학생 자료로 안건·현황·결정(안)을 미리 채운다.
+    기록이 적어도 초안은 만든다(자료 한계를 초안에 적는다)."""
+    check_student_scope(student_code, current_user)
+    from app.services.ai_insight import generate_iep_team_minutes_draft
+    student_info, period_data, current_bip, ebp, team_notes, gate = _decision_context(student_code, req)
+    result = generate_iep_team_minutes_draft(
+        student_info=student_info, period_data=period_data, screen_summary=req.summary or "",
+        current_bip=current_bip, ebp_selections=ebp, team_notes=team_notes,
+        choice=req.choice or "", data_notice="" if gate["eligible"] else gate["notice"])
+    return {"draft": result}

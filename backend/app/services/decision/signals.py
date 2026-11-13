@@ -8,13 +8,15 @@ from app.domain.models import (
     BehaviorEvent, EvidenceRef
 )
 
+# 선행사건·후속결과 필수 안내 시점. 이 날짜 이전 기록은 A·C가 비어도 지적하지 않는다.
+ABC_REQUIRED_SINCE = date(2026, 11, 16)
+
+
 def evaluate_decision_signals(
     student_code: str,
     behavior_events: List[BehaviorEvent],
     as_of_date: Optional[date] = None,
-    safety_window_days: int = 14,
-    is_today_inbox: bool = True,
-    active_tier_names: Optional[List[str]] = None
+    safety_window_days: int = 14
 ) -> List[DecisionSignal]:
     """
     Evaluates deterministic decision support signals for a student.
@@ -37,7 +39,6 @@ def evaluate_decision_signals(
         )
     ]
 
-    has_safety_signal = False
     if recent_safety_events:
         # Sort by event_date descending to pick the most recent incident as primary evidence
         recent_safety_events.sort(key=lambda e: e.event_date, reverse=True)
@@ -63,7 +64,6 @@ def evaluate_decision_signals(
             status=DecisionStatus.OPEN,
             created_at=created_time
         ))
-        has_safety_signal = True
 
     # 2. CHANGE_UP Signal (Current 14d [D-13~D] vs Previous 14d [D-27~D-14])
     cur_start = target_date - timedelta(days=13)
@@ -76,7 +76,6 @@ def evaluate_decision_signals(
     cur_cnt = len(cur_events)
     prev_cnt = len(prev_events)
 
-    has_spike_signal = False
     if cur_cnt >= 4 and (prev_cnt == 0 or cur_cnt >= prev_cnt * 1.5 or (cur_cnt - prev_cnt) >= 3):
         signals.append(DecisionSignal(
             signal_id=f"SIG_SPIKE_{student_code}_{max(e.event_date for e in cur_events)}",
@@ -90,33 +89,21 @@ def evaluate_decision_signals(
             status=DecisionStatus.OPEN,
             created_at=created_time
         ))
-        has_spike_signal = True
 
-    # 4. MORE_DATA Signal (ABC complete < 3)
-    # In Today Action Inbox mode: Only trigger for actively supported students or recent active cases
-    abc_complete = [e for e in behavior_events if e.antecedent and e.consequence]
-
-    should_evaluate_more_data = True
-    if is_today_inbox:
-        # Check if student is active: event within 30 days OR active tier 2/3 OR active safety/spike signal
-        has_recent_events = any(e.event_date >= target_date - timedelta(days=30) for e in behavior_events)
-        is_tier_2_or_3 = bool(
-            active_tier_names and any(
-                t in ["TIER_2_CICO", "TIER_2_SST", "TIER_3", "TIER_3_PLUS"] for t in active_tier_names
-            )
-        )
-        should_evaluate_more_data = has_recent_events or is_tier_2_or_3 or has_safety_signal or has_spike_signal
-
-    if should_evaluate_more_data and len(behavior_events) > 0 and len(abc_complete) < 3:
+    # 4. MORE_DATA: 선행사건·후속결과가 빠진 '새' 기록만 알린다.
+    # 예전 양식은 추정기능만 체크했고 A·C 필수 안내가 없었으므로 ABC_REQUIRED_SINCE 이전 기록은 따지지 않는다.
+    missing = [e for e in behavior_events
+               if e.event_date >= ABC_REQUIRED_SINCE and not (e.antecedent and e.consequence)]
+    if missing:
         signals.append(DecisionSignal(
-            signal_id=f"SIG_DATA_{student_code}_{max(e.event_date for e in behavior_events)}",
+            signal_id=f"SIG_DATA_{student_code}_{max(e.event_date for e in missing)}",
             student_code=student_code,
             signal_type=DecisionSignalType.MORE_DATA,
             severity=SignalSeverity.INFO,
-            title="🟡 FBA 직접 관찰 데이터 부족",
-            reason=f"총 {len(behavior_events)}건의 행동 기록 중 선행사건(A)-후속결과(C)가 완성된 기록이 {len(abc_complete)}건(3건 미만)입니다.",
+            title="🟡 선행사건·후속결과 빠진 기록",
+            reason=f"선행사건·후속결과 필수 안내 뒤 기록 중 {len(missing)}건에 둘 중 하나가 비어 있습니다.",
             evidence=[],
-            recommended_next_action="기능 가설 수립을 위해 교실 일과 중 3회 이상의 ABC 직접 관찰 기록 수집 권장",
+            recommended_next_action="기록 편집에서 선행사건(행동 직전)과 후속결과(행동 직후)를 채워 기능 분석에 쓰이게 하기",
             status=DecisionStatus.OPEN,
             created_at=created_time
         ))

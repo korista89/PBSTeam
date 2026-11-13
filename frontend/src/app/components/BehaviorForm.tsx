@@ -233,7 +233,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     setMessage('');
 
     try {
-      const problem = reportProblem();
+      const problem = (!선행사건.length || !후속결과.length) ? '선행사건과 후속결과를 각각 하나 이상 고르세요(기능 분석에 꼭 필요합니다).' : reportProblem();
       if (problem) { setMessage('❌ ' + problem); return; }
       const res = await axios.post(`${API_BASE_URL}/api/v1/behavior-log`, buildPayload());
 
@@ -394,12 +394,12 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>선행사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직전에 있었던 일 — 복수 선택 가능)</span></label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>선행사건 <span style={{ color: '#dc2626' }}>*</span> <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직전에 있었던 일 — 복수 선택 가능)</span></label>
           <CheckboxGroup options={ANT_OPTIONS} selected={선행사건} onToggle={(o) => toggleIn(선행사건, set선행사건, o)} />
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>후속결과 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직후 달라진 것 — 복수 선택 가능)</span></label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>후속결과 <span style={{ color: '#dc2626' }}>*</span> <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직후 달라진 것 — 복수 선택 가능)</span></label>
           <CheckboxGroup options={CON_OPTIONS} selected={후속결과} onToggle={(o) => toggleIn(후속결과, set후속결과, o)} />
         </div>
 

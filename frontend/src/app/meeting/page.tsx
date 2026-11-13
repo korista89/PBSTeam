@@ -1,212 +1,151 @@
 "use client";
 
-import React, { useState } from 'react';
-import styles from './page.module.css';
-import axios from 'axios';
+// 협의회 초안: 관리자는 학교행동중재지원팀(전교 자료·연간 12차 일정), 담임은 학급 협의회(학급 자료).
+// 차수·안건·기간을 고르면 서버가 수치를 계산하고 안건별 초안을 만든다. 고쳐서 저장·인쇄·워드로 내보낸다.
+import React, { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
-import { useDateRange } from "../hooks/useDateRange";
 import { API_BASE_URL } from "@/app/lib/api";
 
+type Session = { no: number; when: string; focus: string; agenda: string[]; period_start: string; period_end: string };
+type Plan = { scope: "school" | "class"; title: string; attendees: string; agenda?: string[]; period_start?: string; period_end?: string; selected?: number; sessions?: Session[] };
+type Note = { id: string; date: string; content: string; author: string; period_start?: string; period_end?: string };
+
+const inp: React.CSSProperties = { padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: "0.9rem", fontFamily: "inherit", boxSizing: "border-box" };
+const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
 export default function MeetingPage() {
     const { user, isAdmin } = useAuth();
-    const { startDate, endDate } = useDateRange();
-    // 관리자는 학교 차원, 담임은 학급 차원 PBIS 팀 회의록으로 분기 — 데이터는 백엔드가
-    // 이미 역할 기준으로 스코프하므로(analytics.py의 ai-meeting-minutes), 여기서는
-    // 화면 라벨과 저장되는 meeting_type만 나눠 담임들의 안건 메모가 섞이지 않게 한다.
-    const scopeLabel = isAdmin() ? "학교 차원" : `학급 차원${user?.class_id ? ` (${user.class_id})` : ""}`;
-    const savedMeetingType = isAdmin() ? "tier1" : `tier1_class_${user?.class_id || user?.id || "unknown"}`;
-    const [result, setResult] = useState("");
-    const [loading, setLoading] = useState(false);
+    const meetingType = isAdmin() ? "tier1" : `tier1_class_${user?.class_id || user?.id || "unknown"}`;
+    const [plan, setPlan] = useState<Plan | null>(null);
+    const [no, setNo] = useState(0);
+    const [title, setTitle] = useState("");
+    const [agenda, setAgenda] = useState<string[]>([]);
+    const [start, setStart] = useState("");
+    const [end, setEnd] = useState("");
+    const [draft, setDraft] = useState("");
+    const [busy, setBusy] = useState("");
+    const [msg, setMsg] = useState("");
+    const [notes, setNotes] = useState<Note[]>([]);
 
-    // Context Period (Default: Jan 1st - Today)
-    const [contextStartDate, setContextStartDate] = useState(`${new Date().getFullYear()}-01-01`);
-    const [contextEndDate, setContextEndDate] = useState(new Date().toISOString().split('T')[0]);
-    const [showContextSettings, setShowContextSettings] = useState(false);
+    const applySession = useCallback((p: Plan, n: number) => {
+        const s = p.sessions?.find(x => x.no === n);
+        if (!s) return;
+        setNo(n); setTitle(`${p.title} ${n}차(${s.when}) — ${s.focus}`); setAgenda(s.agenda); setStart(s.period_start); setEnd(s.period_end);
+    }, []);
 
-    const handleGenerate = async () => {
-        if (!startDate || !endDate) {
-            alert("상단 네비게이션 바에서 분석할 기간(집중 분석 기간)을 먼저 선택해주세요.");
-            return;
-        }
-        setLoading(true);
+    const loadNotes = useCallback(async () => {
+        try { setNotes((await axios.get(`${API_BASE_URL}/api/v1/meeting-notes`, { params: { meeting_type: meetingType } })).data.notes || []); } catch { setNotes([]); }
+    }, [meetingType]);
+
+    useEffect(() => {
+        if (!user) return;
+        axios.get(`${API_BASE_URL}/api/v1/analytics/meeting-draft/plan`).then(r => {
+            const p: Plan = r.data;
+            setPlan(p);
+            if (p.scope === "school") applySession(p, p.selected || 1);
+            else { setTitle(p.title); setAgenda(p.agenda || []); setStart(p.period_start || ""); setEnd(p.period_end || today()); }
+        }).catch(e => setMsg("⚠ 협의회 정보를 불러오지 못했습니다: " + (e.response?.data?.detail || e.message)));
+        void loadNotes();
+    }, [user, applySession, loadNotes]);
+
+    const make = async () => {
+        setBusy("draft"); setMsg("");
         try {
-            const apiUrl = API_BASE_URL;
-            const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-meeting-minutes`, {
-                start_date: startDate,
-                end_date: endDate,
-                context_start_date: contextStartDate,
-                context_end_date: contextEndDate
-            }, { timeout: 240000 });
-            setResult(res.data.analysis || "");
+            const r = await axios.post(`${API_BASE_URL}/api/v1/analytics/meeting-draft`, { title, agenda, start_date: start, end_date: end }, { timeout: 240000 });
+            setDraft(r.data.draft || "");
         } catch (e: any) {
-            console.error(e);
-            alert("회의록 생성 실패: " + (e.response?.data?.detail || e.message));
-        } finally {
-            setLoading(false);
-        }
+            setMsg("⚠ 초안을 만들지 못했습니다: " + (e.response?.data?.detail || e.message));
+        } finally { setBusy(""); }
     };
 
-    const [saving, setSaving] = useState(false);
-
-    const handleSaveToSheet = async () => {
-        if (!result) return;
-        setSaving(true);
+    const save = async () => {
+        setBusy("save");
         try {
-            const apiUrl = API_BASE_URL;
-            await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
-                meeting_type: savedMeetingType,
-                date: new Date().toISOString().split('T')[0],
-                content: result,
-                author: user?.name || user?.id || "PBS Coordinator",
-                period_start: startDate,
-                period_end: endDate
-            });
-            alert("협의록이 시스템 및 구글 시트에 성공적으로 저장되었습니다.");
+            await axios.post(`${API_BASE_URL}/api/v1/meeting-notes`, { meeting_type: meetingType, date: today(), content: draft, author: user?.name || user?.id || "", period_start: start, period_end: end });
+            setMsg("✓ 저장했습니다.");
+            void loadNotes();
         } catch (e: any) {
-            console.error(e);
-            alert("저장 실패: " + (e.response?.data?.detail || e.message));
-        } finally {
-            setSaving(false);
-        }
+            setMsg("⚠ 저장 실패: " + (e.response?.data?.detail || e.message));
+        } finally { setBusy(""); }
     };
 
-    const handleCopy = () => {
-        if (!result) return;
-        navigator.clipboard.writeText(result);
-        alert("클립보드에 복사되었습니다.");
-    };
-
-    const handlePrint = () => {
-        window.print();
+    const html = () => `<html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:A4;margin:20mm}body{font-family:'Malgun Gothic',sans-serif;font-size:11pt;line-height:1.7}h1{font-size:16pt;text-align:center;border-bottom:2px solid #000;padding-bottom:8px}pre{white-space:pre-wrap;font-family:inherit}</style></head><body><h1>${esc(title)}</h1><pre>${esc(draft)}</pre></body></html>`;
+    const print = () => { const w = window.open("", "_blank"); if (!w) return; w.document.write(html()); w.document.close(); w.focus(); w.print(); };
+    const word = () => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob(["﻿", html()], { type: "application/msword" }));
+        a.download = `${title.replace(/[\\/:*?"<>|]/g, "")}_${today()}.doc`;
+        a.click(); URL.revokeObjectURL(a.href);
     };
 
     return (
         <AuthCheck>
-            <AppShell
-                currentPage="meeting"
-                title={`🤝 ${scopeLabel} PBIS 팀 회의록 에이전트`}
-                subtitle={isAdmin()
-                    ? "학교 전체 행동 데이터(Log_Main, CICO, Tier 3)를 다차원 분석하여 학교장 보고용 표준 협의록을 자동 생성"
-                    : "우리 학급 행동 데이터를 분석하여 학급 차원 PBIS 팀 회의록을 자동 생성"}
-            >
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                    {/* Top Configuration Card */}
-                    <div className="card" style={{ padding: "20px", borderLeft: "4px solid #8b5cf6" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
-                            <div>
-                                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                                    🎯 분석 기간 설정 및 AI 협의록 생성
-                                </div>
-                                <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                    집중 분석 기간과 비교 기간의 변화율을 대조하여 개선율, 악화 영역, 차기 지원 대책을 도출합니다.
-                                </div>
-                            </div>
+            <AppShell currentPage="meeting" hideDateFilter={true}
+                title={isAdmin() ? "🤝 학교행동중재지원팀 협의회" : "🤝 학급 협의회"}
+                subtitle={isAdmin() ? "전교 자료로 차수별 협의록 초안을 만듭니다 · 고쳐서 저장·인쇄합니다" : "담임·부담임·교과·지원인력이 함께 볼 학급 자료 기반 협의록 초안을 만듭니다"}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {msg && <div className="card" style={{ padding: 12, color: msg.startsWith("✓") ? "#15803d" : "#b91c1c" }}>{msg}</div>}
 
-                            <button
-                                onClick={handleGenerate}
-                                disabled={loading || !startDate || !endDate}
-                                className="btn btn-ai"
-                                style={{ padding: "10px 24px", fontSize: "0.88rem" }}
-                            >
-                                {loading ? "데이터 종합 분석 중..." : "✨ AI 정기 협의록 자동 생성"}
-                            </button>
+                    {/* 1. 협의회 준비 */}
+                    <div className="card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div style={{ fontWeight: 800 }}>① 협의회 준비</div>
+                        {plan?.scope === "school" && (
+                            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.85rem", fontWeight: 700 }}>차수
+                                <select value={no} onChange={e => applySession(plan, Number(e.target.value))} style={inp}>
+                                    {plan.sessions?.map(s => <option key={s.no} value={s.no}>{s.no}차 · {s.when} · {s.focus}{s.no === plan.selected ? " (이번 차수)" : ""}</option>)}
+                                </select>
+                            </label>
+                        )}
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.85rem", fontWeight: 700 }}>제목
+                            <input value={title} onChange={e => setTitle(e.target.value)} style={inp} />
+                        </label>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: "0.85rem", fontWeight: 700 }}>
+                            자료 기간 <input type="date" value={start} onChange={e => setStart(e.target.value)} style={inp} /> ~ <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={inp} />
                         </div>
-
-                        <div className="responsive-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", background: "var(--bg-subtle)", padding: "14px 16px", borderRadius: "10px", border: "1px solid var(--border-subtle)" }}>
-                            <div>
-                                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-secondary)", marginBottom: "4px" }}>
-                                    📅 집중 분석 기간 (TopBar 기준)
+                        <div style={{ fontSize: "0.85rem", color: "#475569" }}>참석: {plan?.attendees || "-"}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>안건</div>
+                            {agenda.map((a, i) => (
+                                <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                    <b style={{ width: 20 }}>{i + 1}.</b>
+                                    <input value={a} onChange={e => setAgenda(agenda.map((x, j) => j === i ? e.target.value : x))} style={{ ...inp, flex: 1 }} />
+                                    <button className="btn btn-secondary" onClick={() => setAgenda(agenda.filter((_, j) => j !== i))} title="안건 빼기">✕</button>
                                 </div>
-                                <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--primary-blue)" }}>
-                                    {startDate && endDate ? `${startDate} ~ ${endDate}` : "상단 탑바에서 날짜를 선택하세요"}
-                                </div>
-                            </div>
-
-                            <div>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                                    <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-secondary)" }}>
-                                        📊 비교/배경 기간 (Context)
-                                    </div>
-                                    <button
-                                        onClick={() => setShowContextSettings(!showContextSettings)}
-                                        style={{ border: "none", background: "none", color: "var(--primary-blue)", fontSize: "0.75rem", cursor: "pointer", fontWeight: 700 }}
-                                    >
-                                        {showContextSettings ? "접기" : "기간 변경"}
-                                    </button>
-                                </div>
-                                {showContextSettings ? (
-                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                        <input
-                                            type="date"
-                                            value={contextStartDate}
-                                            onChange={e => setContextStartDate(e.target.value)}
-                                            style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", fontSize: "0.78rem", background: "white" }}
-                                        />
-                                        <span style={{ color: "var(--text-muted)" }}>~</span>
-                                        <input
-                                            type="date"
-                                            value={contextEndDate}
-                                            onChange={e => setContextEndDate(e.target.value)}
-                                            style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", fontSize: "0.78rem", background: "white" }}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-primary)" }}>
-                                        {contextStartDate} ~ {contextEndDate}
-                                    </div>
-                                )}
-                            </div>
+                            ))}
+                            <button className="btn btn-secondary" style={{ alignSelf: "flex-start" }} onClick={() => setAgenda([...agenda, ""])}>+ 안건 추가</button>
                         </div>
+                        <button className="btn btn-ai" onClick={() => void make()} disabled={!!busy || !agenda.some(a => a.trim()) || !start || !end} style={{ alignSelf: "flex-start" }}>
+                            {busy === "draft" ? "자료 분석·초안 작성 중..." : "✨ 협의록 초안 만들기"}
+                        </button>
                     </div>
 
-                    {/* Result Content */}
-                    {result ? (
-                        <div className="card" style={{ padding: "24px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid var(--border-subtle)" }}>
-                                <div style={{ fontWeight: 800, fontSize: "1rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <span>📋</span> 생성된 정기 협의록 전문
-                                </div>
-                                <div style={{ display: "flex", gap: "8px" }}>
-                                    <button
-                                        onClick={handleSaveToSheet}
-                                        disabled={saving}
-                                        className="btn btn-primary"
-                                    >
-                                        {saving ? "저장 중..." : "💾 시트에 저장"}
-                                    </button>
-                                    <button onClick={handleCopy} className="btn btn-secondary">
-                                        📋 복사하기
-                                    </button>
-                                    <button onClick={handlePrint} className="btn btn-secondary">
-                                        🖨️ 인쇄
-                                    </button>
-                                </div>
+                    {/* 2. 초안 고치기·저장·인쇄 */}
+                    {draft && (
+                        <div className="card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                <div style={{ fontWeight: 800, flex: 1 }}>② 초안 고치기 <span style={{ fontWeight: 500, fontSize: "0.8rem", color: "#64748b" }}>[협의 필요]는 회의에서 정한 뒤 지우세요</span></div>
+                                <button className="btn btn-primary" onClick={() => void save()} disabled={!!busy}>{busy === "save" ? "저장 중..." : "💾 저장"}</button>
+                                <button className="btn btn-secondary" onClick={print}>🖨️ 인쇄</button>
+                                <button className="btn btn-secondary" onClick={word}>📄 워드</button>
                             </div>
-
-                            <div
-                                style={{
-                                    whiteSpace: "pre-wrap",
-                                    lineHeight: 1.8,
-                                    color: "var(--text-primary)",
-                                    background: "var(--bg-subtle)",
-                                    padding: "20px",
-                                    borderRadius: "10px",
-                                    border: "1px solid var(--border-subtle)",
-                                    fontSize: "0.92rem"
-                                }}
-                            >
-                                {result}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="empty-state">
-                            <div className="empty-state-icon">🤝</div>
-                            <div className="empty-state-title">협의회 안건을 생성할 준비가 되었습니다</div>
-                            <div className="empty-state-text">상단 [AI 정기 협의록 자동 생성] 버튼을 누르면 전교 데이터를 기반으로 공문서 규격의 협의록이 도출됩니다.</div>
+                            <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={Math.min(40, draft.split("\n").length + 2)} style={{ ...inp, width: "100%", lineHeight: 1.7 }} />
                         </div>
                     )}
+
+                    {/* 3. 지난 협의록 */}
+                    <details className="card" style={{ padding: 18 }}>
+                        <summary style={{ cursor: "pointer", fontWeight: 800 }}>📚 지난 협의록 ({notes.length}건)</summary>
+                        {notes.length === 0 ? <p style={{ color: "#94a3b8" }}>저장된 협의록이 없습니다.</p> : notes.map(n => (
+                            <div key={n.id} style={{ borderTop: "1px solid #e2e8f0", padding: "10px 0", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <b>{n.date}</b>
+                                <span style={{ flex: 1, color: "#475569", fontSize: "0.85rem", minWidth: 160 }}>{n.content.split("\n").find(l => l.trim())?.slice(0, 60)}</span>
+                                <button className="btn btn-secondary" onClick={() => { setDraft(n.content); window.scrollTo({ top: 0, behavior: "smooth" }); }}>열기</button>
+                            </div>
+                        ))}
+                    </details>
                 </div>
             </AppShell>
         </AuthCheck>

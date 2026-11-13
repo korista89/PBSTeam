@@ -45,15 +45,12 @@ def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_aut
 
     for s in students:
         s_events = events_by_student.get(s.student_code, [])
-        tier_names = [t.value for t in s.tier.active_tiers]
         if s_events:
             sigs = evaluate_decision_signals(
                 student_code=s.student_code,
                 behavior_events=s_events,
                 as_of_date=today,
-                safety_window_days=14,
-                is_today_inbox=True,
-                active_tier_names=tier_names
+                safety_window_days=14
             )
             all_signals.extend(sigs)
 

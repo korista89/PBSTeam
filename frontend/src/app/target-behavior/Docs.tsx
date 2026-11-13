@@ -7,7 +7,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
 import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox } from "./shared";
-import { AIBox, card, dOf, err, mergeInto, openPrint } from "./Steps";
+import { AIBox, AutoArea, card, dOf, err, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
 
@@ -52,6 +52,24 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
     const apply = (mode: "empty" | "append") => set(mergeInto(cur, { rationale: ai.text.replace(/\*\*/g, "") }, mode));
+    // 개별화교육지원팀 협의회 전 협의록 초안: 지금까지 자료 + 지난 협의 기록 + 고른 결정으로 미리 채운다
+    const [minutes, setMinutes] = useState({ loading: false, text: "" });
+    const [notesKey, setNotesKey] = useState(0);
+    const runMinutes = async () => {
+        setMinutes({ loading: true, text: "" });
+        try {
+            const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-team-minutes-draft`,
+                { start_date: bip.PlanStart || undefined, end_date: today(), summary, choice: cur.choice || "" }, { timeout: 240000 });
+            setMinutes({ loading: false, text: r.data.draft || "" });
+        } catch (e) { setMinutes({ loading: false, text: "⚠️ " + err(e) }); }
+    };
+    const saveMinutes = async () => {
+        try {
+            await axios.post(`${API_BASE_URL}/api/v1/meeting-notes`, { meeting_type: "tier3", date: today(), content: minutes.text, author: cur.author ?? bip.Teacher ?? "", student_code: head.code });
+            setMinutes({ loading: false, text: "" }); setNotesKey(k => k + 1);
+            alert("이 학생 사례 협의 기록에 저장했습니다.");
+        } catch (e) { alert("저장 실패: " + err(e)); }
+    };
     const printMeta: [string, string][] = [["결정일", kDate(cur.date || today())], ["다음 점검일", kDate(cur.nextReview || "")], ["작성자", cur.author ?? bip.Teacher ?? ""]];
     const printSections: [string, string][] = [["자료 요약", summary], ["결정", cur.choice || ""], ["판단 근거", cur.rationale || ""], ["후속 조치", cur.actions || ""]];
     const meta: [string, React.ReactNode][] = [
@@ -77,7 +95,22 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
             <div style={sheetBox}><SectionSheet heading="데이터 기반 의사결정 기록" s={head} meta={meta} sections={sections} /></div>
-            <MeetingNotesSection apiUrl={API_BASE_URL} meetingType="tier3" title="이 학생 사례 협의 기록 (누적)" studentCode={head.code} />
+            <div style={card}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <b style={{ flex: 1, minWidth: 200 }}>🤝 개별화교육지원팀 협의록 초안 <span style={{ fontWeight: 500, fontSize: "0.78rem", color: "#64748b" }}>협의회 전에 지금까지 자료로 안건·현황·결정(안)을 미리 채웁니다</span></b>
+                    <button className="btn btn-ai" onClick={runMinutes} disabled={minutes.loading}>{minutes.loading ? "초안 작성 중..." : "✨ 협의록 초안 만들기"}</button>
+                </div>
+                {minutes.text && (
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <AutoArea value={minutes.text} onChange={v => setMinutes({ loading: false, text: v })} rows={12} />
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button className="btn btn-primary" onClick={saveMinutes}>💾 사례 협의 기록에 저장</button>
+                            <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "개별화교육지원팀 협의록", s: head, meta: [["협의일", kDate(today())]], sections: [["협의 내용", minutes.text]] })}>🖨️ 미리보기·인쇄</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+            <MeetingNotesSection key={notesKey} apiUrl={API_BASE_URL} meetingType="tier3" title="이 학생 사례 협의 기록 (누적)" studentCode={head.code} />
         </div>
     );
 }

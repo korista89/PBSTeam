@@ -3,6 +3,7 @@ import logging
 from app.adapters.sheets.resilience import SheetUnavailable
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from datetime import timedelta
 from typing import Optional, List, Dict, Any
 from app.services.analysis import get_analytics_data, get_student_analytics
 from app.services.sheets import (
@@ -15,7 +16,6 @@ from app.services.normalize import (
 from app.services.ai_insight import (
     generate_bcba_section_analysis,
     generate_bcba_cico_analysis,
-    generate_bcba_meeting_minutes,
     generate_bcba_student_analysis,
     generate_medication_response_report
 )
@@ -115,13 +115,6 @@ class ComprehensiveAnalysisRequest(BaseModel):
     start_date: str
     end_date: str
 
-class MeetingMinutesRequest(BaseModel):
-    start_date: str
-    end_date: str
-    context_start_date: Optional[str] = None
-    context_end_date: Optional[str] = None
-
-
 @router.post("/ai-section-analysis")
 def ai_section_analysis(
     req: SectionAnalysisRequest,
@@ -211,35 +204,49 @@ def ai_cico_analysis(
     return {"analysis": result}
 
 
-@router.post("/ai-meeting-minutes")
-def ai_meeting_minutes(
-    req: MeetingMinutesRequest,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """④ 🤖 SST 행동중재협의회 공문서 규격 AI 회의록 자동 생성 (교사 학급 스코프 격리)"""
+def _meeting_scope(current_user: Dict[str, Any]):
     role = str(current_user.get("role", "")).lower()
-    user_class = None
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    if role in ["admin", "superadmin"]:
+        return None
+    return normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
 
-    analytics = get_analytics_data(req.start_date, req.end_date, class_id=user_class)
-    risk_list = analytics.get("risk_list", [])
-    risk_list.sort(key=lambda x: x.get("count", 0), reverse=True)
 
-    meeting_data = {
-        "scope": f"학급 차원 PBIS 팀 회의 ({user_class})" if user_class else "학교 차원 PBIS 팀 회의",
-        "start_date": req.start_date,
-        "end_date": req.end_date,
-        "summary": analytics.get("summary", {}),
-        "total_incidents": analytics.get("summary", {}).get("total_incidents", 0)
-    }
+@router.get("/meeting-draft/plan")
+def meeting_draft_plan(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """협의회 종류·차수·안건·기본 기간. 관리자는 학교행동중재지원팀 12차 일정, 담임은 학급 협의회."""
+    from app.core.time import today_kst
+    from app.services import meeting_draft as M
+    today = today_kst()
+    cls = _meeting_scope(current_user)
+    if cls:
+        # 기본 기간: 이번 달 1일부터(월초 첫 주면 지난달 1일부터)
+        start = today.replace(day=1) if today.day >= 8 else (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        return {"scope": "class", "title": f"{cls} 학급 협의회", "attendees": M.CLASS_ATTENDEES,
+                "agenda": M.CLASS_AGENDA, "period_start": start.isoformat(), "period_end": today.isoformat()}
+    no = M.pick_session(today)
+    return {"scope": "school", "title": "학교행동중재지원팀 협의회", "attendees": M.SCHOOL_ATTENDEES, "selected": no,
+            "sessions": [M.session_info(s[0], today) for s in M.SCHOOL_SESSIONS]}
 
-    result = generate_bcba_meeting_minutes(
-        meeting_data=meeting_data,
-        risk_students=risk_list[:5],
-        recent_trends=analytics.get("trends", [])
-    )
-    return {"analysis": result}
+
+class MeetingDraftRequest(BaseModel):
+    title: str
+    agenda: List[str]
+    start_date: str
+    end_date: str
+
+
+@router.post("/meeting-draft")
+def meeting_draft(req: MeetingDraftRequest, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """협의회 실시 전 초안. 수치는 범위(학교/학급)에 맞춰 계산하고, 안건별 문장은 AI가 쓴다."""
+    from app.services import meeting_draft as M
+    cls = _meeting_scope(current_user)
+    agenda = [a.strip() for a in req.agenda if a.strip()][:8]
+    if not agenda:
+        raise HTTPException(status_code=400, detail="안건이 비었습니다.")
+    facts = M.build_facts(req.start_date, req.end_date, cls)
+    attendees = M.CLASS_ATTENDEES if cls else M.SCHOOL_ATTENDEES
+    audience = f"{cls} 학급(담임·부담임·교과·지원인력)" if cls else "학교행동중재지원팀(전교)"
+    return {"draft": M.generate_draft(req.title, attendees, agenda, facts, audience), "facts": facts}
 
 
 @router.post("/ai-student-analysis")

@@ -22,12 +22,17 @@ def test_long_form_headers_are_read():
     assert e.antecedent == "과제 제시" and e.consequence == "과제 철회"
 
 
-def test_signal_id_moves_with_new_evidence():
-    events = [ev("2026-11-02"), ev("2026-11-05")]
-    ids = {s.signal_id for s in evaluate_decision_signals("2211", events, as_of_date=date(2026, 11, 13))}
-    assert "SIG_DATA_2211_2026-11-05" in ids
-    ids2 = {s.signal_id for s in evaluate_decision_signals("2211", events + [ev("2026-11-12")], as_of_date=date(2026, 11, 13))}
-    assert "SIG_DATA_2211_2026-11-12" in ids2 and "SIG_DATA_2211_2026-11-05" not in ids2
-    # ABC가 3건 이상 채워지면 신호가 사라진다
-    full = [ev(f"2026-11-0{d}", "요구", "회피") for d in (2, 3, 4)]
-    assert not evaluate_decision_signals("2211", full, as_of_date=date(2026, 11, 13))
+def test_old_records_without_abc_are_not_flagged():
+    """필수 안내(ABC_REQUIRED_SINCE) 전 기록은 A·C가 비어도 신호를 만들지 않는다."""
+    old = [ev("2026-10-01"), ev("2026-11-13")]
+    assert not evaluate_decision_signals("2211", old, as_of_date=date(2026, 11, 20))
+
+
+def test_new_record_missing_abc_flagged_and_id_moves():
+    events = [ev("2026-11-13"), ev("2026-11-17")]
+    ids = {s.signal_id for s in evaluate_decision_signals("2211", events, as_of_date=date(2026, 11, 20))}
+    assert ids == {"SIG_DATA_2211_2026-11-17"}
+    ids2 = {s.signal_id for s in evaluate_decision_signals("2211", events + [ev("2026-11-19")], as_of_date=date(2026, 11, 20))}
+    assert ids2 == {"SIG_DATA_2211_2026-11-19"}
+    # 채워진 새 기록만 있으면 신호 없음
+    assert not evaluate_decision_signals("2211", [ev("2026-11-17", "요구", "회피")], as_of_date=date(2026, 11, 20))

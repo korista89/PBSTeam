@@ -1114,40 +1114,6 @@ def generate_bcba_cico_analysis(
 # ------------------------------------------------------------------------------
 # ④ 🤖 SST 행동중재협의회 AI 회의록 자동 생성 (/meetings)
 # ------------------------------------------------------------------------------
-def generate_bcba_meeting_minutes(
-    meeting_data: dict,
-    risk_students: list,
-    recent_trends: list = None
-) -> str:
-    """
-    SST 회의록: 공문서 규격 개조식 + 4단 안건 구조 + 다학제 역할 분담 + 보호자 지원 분리
-    """
-    m_info = json.dumps(meeting_data, ensure_ascii=False, separators=(',', ':'))
-    r_info = json.dumps(_redact_list_names(risk_students), ensure_ascii=False, separators=(',', ':'))
-
-    prompt = f"""[회의 기본 정보]
-{m_info}
-
-[심의 대상 위기군 학생 데이터]
-{r_info}
-
-[지시사항]
-학교장 결재 및 특수교육지원센터 제출이 가능한 고품격 공문서 규격 회의록을 작성하라.
-1. **문서 형식**:
-   - 제목 / 일시 / 장소 / 참석자(직위 포함) / 안건 / 협의 내용 / 결정 사항 / 향후 일정 순서의 개조식 종결체.
-   - 제목은 [회의 기본 정보]의 `scope` 값을 그대로 반영하라(예: "학교 차원 PBIS 팀 회의록" 또는 "학급 차원 PBIS 팀 회의록").
-   - 학생은 실명 대신 '학생코드'를 우선 사용하라.
-2. **안건별 4단 구조 필수 준수**:
-   - `[현황 데이터]` ➔ `[협의 내용]` ➔ `[결정사항]` ➔ `[담당자/기한]`
-3. **실행 가능한 결정사항 기술**: "지속 관찰" 같은 모호한 문구를 금지하고 구체적인 실행 행동을 기술하라.
-4. **다학제 역할 분담 명시**: 담임교사 / 특수교육지도사 / 전문상담사 / 치료사 / 보호자 / 관리자 역할 구분.
-5. **보호자 협력 사항 분리**: 학교가 제공할 지원과 가정에 요청할 지원을 명확히 구분.
-6. **금지**: 논의되지 않은 내용을 데이터만 보고 지어내지 말고, 제안 사항은 `[AI 제안 — 협의 필요]` 태그를 붙여라.
-7. 안건별 현황·결정·담당·기한은 각각 3줄 이내로 쓰고 반복 설명은 제거하라."""
-
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 3000)
-
-
 # ------------------------------------------------------------------------------
 # ⑤ 🤖 Tier 3 심층 위기지원 컨설팅 (/tier3) - Optimized with Structured Summary
 # ------------------------------------------------------------------------------
@@ -1576,6 +1542,42 @@ def generate_full_bip(
         reinforcer_info=reinforcer_info,
         other_considerations=other_considerations,
     )
+
+
+def generate_iep_team_minutes_draft(
+    student_info: dict, period_data: str, screen_summary: str, current_bip: str,
+    ebp_selections: str, team_notes: str, choice: str = "", data_notice: str = ""
+) -> str:
+    """개별화교육지원팀 협의회 실시 전 협의록 초안(학생 1명). 자료 수치만 근거로 쓰고 결정은 [협의 필요]로 남긴다."""
+    prompt = f"""[학생] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
+[화면 자료 요약(위기행동·표적행동 기록)]
+{screen_summary or "(없음)"}
+[기간 행동 자료]
+{period_data}
+[현재 BIP]
+{current_bip or "(작성된 BIP 없음)"}
+[EBP·실행충실도]
+{ebp_selections or "(없음)"}
+[지난 협의 기록]
+{team_notes or "(없음)"}
+[담임이 고른 결정 선택지] {choice or "(미선택)"}
+[자료 한계] {data_notice or "(없음)"}
+
+[지시사항]
+개별화교육지원팀(담임·부담임·교과·지원인력·보호자·관리자) 협의회를 열기 전에 미리 읽을 협의록 초안을 작성하라.
+형식(개조식 '~함', 한 줄 55자 이내, ** 금지):
+■ 개별화교육지원팀 협의록(초안) — 학생코드
+- 일시·장소·참석자: 빈칸(회의에서 기입)
+Ⅰ. 현재까지 자료 요약(수치 인용 5줄 이하, 지난 협의 이후 변화 포함)
+Ⅱ. 협의 안건
+ 1. 중재 효과 판단(자료-BIP 일치 여부)
+ 2. 실행충실도와 장애 요인
+ 3. 다음 단계 결정(유지·수정·단계 조정·의뢰)
+ 4. 가정 연계와 구성원별 역할
+ 각 안건: 가. 현황 / 나. 협의할 점(질문 1~2개) / 다. 결정(안) [협의 필요] / 라. 담당·기한
+Ⅲ. 다음 점검일(안)
+자료에 없는 사실·수치는 만들지 말고 '확인 필요'로 쓴다. 지난 협의에서 정한 사항이 지켜졌는지 확인 항목을 넣는다."""
+    return (_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500) or "").replace("**", "")
 
 
 def generate_data_based_decision_recommendation(

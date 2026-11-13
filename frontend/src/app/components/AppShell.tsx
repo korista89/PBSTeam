@@ -107,10 +107,9 @@ export default function AppShell({
             ]
         },
         {
-            groupTitle: "회의 / 협의록",
+            groupTitle: "협의회",
             items: [
-                { href: "/meeting", label: "협의회 에이전트", key: "meeting", icon: "🤝" },
-                { href: "/consultation/report", label: "월별 회의록", key: "consultation-report", icon: "📑" }
+                { href: "/meeting", label: admin ? "학교 협의회" : "학급 협의회", key: "meeting", icon: "🤝" }
             ]
         },
         {
