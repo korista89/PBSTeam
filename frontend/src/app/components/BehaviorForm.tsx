@@ -100,7 +100,7 @@ const EXAMPLE_CONSEQUENCES = [
 ];
 function CheckboxGroup({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (opt: string) => void }) {
   return (
-    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+    <div className="behavior-options-grid">
       {options.map(opt => (
         <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
           <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
@@ -257,8 +257,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
     }
   };
 
-  const radioStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontSize: '0.9rem' };
-  const groupStyle: React.CSSProperties = { padding: '15px', border: '1px solid #eaeaea', borderRadius: '8px', marginBottom: '15px', backgroundColor: '#fff' };
+  const radioStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: 0, fontSize: '0.9rem', lineHeight: 1.2, minHeight: '24px' };
+  const groupStyle: React.CSSProperties = { padding: '8px 10px', border: '1px solid #eaeaea', borderRadius: '8px', marginBottom: '6px', backgroundColor: '#fff' };
 
   return (
     <div style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '12px', marginTop: '20px', backgroundColor: '#fff' }}>
@@ -291,17 +291,17 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         {mode === 'report' && <> 제출 뒤 결재함·전체 로그의 &lsquo;📄 보고서 보기·인쇄&rsquo;에서 PDF로 인쇄합니다. <a href={`${API_BASE_URL}/api/v1/behavior-log/report-template.hwpx`}>⬇️ 빈 양식(hwpx)</a></>}
       </p>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '20px' }}>
+      <form className="behavior-data-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', marginTop: '10px' }}>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>행동발생날짜 *</label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>행동발생날짜 *</label>
           <input type="date" name="행동발생날짜" value={formData.행동발생날짜} onChange={handleChange} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
         </div>
 
         <>
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>시간대 *</label>
-          <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>시간대 *</label>
+          <div className="behavior-options-grid">
             {TIME_SLOTS.map(t => (
               <label key={t} style={radioStyle}>
                 <input type="checkbox" value={t} checked={formData.시간대.includes(t)} onChange={(e) => handleCheckboxChange(e, '시간대')} />
@@ -312,7 +312,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>행동 발생 장소 *</label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>행동 발생 장소 *</label>
+          <div className="behavior-options-grid">
           {PLACES.map(p => (
             <label key={p} style={radioStyle}>
               <input type="radio" name="장소" value={p} checked={formData.장소 === p} onChange={handleChange} required />
@@ -322,30 +323,36 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
               )}
             </label>
           ))}
+          </div>
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>행동유형(핵심행동으로택1) *</label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>행동유형(핵심행동으로택1) *</label>
+          <div className="behavior-options-grid behavior-options-grid-long">
           {BEHAVIOR_TYPES.map(b => (
             <label key={b} style={radioStyle}>
               <input type="radio" name="행동유형" value={b} checked={formData.행동유형 === b} onChange={handleChange} required />
               {b}
             </label>
           ))}
+          </div>
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>강도(1~5점 척도) *</label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>강도(1~5점 척도) *</label>
+          <div className="behavior-options-grid behavior-options-grid-long">
           {INTENSITIES.map(i => (
             <label key={i} style={radioStyle}>
               <input type="radio" name="강도" value={i} checked={formData.강도 === i} onChange={handleChange} required />
               {i}
             </label>
           ))}
+          </div>
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>기능(이번 행동을 통해 파악된 기능) *</label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>기능(이번 행동을 통해 파악된 기능) *</label>
+          <div className="behavior-options-grid behavior-options-grid-long">
           {FUNCTIONS.map(f => (
             <label key={f} style={radioStyle}>
               <input type="radio" name="기능" value={f} checked={formData.기능 === f} onChange={handleChange} required />
@@ -359,11 +366,12 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
               <input type="text" name="기능기타" value={formData.기능기타} onChange={handleChange} style={{ marginLeft: '10px', padding: '4px', border: '1px solid #ccc', flex: 1 }} required />
             )}
           </label>
+          </div>
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>발생횟수(한 에피소드 당 1회로 입력 권장) *</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '5px' }}>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>발생횟수(한 에피소드 당 1회로 입력 권장) *</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '2px 8px' }}>
             {FREQUENCIES.map(f => (
               <label key={f} style={radioStyle}>
                 <input type="radio" name="발생횟수" value={f} checked={formData.발생횟수 === f} onChange={handleChange} required />
@@ -371,7 +379,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
               </label>
             ))}
           </div>
-          <label style={{ ...radioStyle, marginTop: '8px' }}>
+          <label style={{ ...radioStyle, marginTop: '2px' }}>
             <input type="radio" name="발생횟수" value="기타" checked={formData.발생횟수 === '기타'} onChange={handleChange} />
             기타:
             {formData.발생횟수 === '기타' && (
@@ -381,22 +389,22 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>배경사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(오늘 평소와 다른 점 — 복수 선택 가능)</span></label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>배경사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(오늘 평소와 다른 점 — 복수 선택 가능)</span></label>
           <CheckboxGroup options={BG_OPTIONS} selected={배경사건} onToggle={(o) => toggleIn(배경사건, set배경사건, o)} />
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>선행사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직전에 있었던 일 — 복수 선택 가능)</span></label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>선행사건 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직전에 있었던 일 — 복수 선택 가능)</span></label>
           <CheckboxGroup options={ANT_OPTIONS} selected={선행사건} onToggle={(o) => toggleIn(선행사건, set선행사건, o)} />
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>후속결과 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직후 달라진 것 — 복수 선택 가능)</span></label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>후속결과 <span style={{ fontWeight: 400, color: '#94a3b8' }}>(행동 직후 달라진 것 — 복수 선택 가능)</span></label>
           <CheckboxGroup options={CON_OPTIONS} selected={후속결과} onToggle={(o) => toggleIn(후속결과, set후속결과, o)} />
         </div>
 
         <div style={groupStyle}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '10px' }}>특기사항(기타)</label>
+          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px', lineHeight: 1.25 }}>특기사항(기타)</label>
           <textarea name="특기사항" placeholder="실명 대신 학생코드 사용" value={formData.특기사항} onChange={handleChange} style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }} />
         </div>
         </>
