@@ -29,6 +29,18 @@ img, canvas, svg, video { max-width: 100%; }
   [role="dialog"], .modal, .modal-content { max-width: 96vw !important; width: auto !important; }
   h1 { font-size: 1.25rem; }
   .app-topbar { gap: 8px; }
+
+  /* 상단 분석기간(날짜 두 칸+조회): 한 줄에 못 들어가면 줄바꿈하고 칸은 남는 폭을 나눠 쓴다 */
+  .app-date-filter { flex-wrap: wrap !important; white-space: normal !important; flex-shrink: 1 !important; max-width: 100%; width: 100%; }
+  .app-date-filter input[type="date"] { flex: 1 1 130px; min-width: 0; max-width: 100%; }
+  .app-topbar > * { min-width: 0; max-width: 100%; }
+  /* 날짜·시간·숫자 입력칸과 선택칸이 부모 폭을 넘지 않게(브라우저 기본 최소폭 해제) */
+  .app-content input[type="date"], .app-content input[type="time"], .app-content input[type="month"],
+  .app-content input[type="number"], .app-content select { min-width: 0; max-width: 100%; }
+  /* flex 자식이 내용 때문에 부모보다 커지지 않게 */
+  .app-content [style*="display: flex"] > :not(button):not(svg):not(img):not(input):not(a) { min-width: 0; }
+  /* 긴 문자열(URL·코드)이 카드를 밀어내지 않게 */
+  .app-content .card, .app-content p, .app-content td { overflow-wrap: anywhere; }
 }
 
 @media (max-width: 480px) {

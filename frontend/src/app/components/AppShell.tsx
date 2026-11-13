@@ -247,7 +247,7 @@ export default function AppShell({
                     {/* Date Picker & Utility Right */}
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", rowGap: "8px" }}>
                         {!hideDateFilter && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--bg-subtle)", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--border-subtle)", flexShrink: 0, whiteSpace: "nowrap" }}>
+                            <div className="app-date-filter" style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--bg-subtle)", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--border-subtle)", flexShrink: 0, whiteSpace: "nowrap" }}>
                                 <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>📅 분석기간</span>
                                 <input
                                     type="date"
