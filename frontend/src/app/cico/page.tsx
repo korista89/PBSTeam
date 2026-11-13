@@ -6,6 +6,13 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import ReadableAIResult from "../components/ReadableAIResult";
 import { maskName } from "../utils";
+
+// CICO 월의 달력 연도: 학년도는 3월 시작이므로 1~2월은 학년도 다음 해다.
+function cicoYear(month: number) {
+  const d = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const sy = +d.slice(0, 4) - (+d.slice(5, 7) >= 3 ? 0 : 1);
+  return month >= 3 ? sy : sy + 1;
+}
 import { requestSheetLiveRefresh, useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import {
   ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, LabelList,
@@ -201,7 +208,7 @@ export default function CICOPage() {
       // One request (monthly + business days + report) so a poll costs one auth check
       // and hits one backend instance's cache instead of three.
       const { data: overview } = await axios.get(
-        `${apiUrl}/api/v1/cico/overview?month=${month}&year=${new Date().getFullYear()}`
+        `${apiUrl}/api/v1/cico/overview?month=${month}&year=${cicoYear(month)}`
       );
 
       const monthlyData: GridData = overview.monthly;
@@ -261,7 +268,7 @@ export default function CICOPage() {
   const handleGenerateSheet = async () => {
     setGenerating(true);
     try {
-      const res = await axios.post(`${apiUrl}/api/v1/cico/generate`, { year: new Date().getFullYear(), month });
+      const res = await axios.post(`${apiUrl}/api/v1/cico/generate`, { year: cicoYear(month), month });
       alert(res.data?.exists ? `${month}월 CICO 시트가 이미 존재합니다.` : `${month}월 CICO 시트를 생성했습니다.`);
       setIs404(false);
       await fetchData();
