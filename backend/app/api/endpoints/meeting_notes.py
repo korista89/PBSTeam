@@ -1,8 +1,7 @@
 """Meeting Notes API endpoints"""
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Optional, Dict, Any
 from app.services.sheets import add_meeting_note, fetch_meeting_notes, update_meeting_note, delete_meeting_note
 from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier, get_student_class_code
 
@@ -82,27 +81,6 @@ def get_meeting_notes(
 
     return {"notes": notes, "total": len(notes)}
 
-
-@router.get("/latest")
-def get_latest_notes(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
-    """Get the latest note for each meeting type (scoped by teacher class or school-wide for admin)"""
-    all_notes = fetch_meeting_notes()
-    role = str(current_user.get("role", "")).lower()
-
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        all_notes = [
-            n for n in all_notes
-            if not n.get("student_code") or get_student_class_code(str(n.get("student_code", "")).strip()) == user_class
-        ]
-
-    latest = {}
-    for note in all_notes:
-        mt = note["meeting_type"]
-        if mt not in latest:
-            latest[mt] = note
-
-    return {"notes": latest}
 
 @router.patch("/{note_id}")
 def update_note(

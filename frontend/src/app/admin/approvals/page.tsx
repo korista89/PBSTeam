@@ -92,6 +92,22 @@ export default function ApprovalsPage() {
     }
   };
 
+  // 일괄 결재: 지금 목록에서 결재가 끝나지 않은 기록의 남은 확인 단계를 한 번에 채운다
+  const [confirmAll, setConfirmAll] = useState(false);
+  const pendingIds = rows.filter(r => !r.complete).map(r => r.Log_ID as string);
+  const signAll = async () => {
+    setBusy("all");
+    try {
+      await axios.post(`${API_BASE_URL}/api/v1/behavior-log/sign-all`, { log_ids: pendingIds });
+      setConfirmAll(false);
+      await load(true);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || "일괄 결재에 실패했습니다.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const counts = {
     total: rows.length,
     waitingPrincipal: rows.filter(r => !r.complete).length,
@@ -140,6 +156,17 @@ export default function ApprovalsPage() {
                 </select>
               </label>
               <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>결재 대기·재작성 요청은 기간과 관계없이 항상 보입니다.</span>
+              {admin && pendingIds.length > 0 && (
+                confirmAll ? (
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <b style={{ fontSize: "0.85rem", color: "#b45309" }}>보이는 {pendingIds.length}건을 3단계 모두 확인 처리합니다</b>
+                    <button onClick={() => setConfirmAll(false)} className="btn btn-secondary" disabled={!!busy}>취소</button>
+                    <button onClick={() => void signAll()} className="btn btn-primary" disabled={!!busy}>{busy === "all" ? "처리 중..." : "결재 완료"}</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmAll(true)} className="btn btn-primary" style={{ marginLeft: "auto" }} disabled={!!busy}>✅ 목록 일괄 결재 ({pendingIds.length}건)</button>
+                )
+              )}
             </div>
 
             {error && <div className="card" style={{ padding: 12, background: "#fef2f2", color: "#dc2626" }}>⚠️ {error}</div>}

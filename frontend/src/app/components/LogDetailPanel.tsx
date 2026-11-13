@@ -58,8 +58,6 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
     const status = String(log["Status"] ?? "");
     const [reportValues, setReportValues] = useState<Record<string, string>>(() => Object.fromEntries(reportEntries(log, isCrisis)));
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [reviseMemo, setReviseMemo] = useState("");
-    const [showRevise, setShowRevise] = useState(false);
     const [editing, setEditing] = useState(false);
     const [values, setValues] = useState<Record<string, string>>(() =>
         Object.fromEntries(EDITABLE_FIELDS.map(f => [f.key, String(log[f.key] ?? "")]))
@@ -111,7 +109,6 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
         try {
             await fn();
             setConfirmDelete(false);
-            setShowRevise(false);
             onSaved?.();
         } catch (err: any) {
             setError(err.response?.data?.detail || err.message || "처리에 실패했습니다.");
@@ -121,8 +118,6 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
     };
     const logId = encodeURIComponent(log["Log_ID"] || "");
     const remove = () => act(() => axios.delete(`${API_BASE_URL}/api/v1/behavior-log/${logId}`));
-    const approve = () => act(() => axios.post(`${API_BASE_URL}/api/v1/behavior-log/approve`, { log_id: log["Log_ID"] }));
-    const revise = () => act(() => axios.post(`${API_BASE_URL}/api/v1/behavior-log/revise`, { log_id: log["Log_ID"], memo: reviseMemo }));
     const small = { fontSize: "0.78rem", padding: "5px 10px" };
 
     return (
@@ -135,12 +130,6 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
                 )}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "8px", marginBottom: "12px" }}>
-                {admin && !editing && status !== "Approved" && (
-                    <button onClick={approve} className="btn btn-primary" style={small} disabled={saving}>✅ 승인</button>
-                )}
-                {admin && !editing && (
-                    <button onClick={() => setShowRevise(v => !v)} className="btn btn-secondary" style={small} disabled={saving}>↩️ 재작성 요청</button>
-                )}
                 {canEdit && !editing && (
                     confirmDelete ? (
                         <>
@@ -177,13 +166,6 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
                 ) : null}
             </div>
 
-            {showRevise && (
-                <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-                    <input value={reviseMemo} onChange={(e) => setReviseMemo(e.target.value)} placeholder="보완할 내용 (작성자에게 표시)"
-                        style={{ flex: 1, padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "0.85rem" }} />
-                    <button onClick={revise} className="btn btn-primary" style={small} disabled={saving}>요청 보내기</button>
-                </div>
-            )}
 
             {error && (
                 <div style={{ background: "#fef2f2", color: "#dc2626", padding: "8px 12px", borderRadius: "6px", fontSize: "0.82rem", marginBottom: "12px" }}>

@@ -72,7 +72,7 @@ export default function AppShell({
                 // 담임도 관리자와 같은 메뉴를 쓰고, 화면은 자기 학급 범위로 열린다
                 { href: "/", label: admin ? "전체대시보드" : "학급대시보드", key: "dashboard", icon: "📊" },
                 { href: "/briefing", label: admin ? "관리자 브리핑" : "학급 브리핑", key: "briefing", icon: "🗞️" },
-                { href: "/today", label: "Today결정", key: "today", icon: "🧭" },
+                { href: "/today", label: "오늘 할 일", key: "today", icon: "🧭" },
                 { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" }
             ]
         },

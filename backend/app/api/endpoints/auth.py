@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.services.sheets import get_user_by_id, UserStoreUnavailable, update_user_password, update_user_password_cas, get_all_users
 from app.core.security import (
     verify_password_compat, create_access_token, set_session_cookie,
-    delete_session_cookie, hash_password
+    delete_session_cookie
 )
 from app.api.deps import require_authenticated_user
 from app.core import login_throttle

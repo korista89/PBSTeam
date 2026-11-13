@@ -4,7 +4,7 @@ CICODaily(Tier2 고정 카드형)와는 별개 기능: 여기는 학생 개별�
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from app.api.deps import require_authenticated_user, check_student_scope
 from app.services.sheets import (
     get_target_behaviors, create_target_behavior, update_target_behavior_status,

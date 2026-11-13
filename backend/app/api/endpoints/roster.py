@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.services.sheets import fetch_all_records, fetch_student_codes, update_student_codes
-from typing import List, Dict, Any
+from app.services.sheets import fetch_student_codes, update_student_codes
+from typing import Dict, Any
 from app.api.deps import require_authenticated_user, require_admin, get_student_class_code, normalize_class_identifier
 
 router = APIRouter()

@@ -3,7 +3,7 @@
 원본 XML을 문자열 연산으로만 수정한다(etree.tostring 사용 금지 → 한컴 호환 유지).
 mimetype은 항상 첫 엔트리·비압축(STORED)으로 재패키징한다.
 """
-import re, zipfile, io, shutil, os
+import re, zipfile, os
 
 def read_hwpx(path):
     """원본 zip을 순서·압축방식 보존하여 읽는다.

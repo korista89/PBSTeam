@@ -10,7 +10,6 @@ from app.services.normalize import (
     extract_clinical_signals, normalize_behavior_log,
     calculate_data_quality_report
 )
-from app.services.contagion import analyze_peer_contagion
 from app.services.fba_evidence import build_fba_evidence_summary, fba_data_gate
 
 print("=" * 60)
@@ -59,8 +58,6 @@ mock_logs = [
     {"student_name": "윤솔아", "notes": "하준이와 지안이의 울음 소리가 자극이 되었음.", "date": "2026-07-08", "class_name": "초6-2", "primary_slot": 3},
     {"student_name": "윤솔", "notes": "한유진 학생의 울음 소리를 많이 힘들어 함", "date": "2026-07-10", "class_name": "초2-2", "primary_slot": 2}
 ]
-contagion = analyze_peer_contagion(mock_logs, [{"name": "나하준", "class": "초6-2"}, {"name": "오지안", "class": "초6-2"}, {"name": "한유진", "class": "초2-2"}])
-print(f"7. 또래 전염 엣지 수: {len(contagion['edges'])}개 (기대: >=2) -> {'✅ 통과' if len(contagion['edges']) >= 2 else '❌ 실패'}")
 
 # 8. 별도 ABC 문항이 없는 특기사항 중심 FBA 근거 집계
 narrative_logs = [

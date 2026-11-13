@@ -94,17 +94,7 @@ const BEHAVIOR_PRESETS = [
   { label: "[감소] 방해행동", behavior: "방해행동", type: "감소 목표행동", scale: "O/X(발생)", criteria: "10% 이하" },
 ];
 
-const DECISION_OPTIONS = [
-  { label: "CICO 유지", color: "#3b82f6" },
-  { label: "CICO 유지 (양호)", color: "#3b82f6" },
-  { label: "CICO 유지 (T3/SST 병행)", color: "#3b82f6" },
-  { label: "Tier1 하향 권장", color: "#10b981" },
-  { label: "CICO 수정 검토", color: "#f59e0b" },
-  { label: "Tier2(SST) 전환", color: "#8b5cf6" },
-  { label: "Tier3 상향 검토", color: "#ef4444" },
-];
-
-const RATE_THRESHOLDS = { high: 80, mid: 50 };
+const RATE_THRESHOLDS = { mid: 50 };
 
 function getInputOptions(scale: string): string[] {
   const s = scale?.trim() || "";
@@ -271,7 +261,8 @@ export default function CICOPage() {
     setGenerating(true);
     try {
       const res = await axios.post(`${apiUrl}/api/v1/cico/generate`, { year: cicoYear(month), month });
-      alert(res.data?.exists ? `${month}월 CICO 시트가 이미 존재합니다.` : `${month}월 CICO 시트를 생성했습니다.`);
+      setSaveStatus(res.data?.exists ? (res.data.added ? `✓ ${res.data.added}명 추가` : "✓ 빠진 학생 없음") : `✓ ${month}월 CICO 생성`);
+      setTimeout(() => setSaveStatus(""), 3000);
       setIs404(false);
       await fetchData();
     } catch (err: any) {
@@ -386,13 +377,13 @@ export default function CICOPage() {
               </span>
             )}
             {isAdmin() && (
-              <button onClick={handleGenerateSheet} disabled={generating} className="btn btn-secondary" title="TierStatus에서 Tier2(CICO) 대상 학생 명단을 파악해 선택된 월의 CICO 입력 시트를 새로 생성합니다">
-                {generating ? "생성 중..." : "🗓️ 월 시트 생성"}
+              <button onClick={handleGenerateSheet} disabled={generating} className="btn btn-secondary" title="Tier현황의 CICO 학생 중 이 달 표에 없는 학생을 넣습니다(없는 달이면 새로 만듭니다)">
+                {generating ? "맞추는 중..." : "🗓️ 명단 맞추기"}
               </button>
             )}
             <select value={month} onChange={e => setMonth(Number(e.target.value))} style={{ padding: "6px 10px", borderRadius: "8px", border: "1.5px solid var(--primary-blue)", fontWeight: 700, fontSize: "0.82rem", outline: "none", background: "white" }}>
               {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                <option key={m} value={m}>{String(new Date().getFullYear()).slice(-2)}-{String(m).padStart(2, '0')}월</option>
+                <option key={m} value={m}>{String(cicoYear(m)).slice(-2)}-{String(m).padStart(2, '0')}월</option>
               ))}
             </select>
             <button onClick={() => void fetchData()} className="btn btn-primary">🔄 새로고침</button>
@@ -412,7 +403,7 @@ export default function CICOPage() {
               <p style={{ fontWeight: 800 }}>{error}</p>
               {is404 && isAdmin() && (
                 <button onClick={handleGenerateSheet} disabled={generating} className="btn btn-primary" style={{ marginTop: "16px" }}>
-                  {generating ? "생성 중..." : `🗓️ ${month}월 CICO 시트 지금 생성하기`}
+                  {generating ? "만드는 중..." : `🗓️ ${month}월 CICO 만들기`}
                 </button>
               )}
               {is404 && !isAdmin() && <p style={{ color: "#64748b", marginTop: 8 }}>관리자에게 시트 생성을 요청해주세요.</p>}
@@ -425,7 +416,7 @@ export default function CICOPage() {
             ) : (
               <div className="cico-unified-layout" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" }}>
                 {/* 학생 목록 */}
-                <div className="card" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6, maxHeight: 720, overflowY: "auto" }}>
+                <div className="card cico-student-list" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6, maxHeight: 720, overflowY: "auto" }}>
                   {reportData?.students.map(rs => {
                     const active = rs.code === selectedCode;
                     return (
@@ -455,13 +446,12 @@ export default function CICOPage() {
                 {/* 선택된 학생 상세 */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {!gridStudent ? (
-                    <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>요청한 학생의 이달 기록이 없거나 선택되지 않았습니다. 왼쪽에서 확인하세요.</div>
+                    <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>학생을 고르세요.</div>
                   ) : (
                     <>
                     <div className="card" style={{ padding: 12, display: "flex", gap: 16, flexWrap: "wrap" }}>
                       <a href={`/student/${encodeURIComponent(gridStudent.학생코드)}`}>학생 대시보드 →</a>
                       <a href={`/target-behavior?student=${encodeURIComponent(gridStudent.학생코드)}`}>개별 행동중재 검토 →</a>
-                      <span style={{ color: "#64748b", fontSize: "0.8rem" }}>이동만 하며 지원 단계는 자동 변경되지 않습니다.</span>
                     </div>
                     <StudentCICOPanel
                       gridStudent={gridStudent}
@@ -479,20 +469,9 @@ export default function CICOPage() {
             )
           )}
 
-          {/* 의사결정 기준 + 가이드 (통합) */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", padding: "12px 16px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px" }}>
-            <span style={{ color: "#64748b", fontSize: "0.75rem", alignSelf: "center", fontWeight: 600 }}>의사결정 기준:</span>
-            {DECISION_OPTIONS.map(opt => (
-              <span key={opt.label} style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.7rem", color: opt.color, background: `${opt.color}15`, padding: "3px 8px", borderRadius: "4px" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: opt.color }} />
-                {opt.label}
-              </span>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 8, padding: "22px 26px", background: "linear-gradient(135deg,#f0f9ff,#dbeafe)", borderRadius: 20, border: "1px solid #93c5fd" }}>
-            <h3 style={{ margin: "0 0 14px 0", fontSize: "1rem", fontWeight: 800, color: "#1e3a8a" }}>📖 CICO 가이드</h3>
-            <div className="responsive-grid-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, fontSize: "0.75rem", color: "#0f172a", lineHeight: 1.8 }}>
+          <details style={{ padding: "14px 18px", background: "#f0f9ff", borderRadius: 12, border: "1px solid #bfdbfe" }}>
+            <summary style={{ cursor: "pointer", fontSize: "0.95rem", fontWeight: 800, color: "#1e3a8a" }}>📖 CICO 사용법과 판단 기준</summary>
+            <div className="responsive-grid-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12, fontSize: "0.8rem", color: "#0f172a", lineHeight: 1.7 }}>
               {[
                 { t: "📌 CICO란?", b: "Check-In/Check-Out — Tier2 학생이 매일 담당 교사와 짧게 체크인·체크아웃하며 목표 행동을 점검하는 중재 프로그램입니다." },
                 { t: "✍️ 데이터 입력", b: "학생을 선택한 뒤 일별 셀을 클릭하세요. O/X는 클릭마다 O→X→공백, 점수/숫자 척도는 드롭다운·입력창이 뜹니다. 저장은 자동입니다." },
@@ -507,7 +486,7 @@ export default function CICOPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </details>
         </div>
       </AppShell>
     </AuthCheck>

@@ -4,7 +4,7 @@
 """
 import re
 from datetime import date
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 
 # ── 발생횟수 ─────────────────────────────────────────────────

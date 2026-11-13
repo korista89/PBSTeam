@@ -3,7 +3,6 @@ import gspread
 from app.core.config import settings
 import pandas as pd
 import re
-import datetime
 import time
 from typing import Optional, List, Dict, Any, Union
 from app.adapters.sheets.client import (
@@ -11,7 +10,7 @@ from app.adapters.sheets.client import (
     get_sheets_client, safe_get_all_records, safe_get_all_values,
     current_sheet_url, open_main_sheet, open_pw_sheet,
 )
-from app.adapters.sheets.resilience import ResilientClient, SheetUnavailable, invalidate_worksheet_lookups
+from app.adapters.sheets.resilience import SheetUnavailable, invalidate_worksheet_lookups
 from app.core.time import now_kst
 from app.core.privacy import mask_name
 
@@ -813,66 +812,6 @@ def code_to_class_name(code: str) -> str:
     course_name = course_names.get(course, "")
     return f"{course_name} {grade}학년 {cls}반"
 
-def get_unique_class_info() -> dict:
-    """
-    Extract unique class IDs and Names from STUDENT_CODES.
-    Returns dict: { '211': '초등 1학년 1반', ... }
-    Class ID is the first 3 digits of student code (e.g. 2111 -> 211)
-    """
-    classes = {}
-    for code in STUDENT_CODES:
-        if len(code) < 3: continue
-
-        # Determine Class ID (Provisional: first 3 digits)
-        # For special classes (34xx, 44xx), we still use first 3 distinct digits if they distinguish classes
-        # 3401 -> 340 (Visiting)
-        class_id = code[:3]
-        class_name = code_to_class_name(code)
-
-        if class_id not in classes:
-            classes[class_id] = class_name
-
-    return classes
-
-
-
-def _generate_teacher_id(class_name: str) -> str:
-    """
-    Generate Korean ID from class name.
-    Ex: "초등 1학년 1반" -> "초1-1관리자"
-        "유치원 1반" -> "유1관리자" (Grade is often integrated or 0)
-        "중학교 1학년 1반" -> "중1-1관리자"
-        "고등 3학년 1반" -> "고3-1관리자"
-        "전공과 1학년 1반" -> "전1-1관리자"
-    """
-    try:
-        if "유치원" in class_name:
-            # "유치원 1반" -> extract numbers
-            parts = class_name.split()
-            # Find class num
-            cls_num = parts[-1].replace("반", "")
-            return f"유{cls_num}관리자"
-
-        prefix_map = {
-            "초등": "초", "중학교": "중", "고등": "고", "전공과": "전", "예비": "예비"
-        }
-
-        # Standard format: "Process Grade학년 Class반"
-        # "초등 1학년 1반" -> ["초등", "1학년", "1반"]
-        parts = class_name.split()
-        if len(parts) >= 3:
-            process = parts[0]
-            grade = parts[1].replace("학년", "")
-            cls = parts[2].replace("반", "")
-
-            p_char = prefix_map.get(process, process[0])
-            return f"{p_char}{grade}-{cls}관리자"
-
-        return class_name.replace(" ", "") + "관리자"
-    except:
-        return class_name + "관리자"
-
-
 def get_student_status_worksheet():
     client = get_sheets_client()
     if not client or not current_sheet_url():
@@ -961,7 +900,6 @@ def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""
 
     try:
         records = safe_get_all_records(ws)
-        from datetime import datetime
         today = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d")
 
         # Column mapping (A=1, B=2, etc. H=8)
@@ -1015,7 +953,6 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
 
     try:
         records = safe_get_all_records(ws)
-        from datetime import datetime
         today = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d")
 
         tier_columns = {
@@ -1093,48 +1030,6 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
         return {"error": str(e)}
 
 
-def update_student_enrollment(code: str, enrolled: str):
-    """Update student enrollment status (O/X)"""
-    ws = get_student_status_worksheet()
-    if not ws:
-        return {"error": "Sheet not accessible"}
-
-    try:
-        records = safe_get_all_records(ws)
-        for idx, r in enumerate(records):
-            if str(r.get('학생코드')) == str(code):
-                row_num = idx + 2
-                ws.update_cell(row_num, 5, enrolled)  # Column 5: 재학여부
-                return {"message": f"Enrollment updated to {enrolled}"}
-        return {"error": f"Student code {code} not found"}
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
-        return {"error": str(e)}
-
-
-def update_student_beable_code(code: str, beable_code: str):
-    """Update student's BeAble code for data linking"""
-    ws = get_student_status_worksheet()
-    if not ws:
-        return {"error": "Sheet not accessible"}
-
-    try:
-        records = safe_get_all_records(ws)
-        for idx, r in enumerate(records):
-            if str(r.get('학생코드')) == str(code):
-                row_num = idx + 2
-                ws.update_cell(row_num, 6, beable_code)  # Column 6: BeAble코드
-                return {"message": f"BeAble code updated to {beable_code}"}
-        return {"error": f"Student code {code} not found"}
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
-        return {"error": str(e)}
-
-
 def get_beable_code_mapping():
     """Get mapping of BeAble codes to student codes for data analysis"""
     try:
@@ -1194,55 +1089,6 @@ def get_enrolled_student_count():
 # =============================
 # CICO Daily Tracking Worksheet
 # =============================
-
-
-def sync_daily_entry_to_monthly(student_code: str, date_str: str, target1: str, target2: str):
-    """
-    Update the corresponding cell in the monthly sheet based on daily input.
-    """
-    try:
-        month = int(date_str.split("-")[1])
-        day = int(date_str.split("-")[2])
-
-        # Determine Daily Outcome (O/X) for the cell
-        # Logic: If both O -> O? Or if valid data exists?
-        # The user said "Rate calculation not working".
-        # We need to mark the day as something to count it.
-
-        t1 = target1.upper() == 'O'
-        t2 = target2.upper() == 'O'
-
-        daily_val = ""
-        # If at least one target is present
-        if target1 or target2:
-            daily_val = "O" if (t1 and t2) else "X"
-            if not target2 and target1: daily_val = target1.upper()
-            if not target1 and target2: daily_val = target2.upper()
-
-        if not daily_val:
-            return {"message": "No targets to sync"}
-
-        # Now update monthly sheet
-        updates = [{
-            "row": None, # Will be found by student_code
-            "col": str(day),
-            "value": daily_val
-        }]
-
-        if settings.ENVIRONMENT.lower() != "production":
-            logger.debug(f"Syncing Daily {date_str} for {student_code} -> {daily_val}")
-        else:
-            logger.info("Syncing CICO daily to monthly sheet")
-        return update_monthly_cico_cells(month, updates, student_code_override=student_code)
-
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        if settings.ENVIRONMENT.lower() != "production":
-            logger.error(f"DEBUG: Sync Error: {e}")
-        else:
-            logger.error("Error during CICO daily to monthly sync")
-        return {"error": str(e)}
 
 
 def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str = "", memo: str = ""):
@@ -1403,7 +1249,6 @@ def add_meeting_note(data: dict):
         return {"error": "Sheet not accessible"}
 
     try:
-        from datetime import datetime
         created_at = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
 
         import uuid
@@ -1787,14 +1632,19 @@ def create_monthly_cico_sheet(year: int, month: int):
         sheet = open_main_sheet(client)
         month_name = f"{month}월"
 
-        # Check if exists
-        ws = get_worksheet_fuzzy(sheet, month_name)
-        if ws:
-            return {"message": f"Sheet '{month_name}' already exists.", "exists": True}
+        from app.adapters.sheets.cico_store import open_store, school_year
+        sy = school_year()
+        store = open_store(sheet)
+        existing = store.month_rows(sy, month)
 
         # 1. Fetch CICO Students (Tier2(CICO) == 'O')
         status_records = fetch_student_status()
         cico_students = [s for s in status_records if s.get('Tier2(CICO)') == 'O']
+        # 이미 있는 달이면 Tier현황에서 새로 CICO가 된 학생만 덧붙인다(기존 줄·기록은 그대로)
+        have = {str(r.get("학생코드", "")).strip() for r in existing}
+        cico_students = [s for s in cico_students if str(s.get("학생코드", "")).strip() not in have]
+        if existing and not cico_students:
+            return {"message": f"{month_name} CICO에 빠진 학생이 없습니다.", "exists": True, "added": 0}
 
         if not cico_students:
             return {"error": "No students marked for CICO in TierStatus."}
@@ -1818,7 +1668,8 @@ def create_monthly_cico_sheet(year: int, month: int):
 
         rows = [headers]
 
-        for idx, s in enumerate(cico_students, 1):
+        start = max([int(r.get("번호") or 0) for r in existing if str(r.get("번호", "")).isdigit()] + [0])
+        for idx, s in enumerate(cico_students, start + 1):
             name_code = f"{s.get('학생이름', '')}({s.get('학생코드', '')})"
             row = [
                 idx, # 번호
@@ -1839,21 +1690,21 @@ def create_monthly_cico_sheet(year: int, month: int):
             rows.append(row)
 
         # 3. CICO_설정에 이 달 학생 줄을, CICO_달력에 기록일을 만든다(월별 탭을 새로 만들지 않음)
-        from app.adapters.sheets.cico_store import open_store, school_year
-        sy = school_year()
         set_rows = []
         for r in rows[1:]:
-            s = cico_students[int(r[0]) - 1]
+            s = cico_students[int(r[0]) - start - 1]
             set_rows.append({
                 "학년도": sy, "월": month, "번호": r[0], "학급": r[1], "학생코드": s.get("학생코드", ""),
                 "학생명": s.get("학생이름", ""), "Tier2": r[3], "Tier3": r[4], "목표행동": r[5],
                 "목표": 1, "목표행동 유형": r[6], "척도": r[7], "입력 기준(베이스라인)": r[8], "목표 달성 기준": r[9],
                 "수행/발생률": "-", "목표 달성 여부": "-",
             })
-        open_store(sheet).add_month(sy, month, set_rows, list(business_days) if business_days else [])
+        store.add_month(sy, month, set_rows, list(business_days) if business_days else [])
         invalidate_cache(f"sheet:cico:raw:{now_kst().year}:{month:02d}")
 
-        return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students."}
+        if existing:
+            return {"message": f"{month_name} CICO에 {len(cico_students)}명을 추가했습니다.", "exists": True, "added": len(cico_students)}
+        return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students.", "added": len(cico_students)}
 
     except SheetUnavailable:
         raise
@@ -2526,56 +2377,6 @@ def update_student_cico_settings(month: int, student_code: str, settings_data: d
         raise
     except Exception as e:
         logger.error(f"Error updating CICO settings: {e}")
-        return {"error": str(e)}
-
-
-def toggle_tier2_status(month: int, student_code: str, status: str):
-    """Toggle Tier2 status (O/X) for a student in a monthly sheet."""
-    client = get_sheets_client()
-    if not client or not current_sheet_url():
-        return {"error": "Sheet not accessible"}
-    try:
-        sh = open_main_sheet(client)
-        month_name = f"{month}월"
-
-        ws = get_worksheet_fuzzy(sh, month_name)
-        if not ws:
-            return {"error": f"'{month_name}' 시트가 없습니다."}
-
-        all_values = safe_get_all_values(ws)
-        headers = all_values[0]
-
-        code_idx = -1
-        for idx, header in enumerate(headers):
-            normalized = str(header).strip()
-            if "학생코드" in normalized or "(코드)" in normalized or normalized.lower() in {"code", "studentcode"}:
-                code_idx = idx
-                break
-        if code_idx == -1:
-            return {"error": "학생코드 열을 찾을 수 없습니다."}
-        tier2_idx = headers.index("Tier2") if "Tier2" in headers else 3
-
-        for i, row in enumerate(all_values[1:], start=2):
-            if len(row) <= code_idx:
-                continue
-            cell_value = str(row[code_idx]).strip()
-            code_match = re.search(r'\((.*?)\)', cell_value)
-            resolved_code = code_match.group(1).strip() if code_match else cell_value
-            if resolved_code == str(student_code).strip():
-                ws.update_cell(i, tier2_idx + 1, status)  # 1-based column
-                cur_year = now_kst().year
-                invalidate_cache(f"sheet:cico:{cur_year}:{month:02d}")
-                invalidate_cache(f"sheet:cico:raw:{cur_year}:{month:02d}")
-                invalidate_cache(f"sheet:cico:{month}")
-                clear_cache("daily_cico")
-                return {"message": f"Tier2 status for {student_code} → {status}"}
-
-        return {"error": f"학생코드 {student_code}를 찾을 수 없습니다."}
-
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error toggling Tier2: {e}")
         return {"error": str(e)}
 
 
@@ -3467,7 +3268,6 @@ def add_board_post(title: str, content: str, author: str):
         return {"error": "Sheet not accessible"}
 
     try:
-        from datetime import datetime
         import uuid
 
         post_id = str(uuid.uuid4())[:8]
@@ -4421,13 +4221,34 @@ def fetch_approval_states(force_refresh: bool = False) -> Dict[str, Dict[str, di
     return states
 
 
-def add_approval_step(log_id: str, step: str, by: str, cancel: bool = False, memo: str = "") -> None:
+def append_approval_rows(rows: List[list]) -> None:
+    """[Log_ID, Step, Action, By, At, Memo] 행을 한 번에 추가한다."""
     ws = ensure_approvals_sheet()
     if not ws:
         raise RuntimeError("Approvals 탭에 접근할 수 없습니다")
-    ws.append_row([log_id, step, "취소" if cancel else "확인", by,
-                   now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"), memo], value_input_option="RAW")
+    ws.append_rows(rows, value_input_option="RAW")
     invalidate_cache("approvals:")
+
+
+def add_approval_step(log_id: str, step: str, by: str, cancel: bool = False, memo: str = "") -> None:
+    append_approval_rows([[log_id, step, "취소" if cancel else "확인", by,
+                           now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S"), memo]])
+
+
+# Today 화면 신호의 '확인 완료'도 같은 탭에 Step='Today확인'으로 남긴다(Log_ID 칸 = 신호 ID).
+# 신호 ID에는 근거가 된 마지막 기록 날짜가 들어 있어, 새 기록이 생기면 새 신호로 다시 뜬다.
+TODAY_ACK_STEP = "Today확인"
+
+
+def fetch_today_acks() -> set:
+    cached = get_cached("approvals:today", ttl=60)
+    if cached is not None:
+        return cached
+    ws = ensure_approvals_sheet()
+    acks = {str(r.get("Log_ID", "")).strip() for r in (safe_get_all_records(ws) if ws else [])
+            if str(r.get("Step", "")).strip() == TODAY_ACK_STEP}
+    set_cached("approvals:today", acks)
+    return acks
 
 
 _PRIOR_DAILY_CACHE: Dict[str, Any] = {"at": 0.0, "data": {}}

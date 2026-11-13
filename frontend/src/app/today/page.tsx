@@ -69,25 +69,10 @@ export default function TodayPage() {
     if (month < 3 || month > 12) { setCicoItems([]); return; }
     const todayStr = `${String(month).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-    Promise.all([
-      axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`),
-      axios.get(`${apiUrl}/api/v1/cico/business-days?month=${month}&year=${now.getFullYear()}`),
-    ]).then(([monthlyRes, bizDaysRes]) => {
-      const dayCols: { index: number; label: string }[] = monthlyRes.data.day_columns || [];
-      const businessDays: string[] = bizDaysRes.data.business_days || [];
-      // 영업일(오름차순)과 회차 컬럼을 순서대로 1:1 매핑 — cico 페이지가 하는 것과 동일한 방식.
-      const dateByIndex: Record<number, string> = {};
-      dayCols.filter(c => c.label.includes("회차")).sort((a, b) => a.index - b.index).forEach((c, i) => {
-        if (businessDays[i]) dateByIndex[c.index] = businessDays[i];
-      });
-      const todayCol = dayCols.find(c => dateByIndex[c.index] === todayStr || c.label === todayStr);
-      if (!todayCol) { setCicoItems([]); return; }
-      const items: CicoCheckinItem[] = (monthlyRes.data.students || []).map((s: any) => ({
-        code: s.학생코드,
-        name: s.학생명,
-        checkedIn: !!(s.days?.[todayCol.label] && s.days[todayCol.label] !== ""),
-      }));
-      setCicoItems(items);
+    axios.get(`${apiUrl}/api/v1/cico/monthly?month=${month}`).then(res => {
+      const s0 = (s: any) => !!s.days?.[todayStr] || Object.values(s.periods?.[todayStr] || {}).some(Boolean);
+      const isSchoolDay = (res.data.day_columns || []).some((c: { label: string }) => c.label === todayStr);
+      setCicoItems(isSchoolDay ? (res.data.students || []).map((s: any) => ({ code: s.학생코드, name: s.학생명, checkedIn: s0(s) })) : []);
     }).catch(() => setCicoItems([]));
   }, [apiUrl, user?.class_id, isAdmin]);
 
@@ -98,6 +83,22 @@ export default function TodayPage() {
       setClassRulesSet(Boolean(res.data.rule));
     }).catch(() => setClassRulesSet(null));
   }, [apiUrl, user?.class_id, isAdmin]);
+
+  // 확인 완료: 신호를 닫는다. 같은 학생에게 새 기록이 생기면 새 신호로 다시 뜬다.
+  const [acking, setAcking] = useState(false);
+  const ack = async (sigs: DecisionSignal[]) => {
+    if (!sigs.length) return;
+    setAcking(true);
+    try {
+      await axios.post(`${apiUrl}/api/v1/workspace/today/ack`, { signal_ids: sigs.map(s => s.signal_id) });
+      const done = new Set(sigs.map(s => s.signal_id));
+      setData(d => d ? { ...d, urgent_safety_signals: d.urgent_safety_signals.filter(s => !done.has(s.signal_id)), review_signals: d.review_signals.filter(s => !done.has(s.signal_id)) } : d);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || "확인 완료 처리에 실패했습니다.");
+    } finally {
+      setAcking(false);
+    }
+  };
 
   const goTo = (kind: string, code?: string | null) => {
     if (kind === "student" && code) router.push(`/student/${encodeURIComponent(code)}`);
@@ -113,7 +114,7 @@ export default function TodayPage() {
     <AuthCheck>
       <AppShell
         currentPage="today"
-        title="🧭 오늘 확인할 것"
+        title="🧭 오늘 할 일"
         subtitle="담임교사가 지금 무엇을 챙겨야 하는지 우선순위대로 정리했습니다"
         headerActions={<button onClick={() => void fetchToday()} className="btn btn-secondary">🔄 새로고침</button>}
       >
@@ -138,7 +139,7 @@ export default function TodayPage() {
               <div style={{ flex: 1, minWidth: 200, fontSize: "0.8rem", color: "#64748b" }}>
                 {totalTodo === 0
                   ? "🎉 지금 특별히 확인할 항목이 없습니다. 평소처럼 학급을 운영하세요."
-                  : "아래 항목을 위에서부터 순서대로 확인하세요. 각 카드의 버튼을 누르면 바로 처리할 수 있는 화면으로 이동합니다."}
+                  : "위에서부터 확인하세요. 처리했으면 '확인 완료'로 닫습니다. 새 기록이 생기면 다시 뜹니다."}
               </div>
               <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
                 {isAdmin() ? "학교 전체" : "우리 학급"} 재학 {data?.total_enrolled || 0}명 · 최근 14일 기록 {data?.recent_14d_events_count || 0}건
@@ -147,9 +148,10 @@ export default function TodayPage() {
 
             {/* 1. 지금 바로 확인 — 안전/위기 후속조치 */}
             {data && data.urgent_safety_signals.length > 0 && (
-              <TodoSection title="🚨 지금 바로 확인" subtitle="물리적 제지·상해·위기 발생에 대한 후속 조치가 필요합니다" tone="urgent">
+              <TodoSection title="🚨 지금 바로 확인" subtitle="물리적 제지·상해·위기 발생에 대한 후속 조치가 필요합니다" tone="urgent"
+                onDoneAll={() => void ack(data.urgent_safety_signals)} busy={acking}>
                 {data.urgent_safety_signals.map(sig => (
-                  <SignalCard key={sig.signal_id} sig={sig} tone="urgent" onAct={() => goTo(SIGNAL_ROUTE[sig.signal_type] || "student", sig.student_code)} />
+                  <SignalCard key={sig.signal_id} sig={sig} tone="urgent" busy={acking} onDone={() => void ack([sig])} onAct={() => goTo(SIGNAL_ROUTE[sig.signal_type] || "student", sig.student_code)} />
                 ))}
               </TodoSection>
             )}
@@ -177,9 +179,10 @@ export default function TodayPage() {
 
             {/* 3. 이번 주 살펴볼 것 */}
             {data && data.review_signals.length > 0 && (
-              <TodoSection title="🔍 이번 주 살펴볼 것" subtitle="당장 급하진 않지만 검토가 필요한 항목입니다" tone="review">
+              <TodoSection title="🔍 이번 주 살펴볼 것" subtitle="당장 급하진 않지만 검토가 필요한 항목입니다" tone="review"
+                onDoneAll={() => void ack(data.review_signals)} busy={acking}>
                 {data.review_signals.map(sig => (
-                  <SignalCard key={sig.signal_id} sig={sig} tone="review" onAct={() => goTo(SIGNAL_ROUTE[sig.signal_type] || "student", sig.student_code)} />
+                  <SignalCard key={sig.signal_id} sig={sig} tone="review" busy={acking} onDone={() => void ack([sig])} onAct={() => goTo(SIGNAL_ROUTE[sig.signal_type] || "student", sig.student_code)} />
                 ))}
               </TodoSection>
             )}
@@ -195,12 +198,6 @@ export default function TodayPage() {
               </TodoSection>
             )}
 
-            {totalTodo === 0 && !data?.urgent_safety_signals.length && !data?.review_signals.length && (
-              <div className="card" style={{ padding: 50, textAlign: "center", color: "#64748b" }}>
-                <div style={{ fontSize: "2.2rem", marginBottom: 10 }}>🎉</div>
-                오늘은 특별히 확인할 항목이 없습니다.
-              </div>
-            )}
           </div>
         )}
       </AppShell>
@@ -208,7 +205,7 @@ export default function TodayPage() {
   );
 }
 
-function TodoSection({ title, subtitle, tone, children }: { title: string; subtitle: string; tone: "urgent" | "warn" | "review" | "done"; children: React.ReactNode }) {
+function TodoSection({ title, subtitle, tone, children, onDoneAll, busy }: { title: string; subtitle: string; tone: "urgent" | "warn" | "review" | "done"; children: React.ReactNode; onDoneAll?: () => void; busy?: boolean }) {
   const colors: Record<string, { border: string; text: string }> = {
     urgent: { border: "#fca5a5", text: "#991b1b" },
     warn: { border: "#fed7aa", text: "#9a3412" },
@@ -218,16 +215,19 @@ function TodoSection({ title, subtitle, tone, children }: { title: string; subti
   const c = colors[tone];
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden", border: `1px solid ${c.border}` }}>
-      <div style={{ padding: "14px 20px", borderBottom: `1px solid ${c.border}`, background: `${c.text}08` }}>
-        <div style={{ fontWeight: 800, fontSize: "1rem", color: c.text }}>{title}</div>
-        <div style={{ fontSize: "0.78rem", color: "#64748b", marginTop: 2 }}>{subtitle}</div>
+      <div style={{ padding: "14px 20px", borderBottom: `1px solid ${c.border}`, background: `${c.text}08`, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ fontWeight: 800, fontSize: "1rem", color: c.text }}>{title}</div>
+          <div style={{ fontSize: "0.78rem", color: "#64748b", marginTop: 2 }}>{subtitle}</div>
+        </div>
+        {onDoneAll && <button onClick={onDoneAll} disabled={busy} className="btn btn-secondary" style={{ fontSize: "0.8rem" }}>✓ 모두 확인 완료</button>}
       </div>
       <div style={{ padding: "10px 16px" }}>{children}</div>
     </div>
   );
 }
 
-function SignalCard({ sig, tone, onAct }: { sig: DecisionSignal; tone: "urgent" | "review"; onAct: () => void }) {
+function SignalCard({ sig, tone, onAct, onDone, busy }: { sig: DecisionSignal; tone: "urgent" | "review"; onAct: () => void; onDone: () => void; busy: boolean }) {
   const accent = tone === "urgent" ? "#ef4444" : "#3b82f6";
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, padding: "12px 6px", borderBottom: "1px solid #f1f5f9", flexWrap: "wrap" }}>
@@ -239,9 +239,14 @@ function SignalCard({ sig, tone, onAct }: { sig: DecisionSignal; tone: "urgent" 
         <p style={{ fontSize: "0.8rem", color: "#475569", margin: "0 0 4px 0" }}>{sig.reason}</p>
         <p style={{ fontSize: "0.76rem", color: accent, margin: 0, fontWeight: 600 }}>👉 {sig.recommended_next_action}</p>
       </div>
+      <div style={{ display: "flex", gap: 6 }}>
+      <button onClick={onDone} disabled={busy} title="처리했으면 닫습니다. 새 기록이 생기면 다시 뜹니다" style={{ padding: "8px 12px", background: "#fff", color: "#0f172a", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+        ✓ 확인 완료
+      </button>
       <button onClick={onAct} disabled={!sig.student_code} style={{ padding: "8px 14px", background: sig.student_code ? accent : "#e2e8f0", color: "white", border: "none", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700, cursor: sig.student_code ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}>
         확인하러 가기 →
       </button>
+      </div>
     </div>
   );
 }

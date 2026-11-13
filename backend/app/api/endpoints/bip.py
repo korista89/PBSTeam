@@ -1,7 +1,7 @@
 from app.services.sheets import tier_label
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal
 from app.services.normalize import normalize_behavior_log
 from app.services.ai_insight import (
     generate_bip_hypothesis,

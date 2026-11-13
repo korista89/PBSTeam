@@ -95,13 +95,17 @@ def test_delete_is_soft_and_hides_row():
         assert e.value.status_code == 404
 
 
-def test_admin_revise_then_approve():
+def test_admin_revise_then_sign_all_fills_missing_steps():
     ws = WS(rows())
-    with _patch(ws):
+    added = []
+    with _patch(ws), mock.patch("app.services.sheets.append_approval_rows", side_effect=added.extend), \
+         mock.patch("app.services.sheets.fetch_approval_states", return_value={"c": {"교감확인": {}}}):
         B.revise_behavior_log({"log_id": "a", "memo": "보완"}, current_admin=ADMIN)
         assert status(ws, "a") == "Revision Requested"
-        B.approve_behavior_log({"log_id": "a"}, current_admin=ADMIN)
-        assert status(ws, "a") == "Approved"
+        r = B.sign_all_behavior_logs({"log_ids": ["a", "c"]}, current_admin=ADMIN)
+    assert status(ws, "a") == "Approved" and status(ws, "c") == "Approved"
+    assert r == {"success": True, "steps_added": 5, "status_changed": 2}   # c는 교감확인이 이미 있어 2단계만
+    assert {(x[0], x[1]) for x in added} >= {("a", "담당자확인"), ("c", "학교장확인")}
 
 
 def test_crisis_without_report_rejected_and_author_from_session():

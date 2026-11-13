@@ -2,8 +2,8 @@
 
 from typing import List, Dict, Any, Optional
 from app.domain.models import (
-    EBPStrategy, EBPCategory, FunctionCode, FunctionHypothesis,
-    DataSufficiency, EBPRecommendation, EvidenceRef
+    EBPStrategy, FunctionCode, FunctionHypothesis,
+    DataSufficiency
 )
 from app.services.ebp.catalog import load_ebp_catalog
 from app.services.ebp.guardrails import validate_ebp_guardrails

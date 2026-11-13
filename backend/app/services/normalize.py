@@ -1,6 +1,6 @@
 import re
 import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 
 # ==============================================================================
 # 정규 코드 및 매핑 사전 정의

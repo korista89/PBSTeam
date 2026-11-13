@@ -1,18 +1,16 @@
 # backend/app/services/decision/signals.py
 
-from datetime import datetime, date, timedelta
-from typing import List, Dict, Any, Optional
+from datetime import date, timedelta
+from typing import List, Optional
 from app.core.time import now_kst, today_kst
 from app.domain.models import (
     DecisionSignal, DecisionSignalType, SignalSeverity, DecisionStatus,
-    BehaviorEvent, CicoObservation, EvidenceRef
+    BehaviorEvent, EvidenceRef
 )
 
 def evaluate_decision_signals(
     student_code: str,
     behavior_events: List[BehaviorEvent],
-    cico_observations: List[CicoObservation] = None,
-    bip_plan: Dict[str, Any] = None,
     as_of_date: Optional[date] = None,
     safety_window_days: int = 14,
     is_today_inbox: bool = True,
@@ -23,7 +21,6 @@ def evaluate_decision_signals(
     Does NOT mutate Tiers automatically; creates actionable review items for teachers/teams.
     """
     signals: List[DecisionSignal] = []
-    cico_observations = cico_observations or []
     target_date = as_of_date or today_kst()
     created_time = now_kst()
 
@@ -82,7 +79,7 @@ def evaluate_decision_signals(
     has_spike_signal = False
     if cur_cnt >= 4 and (prev_cnt == 0 or cur_cnt >= prev_cnt * 1.5 or (cur_cnt - prev_cnt) >= 3):
         signals.append(DecisionSignal(
-            signal_id=f"SIG_SPIKE_{student_code}_{target_date}",
+            signal_id=f"SIG_SPIKE_{student_code}_{max(e.event_date for e in cur_events)}",
             student_code=student_code,
             signal_type=DecisionSignalType.CHANGE_UP,
             severity=SignalSeverity.REVIEW,
@@ -94,24 +91,6 @@ def evaluate_decision_signals(
             created_at=created_time
         ))
         has_spike_signal = True
-
-    # 3. GOAL_STALLED Signal (CICO Goal Met Rate < 70%)
-    if len(cico_observations) >= 10:
-        met_count = sum(1 for c in cico_observations if c.goal_met is True)
-        total_valid = sum(1 for c in cico_observations if c.goal_met is not None)
-        if total_valid >= 10 and (met_count / total_valid) < 0.7:
-            signals.append(DecisionSignal(
-                signal_id=f"SIG_CICO_STALL_{student_code}",
-                student_code=student_code,
-                signal_type=DecisionSignalType.GOAL_STALLED,
-                severity=SignalSeverity.REVIEW,
-                title="🟠 CICO 지원 목표 달성 정체",
-                reason=f"최근 {total_valid}회차 중 목표 달성률이 {round(met_count/total_valid*100, 1)}%로 70% 미만에 머물고 있습니다.",
-                evidence=[],
-                recommended_next_action="강화제 선호도 재평가 또는 목표행동 난이도/기준 조정 검토",
-                status=DecisionStatus.OPEN,
-                created_at=created_time
-            ))
 
     # 4. MORE_DATA Signal (ABC complete < 3)
     # In Today Action Inbox mode: Only trigger for actively supported students or recent active cases
@@ -130,7 +109,7 @@ def evaluate_decision_signals(
 
     if should_evaluate_more_data and len(behavior_events) > 0 and len(abc_complete) < 3:
         signals.append(DecisionSignal(
-            signal_id=f"SIG_DATA_{student_code}",
+            signal_id=f"SIG_DATA_{student_code}_{max(e.event_date for e in behavior_events)}",
             student_code=student_code,
             signal_type=DecisionSignalType.MORE_DATA,
             severity=SignalSeverity.INFO,

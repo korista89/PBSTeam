@@ -1,30 +1,17 @@
 # backend/app/api/endpoints/workspace.py
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional, List, Dict, Any
-from datetime import date, timedelta
+from fastapi import APIRouter, HTTPException, Body, Depends
+from typing import List, Dict, Any
+from datetime import timedelta
 from app.core.time import now_kst, today_kst
-from app.domain.models import (
-    StudentWorkspace, StudentProfile, BehaviorEvent, CicoObservation,
-    DecisionSignal, DataQualityCheck, FunctionHypothesis, FunctionCode,
-    DataSufficiency, SignalSeverity, HypothesisStatus
-)
+from app.domain.models import BehaviorEvent, DecisionSignal, SignalSeverity
 from app.adapters.sheets.tier_status import TierStatusAdapter
 from app.adapters.sheets.log_main import LogMainAdapter
-from app.adapters.sheets.cico import CicoMonthAdapter
-from app.services.sheets import get_bip
-from app.services.ebp.matching import generate_ebp_recommendation_bundle
 from app.services.decision.signals import evaluate_decision_signals
 from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier
 
 router = APIRouter()
 
-
-def _active_cico_months(as_of_date: date) -> List[int]:
-    """Return the current school-year CICO tabs through the as-of month."""
-    if as_of_date.month < 3:
-        return []
-    return list(range(3, min(as_of_date.month, 12) + 1))
 
 @router.get("/today")
 def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
@@ -70,6 +57,9 @@ def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_aut
             )
             all_signals.extend(sigs)
 
+    from app.services.sheets import fetch_today_acks
+    acks = fetch_today_acks()
+    all_signals = [s for s in all_signals if s.signal_id not in acks]
     urgent_signals = [s for s in all_signals if s.severity in [SignalSeverity.URGENT, SignalSeverity.PRIORITY]]
     review_signals = [s for s in all_signals if s.severity in [SignalSeverity.REVIEW, SignalSeverity.INFO]]
 
@@ -91,150 +81,26 @@ def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_aut
         "total_enrolled": len(students),
         "tier_counts": tier_counts,
         "recent_14d_events_count": len(recent_events),
-        "urgent_safety_signals": urgent_signals[:10],
-        "review_signals": review_signals[:20],
+        "urgent_safety_signals": urgent_signals,
+        "review_signals": review_signals,
         "active_signals_count": len(all_signals)
     }
 
 
-@router.get("/student/{student_code}")
-def get_student_workspace(
-    student_code: str,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """
-    Returns unified Student 360 Workspace:
-    - Profile & Tiers
-    - Behavior Events timeline
-    - FBA Functional Patterns & Hypothesis
-    - EBP Recommendation Candidate Bundle
-    - CICO History (3~7월)
-    - Active BIP
-    - Decision Signals & Data Quality check
-    """
-    check_student_scope(student_code, current_user)
-    today = today_kst()
-    students = TierStatusAdapter.fetch_students()
-    profile = next((s for s in students if s.student_code == student_code), None)
-    if not profile:
-        raise HTTPException(status_code=404, detail=f"Student '{student_code}' not found in TierStatus roster.")
-
-    all_events = LogMainAdapter.fetch_events()
-    s_events = [e for e in all_events if e.student_code == student_code]
-
-    # CICO observations from every active month through today.
-    cico_obs: List[CicoObservation] = []
-    for m in _active_cico_months(today):
-        m_obs = CicoMonthAdapter.fetch_observations(m)
-        s_m_obs = [o for o in m_obs if o.student_code == student_code]
-        cico_obs.extend(s_m_obs)
-
-    # Active BIP
-    raw_bip = get_bip(student_code)
-
-    # Data Quality Check
-    complete_abc = sum(1 for e in s_events if e.antecedent and e.consequence)
-    if s_events:
-        dates = [e.event_date for e in s_events]
-        date_span_days = (max(dates) - min(dates)).days + 1
-        unique_dates = len(set(dates))
-    else:
-        date_span_days = 0
-        unique_dates = 0
-
-    is_sufficient = len(s_events) >= 5 and complete_abc >= 3
-    
-    dq = DataQualityCheck(
-        event_count=len(s_events),
-        date_span_days=date_span_days,
-        complete_abc_count=complete_abc,
-        has_location_data=any(e.primary_location and e.primary_location != "기타/미상" for e in s_events),
-        has_intensity_data=any(e.intensity is not None and e.intensity > 0 for e in s_events),
-        is_sufficient_for_fba=is_sufficient,
-        reasons=[] if is_sufficient else (
-            ["ABC 직접 관찰 기록(선행-행동-후속) 3건 이상 수집 필요"] if complete_abc < 3 else ["충분한 상황/일자 다양성 확보 필요"]
-        )
-    )
-
-    # Function Hypothesis estimation
-    fn_counts: Dict[str, int] = {}
-    for e in s_events:
-        for est in e.teacher_function_estimates:
-            fn_counts[est.function_code.value] = fn_counts.get(est.function_code.value, 0) + 1
-
-    top_fn_code = FunctionCode.UNKNOWN
-    if fn_counts:
-        top_fn_str = max(fn_counts, key=fn_counts.get)
-        if top_fn_str in FunctionCode.__members__:
-            top_fn_code = FunctionCode(top_fn_str)
-
-    if complete_abc >= 3 and s_events:
-        target_beh = s_events[0].behavior_code
-        antecedent = s_events[0].antecedent or "특정 일과 상황"
-        consequence = s_events[0].consequence or "교사 반응 또는 회피"
-        setting_ev = s_events[0].setting_events[0] if s_events[0].setting_events else None
-        hyp_statement = f"{student_code} 학생은 {antecedent} 상황에서 {top_fn_code.value} 기능을 위해 {target_beh} 행동을 나타내는 것으로 추정됨."
-        suff_status = "MEDIUM" if len(s_events) < 5 else "HIGH"
-    else:
-        target_beh = s_events[0].behavior_code if s_events else "표적행동 미지정"
-        antecedent = "자료 부족 (ABC 직접 관찰 필요)"
-        consequence = "자료 부족 (ABC 직접 관찰 필요)"
-        setting_ev = None
-        hyp_statement = f"{student_code} 학생의 직접 관찰(ABC) 기록이 부족하여 기능 가설 검토 대기 중입니다."
-        suff_status = "LOW"
-
-    hyp = FunctionHypothesis(
-        hypothesis_id=f"HYP_{student_code}",
-        student_code=student_code,
-        target_behavior=target_beh,
-        setting_event=setting_ev,
-        antecedent_condition=antecedent,
-        consequence_pattern=consequence,
-        function_code=top_fn_code,
-        hypothesis_statement=hyp_statement,
-        evidence_for=[],
-        evidence_against=[],
-        data_sufficiency=DataSufficiency(
-            direct_observation_n=len(s_events),
-            unique_days_n=unique_dates,
-            unique_contexts_n=len(set(e.primary_location for e in s_events if e.primary_location)),
-            abc_complete_n=complete_abc,
-            contradictory_evidence_n=0,
-            status=suff_status,
-            reasons=dq.reasons
-        ),
-        status=HypothesisStatus.PROPOSED
-    )
-
-    # EBP Recommendation Bundle
-    tier_names = [t.value for t in profile.tier.active_tiers]
-    ebp_bundle = generate_ebp_recommendation_bundle(
-        hypothesis=hyp,
-        antecedent_patterns=[e.primary_location for e in s_events[:5] if e.primary_location],
-        setting_events=[s for e in s_events for s in e.setting_events],
-        current_tier=tier_names[0] if tier_names else "TIER_1"
-    )
-
-    # Decision Signals (Workspace mode: shows all relevant student signals)
-    signals = evaluate_decision_signals(
-        student_code=student_code,
-        behavior_events=s_events,
-        cico_observations=cico_obs,
-        bip_plan=raw_bip,
-        as_of_date=today,
-        safety_window_days=14,
-        is_today_inbox=False,
-        active_tier_names=tier_names
-    )
-
-    return {
-        "profile": profile,
-        "events_count": len(s_events),
-        "events": s_events[:50],  # Latest 50 events
-        "cico_observations": cico_obs,
-        "hypothesis": hyp,
-        "ebp_recommendation_bundle": ebp_bundle,
-        "active_bip": raw_bip,
-        "decision_signals": signals,
-        "data_quality": dq
-    }
+@router.post("/today/ack")
+def acknowledge_today_signals(payload: dict = Body(...), current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """Today 신호 '확인 완료'. signal_ids 를 받는다. 담임은 자기 학급 학생 신호만 닫을 수 있다.
+    새 기록이 생기면 신호 ID가 바뀌어 다시 뜬다."""
+    from app.services.sheets import TODAY_ACK_STEP, append_approval_rows, fetch_today_acks
+    ids = [str(x).strip() for x in (payload.get("signal_ids") or []) if str(x).strip().startswith("SIG_")]
+    if not ids:
+        raise HTTPException(status_code=400, detail="signal_ids 가 비었습니다.")
+    for sid in ids:  # SIG_{종류}_{학생코드}_{날짜}
+        check_student_scope(sid.split("_", 2)[2].rsplit("_", 1)[0], current_user)
+    done = fetch_today_acks()
+    by = str(current_user.get("name") or current_user.get("id") or "")
+    at = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    rows = [[sid, TODAY_ACK_STEP, "확인", by, at, str(payload.get("memo") or "")] for sid in dict.fromkeys(ids) if sid not in done]
+    if rows:
+        append_approval_rows(rows)
+    return {"success": True, "acknowledged": len(rows)}

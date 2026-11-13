@@ -50,13 +50,6 @@ def get_pw_spreadsheet():
         logger.error(f"[PW] 시트 접근 오류: {e}")
         return None
 
-def get_or_create_worksheet(ss, title: str, rows=200, cols=20):
-    try:
-        return ss.worksheet(title)
-    except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title=title, rows=rows, cols=cols)
-        return ws
-
 # ─────────────────────────────────────────────────────────────
 # 1. Roster (학생 명부) 관리 기반 - TierStatus 연동으로 변경
 # ─────────────────────────────────────────────────────────────

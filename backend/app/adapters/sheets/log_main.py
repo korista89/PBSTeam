@@ -1,12 +1,10 @@
 # backend/app/adapters/sheets/log_main.py
 
 import logging
-from datetime import date, datetime
 from typing import List, Dict, Any, Optional
 import re
 import pandas as pd
 from app.adapters.sheets.client import open_main_sheet, current_sheet_url
-from app.core.config import settings
 from app.domain.models import BehaviorEvent, SafetyFlags, FunctionEstimate, FunctionCode
 from app.adapters.sheets.client import get_sheets_client, safe_get_all_records, get_cached, set_cached
 from app.services.normalize import (
@@ -200,9 +198,12 @@ class LogMainAdapter:
         )
 
         event_id = str(row.get("Log_ID") or f"LOG_{event_date}_{s_code}_{row_idx}")
-        antecedent = str(row.get("A_배경_선행사건") or row.get("선행사건") or row.get("선행") or "")
-        consequence = str(row.get("C_후속결과") or row.get("후속결과") or row.get("후속") or "")
-        setting_ev_raw = row.get("배경사건") or row.get("배경") or ""
+        # 폼 머리글은 '선행사건 - 행동 직전에…'처럼 길다. 앞부분으로 찾는다.
+        def by_prefix(prefix: str) -> str:
+            return next((str(v) for k, v in row.items() if str(k).startswith(prefix) and str(v).strip()), "")
+        antecedent = str(row.get("A_배경_선행사건") or by_prefix("선행사건") or row.get("선행") or "")
+        consequence = str(row.get("C_후속결과") or by_prefix("후속결과") or row.get("후속") or "")
+        setting_ev_raw = by_prefix("배경사건") or row.get("배경") or ""
         setting_events = [str(setting_ev_raw)] if setting_ev_raw else []
 
         notes = str(

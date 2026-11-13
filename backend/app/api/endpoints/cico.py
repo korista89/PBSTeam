@@ -1,12 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from app.services.sheets import (
     get_monthly_cico_data,
     update_monthly_cico_cells,
     update_cico_periods,
     update_student_cico_settings,
-    toggle_tier2_status,
     get_holidays_from_config,
     get_business_days,
     get_cico_report_data,
@@ -304,17 +303,3 @@ class Tier2ToggleRequest(BaseModel):
     student_code: str
     status: str  # "O" or "X"
 
-
-@router.post("/tier2-toggle")
-def tier2_toggle(
-    req: Tier2ToggleRequest,
-    current_admin: Dict[str, Any] = Depends(require_admin)
-):
-    """Toggle Tier2 status for a student in a monthly sheet (Admin only)."""
-    if req.status not in ("O", "X"):
-        raise HTTPException(status_code=400, detail="Status must be 'O' or 'X'")
-
-    result = toggle_tier2_status(req.month, req.student_code, req.status)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result

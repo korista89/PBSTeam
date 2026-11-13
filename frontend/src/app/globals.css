@@ -496,8 +496,16 @@ a {
 }
 @media (max-width: 900px) {
   .cico-unified-layout {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
+  /* 좁은 화면: 학생 목록은 세로로 길게 쌓지 않고 가로로 넘겨 고르는 띠로 바꾼다 */
+  .cico-student-list {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    max-height: none !important;
+  }
+  .cico-student-list > button { flex: 0 0 160px; }
 }
 
 @media (max-width: 768px) {
@@ -510,20 +518,7 @@ a {
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  /* Fixed-px two-column layouts (student list + form/timeline splits) forced
-     horizontal overflow at phone widths - collapse to a single stacked column.
-     !important is required: these grids are set via inline style, which wins
-     over a plain external rule regardless of media query. */
-  .behavior-outer-grid,
-  .behavior-split-grid,
-  .minutes-form-grid,
-  .responsive-grid-2,
-  .responsive-grid-3,
-  .responsive-grid-4,
-  .grid-responsive,
-  .cico-report-chart-grid {
-    grid-template-columns: 1fr !important;
-  }
+  /* 휴대폰 1열 레이아웃 목록은 mobile.css 한 곳에서 관리한다 */
   /* Explicit grid-column/grid-row placements (5-col chart+AI-panel layout) also
      need resetting per-child, or children stay pinned to now-nonexistent columns. */
   .cico-report-chart-grid .cico-chart-cell,

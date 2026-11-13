@@ -29,7 +29,7 @@ def _setup_logging():
 _setup_logging()
 logger = logging.getLogger("app.main")
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool

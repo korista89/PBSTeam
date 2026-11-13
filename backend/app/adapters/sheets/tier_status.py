@@ -4,8 +4,6 @@ import logging
 from typing import List, Dict, Any, Optional
 from app.adapters.sheets.client import open_main_sheet, current_sheet_url
 from app.adapters.sheets.resilience import SheetUnavailable
-import gspread
-from app.core.config import settings
 from app.domain.models import StudentProfile, TierSnapshot, TierCode
 from app.adapters.sheets.client import get_sheets_client, safe_get_all_records, get_cached, set_cached
 

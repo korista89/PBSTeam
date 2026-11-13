@@ -3,8 +3,8 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
-from app.domain.models import EBPStrategy, EBPCategory, FunctionCode, FunctionHypothesis, DataSufficiency, HypothesisStatus
-from app.services.ebp.catalog import load_ebp_catalog, get_ebp_by_code, search_ebp_catalog
+from app.domain.models import EBPCategory, FunctionCode, FunctionHypothesis, DataSufficiency, HypothesisStatus
+from app.services.ebp.catalog import get_ebp_by_code, search_ebp_catalog
 from app.services.ebp.matching import generate_ebp_recommendation_bundle
 from app.api.deps import require_authenticated_user
 

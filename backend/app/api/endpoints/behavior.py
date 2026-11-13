@@ -2,8 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from app.adapters.sheets.client import open_main_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
 from typing import Optional, List, Dict, Any
-from app.services.sheets import fetch_all_records, get_sheets_client, safe_get_all_records, clear_cache, normalize_date_string, FORM_REPORT_HEADERS
-from app.core.config import settings
+from app.services.sheets import fetch_all_records, get_sheets_client, clear_cache, normalize_date_string, FORM_REPORT_HEADERS
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
 from app.adapters.sheets.tier_status import TierStatusAdapter
 import uuid
@@ -174,18 +173,37 @@ def _set_status(ws, headers, row_num, status: str, meta: str):
         pass
 
 
-@router.post("/approve")
-def approve_behavior_log(
+@router.post("/sign-all")
+def sign_all_behavior_logs(
     payload: dict = Body(...),
     current_admin: Dict[str, Any] = Depends(require_admin)
 ):
-    """승인(관리자). 승인 대기·재작성 요청 상태에서 승인할 수 있다."""
+    """일괄 결재(관리자): 고른 기록의 남은 확인 단계(담당자·교감·학교장)를 한 번에 채워 결재 완료로 만든다.
+    누적된 결재를 종결하거나 목록을 한꺼번에 처리할 때 쓴다. 단계 이력은 Approvals 탭에 남는다."""
+    from app.services.sheets import FINAL_STEPS, append_approval_rows, fetch_approval_states
+    ids = {str(x).strip() for x in (payload.get("log_ids") or []) if str(x).strip()}
+    if not ids:
+        raise HTTPException(status_code=400, detail="log_ids 가 비었습니다.")
+    by, at = _author_label(current_admin), _now_str()
+    memo = str(payload.get("memo") or "일괄 결재").strip()
     try:
-        ws, headers, row_num, row = _load_log_row(payload.get("log_id"))
-        if _cell(row, headers, "Status") == "Approved":
-            return {"success": False, "message": "Already approved"}
-        _set_status(ws, headers, row_num, "Approved", f"Approved by {_author_label(current_admin)} on {_now_str()}")
-        return {"success": True, "message": "Log approved"}
+        states = fetch_approval_states(force_refresh=True)
+        rows = [[lid, step, "확인", by, at, memo] for lid in sorted(ids) for step in FINAL_STEPS
+                if step not in states.get(lid, {})]
+        ws = open_main_sheet(get_sheets_client()).worksheet("Log_Main")
+        all_vals = ws.get_all_values()
+        headers = all_vals[0] if all_vals else []
+        cells = []
+        for i, row in enumerate(all_vals[1:]):
+            if _cell(row, headers, "Log_ID") in ids and _cell(row, headers, "Status") not in ("Approved", "Deleted"):
+                cells += [gspread.Cell(row=i + 2, col=headers.index("Status") + 1, value="Approved"),
+                          gspread.Cell(row=i + 2, col=headers.index("Approval_Meta") + 1, value=f"Approved by {by} (일괄 결재) on {at}")]
+        if rows:
+            append_approval_rows(rows)
+        if cells:
+            ws.update_cells(cells)
+            clear_cache("records")
+        return {"success": True, "steps_added": len(rows), "status_changed": len(cells) // 2}
     except (HTTPException, SheetUnavailable):
         raise
     except Exception as e:
@@ -270,9 +288,10 @@ def get_approval_inbox(
         # 결재 대기·재작성 요청은 기간과 무관하게 보이고, 나머지는 최근 기간만
         if status not in ("Pending", "Revision Requested") and normalize_date_string(r.get("행동발생날짜", "")) < since:
             continue
-        if pending_only and is_fully_signed(signed):
+        complete = is_fully_signed(signed)
+        if pending_only and complete:
             continue
-        out.append({**r, "학급": cls, "kind": "report" if is_report else "data", "signoffs": signed, "complete": is_fully_signed(signed)})
+        out.append({**r, "학급": cls, "kind": "report" if is_report else "data", "signoffs": signed, "complete": complete})
     out.sort(key=lambda r: (r.get("Status") != "Pending", str(r.get("타임스탬프", ""))), reverse=False)
     out.sort(key=lambda r: str(r.get("행동발생날짜", "")), reverse=True)
     out.sort(key=lambda r: r.get("Status") not in ("Pending", "Revision Requested"))
@@ -419,17 +438,6 @@ def get_student_timeline(
             
     return {"student_id": student_id, "logs": student_logs}
 
-@router.get("/pending")
-def get_pending_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
-    """
-    Fetch all pending logs requiring admin approval (Admin only).
-    """
-    records = fetch_all_records(force_refresh=False)
-    pending_logs = [r for r in records if r.get("Status") == "Pending"]
-
-    return {"success": True, "logs": pending_logs}
-
-
 @router.get("/logs")
 def get_all_logs(
     q: Optional[str] = Query(None, description="학생명/코드/교사명/행동유형/특기사항 검색어"),
@@ -551,17 +559,3 @@ def remove_no_incident(student_code: str, date_str: str, current_user: Dict[str,
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
-
-
-@router.get("/unlinked")
-def list_unlinked_logs(current_admin: Dict[str, Any] = Depends(require_admin)):
-    """학생코드가 연결되지 않은 기록(이름 겹침·명단에 없음 등). 학생 화면·분석에서 빠지므로
-    시트의 '학생코드' 칸에 코드를 적어 주면 연결된다."""
-    out = []
-    for r in fetch_all_records(force_refresh=True):
-        if str(r.get("학생코드", "")).strip():
-            continue
-        out.append({"Log_ID": r.get("Log_ID", ""), "행동발생날짜": r.get("행동발생날짜", ""),
-                    "학생명": r.get("학생명", ""), "사유": r.get("학생연결", ""), "출처": r.get("Source", "")})
-    out.sort(key=lambda x: str(x["행동발생날짜"]), reverse=True)
-    return {"count": len(out), "logs": out}

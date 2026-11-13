@@ -1,6 +1,5 @@
 # backend/app/core/security.py
 
-import os
 import hashlib
 from typing import Optional, Dict, Any
 from dataclasses import dataclass

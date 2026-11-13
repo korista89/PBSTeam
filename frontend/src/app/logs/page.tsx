@@ -5,7 +5,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import AppShell from "../components/AppShell";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
-import { useDateRange } from "../components/GlobalNav";
+import { useDateRange } from "../hooks/useDateRange";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 import LogDetailPanel from "../components/LogDetailPanel";

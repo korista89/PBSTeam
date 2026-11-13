@@ -1,7 +1,5 @@
 from app.services.sheets import tier_label
 import logging
-from datetime import datetime
-from app.adapters.sheets.client import open_main_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -9,21 +7,16 @@ from typing import Optional, List, Dict, Any
 from app.services.analysis import get_analytics_data, get_student_analytics
 from app.services.sheets import (
     fetch_all_records, get_beable_code_mapping, get_tier3_report_data,
-    fetch_student_status, fetch_meeting_notes, get_monthly_cico_data,
-    normalize_date_string
+    fetch_student_status, normalize_date_string
 )
 from app.services.normalize import (
     normalize_behavior_log, calculate_data_quality_report
 )
-from app.services.contagion import analyze_peer_contagion
 from app.services.ai_insight import (
-    generate_bcba_comprehensive_analysis,
     generate_bcba_section_analysis,
     generate_bcba_cico_analysis,
     generate_bcba_meeting_minutes,
-    generate_bcba_tier3_analysis,
     generate_bcba_student_analysis,
-    generate_peer_contagion_analysis,
     generate_medication_response_report
 )
 from app.services.fba_evidence import fba_data_gate
@@ -77,63 +70,9 @@ def _get_normalized_records(start_date: str = None, end_date: str = None) -> Lis
 # ============================================================
 # §2 Data Quality Endpoint
 # ============================================================
-@router.get("/data-quality")
-def get_data_quality(
-    start_date: str = None,
-    end_date: str = None,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """
-    §2 데이터 정규화 레이어 품질 진단:
-    정규화 실패 건수, 필드별 오염률, 평균 기록 지연일 JSON 반환
-    """
-    normalized_logs = _get_normalized_records(start_date, end_date)
-    report = calculate_data_quality_report(normalized_logs)
-    return report
-
-
 # ============================================================
 # §4 Peer Contagion Endpoint
 # ============================================================
-@router.get("/peer-contagion")
-def get_peer_contagion(
-    start_date: str = None,
-    end_date: str = None,
-    with_ai: bool = False,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """
-    §4 학급 또래 행동 전염 분석:
-    특기사항 텍스트 기반 상호작용 네트워크 및 AI 임상 분석 보고서 반환 (교사 학급 스코프 격리)
-    """
-    role = str(current_user.get("role", "")).lower()
-    normalized_logs = _get_normalized_records(start_date, end_date)
-    status_records = fetch_student_status()
-
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        from app.api.deps import get_student_class_code
-        normalized_logs = [
-            l for l in normalized_logs
-            if get_student_class_code(str(l.get("student_code", "")).strip()) == user_class
-        ]
-        status_records = [
-            s for s in status_records
-            if get_student_class_code(str(s.get("학생코드") or s.get("Code") or s.get("학번") or "").strip()) == user_class
-        ]
-
-    contagion_data = analyze_peer_contagion(normalized_logs, status_records)
-
-    ai_analysis = ""
-    if with_ai and contagion_data["edges"]:
-        ai_analysis = generate_peer_contagion_analysis(contagion_data)
-
-    return {
-        "network": contagion_data,
-        "ai_analysis": ai_analysis
-    }
-
-
 # ============================================================
 # AI BCBA Analysis Endpoints
 # ============================================================
@@ -181,37 +120,6 @@ class MeetingMinutesRequest(BaseModel):
     end_date: str
     context_start_date: Optional[str] = None
     context_end_date: Optional[str] = None
-
-
-@router.post("/ai-comprehensive-analysis")
-def ai_comprehensive_analysis(
-    req: ComprehensiveAnalysisRequest,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """① 🤖 메인 대시보드 BCBA 종합 분석 (교사 학급 스코프 격리)"""
-    role = str(current_user.get("role", "")).lower()
-    user_class = None
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-
-    analytics_data = get_analytics_data(req.start_date, req.end_date, class_id=user_class)
-    summary = analytics_data.get("summary", {})
-    trends = analytics_data.get("trends", [])
-    risk_list = analytics_data.get("risk_list", [])
-
-    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
-    if user_class:
-        from app.api.deps import get_student_class_code
-        normalized_logs = [
-            l for l in normalized_logs
-            if get_student_class_code(str(l.get("student_code", "")).strip()) == user_class
-        ]
-    quality_report = calculate_data_quality_report(normalized_logs)
-
-    result = generate_bcba_comprehensive_analysis(
-        summary, trends, risk_list, quality_report=quality_report
-    )
-    return {"analysis": result}
 
 
 @router.post("/ai-section-analysis")
@@ -334,45 +242,6 @@ def ai_meeting_minutes(
     return {"analysis": result}
 
 
-@router.post("/ai-tier3-analysis")
-def ai_tier3_analysis(
-    req: Tier3AnalysisRequest,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """⑤ 🤖 Tier 3 심층 위기관리 AI 컨설팅 (교사 학급 스코프 격리)"""
-    role = str(current_user.get("role", "")).lower()
-    user_class = None
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-
-    t3_data = get_tier3_report_data(req.start_date, req.end_date, class_id=user_class)
-    if "error" in t3_data:
-        return {"analysis": f"데이터 로드 실패: {t3_data['error']}"}
-
-    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
-    if user_class:
-        from app.api.deps import get_student_class_code
-        normalized_logs = [
-            l for l in normalized_logs
-            if get_student_class_code(str(l.get("student_code", "")).strip()) == user_class
-        ]
-
-    t3_students = t3_data.get("students", [])
-    t3_codes = {str(s.get("code", "")).strip() for s in t3_students}
-
-    t3_logs = [
-        l for l in normalized_logs
-        if l.get("student_code") in t3_codes or l.get("student_name") in t3_codes
-    ]
-
-    gate = fba_data_gate(len(t3_logs))
-    result = generate_bcba_tier3_analysis(
-        tier3_students=t3_students,
-        behavior_logs=t3_logs
-    )
-    return {"analysis": result, **gate}
-
-
 @router.post("/ai-student-analysis")
 def ai_student_analysis(
     req: StudentAnalysisRequest,
@@ -486,26 +355,6 @@ def get_dashboard_summary(
         user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
         class_id = user_class
     return get_analytics_data(start_date, end_date, class_id)
-
-@router.get("/meeting")
-def get_meeting_analysis(
-    target_date: str = None,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    from app.services.analysis import analyze_meeting_data
-    from app.api.deps import get_student_class_code, normalize_class_identifier
-    result = analyze_meeting_data(target_date)
-
-    role = str(current_user.get("role", "")).lower()
-    if role not in ["admin", "superadmin"] and isinstance(result, dict) and "students" in result:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        scoped_students = []
-        for s in result.get("students", []):
-            st_code = str(s.get("code") or s.get("student_code") or "").strip()
-            if get_student_class_code(st_code) == user_class:
-                scoped_students.append(s)
-        result["students"] = scoped_students
-    return result
 
 @router.get("/tier3-report")
 def get_tier3_report(

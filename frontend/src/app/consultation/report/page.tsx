@@ -5,7 +5,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { AuthCheck, useAuth } from "../../components/AuthProvider";
 import AppShell from "../../components/AppShell";
-import { useDateRange } from "../../components/GlobalNav";
+import { useDateRange } from "../../hooks/useDateRange";
 import { maskName } from "../../utils";
 import { API_BASE_URL } from "@/app/lib/api";
 

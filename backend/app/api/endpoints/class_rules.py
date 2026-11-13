@@ -5,7 +5,7 @@ import json
 import os
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from app.api.deps import require_authenticated_user, normalize_class_identifier
 
 router = APIRouter()

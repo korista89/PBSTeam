@@ -1,6 +1,6 @@
 # backend/app/api/deps.py
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from fastapi import Request, HTTPException, status, Depends
 from app.core.config import settings
 from app.core.security import decode_access_token
@@ -126,14 +126,6 @@ def resolve_session_user(request: Request) -> Dict[str, Any]:
     }
 
 
-def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
-    """Returns the resolved session user, or None if unauthenticated or unresolvable."""
-    try:
-        return resolve_session_user(request)
-    except HTTPException:
-        return None
-
-
 def get_current_user(request: Request) -> Dict[str, Any]:
     """Strict authentication dependency (401 unauthenticated, 503 user store unavailable)."""
     return resolve_session_user(request)
@@ -150,16 +142,6 @@ def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> D
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Administrator access required."
-        )
-    return current_user
-
-
-def require_teacher_or_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """Requires TEACHER or ADMIN role. Returns HTTP 403 for unauthorized roles."""
-    if current_user.get("role") not in ["admin", "teacher", "class_teacher", "superadmin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: Teacher or Administrator access required."
         )
     return current_user
 

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import { DashboardData } from "./types";
 import { AuthCheck, useAuth } from "./components/AuthProvider";
-import { useDateRange } from "./components/GlobalNav";
+import { useDateRange } from "./hooks/useDateRange";
 import AppShell from "./components/AppShell";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
 import SectionAIButton from "./components/SectionAIButton";

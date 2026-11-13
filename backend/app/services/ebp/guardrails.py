@@ -1,7 +1,7 @@
 # backend/app/services/ebp/guardrails.py
 
-from typing import List, Dict, Any, Tuple
-from app.domain.models import EBPStrategy, FunctionCode, DataSufficiency, EBPRecommendation, EvidenceRef
+from typing import List, Tuple
+from app.domain.models import EBPStrategy, FunctionCode, DataSufficiency
 
 def validate_ebp_guardrails(
     strategy: EBPStrategy,

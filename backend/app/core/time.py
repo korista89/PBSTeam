@@ -1,6 +1,6 @@
 # backend/app/core/time.py
 
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")

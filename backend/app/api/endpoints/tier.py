@@ -1,9 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.adapters.sheets.resilience import SheetUnavailable
 from app.services.sheets import (
-    fetch_student_status, update_student_tier,
-    update_student_enrollment, update_student_beable_code, get_enrolled_student_count, get_beable_code_mapping,
-    update_student_tier_unified
+    fetch_student_status, get_enrolled_student_count, update_student_tier_unified
 )
 from pydantic import BaseModel
 from typing import Optional, Union, Dict, Any
@@ -14,15 +12,6 @@ router = APIRouter()
 # =============================
 # Tier Status Endpoints
 # =============================
-
-class TierUpdateRequest(BaseModel):
-    code: str
-    tier1: Optional[str] = None  # O or X
-    tier2_cico: Optional[str] = None  # O or X
-    tier2_sst: Optional[str] = None  # O or X
-    tier3: Optional[str] = None  # O or X
-    tier3_plus: Optional[str] = None  # O or X
-    memo: Optional[str] = ""
 
 class UnifiedTierUpdateRequest(BaseModel):
     """Single request for all tier-related updates"""
@@ -70,26 +59,6 @@ def get_all_status(current_user: Dict[str, Any] = Depends(require_authenticated_
         "total_count": len(status)
     }
 
-@router.put("/status")
-def update_tier(request: TierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
-    """Update a student's tier status (5 separate O/X columns - Admin only)"""
-    tier_values = {}
-    if request.tier1 is not None:
-        tier_values['Tier1'] = request.tier1
-    if request.tier2_cico is not None:
-        tier_values['Tier2(CICO)'] = request.tier2_cico
-    if request.tier2_sst is not None:
-        tier_values['Tier2(SST)'] = request.tier2_sst
-    if request.tier3 is not None:
-        tier_values['Tier3'] = request.tier3
-    if request.tier3_plus is not None:
-        tier_values['Tier3+'] = request.tier3_plus
-
-    result = update_student_tier(request.code, tier_values, request.memo)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
-
 @router.put("/status/unified")
 def update_tier_unified(req_data: UnifiedTierUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
     """Unified update: tier + enrollment + beable in single API call (Admin only)"""
@@ -119,38 +88,21 @@ def update_tier_unified(req_data: UnifiedTierUpdateRequest, current_admin: Dict[
         )
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
+        # CICO로 지정하면 이번 달 CICO 표에 바로 넣는다(이미 있으면 그대로). 실패해도 Tier 저장은 유지
+        if req_data.tier2_cico == "O":
+            from app.core.time import today_kst
+            from app.services.sheets import create_monthly_cico_sheet
+            t = today_kst()
+            if 3 <= t.month <= 12:
+                try:
+                    result["cico"] = create_monthly_cico_sheet(t.year, t.month)
+                except Exception as e:
+                    result["cico"] = {"error": str(e)}
         return result
     except SheetUnavailable:
         raise
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Validation Error: {str(e)}")
-
-@router.put("/enrollment")
-def update_enrollment(request: EnrollmentUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
-    """Update a student's enrollment status (O/X - Admin only)"""
-    if request.enrolled not in ["O", "X"]:
-        raise HTTPException(status_code=400, detail="Enrolled must be O or X")
-    result = update_student_enrollment(str(request.code), request.enrolled)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
-
-@router.put("/beable")
-def update_beable(request: BeAbleCodeUpdateRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
-    """Update a student's BeAble code for data linking (Admin only)"""
-    result = update_student_beable_code(str(request.code), request.beable_code)
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
-
-@router.get("/beable-mapping")
-def get_beable_mapping(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
-    """Get BeAble code to student code mapping for data analysis"""
-    mapping = get_beable_code_mapping()
-    return mapping
-
-
-
 
 # =============================
 # 인수인계 자료 연결 (학생코드 ↔ 인수인계 가명ID)

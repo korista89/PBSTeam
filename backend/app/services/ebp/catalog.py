@@ -2,7 +2,7 @@
 
 import json
 import os
-from typing import List, Dict, Optional, Any
+from typing import List, Optional
 from app.domain.models import EBPStrategy, EBPCategory, FunctionCode, WorkloadLevel
 
 _CATALOG_CACHE: Optional[List[EBPStrategy]] = None

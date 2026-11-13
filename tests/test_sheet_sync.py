@@ -21,12 +21,6 @@ class SheetSyncTests(unittest.TestCase):
             os.path.normcase(os.path.join(BACKEND_DIR, "service_account.json")),
         )
 
-    def test_workspace_includes_august_and_later_active_months(self):
-        from app.api.endpoints.workspace import _active_cico_months
-
-        self.assertEqual(_active_cico_months(date(2026, 8, 26)), [3, 4, 5, 6, 7, 8])
-        self.assertEqual(_active_cico_months(date(2026, 2, 26)), [])
-
     def test_fresh_read_header_clears_instance_cache_and_disables_http_cache(self):
         from fastapi.testclient import TestClient
         from app.main import app
@@ -84,27 +78,6 @@ class SheetSyncTests(unittest.TestCase):
         self.assertEqual(written["L2"], "1점")
         self.assertEqual(written["M2"], "75%")
         self.assertEqual(written["N2"], "X")
-
-    def test_tier2_toggle_matches_name_code_combined_cell(self):
-        from app.services.sheets import toggle_tier2_status
-
-        worksheet = mock.MagicMock()
-        sheet = mock.MagicMock()
-        sheet.worksheet.return_value = worksheet
-        client = mock.MagicMock()
-        client.open_by_url.return_value = sheet
-        values = [
-            ["번호", "학급", "학생명(코드)", "Tier2"],
-            [1, "초1-1", "테스트(2111)", "O"],
-        ]
-
-        with mock.patch("app.services.sheets.get_sheets_client", return_value=client), mock.patch(
-            "app.services.sheets.safe_get_all_values", return_value=values
-        ), mock.patch("app.services.sheets.get_worksheet_fuzzy", return_value=worksheet):
-            result = toggle_tier2_status(8, "2111", "X")
-
-        self.assertNotIn("error", result)
-        worksheet.update_cell.assert_called_once_with(2, 4, "X")
 
     def test_existing_bip_sheet_migrates_all_11_field_headers(self):
         from app.services.sheets import ensure_bip_sheet, BIP_FORM_HEADERS

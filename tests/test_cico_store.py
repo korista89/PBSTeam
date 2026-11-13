@@ -80,3 +80,26 @@ def test_scatter_rate_counts_periods():
     assert res["achieved"] == "O" and res["input_days"] == 2
     week = _calculate_cico_rate({**student, "days": {"10-02": "X"}})
     assert week["rate_str"] == "100%"  # 주별 계산은 그 주 날짜의 교시만 센다
+
+
+def test_generate_existing_month_adds_only_missing_cico_students():
+    """이미 있는 달에 '명단 맞추기'를 누르면 Tier현황 CICO 학생 중 빠진 학생만 이어 붙인다."""
+    from unittest import mock
+    from app.services import sheets as S
+    store = mock.MagicMock()
+    store.month_rows.return_value = [{"학생코드": "2211", "번호": "1"}]
+    status = [{"학생코드": "2211", "학생이름": "가", "학급": "초2-1", "Tier2(CICO)": "O"},
+              {"학생코드": "2212", "학생이름": "나", "학급": "초2-1", "Tier2(CICO)": "O"},
+              {"학생코드": "2213", "학생이름": "다", "학급": "초2-1", "Tier2(CICO)": "X"}]
+    with mock.patch.object(S, "get_sheets_client", return_value=mock.MagicMock()), \
+         mock.patch.object(S, "current_sheet_url", return_value="u"), \
+         mock.patch.object(S, "open_main_sheet", return_value=mock.MagicMock()), \
+         mock.patch("app.adapters.sheets.cico_store.open_store", return_value=store), \
+         mock.patch.object(S, "fetch_student_status", return_value=status), \
+         mock.patch.object(S, "get_holidays_from_config", return_value=[]):
+        r = S.create_monthly_cico_sheet(2026, 11)
+        assert r["added"] == 1 and r["exists"]
+        rows = store.add_month.call_args[0][2]
+        assert [(x["학생코드"], x["번호"]) for x in rows] == [("2212", 2)]
+        store.month_rows.return_value = [{"학생코드": "2211", "번호": "1"}, {"학생코드": "2212", "번호": "2"}]
+        assert S.create_monthly_cico_sheet(2026, 11)["added"] == 0
