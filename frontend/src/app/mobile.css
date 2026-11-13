@@ -1,0 +1,37 @@
+/* 휴대폰(≤768px) 공통 최적화: 개별 페이지의 인라인 그리드·표·입력칸을 한 번에 보정한다. */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, canvas, svg, video { max-width: 100%; }
+
+@media (max-width: 768px) {
+  /* 인라인으로 열 수를 고정한 그리드는 칸 최소 폭을 지키며 자동으로 줄바꿈 */
+  .app-content [style*="grid-template-columns"] {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)) !important;
+  }
+  .app-content [style*="grid-template-columns"] > * { min-width: 0; }
+  /* 좌우 고정 폭 flex 줄은 줄바꿈 허용 */
+  .app-content [style*="display: flex"]:not([style*="flex-direction: column"]):not(.no-wrap) { flex-wrap: wrap; }
+
+  /* 표는 칸 안에서만 가로 스크롤 */
+  .table-container, .app-content .card:has(> table), .app-content .card:has(> div > table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .app-content table { min-width: 100%; }
+  .dense-table { min-width: 560px; }
+  [data-report-sheet] { overflow-x: auto; }
+  [data-report-sheet] table { min-width: 640px; }
+
+  /* 입력칸 16px(iOS 확대 방지)·터치 영역 40px */
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px !important; }
+  .btn, button { min-height: 40px; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+
+  /* 카드·모달이 화면 밖으로 나가지 않게 */
+  .card { max-width: 100%; }
+  .card-header { flex-wrap: wrap; gap: 8px; }
+  [role="dialog"], .modal, .modal-content { max-width: 96vw !important; width: auto !important; }
+  h1 { font-size: 1.25rem; }
+  .app-topbar { gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .app-content { padding: 10px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+}
