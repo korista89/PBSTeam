@@ -29,6 +29,6 @@ export default function StudentCicoSummary({ studentCode }: { studentCode: strin
       <b>{goal.target_behavior || "목표 미입력"}</b> · 수행률 {goal.rate || "기록 없음"} · 기준 {goal.goal_criteria || "미설정"}<br />
     </div>)}
     <p style={{ color: "#64748b", fontSize: "0.8rem" }}>자동 제안은 참고자료입니다. 기록량과 학생의 상황을 함께 검토하세요.</p>
-    <a href={`/cico?student=${encodeURIComponent(studentCode)}`}>CICO 기록과 목표 확인 →</a>
+    <a href={`/cico-record?student=${encodeURIComponent(studentCode)}`}>CICO 기록과 목표 확인 →</a>
   </section>;
 }

@@ -95,7 +95,8 @@ export default function AppShell({
         {
             groupTitle: "Tier2",
             items: [
-                { href: "/cico", label: "CICO관리", key: "cico", icon: "📝" }
+                { href: "/cico", label: "CICO관리", key: "cico", icon: "🗂️" },
+                { href: "/cico-record", label: "CICO기록", key: "cico-record", icon: "📝" }
             ]
         },
         {

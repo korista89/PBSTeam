@@ -1788,6 +1788,73 @@ def get_worksheet_fuzzy(sheet, name):
     return None
 
 
+def list_cico_targets(month: int) -> Dict[str, Any]:
+    """CICO 관리 탭: 이 달 대상자(목표 줄) 전체. 해제된 줄(Tier2≠O)도 함께 돌려준다."""
+    from app.adapters.sheets.cico_store import open_store, school_year, full_date
+    sy = school_year()
+    store = open_store(open_main_sheet())
+    rows = store.month_rows(sy, month)
+    counts: Dict[tuple, int] = {}
+    for (date, code, goal, _p), r in store.record_map(sy).items():
+        if len(date) == 10 and int(date[5:7]) == month and r.get("값", "") != "":
+            counts[(code, goal)] = counts.get((code, goal), 0) + 1
+    return {
+        "month": month,
+        "exists": store.has_month(sy, month),
+        "targets": [{
+            "set_row": r["_row"],
+            "row": i,  # CICO 기록 탭의 행 번호와 같다
+            "code": r.get("학생코드", ""),
+            "name": r.get("학생명", ""),
+            "class": r.get("학급", ""),
+            "goal": r.get("목표", "") or "1",
+            "target_behavior": r.get("목표행동", ""),
+            "active": str(r.get("Tier2", "")).strip().upper() == "O",
+            "record_count": counts.get((r.get("학생코드", ""), r.get("목표", "") or "1"), 0),
+        } for i, r in enumerate(rows, start=2)],
+    }
+
+
+def add_cico_target(year: int, month: int, student_code: str) -> Dict[str, Any]:
+    """학생 한 명을 이 달 CICO 대상에 넣는다. 이미 있으면 목표를 하나 더(목표 순번+1) 만든다."""
+    from app.adapters.sheets.cico_store import open_store, school_year
+    code = str(student_code).strip()
+    student = next((s for s in fetch_student_status() if str(s.get("학생코드", "")).strip() == code), None)
+    if not student:
+        return {"error": f"학생코드 {code}를 Tier현황에서 찾을 수 없습니다."}
+    sy = school_year()
+    store = open_store(open_main_sheet())
+    existing = store.month_rows(sy, month)
+    goals = [int(r.get("목표") or 1) for r in existing if r.get("학생코드") == code and str(r.get("목표") or "1").isdigit()]
+    number = max([int(r.get("번호") or 0) for r in existing if str(r.get("번호", "")).isdigit()] + [0]) + 1
+    dates = [] if store.month_dates(sy, month) else get_business_days(year, month, get_holidays_from_config())
+    store.add_month(sy, month, [{
+        "학년도": sy, "월": month, "번호": number, "학급": student.get("학급", ""), "학생코드": code,
+        "학생명": mask_name(student.get("학생이름", "")), "목표": max(goals + [0]) + 1, "Tier2": "O", "Tier3": "X",
+        "목표행동": "", "목표행동 유형": "증가 목표행동", "척도": "O/X(발생)", "입력 기준(베이스라인)": "",
+        "목표 달성 기준": "80% 이상", "수행/발생률": "-", "목표 달성 여부": "-",
+    }], list(dates))
+    _invalidate_cico_caches()
+    return {"message": f"{month}월 CICO에 추가했습니다.", "goal": max(goals + [0]) + 1}
+
+
+def set_cico_target_active(month: int, set_row: int, active: bool) -> Dict[str, Any]:
+    """대상 해제·복원. 줄과 기록은 지우지 않고 Tier2만 X/O로 바꾼다(기록 탭·분석에서 빠진다)."""
+    from app.adapters.sheets.cico_store import open_store, school_year
+    store = open_store(open_main_sheet())
+    if not any(r["_row"] == set_row for r in store.month_rows(school_year(), month)):
+        return {"error": "이 달의 CICO 줄이 아닙니다."}
+    store.update_settings([(set_row, "Tier2", "O" if active else "X")])
+    _invalidate_cico_caches()
+    return {"message": "복원했습니다." if active else "대상에서 뺐습니다."}
+
+
+def _invalidate_cico_caches():
+    # 월별 원본·리포트(지난달은 1시간 캐시)·일일 요약을 모두 비운다. 대상자 변경은 드물다.
+    invalidate_cache("sheet:cico:")
+    clear_cache("daily_cico")
+
+
 def get_cico_raw_sheet_values(month: int) -> List[List[Any]]:
     """
     Fetch raw values from a monthly CICO sheet with cache-aware behavior.

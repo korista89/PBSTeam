@@ -287,10 +287,10 @@ export default function BriefingPage() {
               {cicoReview.status === "error" && <p>불러오지 못했습니다. CICO 관리에서 다시 확인하세요.</p>}
               {(cicoReview.status === "empty" || (cicoReview.status === "ready" && !cicoReview.students.length)) && <p>이번 달 CICO 목표가 없거나 자료가 없습니다.</p>}
               {cicoReview.students.map((s, i) => <div key={`${s.code}-${i}`} style={{ margin: "8px 0" }}>
-                <a href={`/cico?student=${encodeURIComponent(s.code)}`}>{s.class} · {maskName(s.name) || s.code}</a> · {s.target_behavior || "목표 미입력"} · {s.rate || "기록 없음"}
+                <a href={`/cico-record?student=${encodeURIComponent(s.code)}`}>{s.class} · {maskName(s.name) || s.code}</a> · {s.target_behavior || "목표 미입력"} · {s.rate || "기록 없음"}
               </div>)}
               <p style={{ color: "#64748b", fontSize: "0.8rem" }}>2개월 연속 달성 여부와 병행 지원, 기록량을 확인하고 팀이 결정합니다.</p>
-              <a href="/cico">CICO 관리 →</a>
+              <a href="/cico-record">CICO 기록 →</a>
             </div>
             <div className="card" style={{ padding: 16 }}>
               <h3>🪙 Tier 1 학급규칙·토큰 운영</h3>

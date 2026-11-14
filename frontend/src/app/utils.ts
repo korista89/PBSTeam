@@ -127,3 +127,10 @@ export function parseBIPAIResult(text: string): Record<string, string> {
   }
   return sections;
 }
+
+// CICO 월의 달력 연도: 학년도는 3월 시작이므로 1~2월은 학년도 다음 해다.
+export function cicoYear(month: number) {
+  const d = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const sy = +d.slice(0, 4) - (+d.slice(5, 7) >= 3 ? 0 : 1);
+  return month >= 3 ? sy : sy + 1;
+}

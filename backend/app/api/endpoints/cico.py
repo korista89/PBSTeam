@@ -9,7 +9,10 @@ from app.services.sheets import (
     get_holidays_from_config,
     get_business_days,
     get_cico_report_data,
-    create_monthly_cico_sheet
+    create_monthly_cico_sheet,
+    list_cico_targets,
+    add_cico_target,
+    set_cico_target_active,
 )
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, get_student_class_code
 from app.core.time import now_kst
@@ -298,8 +301,51 @@ def update_settings(
     return result
 
 
-class Tier2ToggleRequest(BaseModel):
+# ── CICO 관리 탭: 월별 대상자 ─────────────────────────────
+class TargetAddRequest(BaseModel):
+    year: int
     month: int
     student_code: str
-    status: str  # "O" or "X"
+
+
+class TargetActiveRequest(BaseModel):
+    month: int
+    set_row: int
+    active: bool
+
+
+def _check_month(month: int):
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="Month must be 1-12")
+
+
+@router.get("/targets")
+def get_cico_targets(month: int, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """이 달 CICO 대상자(목표 줄) 목록. 해제된 줄 포함. 교사는 자기 학급만."""
+    _check_month(month)
+    data = list_cico_targets(month)
+    if str(current_user.get("role", "")).lower() not in ["admin", "superadmin"]:
+        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        data["targets"] = [t for t in data["targets"] if get_student_class_code(str(t["code"]).strip()) == user_class]
+    return data
+
+
+@router.post("/targets")
+def post_cico_target(req: TargetAddRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+    """학생을 이 달 CICO 대상에 추가(이미 있으면 목표 하나 추가) - Admin only."""
+    _check_month(req.month)
+    result = add_cico_target(req.year, req.month, req.student_code)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@router.post("/targets/active")
+def post_cico_target_active(req: TargetActiveRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+    """대상 해제·복원(기록은 그대로 둔다) - Admin only."""
+    _check_month(req.month)
+    result = set_cico_target_active(req.month, req.set_row, req.active)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 

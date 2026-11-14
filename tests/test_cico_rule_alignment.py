@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, os.path.join(ROOT, "backend"))
 from app.services.sheets import CICO_DEFAULT_GOAL, CICO_MID_RATE  # noqa: E402
 
-CICO_PAGE = (ROOT / "frontend/src/app/cico/page.tsx").read_text(encoding="utf-8")
+CICO_PAGE = (ROOT / "frontend/src/app/cico-record/page.tsx").read_text(encoding="utf-8")
 PROTOCOL = (ROOT / "frontend/src/app/protocol/page.tsx").read_text(encoding="utf-8")
 
 
