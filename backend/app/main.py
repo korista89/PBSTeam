@@ -185,6 +185,8 @@ app.include_router(tier.router, prefix="/api/v1/tier", tags=["tier"])
 app.include_router(cico.router, prefix="/api/v1/cico", tags=["cico"])
 from app.api.endpoints import sst as sst_endpoints
 app.include_router(sst_endpoints.router, prefix="/api/v1/sst", tags=["sst"])
+from app.api.endpoints import tier3_monthly as tier3_monthly_endpoints
+app.include_router(tier3_monthly_endpoints.router, prefix="/api/v1/tier3-monthly", tags=["tier3-monthly"])
 app.include_router(meeting_notes.router, prefix="/api/v1/meeting-notes", tags=["meeting-notes"])
 from app.api.endpoints import board
 app.include_router(board.router, prefix="/api/v1/board", tags=["board"])

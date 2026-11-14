@@ -176,7 +176,7 @@ export default function CicoDashboard({ month, targets, history, names, decision
   );
 }
 
-function Kpi({ label, value, unit, color, hint }: { label: string; value: number | string; unit: string; color: string; hint?: string }) {
+export function Kpi({ label, value, unit, color, hint }: { label: string; value: number | string; unit: string; color: string; hint?: string }) {
   return (
     <div className="card" style={{ padding: "12px 14px", borderTop: `3px solid ${color}` }} title={hint}>
       <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>{label}</div>
@@ -205,7 +205,7 @@ function TierGroup({ title, color, items }: { title: string; color: string; item
   );
 }
 
-function ChipRow({ title, color, items }: { title: string; color: string; items: string[] }) {
+export function ChipRow({ title, color, items }: { title: string; color: string; items: string[] }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
       <strong style={{ color, minWidth: 56 }}>{title} {items.length}명</strong>
@@ -214,7 +214,7 @@ function ChipRow({ title, color, items }: { title: string; color: string; items:
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+export function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card" style={{ padding: 14 }}>
       <div style={{ fontWeight: 800, fontSize: "0.85rem", marginBottom: 8 }}>{title}</div>
@@ -223,6 +223,6 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function Empty({ text = "자료가 없습니다." }: { text?: string }) {
+export function Empty({ text = "자료가 없습니다." }: { text?: string }) {
   return <p style={{ color: "#94a3b8", fontSize: "0.8rem", padding: "40px 0", textAlign: "center" }}>{text}</p>;
 }

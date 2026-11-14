@@ -103,6 +103,7 @@ export default function AppShell({
         {
             groupTitle: "Tier3",
             items: [
+                { href: "/tier3", label: "Tier3관리", key: "tier3", icon: "🧩" },
                 { href: "/student", label: "개별학생대시보드", key: "student", icon: "👤" },
                 { href: "/target-behavior", label: "개별학생 행동중재", key: "target-behavior", icon: "🧩" },
                 { href: "/ebp", label: "경기Be-Able EBP", key: "ebp", icon: "📚" }
