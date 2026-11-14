@@ -294,7 +294,9 @@ export default function Tier3Page() {
                 <p style={{ fontSize: "0.72rem", color: "#64748b", margin: "6px 0 10px" }}>
                   사이트 전체(대시보드 Tier 인원, CICO 병행 판정, 브리핑)는 Tier현황의 Tier3·Tier3+ 칸을 따릅니다. 이번 달 명단과 다르면 학생별로 맞추세요. Tier3+는 Tier3 칸도 함께 켭니다(기존 시트 관례).
                 </p>
-                {diff.length === 0 ? <div style={{ color: "#10b981", fontSize: "0.8rem" }}>✓ 이번 달 명단과 Tier현황이 모두 같습니다.</div> : (
+                {active.length === 0 ? (
+                  <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>이번 달 명단이 비어 있어 비교하지 않습니다(Tier현황 Tier3·Tier3+ 그대로). 먼저 위에서 ‘Tier현황으로 채우기’나 ‘지난달 명단 가져오기’로 명단을 만드세요.</div>
+                ) : diff.length === 0 ? <div style={{ color: "#10b981", fontSize: "0.8rem" }}>✓ 이번 달 명단과 Tier현황이 모두 같습니다.</div> : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.8rem" }}>
                     {diff.map(d => (
                       <div key={d.code} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
