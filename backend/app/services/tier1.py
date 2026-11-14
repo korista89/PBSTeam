@@ -356,10 +356,12 @@ FIDELITY = _Table("Tier1_충실도", ["학년도", "학기", "학급", "점수",
 def classes(allowed_codes: Optional[set] = None) -> List[Dict[str, Any]]:
     """재학생이 있는 학급과 인원(교사는 자기 학급만)."""
     cnt: Counter = Counter()
+    first: Dict[str, str] = {}  # 학급의 가장 작은 학생코드 → 유치원·초·중·고·전공과 순서로 정렬
     for c, s in _enrolled().items():
         if s.get("학급") and (allowed_codes is None or c in allowed_codes):
             cnt[s["학급"]] += 1
-    return [{"class": k, "students": v} for k, v in sorted(cnt.items())]
+            first[s["학급"]] = min(first.get(s["학급"], c), c)
+    return [{"class": k, "students": cnt[k]} for k in sorted(cnt, key=lambda k: (first[k], k))]
 
 
 def school_weeks(month: int) -> List[str]:
@@ -497,7 +499,8 @@ def dashboard(allowed_codes: Optional[set] = None) -> Dict[str, Any]:
         m = t["month"]
         te = teaching(m, names)
         rates = [c["rate"] for c in te["classes"] if c["rate"] is not None]
-        t["teach_rate"] = round(sum(rates) / len(rates), 1) if rates and te["weeks"] else None
+        recorded = any(c["done"] for c in te["classes"])  # 아무 학급도 기록하지 않은 달은 0%가 아니라 '기록 없음'
+        t["teach_rate"] = round(sum(rates) / len(rates), 1) if rates and te["weeks"] and recorded else None
         tk = tokens(m, cls)
         t["tokens_per_student"] = tk["mean"]
         t["tokens_entered"] = tk["entered"]

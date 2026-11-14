@@ -38,7 +38,8 @@ export default function Tier1Dashboard() {
     "Tier1만 인원": t.tier1_only, Tier2: t.tier2, Tier3: t.tier3,
   }));
   const teachNow = d.teach_now.classes.map(c => c.rate).filter((x): x is number => x != null);
-  const teachRate = teachNow.length ? Math.round(teachNow.reduce((a, b) => a + b, 0) / teachNow.length) : null;
+  const anyTaught = d.teach_now.classes.some(c => c.done > 0);
+  const teachRate = teachNow.length && anyTaught ? Math.round(teachNow.reduce((a, b) => a + b, 0) / teachNow.length) : null;
   const tokenBars = d.this_month.classes.filter(c => c.per_student != null).map(c => ({ name: shortClass(c.class), full: c.class, v: c.per_student }));
   const tm = d.this_month;
   const low = tm.mean != null && tm.sd != null ? tm.classes.filter(c => c.per_student != null && c.per_student < tm.mean! - tm.sd!) : [];
