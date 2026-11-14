@@ -7,6 +7,7 @@
 - 봇 토큰·받는 채팅은 박프로 봇(hermes) .env 의 TELEGRAM_BOT_TOKEN, TELEGRAM_HOME_CHANNEL
   (없으면 TELEGRAM_ALLOWED_USERS 첫 번째)을 쓴다. 값은 출력하지 않는다.
 - 학생은 별칭·학생코드로만 나온다(시트에 실명 없음).
+- 끝에 월별 Tier 정합성 점검(app/services/tier_audit.py) 결과를 한 줄 붙인다.
 """
 import os
 import sys
@@ -24,6 +25,19 @@ HERMES_ENV = os.path.expanduser("~/workspace/cowork/hermes/.env")
 SITE = "https://pbs-team.vercel.app/briefing"
 
 
+def tier_audit_line() -> str:
+    """월별 Tier 정합성 한 줄. 점검이 실패해도 브리핑은 보낸다."""
+    try:
+        from app.services.tier_audit import run_audit
+        problems = run_audit()
+    except Exception as e:
+        return f"🔎 Tier 정합성: 점검 실패({type(e).__name__}) — scripts/audit_tier_monthly.py로 확인"
+    if not problems:
+        return "🔎 Tier 정합성: 문제 0건"
+    more = f" 외 {len(problems) - 1}건" if len(problems) > 1 else ""
+    return f"⚠️ Tier 정합성: 문제 {len(problems)}건 — {problems[0]}{more} (Tier현황 탭 확인)"
+
+
 def main():
     from app.core.time import now_kst
     today = today_kst()
@@ -38,7 +52,7 @@ def main():
     text = "\n".join(
         [f"🗞️ 경은PBST 관리자 브리핑 ({today.month}. {today.day}.)", ""]
         + [f"{i}. {line}" for i, line in enumerate(b["ten_lines"], 1)]
-        + ["", f"자세히 보기: {SITE}"]
+        + ["", tier_audit_line(), f"자세히 보기: {SITE}"]
     )
     if "--dry" in sys.argv:
         print(text)
