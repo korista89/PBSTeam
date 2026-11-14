@@ -73,6 +73,16 @@ def remove_program(program_id: int, current_admin: Dict[str, Any] = Depends(requ
     return _mirror(_raise(sst.delete_program(program_id)), before)
 
 
+@router.get("/summary")
+def summary(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """프로그램별 운영 기간 성과 요약. 교사는 자기 학급 학생만으로 계산."""
+    mine = _scope(current_user)
+    allowed = None
+    if mine:
+        allowed = {c for p in sst.list_programs() for c in p["targets"] if mine(c)}
+    return {"programs": sst.summaries(allowed)}
+
+
 @router.get("/programs/{program_id}/monitor")
 def monitor(program_id: int, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     mine = _scope(current_user)

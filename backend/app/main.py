@@ -189,6 +189,10 @@ from app.api.endpoints import tier3_monthly as tier3_monthly_endpoints
 app.include_router(tier3_monthly_endpoints.router, prefix="/api/v1/tier3-monthly", tags=["tier3-monthly"])
 from app.api.endpoints import tier_monthly as tier_monthly_endpoints
 app.include_router(tier_monthly_endpoints.router, prefix="/api/v1/tier-monthly", tags=["tier-monthly"])
+from app.api.endpoints import tier1 as tier1_endpoints
+app.include_router(tier1_endpoints.router, prefix="/api/v1/tier1", tags=["tier1"])
+from app.api.endpoints import tier3plus as tier3plus_endpoints
+app.include_router(tier3plus_endpoints.router, prefix="/api/v1/tier3plus", tags=["tier3plus"])
 app.include_router(meeting_notes.router, prefix="/api/v1/meeting-notes", tags=["meeting-notes"])
 from app.api.endpoints import board
 app.include_router(board.router, prefix="/api/v1/board", tags=["board"])

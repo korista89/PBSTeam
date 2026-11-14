@@ -7,6 +7,8 @@ import AppShell from "../components/AppShell";
 import { maskName, cicoYear } from "../utils";
 import { API_BASE_URL } from "@/app/lib/api";
 import CicoDashboard, { DashDecision } from "./CicoDashboard";
+import CicoAnnual from "./CicoAnnual";
+import ViewToggle from "../components/ViewToggle";
 
 // CICO 관리 탭: 월별 대상자(목표 줄) 추가·해제·복원. 일일 기록은 CICO 기록 탭(/cico-record).
 interface Target {
@@ -39,6 +41,7 @@ export default function CicoManagePage() {
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [pick, setPick] = useState("");
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"month" | "year">("month");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -127,6 +130,8 @@ export default function CicoManagePage() {
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <ViewToggle value={view} onChange={setView} monthLabel={`${month}월 현황·명단`} />
+          {view === "year" ? <CicoAnnual /> : <>
           {!loading && <CicoDashboard month={month} targets={targets} history={history} names={names} decisions={decisions} />}
           {admin ? (
             <div className="card" style={{ padding: 16, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
@@ -210,6 +215,7 @@ export default function CicoManagePage() {
               </div>
             )}
           </div>
+          </>}
         </div>
       </AppShell>
     </AuthCheck>

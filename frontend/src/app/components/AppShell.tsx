@@ -87,6 +87,7 @@ export default function AppShell({
         {
             groupTitle: "Tier1",
             items: [
+                { href: "/tier1", label: "Tier1관리", key: "tier1", icon: "🌱" },
                 { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
                 { href: "/picture-word", label: "경은그림말", key: "picture-word", icon: "🎨" },
                 { href: "/board", label: "자료 공유 게시판", key: "board", icon: "💬" }
@@ -104,6 +105,7 @@ export default function AppShell({
             groupTitle: "Tier3",
             items: [
                 { href: "/tier3", label: "Tier3관리", key: "tier3", icon: "🧩" },
+                { href: "/tier3plus", label: "Tier3+관리", key: "tier3plus", icon: "🏥" },
                 { href: "/student", label: "개별학생대시보드", key: "student", icon: "👤" },
                 { href: "/target-behavior", label: "개별학생 행동중재", key: "target-behavior", icon: "🧩" },
                 { href: "/ebp", label: "경기Be-Able EBP", key: "ebp", icon: "📚" }

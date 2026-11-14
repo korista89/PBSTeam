@@ -82,3 +82,16 @@ def post_row(req: RowIn, current_admin: Dict[str, Any] = Depends(require_admin))
     res = t3.update_row(req.month, req.row, req.level, req.memo, req.excluded)
     return _ok(res, req.month if req.memo is None else None, [res.get("code", "")])
 
+def _only_my_students(data: Dict[str, Any], current_user: Dict[str, Any]) -> Dict[str, Any]:
+    """연간 성과: 교사는 학생별 표에 자기 학급만(월별 합계는 학교 전체 그대로)."""
+    if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
+        return data
+    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    return {**data, "students": [s for s in data["students"] if get_student_class_code(str(s["code"])) == user_class]}
+
+
+@router.get("/annual")
+def get_annual(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """학년도 Tier3 연간 성과(월별 인원·위기행동, 학생별 변화, 종료 후 행선지)."""
+    from app.services.tier_annual import tier3_annual
+    return _only_my_students(tier3_annual(), current_user)

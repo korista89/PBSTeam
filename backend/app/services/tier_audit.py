@@ -86,6 +86,24 @@ def run_audit(verbose: bool = False) -> List[str]:
         d = [c for c, n in Counter(p["targets"]).items() if n > 1]
         if d: bad("SST", f"{p['name']} 대상 중복 {d}")
 
+    # 5-1) Tier3+ 개별 프로그램(20개 이하, 학생 1명, 명단에 있는 학생)·Tier1 프로그램 범위
+    from app.services import tier3plus, tier1
+    t3p = tier3plus.BOOK.list_programs(sy)
+    if len(t3p) > tier3plus.MAX_PROGRAMS:
+        bad("Tier3+", "프로그램 20개 초과")
+    for p in t3p:
+        if len(p["targets"]) != 1:
+            bad("Tier3+", f"{p['name']} 대상이 1명이 아님")
+        elif p["targets"][0] not in roster:
+            bad("Tier3+", f"{p['name']} 학생코드 {p['targets'][0]}가 Tier현황에 없음")
+    classes = {s.get("학급", "") for s in roster.values()}
+    for p in tier1.list_programs(sy):
+        if p["scope"] == "학급":
+            missing = [c for c in p["scope_values"] if c not in classes]
+            if missing:
+                bad("Tier1", f"{p['name']} 없는 학급 {missing}")
+    _say("Tier3+ 프로그램", len(t3p), "· Tier1 프로그램", len(tier1.list_programs(sy)))
+
     # 6) 이번 달 거울
     diff = tm.mirror_diff()
     _say("이번 달 TierStatus 거울 차이", len(diff))

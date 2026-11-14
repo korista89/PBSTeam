@@ -8,6 +8,8 @@ import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
 import { API_BASE_URL } from "@/app/lib/api";
 import { ChartCard, ChipRow, Empty, Kpi } from "../cico/CicoDashboard";
+import Tier3Annual from "./Tier3Annual";
+import ViewToggle from "../components/ViewToggle";
 
 // Tier3 관리: Tier3·Tier3+ 월별 명단(단계 포함)과 대시보드. TierStatus는 '지금' 상태, 이 화면은 달마다의 기록.
 interface Row {
@@ -33,6 +35,7 @@ export default function Tier3Page() {
   const [pick, setPick] = useState("");
   const [pickLevel, setPickLevel] = useState("Tier3");
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"month" | "year">("month");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -136,10 +139,16 @@ export default function Tier3Page() {
           </div>
         }
       >
-        {loading || !data || !stats ? (
+        {view === "year" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <ViewToggle value={view} onChange={setView} monthLabel={`${month}월 현황·명단`} />
+            <Tier3Annual />
+          </div>
+        ) : loading || !data || !stats ? (
           <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>불러오는 중...</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <ViewToggle value={view} onChange={setView} monthLabel={`${month}월 현황·명단`} />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
               <Kpi label="Tier3" value={stats.t3} unit="명" color={C.t3} />
               <Kpi label="Tier3+" value={stats.t3p} unit="명" color={C.t3p} />

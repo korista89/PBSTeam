@@ -13,10 +13,10 @@ const box = (c: string, bg: string): React.CSSProperties => ({ borderLeft: `4px 
 const small: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.6 };
 
 const TIERS = [
-    { k: "Tier 1", n: "보편적 지원", c: "var(--tier1)", bg: "var(--tier1-bg)", who: "전교생", what: "기대행동 교수, 긍정 강화, 학급 규칙·토큰", site: "학급규칙/토큰 · 대시보드" },
+    { k: "Tier 1", n: "보편적 지원", c: "var(--tier1)", bg: "var(--tier1-bg)", who: "전교생", what: "기대행동 교수, 긍정 강화, 학급 규칙·토큰", site: "Tier1관리 · 학급규칙/토큰 · 대시보드" },
     { k: "Tier 2", n: "표적 집단", c: "var(--tier2)", bg: "var(--tier2-bg)", who: "2주 연속 주 2회 이상 발생 + 담임 추천", what: "CICO(기본) · 소집단 SST(유사 결핍 2인 이상)", site: "CICO관리·CICO기록 · SST관리 · Tier현황" },
     { k: "Tier 3", n: "개별 집중", c: "var(--tier3)", bg: "var(--tier3-bg)", who: "Tier 2 반응 미흡 또는 긴급 기준 해당", what: "FBA → BIP → 모니터링 → 데이터 기반 의사결정", site: "Tier3관리 · 개별학생 행동중재" },
-    { k: "Tier 3+", n: "지역사회 연계", c: "var(--tier3-plus)", bg: "var(--tier3-plus-bg)", who: "교내 자원으로 한계, 의료적 판단 필요", what: "의료협력 의뢰, 교육청 지원단, 추가지원 신청", site: "개별학생 행동중재 6단계" },
+    { k: "Tier 3+", n: "지역사회 연계", c: "var(--tier3-plus)", bg: "var(--tier3-plus-bg)", who: "교내 자원으로 한계, 의료적 판단 필요", what: "의료협력 의뢰, 교육청 지원단, 추가지원 신청", site: "Tier3+관리 · 개별학생 행동중재 6단계" },
 ];
 
 const FLOW = [
