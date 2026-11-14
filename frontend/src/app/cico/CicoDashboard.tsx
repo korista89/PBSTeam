@@ -199,7 +199,7 @@ function TierGroup({ title, color, items }: { title: string; color: string; item
         {items.length === 0 ? <span style={{ fontSize: "0.72rem", color: "#cbd5e1" }}>없음</span> : items.map(d => (
           <a key={d.code} href={`/cico-record?student=${encodeURIComponent(d.code)}`}
             style={{ padding: "2px 8px", borderRadius: 999, background: `${color}15`, color, fontSize: "0.72rem", textDecoration: "none" }}>
-            {maskName(d.name || "") || d.code}
+            {maskName((d.name || "").replace(/\(\d+\)\s*$/, "")) || d.code}
           </a>
         ))}
       </div>
