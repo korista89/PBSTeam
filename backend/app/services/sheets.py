@@ -1709,9 +1709,10 @@ def create_monthly_cico_sheet(year: int, month: int):
         store.add_month(sy, month, set_rows, list(business_days) if business_days else [])
         invalidate_cache(f"sheet:cico:raw:{now_kst().year}:{month:02d}")
 
+        codes = [str(s.get("학생코드", "")).strip() for s in cico_students]
         if existing:
-            return {"message": f"{month_name} CICO에 {len(cico_students)}명을 추가했습니다.", "exists": True, "added": len(cico_students)}
-        return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students.", "added": len(cico_students)}
+            return {"message": f"{month_name} CICO에 {len(cico_students)}명을 추가했습니다.", "exists": True, "added": len(cico_students), "codes": codes}
+        return {"message": f"Created sheet '{month_name}' with {len(cico_students)} students.", "added": len(cico_students), "codes": codes}
 
     except SheetUnavailable:
         raise
@@ -1905,18 +1906,20 @@ def copy_prev_month_targets(year: int, month: int) -> Dict[str, Any]:
     _invalidate_cico_caches()
     filled = len({r for r, _, _ in fills})
     return {"message": f"{prev_month}월에서 {len(appends) + filled}줄을 가져왔습니다(새 줄 {len(appends)}, 빈 목표 채움 {filled}, 이미 있음 {skipped}).",
-            "added": len(appends), "filled": filled, "skipped": skipped}
+            "added": len(appends), "filled": filled, "skipped": skipped,
+            "codes": sorted({a["학생코드"] for a in appends} | {next(r.get("학생코드") for r in cur if r["_row"] == row) for row, _, _ in fills})}
 
 
 def set_cico_target_active(month: int, set_row: int, active: bool) -> Dict[str, Any]:
     """대상 해제·복원. 줄과 기록은 지우지 않고 Tier2만 X/O로 바꾼다(기록 탭·분석에서 빠진다)."""
     from app.adapters.sheets.cico_store import open_store, school_year
     store = open_store(open_main_sheet())
-    if not any(r["_row"] == set_row for r in store.month_rows(school_year(), month)):
+    row = next((r for r in store.month_rows(school_year(), month) if r["_row"] == set_row), None)
+    if not row:
         return {"error": "이 달의 CICO 줄이 아닙니다."}
     store.update_settings([(set_row, "Tier2", "O" if active else "X")])
     _invalidate_cico_caches()
-    return {"message": "복원했습니다." if active else "대상에서 뺐습니다."}
+    return {"message": "복원했습니다." if active else "대상에서 뺐습니다.", "code": row.get("학생코드", "")}
 
 
 def _invalidate_cico_caches():
@@ -2785,6 +2788,16 @@ def get_cico_report_data(month: int):
         except Exception:
             pass
 
+        # 그 달의 SST·Tier3(월별 표). 표가 없는 단계는 TierStatus(지금)로 본다.
+        month_tiers = None
+        try:
+            from app.services.tier_monthly import month_state
+            month_tiers = month_state(month)
+        except SheetUnavailable:
+            raise
+        except Exception:
+            logger.warning("CICO 리포트: 월별 Tier 읽기 실패, TierStatus로 판단", exc_info=True)
+
         for row_idx, row in enumerate(all_values[1:], start=2):
             if tier2_idx < 0 or len(row) <= tier2_idx:
                 continue
@@ -2882,6 +2895,12 @@ def get_cico_report_data(month: int):
             ts = tier_status_records.get(code, {})
             has_sst = str(ts.get("Tier2(SST)", "")).strip() == "O"
             has_t3  = str(ts.get("Tier3", "")).strip() == "O" or str(ts.get("Tier3+", "")).strip() == "O"
+            has_t3plus = str(ts.get("Tier3+", "")).strip() == "O"
+            if month_tiers and month_tiers["ready"]["sst"]:
+                has_sst = code in month_tiers["sst"]
+            if month_tiers and month_tiers["ready"]["t3"]:
+                has_t3 = code in month_tiers["t3"]
+                has_t3plus = month_tiers["t3"].get(code) == "Tier3+"
             cico_only = not (has_sst or has_t3)
 
             # Goal number parsing. rate_num is always attainment (higher =
@@ -2954,7 +2973,7 @@ def get_cico_report_data(month: int):
                 "cico_only": cico_only,
                 "has_sst": has_sst,
                 "has_t3": has_t3,
-                "has_t3plus": str(ts.get("Tier3+", "")).strip() == "O",  # 대시보드 병행 조합(Tier3 / Tier3+) 구분용
+                "has_t3plus": has_t3plus,  # 대시보드 병행 조합(Tier3 / Tier3+) 구분용
                 "decision": decision,
                 "decision_color": decision_color,
                 "team_talk": team_talk,

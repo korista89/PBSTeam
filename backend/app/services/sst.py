@@ -4,8 +4,8 @@
 - 저장: 운영 시트의 숨김 탭 'SST_프로그램'(처음 저장할 때 앱이 만든다). 삭제는 상태='삭제'로 남긴다.
 - 효과 모니터링: 대상 학생의 월별 위기행동 기록 건수(Log_Main)와 CICO 수행률(목표 여러 개면 평균)을
   운영 전 1개월(기초선)·운영 기간·운영 후 1개월로 나눠 보여 준다.
-- Tier현황 맞춤: 사이트의 SST 표시는 TierStatus 'Tier2(SST)' 열이 기준이다. 이 달 운영 중인 프로그램 대상과
-  그 열이 다르면 목록으로 보여 주고, 관리자가 학생별로 맞출 수 있다.
+- 운영 중인 프로그램 대상이 그 달의 SST 대상이다. TierStatus 'Tier2(SST)' 칸은 이번 달의 거울로,
+  프로그램을 저장·삭제하면 tier_monthly.mirror_after_change가 그 학생들만 맞춘다.
 """
 
 import logging
@@ -232,28 +232,3 @@ def monitor_program(program_id: int, allowed_codes: Optional[set] = None) -> Dic
         } for c in codes],
     }
 
-
-# ── Tier현황 맞춤 ──────────────────────────────────────
-def tier_sync_status(month: int) -> Dict[str, Any]:
-    """이 달 운영 중인 프로그램 대상 ↔ TierStatus 'Tier2(SST)'=O 비교."""
-    from app.services.sheets import fetch_student_status
-    running = [p for p in list_programs() if runs_in(p, month)]
-    in_program: Dict[str, List[str]] = {}
-    for p in running:
-        for c in p["targets"]:
-            in_program.setdefault(c, []).append(p["name"])
-    roster = {str(s.get("학생코드", "")).strip(): s for s in fetch_student_status() or []}
-    sst_on = {c for c, s in roster.items() if str(s.get("Tier2(SST)", "")).strip().upper() == "O"}
-
-    def row(c, programs):
-        s = roster.get(c, {})
-        return {"code": c, "name": s.get("학생이름", ""), "class": s.get("학급", ""), "programs": programs}
-
-    return {
-        "month": month,
-        "running": [p["name"] for p in running],
-        "need_on": [row(c, ps) for c, ps in in_program.items() if c not in sst_on and c in roster],
-        "need_off": [row(c, []) for c in sorted(sst_on - set(in_program))],
-        "matched": len(sst_on & set(in_program)),
-        "unknown": [c for c in in_program if c not in roster],
-    }

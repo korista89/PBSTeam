@@ -27,15 +27,3 @@ def test_validate_period_targets_and_max_six():
         assert sst.validate({**ok, "start": 12, "end": 2}, 2026, editing_id=2) is None  # 12월~2월은 정상
         assert "대상" in sst.validate({**ok, "targets": []}, 2026, editing_id=2)
 
-
-def test_tier_sync_compares_running_programs_with_tierstatus():
-    from app.services import sst, sheets
-    programs = [_p(2, 3, 5, ["A", "B"]), _p(3, 9, 10, ["C"])]
-    roster = [{"학생코드": "A", "Tier2(SST)": "O"}, {"학생코드": "B", "Tier2(SST)": "X"},
-              {"학생코드": "C", "Tier2(SST)": "X"}, {"학생코드": "D", "Tier2(SST)": "O"}]
-    with mock.patch.object(sst, "list_programs", return_value=programs), \
-         mock.patch.object(sheets, "fetch_student_status", return_value=roster):
-        r = sst.tier_sync_status(4)
-    assert [x["code"] for x in r["need_on"]] == ["B"]   # 4월 운영 중인데 Tier현황 SST가 꺼짐
-    assert [x["code"] for x in r["need_off"]] == ["D"]  # SST 켜져 있는데 4월 프로그램 없음
-    assert r["matched"] == 1 and r["running"] == ["P2"]

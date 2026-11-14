@@ -69,14 +69,8 @@ def update_tier_unified(req_data: UnifiedTierUpdateRequest, current_admin: Dict[
         tier_values = {}
         if req_data.tier1 is not None:
             tier_values['Tier1'] = req_data.tier1
-        if req_data.tier2_cico is not None:
-            tier_values['Tier2(CICO)'] = req_data.tier2_cico
-        if req_data.tier2_sst is not None:
-            tier_values['Tier2(SST)'] = req_data.tier2_sst
-        if req_data.tier3 is not None:
-            tier_values['Tier3'] = req_data.tier3
-        if req_data.tier3_plus is not None:
-            tier_values['Tier3+'] = req_data.tier3_plus
+        # CICO·SST·Tier3·Tier3+는 월별 표(CICO관리·SST관리·Tier3관리, Tier현황 월별 편집)가 출처이고
+        # TierStatus 칸은 이번 달의 거울이라 여기서 쓰지 않는다(써도 다음 반영 때 덮인다).
 
         result = update_student_tier_unified(
             code=str_code,
@@ -88,16 +82,6 @@ def update_tier_unified(req_data: UnifiedTierUpdateRequest, current_admin: Dict[
         )
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
-        # CICO로 지정하면 이번 달 CICO 표에 바로 넣는다(이미 있으면 그대로). 실패해도 Tier 저장은 유지
-        if req_data.tier2_cico == "O":
-            from app.core.time import today_kst
-            from app.services.sheets import create_monthly_cico_sheet
-            t = today_kst()
-            if 3 <= t.month <= 12:
-                try:
-                    result["cico"] = create_monthly_cico_sheet(t.year, t.month)
-                except Exception as e:
-                    result["cico"] = {"error": str(e)}
         return result
     except SheetUnavailable:
         raise

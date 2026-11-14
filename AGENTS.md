@@ -27,8 +27,8 @@
 - CICO는 월별 탭(3월·4월…)이 아니라 `CICO_설정`(학년도·월·학생·목표 순번·기록방식)·`CICO_기록`(날짜·학생·목표·교시·값)·`CICO_달력`(월별 기록일) 3개 표다.
   `adapters/sheets/cico_store.py`의 `MonthSheet`가 예전 월별 탭 모양을 만들어 주므로 `get_worksheet_fuzzy(sheet, "10월")`로 연다. 월별 탭을 새로 만들지 않는다.
 - CICO 기록 방식은 일별(기본)과 분포도기록지(교시별, 초등은 3교시 뒤·그 외는 4교시 뒤 점심) 중 고른다.
-- Tier3·Tier3+ 월별 명단은 숨김 탭 `Tier3_월별`(학년도·월·학생·단계, 앱이 처음 저장할 때 만든다, 정정은 상태='제외'). TierStatus는 '지금' 상태이고 Tier3+ 학생은 Tier3 칸도 O가 관례다. 이번 달 명단과 다르면 Tier3관리 화면에서 맞춘다(`backend/app/services/tier3_monthly.py`).
-- SST 프로그램은 숨김 탭 `SST_프로그램`(학년도당 최대 6개, 앱이 처음 저장할 때 만든다, 삭제는 상태='삭제'). 사이트의 SST 표시는 여전히 TierStatus `Tier2(SST)`가 기준이고, SST관리 화면의 'Tier현황 SST 맞추기'로 맞춘다(`backend/app/services/sst.py`).
+- **Tier는 월별로 관리한다(2026-11-14).** 단계마다 그 달 출처는 하나다: CICO=`CICO_설정`의 그 달 줄, SST=그 달 운영 중인 `SST_프로그램`(학년도 최대 6개) 대상, Tier3·Tier3+=`Tier3_월별`(정정은 상태='제외'). 모두 숨김 탭이고 앱이 처음 저장할 때 만든다.
+  TierStatus의 Tier2(CICO)·Tier2(SST)·Tier3·Tier3+ 칸은 **이번 달의 거울**이다(사이트 다른 화면이 읽음). 관리 탭에서 이번 달 표를 바꾸면 `tier_monthly.mirror_after_change`가 그 탭의 칸만, 바뀐 학생만 맞춘다. 전교생 차이는 Tier현황 탭에서 사람이 보고 '모두 반영'할 때만 쓴다. 그 달 표가 없는 단계는 거울에 쓰지 않는다. Tier3+ 학생은 Tier3 칸도 O(관례). TierStatus 칸을 직접 쓰는 새 코드를 만들지 않는다.
 - 그림말누리제(`PW_*`·`평가문장`)는 별도 파일 `PW_SHEET_URL`(`open_pw_sheet()`). 옛 월별 탭·안 쓰는 탭은 보관 파일 `26경은PBST 보관 (2026-11-01 정리)`에 있다.
 
 ## 실행

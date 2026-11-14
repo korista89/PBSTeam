@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import styles from "../page.module.css";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { maskName } from "../utils";
@@ -11,382 +10,342 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
 import HandoverMatch from "./HandoverMatch";
 
-interface StudentStatus {
-    번호: number;
-    학급: string;
-    학생코드: string;
-    학생이름: string;
-    재학여부: string;
-    'BeAble코드': string;
-    '그림말인증': number | string;
-    'Tier1': string;
-    'Tier2(CICO)': string;
-    'Tier2(SST)': string;
-    'Tier3': string;
-    'Tier3+': string;
-    변경일: string;
-    메모: string;
-    row_index?: number;
+// Tier현황(월별): CICO·SST·Tier3는 그 달의 관리 탭 표(CICO관리·SST관리·Tier3관리)가 출처다.
+// 여기서 CICO·Tier3를 고치면 그 표에 저장되고, 이번 달이면 TierStatus 시트의 칸(사이트 다른 화면이 읽는 거울)도 그 학생만 맞춘다.
+// 이름·재학·BeAble·Tier1·메모는 월별이 아니라 TierStatus 그대로다.
+type Flags = { cico: boolean; sst: boolean | string[]; t3: string };
+interface Row {
+  번호: number | string; 학급: string; 학생코드: string; 학생이름: string; 재학여부: string;
+  BeAble코드: string; 그림말인증: number | string; Tier1: string; 변경일: string; 메모: string;
+  cico: boolean; sst: string[]; t3: string; prev: Flags | null; now: Flags;
 }
+interface Overview {
+  month: number; prev_month: number | null; is_current: boolean;
+  ready: { cico: boolean; sst: boolean; t3: boolean }; prev_ready: { cico: boolean; sst: boolean; t3: boolean } | null;
+  sst_programs: number; students: Row[];
+}
+interface Diff { code: string; name: string; class: string; col: string; from: string; to: string; }
+
+const SCHOOL_MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2];
+const nowMonth = () => new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1;
+const COURSE: Record<string, string> = { "1": "유치원", "2": "초등", "3": "중학교", "4": "고등", "5": "전공과", "6": "예비" };
 
 export default function TierStatusPage() {
-    const { isAdmin } = useAuth();
-    const router = useRouter();
-    const [students, setStudents] = useState<StudentStatus[]>([]);
-    const [enrolledCount, setEnrolledCount] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState("all");
-    const [courseFilter, setCourseFilter] = useState("all");
-    const [saving, setSaving] = useState(false);
+  const { isAdmin } = useAuth();
+  const admin = isAdmin();
+  const router = useRouter();
+  const [month, setMonth] = useState(nowMonth);
+  const [data, setData] = useState<Overview | null>(null);
+  const [diff, setDiff] = useState<Diff[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [courseFilter, setCourseFilter] = useState("all");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<{
+    code: string; name: string; enrolled: string; beable: string; tier1: string; memo: string; cico: boolean; t3: string;
+  } | null>(null);
 
-    // Editing states
-    const [editingCode, setEditingCode] = useState<string | null>(null);
-    const [editMemo, setEditMemo] = useState("");
-    const [editEnrolled, setEditEnrolled] = useState("");
-    const [editBeAble, setEditBeAble] = useState("");
-    const [editName, setEditName] = useState("");
-    const [editTiers, setEditTiers] = useState({
-        tier1: "O",
-        tier2_cico: "X",
-        tier2_sst: "X",
-        tier3: "X",
-        tier3_plus: "X"
-    });
-
-    const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-    const fetchStatus = useCallback(async (silent = false) => {
-        try {
-            if (!silent) setLoading(true);
-            setErrorMsg(null);
-            const apiUrl = API_BASE_URL;
-            const response = await axios.get(`${apiUrl}/api/v1/tier/status`);
-
-            const fetchedStudents = response.data.students || response.data || [];
-
-            if (fetchedStudents.length === 0) {
-                setStudents([]);
-                setEnrolledCount(0);
-                setErrorMsg("DATA_UNAVAILABLE: 등록된 학생 지원 단계 데이터가 없습니다.");
-            } else {
-                setStudents(fetchedStudents);
-                setEnrolledCount(response.data.enrolled_count || fetchedStudents.filter((s: StudentStatus) => s.재학여부 === "O").length);
-            }
-        } catch (error) {
-            console.error("Failed to fetch tier status:", error);
-            setStudents([]);
-            setEnrolledCount(0);
-            setErrorMsg("DATA_UNAVAILABLE: 학생 지원 단계(TierStatus) 데이터를 불러올 수 없습니다.");
-        } finally {
-            if (!silent) setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { void fetchStatus(); }, [fetchStatus]);
-    useSheetLiveSync(() => fetchStatus(true), { enabled: editingCode === null && !saving });
-
-    const handleEdit = (student: StudentStatus) => {
-        setEditingCode(student.학생코드);
-        setEditName(student.학생이름 || student.학생코드);
-        setEditMemo(student.메모 || "");
-        setEditEnrolled(student.재학여부);
-        setEditBeAble(student['BeAble코드'] || "");
-        setEditTiers({
-            tier1: student['Tier1'] || "O",
-            tier2_cico: student['Tier2(CICO)'] || "X",
-            tier2_sst: student['Tier2(SST)'] || "X",
-            tier3: student['Tier3'] || "X",
-            tier3_plus: student['Tier3+'] || "X"
-        });
-    };
-
-    // ===== Unified Save: single API call =====
-    const handleSave = async () => {
-        if (!editingCode) return;
-
-        setSaving(true);
-        try {
-            const apiUrl = API_BASE_URL;
-
-            await axios.put(`${apiUrl}/api/v1/tier/status/unified`, {
-                code: editingCode,
-                tier1: editTiers.tier1,
-                tier2_cico: editTiers.tier2_cico,
-                tier2_sst: editTiers.tier2_sst,
-                tier3: editTiers.tier3,
-                tier3_plus: editTiers.tier3_plus,
-                memo: editMemo,
-                enrolled: editEnrolled,
-                beable_code: editBeAble,
-                student_name: editName
-            });
-
-            setEditingCode(null);
-            fetchStatus();
-        } catch (error) {
-            console.error("Failed to save:", error);
-            alert("저장에 실패했습니다.");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleCancel = () => {
-        setEditingCode(null);
-    };
-
-    const getCourse = (code: string) => {
-        if (!code) return "";
-        const first = code[0];
-        switch (first) {
-            case "1": return "유치원";
-            case "2": return "초등";
-            case "3": return "중학교";
-            case "4": return "고등";
-            case "5": return "전공과";
-            case "6": return "예비";
-            default: return "";
-        }
-    };
-
-
-    // Filter students
-    // Note: /api/v1/tier/status already scopes `students` to the caller's own class
-    // for non-admins server-side (get_student_class_code / normalize_class_identifier),
-    // so no client-side class filter is needed here. A previous version compared the
-    // numeric 학생코드 against class_id via .startsWith(), which could never match -
-    // it emptied an already-correctly-scoped list for every teacher.
-    const filteredStudents = students.filter(s => {
-        // Inclusive filtering logic
-        if (filter !== "all") {
-            if (filter === "Tier1") {
-                // Tier 1 is "Pure" Tier 1 (no other tiers)
-                if (!(s['Tier1'] === "O" && s['Tier2(CICO)'] === "X" && s['Tier2(SST)'] === "X" && s['Tier3'] === "X" && s['Tier3+'] === "X")) return false;
-            } else if (filter === "Tier2(CICO)") {
-                if (s['Tier2(CICO)'] !== "O") return false;
-            } else if (filter === "Tier2(SST)") {
-                if (s['Tier2(SST)'] !== "O") return false;
-            } else if (filter === "Tier3") {
-                if (s['Tier3'] !== "O") return false;
-            } else if (filter === "Tier3+") {
-                if (s['Tier3+'] !== "O") return false;
-            }
-        }
-
-        if (courseFilter !== "all" && getCourse(s.학생코드) !== courseFilter) return false;
-        return true;
-    });
-
-    if (loading) {
-        return (
-            <AuthCheck>
-                <AppShell currentPage="tier-status" title="📋 전교생 Tier 지원 단계 현황">
-                    <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        <div style={{ fontSize: '2.5rem', marginBottom: '12px', animation: 'spin 2s linear infinite' }}>⏳</div>
-                        <p style={{ fontWeight: 700 }}>학생 지원 단계 데이터를 불러오고 있습니다...</p>
-                    </div>
-                </AppShell>
-            </AuthCheck>
-        );
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setErrorMsg(null);
+    try {
+      const { data } = await axios.get(`${API_BASE_URL}/api/v1/tier-monthly/overview`, { params: { month } });
+      setData(data);
+      if (admin && data.is_current) {
+        const r = await axios.get(`${API_BASE_URL}/api/v1/tier-monthly/mirror`);
+        setDiff(r.data.diff || []);
+      } else setDiff(null);
+    } catch (e: any) {
+      setErrorMsg(`학생 지원 단계를 불러올 수 없습니다. (${e?.response?.data?.detail || e.message})`);
+    } finally {
+      if (!silent) setLoading(false);
     }
+  }, [month, admin]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
+  useSheetLiveSync(() => fetchAll(true), { enabled: editing === null && !saving });
 
+  const run = async (label: string, fn: () => Promise<any>) => {
+    setSaving(true);
+    setStatus(`${label} 중...`);
+    try {
+      const res = await fn();
+      const m = res?.data?.mirror;
+      const mirrored = m?.changed ? ` · Tier현황 ${m.changed}칸 맞춤` : "";
+      setStatus(`✓ ${res?.data?.message || label + " 완료"}${mirrored}`);
+      await fetchAll(true);
+    } catch (e: any) {
+      setStatus(`⚠ ${label} 실패 — ${e?.response?.data?.detail || e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 표에 보일 이 달 값: 그 단계 표가 있으면 월별 값, 없으면 이번 달만 Tier현황(지금) 값을 흐리게
+  const ready = data?.ready;
+  const view = (s: Row) => ({
+    cico: ready?.cico ? s.cico : data?.is_current ? s.now.cico : null,
+    sst: ready?.sst ? s.sst.length > 0 : data?.is_current ? !!s.now.sst : null,
+    t3: ready?.t3 ? s.t3 : data?.is_current ? s.now.t3 : null,
+  });
+
+  const save = async () => {
+    if (!editing || !data) return;
+    const s = data.students.find(x => x.학생코드 === editing.code);
+    if (!s) return;
+    await run("저장", async () => {
+      await axios.put(`${API_BASE_URL}/api/v1/tier/status/unified`, {
+        code: editing.code, tier1: editing.tier1, memo: editing.memo, enrolled: editing.enrolled,
+        beable_code: editing.beable, student_name: editing.name,
+      });
+      const v = view(s);
+      const body: Record<string, unknown> = { month, code: editing.code };
+      if (editing.cico !== !!v.cico) body.cico = editing.cico;
+      if (editing.t3 !== (v.t3 || "")) body.t3 = editing.t3;
+      if ("cico" in body || "t3" in body) return axios.post(`${API_BASE_URL}/api/v1/tier-monthly/student`, body);
+      return { data: { message: "저장했습니다." } };
+    });
+    setEditing(null);
+  };
+
+  if (loading || !data) {
     return (
-        <AuthCheck>
-            <AppShell
-                currentPage="tier-status"
-                title="📋 전교생 Tier 지원 단계 현황"
-                subtitle={`전교생 ${enrolledCount}명 (재학생 기준) · 전체 ${students.length}명`}
-                headerActions={
-                    <button onClick={() => void fetchStatus()} className="btn btn-secondary">
-                        🔄 새로고침
-                    </button>
-                }
-            >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {!isAdmin() && (
-                        <div style={{ padding: '10px 14px', backgroundColor: 'var(--tier2-bg)', borderRadius: '8px', border: '1px solid #fde68a', color: 'var(--tier2-text)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>🔒</span> 담임교사는 배정 학급 학생의 데이터 조회가 가능하며, Tier 수정은 관리자 권한으로 수행됩니다.
-                        </div>
-                    )}
-
-                    {isAdmin() && <HandoverMatch students={students} />}
-
-                    {errorMsg && (
-                        <div className="card" style={{ padding: '16px 20px', background: 'var(--tier3-bg)', borderColor: '#fca5a5', color: 'var(--tier3-text)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>⚠️ {errorMsg}</span>
-                            <button onClick={() => void fetchStatus()} className="btn btn-danger">다시 시도</button>
-                        </div>
-                    )}
-
-                    {/* Filters */}
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="form-select">
-                            <option value="all">전체 Tier</option>
-                            <option value="Tier1">Tier 1</option>
-                            <option value="Tier2(CICO)">Tier2(CICO)</option>
-                            <option value="Tier2(SST)">Tier2(SST)</option>
-                            <option value="Tier3">Tier 3</option>
-                            <option value="Tier3+">Tier 3+</option>
-                        </select>
-                        <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value)} className="form-select">
-                            <option value="all">전체 과정</option>
-                            <option value="유치원">유치원</option>
-                            <option value="초등">초등</option>
-                            <option value="중학교">중학교</option>
-                            <option value="고등">고등</option>
-                            <option value="전공과">전공과</option>
-                        </select>
-                        <span className="badge badge-neutral">표시: {filteredStudents.length}명</span>
-                    </div>
-
-                    {/* Table */}
-                    <div className="table-container">
-                        <table className="dense-table">
-                            <thead>
-                                <tr>
-                                    <th style={{ width: '40px', textAlign: 'center' }}>번호</th>
-                                    <th style={{ width: '100px' }}>학급</th>
-                                    <th style={{ width: '70px', textAlign: 'center' }}>학생코드</th>
-                                    <th style={{ width: '90px', textAlign: 'center' }}>학생이름</th>
-                                    <th style={{ width: '50px', textAlign: 'center' }}>재학</th>
-                                    <th style={{ width: '80px', textAlign: 'center' }}>BeAble</th>
-                                    <th style={{ width: '70px', textAlign: 'center' }}>그림말인증</th>
-                                    <th style={{ width: '55px', textAlign: 'center', background: 'var(--tier1-bg)', color: 'var(--tier1-text)' }}>Tier1</th>
-                                    <th style={{ width: '85px', textAlign: 'center', background: 'var(--tier2-bg)', color: 'var(--tier2-text)' }}>Tier2(CICO)</th>
-                                    <th style={{ width: '85px', textAlign: 'center', background: 'var(--primary-light)', color: 'var(--primary-blue)' }}>Tier2(SST)</th>
-                                    <th style={{ width: '55px', textAlign: 'center', background: 'var(--tier3-bg)', color: 'var(--tier3-text)' }}>Tier3</th>
-                                    <th style={{ width: '55px', textAlign: 'center', background: 'var(--tier3-plus-bg)', color: 'var(--tier3-plus-text)' }}>Tier3+</th>
-                                    <th style={{ width: '80px', textAlign: 'center' }}>변경일</th>
-                                    <th style={{ width: '140px' }}>메모</th>
-                                    <th style={{ width: '60px', textAlign: 'center' }}>상세분석</th>
-                                    {isAdmin() && <th style={{ width: '80px', textAlign: 'center' }}>관리</th>}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredStudents.map((s) => {
-                                    const isEditing = editingCode === s.학생코드;
-                                    const isInactive = s.재학여부 === "X";
-
-                                    return (
-                                        <tr key={s.학생코드} style={{ opacity: isInactive ? 0.5 : 1 }}>
-                                            <td style={{ textAlign: 'center' }}>{s.번호}</td>
-                                            <td>{s.학급}</td>
-                                            <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>{s.학생코드}</td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                {isEditing ? (
-                                                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="form-input" style={{ width: '70px', padding: '3px 6px' }} placeholder="이름" />
-                                                ) : (
-                                                    <span style={{ fontWeight: 700 }}>{maskName(s.학생이름) || s.학생코드}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                {isEditing ? (
-                                                    <select value={editEnrolled} onChange={(e) => setEditEnrolled(e.target.value)} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
-                                                        <option value="O">O</option>
-                                                        <option value="X">X</option>
-                                                    </select>
-                                                ) : (
-                                                    <span className={`badge ${s.재학여부 === "O" ? "badge-tier1" : "badge-neutral"}`}>{s.재학여부}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                {isEditing ? (
-                                                    <input type="text" value={editBeAble} onChange={(e) => setEditBeAble(e.target.value)} className="form-input" style={{ width: '70px', padding: '3px 6px' }} placeholder="코드" />
-                                                ) : (
-                                                    s['BeAble코드'] || '-'
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--primary-navy)' }}>
-                                                {s['그림말인증'] !== undefined ? s['그림말인증'] : 0} / 13
-                                            </td>
-                                            {/* 5 Tier columns with O/X */}
-                                            <td style={{ textAlign: 'center', background: 'var(--tier1-bg)' }}>
-                                                {isEditing ? (
-                                                    <select value={editTiers.tier1} onChange={(e) => setEditTiers({ ...editTiers, tier1: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
-                                                        <option value="O">O</option>
-                                                        <option value="X">X</option>
-                                                    </select>
-                                                ) : (
-                                                    <span className={`badge ${s['Tier1'] === "O" ? "badge-tier1" : "badge-neutral"}`}>{s['Tier1']}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center', background: 'var(--tier2-bg)' }}>
-                                                {isEditing ? (
-                                                    <select value={editTiers.tier2_cico} onChange={(e) => setEditTiers({ ...editTiers, tier2_cico: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
-                                                        <option value="O">O</option>
-                                                        <option value="X">X</option>
-                                                    </select>
-                                                ) : (
-                                                    <span className={`badge ${s['Tier2(CICO)'] === "O" ? "badge-tier2" : "badge-neutral"}`}>{s['Tier2(CICO)']}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center', background: 'var(--primary-light)' }}>
-                                                {isEditing ? (
-                                                    <select value={editTiers.tier2_sst} onChange={(e) => setEditTiers({ ...editTiers, tier2_sst: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
-                                                        <option value="O">O</option>
-                                                        <option value="X">X</option>
-                                                    </select>
-                                                ) : (
-                                                    <span className={`badge ${s['Tier2(SST)'] === "O" ? "badge-info" : "badge-neutral"}`}>{s['Tier2(SST)']}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center', background: 'var(--tier3-bg)' }}>
-                                                {isEditing ? (
-                                                    <select value={editTiers.tier3} onChange={(e) => setEditTiers({ ...editTiers, tier3: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
-                                                        <option value="O">O</option>
-                                                        <option value="X">X</option>
-                                                    </select>
-                                                ) : (
-                                                    <span className={`badge ${s['Tier3'] === "O" ? "badge-tier3" : "badge-neutral"}`}>{s['Tier3']}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center', background: 'var(--tier3-plus-bg)' }}>
-                                                {isEditing ? (
-                                                    <select value={editTiers.tier3_plus} onChange={(e) => setEditTiers({ ...editTiers, tier3_plus: e.target.value })} className="form-select" style={{ padding: '3px 4px', width: '50px' }}>
-                                                        <option value="O">O</option>
-                                                        <option value="X">X</option>
-                                                    </select>
-                                                ) : (
-                                                    <span className={`badge ${s['Tier3+'] === "O" ? "badge-tier3-plus" : "badge-neutral"}`}>{s['Tier3+']}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{s.변경일 || '-'}</td>
-                                            <td style={{ fontSize: '0.8rem', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {isEditing ? (
-                                                    <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className="form-input" style={{ width: '100%', padding: '3px 6px' }} placeholder="메모" />
-                                                ) : (
-                                                    s.메모 || '-'
-                                                )}
-                                            </td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>📊</button>
-                                            </td>
-                                            {isAdmin() && (
-                                                <td style={{ textAlign: 'center' }}>
-                                                    {isEditing ? (
-                                                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                                            <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ padding: '3px 8px', fontSize: '0.72rem' }}>
-                                                                {saving ? '...' : '저장'}
-                                                            </button>
-                                                            <button onClick={handleCancel} className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '0.72rem' }}>
-                                                                취소
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <button onClick={() => handleEdit(s)} className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: '0.72rem' }}>
-                                                            편집
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            )}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </AppShell>
-        </AuthCheck>
+      <AuthCheck>
+        <AppShell currentPage="tier-status" title="📋 전교생 Tier 지원 단계 현황">
+          <div className="card" style={{ padding: 60, textAlign: "center", color: "var(--text-secondary)" }}>
+            {errorMsg ? <p style={{ color: "var(--tier3-text)", fontWeight: 700 }}>⚠️ {errorMsg}</p> : <p style={{ fontWeight: 700 }}>⏳ 학생 지원 단계를 불러오고 있습니다...</p>}
+          </div>
+        </AppShell>
+      </AuthCheck>
     );
+  }
+
+  const students = data.students;
+  const enrolled = students.filter(s => s.재학여부 === "O").length;
+  const filtered = students.filter(s => {
+    const v = view(s);
+    if (filter === "Tier1" && (v.cico || v.sst || v.t3)) return false;
+    if (filter === "Tier2(CICO)" && !v.cico) return false;
+    if (filter === "Tier2(SST)" && !v.sst) return false;
+    if (filter === "Tier3" && !v.t3) return false;
+    if (filter === "Tier3+" && v.t3 !== "Tier3+") return false;
+    if (courseFilter !== "all" && COURSE[s.학생코드?.[0]] !== courseFilter) return false;
+    return true;
+  });
+  const missing = [!data.ready.cico && month >= 3 && month <= 12 && "CICO", !data.ready.t3 && "Tier3"].filter(Boolean) as string[];
+  const ox = (on: boolean | null, cls: string, title?: string) =>
+    on === null ? <span style={{ color: "#cbd5e1" }}>-</span> : <span className={`badge ${on ? cls : "badge-neutral"}`} title={title}>{on ? "O" : "X"}</span>;
+  const changeMark = (s: Row, key: "cico" | "t3") => {
+    if (!s.prev || !data.prev_ready || !data.ready[key] || !data.prev_ready[key]) return null;
+    const was = key === "cico" ? s.prev.cico : !!s.prev.t3;
+    const is = key === "cico" ? s.cico : !!s.t3;
+    if (was === is) return null;
+    return <span style={{ fontSize: "0.6rem", fontWeight: 800, color: is ? "#10b981" : "#94a3b8", marginLeft: 2 }}>{is ? "신규" : "종료"}</span>;
+  };
+  const sel = { padding: "3px 4px", fontSize: "0.75rem" } as React.CSSProperties;
+
+  return (
+    <AuthCheck>
+      <AppShell
+        currentPage="tier-status"
+        title="📋 전교생 Tier 지원 단계 현황"
+        subtitle={`${month}월 기준 · 재학생 ${enrolled}명 · 전체 ${students.length}명 · CICO·SST·Tier3는 각 관리 탭의 월별 표가 출처`}
+        headerActions={
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {status && <span className={`badge ${status.startsWith("⚠") ? "badge-tier3" : "badge-tier1"}`} style={{ fontSize: "0.78rem" }}>{status}</span>}
+            <select value={month} onChange={e => { setMonth(Number(e.target.value)); setEditing(null); setStatus(""); }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1.5px solid var(--primary-blue)", fontWeight: 700, fontSize: "0.82rem", background: "white" }}>
+              {SCHOOL_MONTHS.map(m => <option key={m} value={m}>{m}월{m === nowMonth() ? " (이번 달)" : ""}</option>)}
+            </select>
+            <button onClick={() => void fetchAll()} className="btn btn-secondary">🔄 새로고침</button>
+          </div>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {!admin && (
+            <div style={{ padding: "10px 14px", backgroundColor: "var(--tier2-bg)", borderRadius: 8, border: "1px solid #fde68a", color: "var(--tier2-text)", fontSize: "0.82rem" }}>
+              🔒 담임교사는 배정 학급 학생을 조회할 수 있고, Tier 수정은 관리자가 합니다.
+            </div>
+          )}
+
+          {/* 이 달 표 상태 */}
+          <div className="card" style={{ padding: 14, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: "0.8rem" }}>
+            <strong>{month}월 표</strong>
+            <Pill ok={data.ready.cico || month < 3} label={month < 3 ? "CICO 운영 안 함" : `CICO ${data.ready.cico ? "있음" : "없음"}`} href="/cico" />
+            <Pill ok={data.ready.sst} label={`SST 프로그램 ${data.sst_programs}개`} href="/sst" />
+            <Pill ok={data.ready.t3} label={`Tier3 명단 ${data.ready.t3 ? "있음" : "없음"}`} href="/tier3" />
+            {missing.length > 0 && (
+              <span style={{ color: "#64748b" }}>
+                {data.is_current ? "· 표가 없는 단계는 Tier현황(지금) 값을 흐리게 보여 줍니다." : "· 표가 없는 단계는 ‘-’로 보입니다."}
+              </span>
+            )}
+            {admin && missing.length > 0 && data.prev_month && (
+              <button className="btn btn-primary" style={{ padding: "4px 12px", fontSize: "0.78rem", marginLeft: "auto" }} disabled={saving}
+                onClick={() => {
+                  if (!window.confirm(`${missing.join("·")} 표를 ${data.prev_month}월 그대로 만들어 ${month}월을 시작할까요?`)) return;
+                  void run(`${month}월 시작`, () => axios.post(`${API_BASE_URL}/api/v1/tier-monthly/start`, { month }));
+                }}>
+                📋 {data.prev_month}월 그대로 {month}월 시작하기 ({missing.join("·")})
+              </button>
+            )}
+          </div>
+
+          {/* 이번 달 거울 차이 */}
+          {admin && data.is_current && diff && diff.length > 0 && (
+            <div className="card" style={{ padding: 14, border: "1.5px solid #f59e0b" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <strong style={{ color: "#b45309" }}>⚠ Tier현황 시트와 {month}월 월별 표가 다른 칸 {diff.length}개</strong>
+                <button className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: "0.78rem" }} disabled={saving}
+                  onClick={() => {
+                    if (!window.confirm(`Tier현황 시트의 ${diff.length}칸을 ${month}월 월별 표에 맞춥니다. 대시보드·브리핑·CICO 판정이 이 값을 씁니다. 진행할까요?`)) return;
+                    void run("Tier현황 맞추기", () => axios.post(`${API_BASE_URL}/api/v1/tier-monthly/mirror`));
+                  }}>
+                  월별 표대로 모두 반영
+                </button>
+              </div>
+              <p style={{ fontSize: "0.72rem", color: "#64748b", margin: "6px 0" }}>
+                사이트의 다른 화면은 Tier현황 시트 칸을 읽습니다. 월별 표가 맞으면 ‘모두 반영’, 시트가 맞으면 해당 관리 탭(CICO관리·SST관리·Tier3관리)에서 월별 표를 고치세요.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: "0.75rem" }}>
+                {diff.map(d => (
+                  <span key={d.code + d.col} style={{ padding: "2px 8px", borderRadius: 999, background: "#fef3c7", color: "#92400e" }}>
+                    {maskName(d.name) || d.code} {d.col} {d.from}→{d.to}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {admin && <HandoverMatch students={students} />}
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <select value={filter} onChange={e => setFilter(e.target.value)} className="form-select">
+              <option value="all">전체 Tier</option>
+              <option value="Tier1">Tier 1만</option>
+              <option value="Tier2(CICO)">Tier2(CICO)</option>
+              <option value="Tier2(SST)">Tier2(SST)</option>
+              <option value="Tier3">Tier 3 (3+ 포함)</option>
+              <option value="Tier3+">Tier 3+</option>
+            </select>
+            <select value={courseFilter} onChange={e => setCourseFilter(e.target.value)} className="form-select">
+              <option value="all">전체 과정</option>
+              {["유치원", "초등", "중학교", "고등", "전공과"].map(c => <option key={c}>{c}</option>)}
+            </select>
+            <span className="badge badge-neutral">표시: {filtered.length}명</span>
+          </div>
+
+          <div className="table-container">
+            <table className="dense-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 40, textAlign: "center" }}>번호</th>
+                  <th style={{ width: 100 }}>학급</th>
+                  <th style={{ width: 70, textAlign: "center" }}>학생코드</th>
+                  <th style={{ width: 90, textAlign: "center" }}>학생이름</th>
+                  <th style={{ width: 50, textAlign: "center" }}>재학</th>
+                  <th style={{ width: 80, textAlign: "center" }}>BeAble</th>
+                  <th style={{ width: 70, textAlign: "center" }}>그림말인증</th>
+                  <th style={{ width: 55, textAlign: "center", background: "var(--tier1-bg)", color: "var(--tier1-text)" }}>Tier1</th>
+                  <th style={{ width: 85, textAlign: "center", background: "var(--tier2-bg)", color: "var(--tier2-text)" }}>CICO</th>
+                  <th style={{ width: 85, textAlign: "center", background: "var(--primary-light)", color: "var(--primary-blue)" }}>SST</th>
+                  <th style={{ width: 90, textAlign: "center", background: "var(--tier3-bg)", color: "var(--tier3-text)" }}>Tier3 / 3+</th>
+                  <th style={{ width: 80, textAlign: "center" }}>변경일</th>
+                  <th style={{ width: 140 }}>메모</th>
+                  <th style={{ width: 60, textAlign: "center" }}>상세분석</th>
+                  {admin && <th style={{ width: 80, textAlign: "center" }}>관리</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(s => {
+                  const v = view(s);
+                  const e = editing?.code === s.학생코드 ? editing : null;
+                  const dim = (k: "cico" | "sst" | "t3") => (!data.ready[k] ? { opacity: 0.5 } : undefined);
+                  return (
+                    <tr key={s.학생코드} style={{ opacity: s.재학여부 === "X" ? 0.5 : 1 }}>
+                      <td style={{ textAlign: "center" }}>{s.번호}</td>
+                      <td>{s.학급}</td>
+                      <td style={{ textAlign: "center", fontFamily: "monospace" }}>{s.학생코드}</td>
+                      <td style={{ textAlign: "center" }}>
+                        {e ? <input value={e.name} onChange={x => setEditing({ ...e, name: x.target.value })} className="form-input" style={{ width: 70, padding: "3px 6px" }} />
+                          : <span style={{ fontWeight: 700 }}>{maskName(s.학생이름) || s.학생코드}</span>}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {e ? <select value={e.enrolled} onChange={x => setEditing({ ...e, enrolled: x.target.value })} className="form-select" style={sel}><option>O</option><option>X</option></select>
+                          : <span className={`badge ${s.재학여부 === "O" ? "badge-tier1" : "badge-neutral"}`}>{s.재학여부}</span>}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {e ? <input value={e.beable} onChange={x => setEditing({ ...e, beable: x.target.value })} className="form-input" style={{ width: 70, padding: "3px 6px" }} />
+                          : s.BeAble코드 || "-"}
+                      </td>
+                      <td style={{ textAlign: "center", fontWeight: 700, color: "var(--primary-navy)" }}>{s.그림말인증 ?? 0} / 13</td>
+                      <td style={{ textAlign: "center", background: "var(--tier1-bg)" }}>
+                        {e ? <select value={e.tier1} onChange={x => setEditing({ ...e, tier1: x.target.value })} className="form-select" style={sel}><option>O</option><option>X</option></select>
+                          : ox(s.Tier1 === "O", "badge-tier1")}
+                      </td>
+                      <td style={{ textAlign: "center", background: "var(--tier2-bg)", ...dim("cico") }}>
+                        {e && month >= 3 && month <= 12
+                          ? <select value={e.cico ? "O" : "X"} onChange={x => setEditing({ ...e, cico: x.target.value === "O" })} className="form-select" style={sel}><option>O</option><option>X</option></select>
+                          : <>{ox(v.cico, "badge-tier2")}{changeMark(s, "cico")}</>}
+                      </td>
+                      <td style={{ textAlign: "center", background: "var(--primary-light)", ...dim("sst") }}>
+                        {e ? <a href="/sst" style={{ fontSize: "0.7rem" }} title="SST는 SST관리의 프로그램 대상으로 정합니다">SST관리 →</a>
+                          : ox(v.sst, "badge-info", s.sst.join(", ") || undefined)}
+                      </td>
+                      <td style={{ textAlign: "center", background: "var(--tier3-bg)", ...dim("t3") }}>
+                        {e ? (
+                          <select value={e.t3} onChange={x => setEditing({ ...e, t3: x.target.value })} className="form-select" style={sel}>
+                            <option value="">없음</option><option>Tier3</option><option>Tier3+</option>
+                          </select>
+                        ) : v.t3 === null ? <span style={{ color: "#cbd5e1" }}>-</span> : v.t3 ? (
+                          <span className={`badge ${v.t3 === "Tier3+" ? "badge-tier3-plus" : "badge-tier3"}`}>{v.t3}</span>
+                        ) : <span className="badge badge-neutral">X</span>}
+                        {!e && changeMark(s, "t3")}
+                      </td>
+                      <td style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--text-muted)" }}>{s.변경일 || "-"}</td>
+                      <td style={{ fontSize: "0.8rem", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {e ? <input value={e.memo} onChange={x => setEditing({ ...e, memo: x.target.value })} className="form-input" style={{ width: "100%", padding: "3px 6px" }} />
+                          : s.메모 || "-"}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>📊</button>
+                      </td>
+                      {admin && (
+                        <td style={{ textAlign: "center" }}>
+                          {e ? (
+                            <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                              <button onClick={() => void save()} disabled={saving} className="btn btn-primary" style={{ padding: "3px 8px", fontSize: "0.72rem" }}>{saving ? "..." : "저장"}</button>
+                              <button onClick={() => setEditing(null)} className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: "0.72rem" }}>취소</button>
+                            </div>
+                          ) : (
+                            <button className="btn btn-secondary" style={{ padding: "3px 10px", fontSize: "0.72rem" }} disabled={saving}
+                              onClick={() => setEditing({
+                                code: s.학생코드, name: s.학생이름 || "", enrolled: s.재학여부 || "O", beable: s.BeAble코드 || "",
+                                tier1: s.Tier1 || "O", memo: s.메모 || "", cico: !!v.cico, t3: v.t3 || "",
+                              })}>편집</button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+            ※ ‘신규·종료’는 {data.prev_month ? `${data.prev_month}월` : "지난달"} 대비입니다. CICO·Tier3를 여기서 고치면 {month}월 CICO관리·Tier3관리 표에 저장됩니다. SST는 SST관리의 프로그램 대상으로 정합니다.
+          </p>
+        </div>
+      </AppShell>
+    </AuthCheck>
+  );
+}
+
+function Pill({ ok, label, href }: { ok: boolean; label: string; href: string }) {
+  return (
+    <a href={href} style={{ padding: "2px 10px", borderRadius: 999, textDecoration: "none", fontWeight: 700, fontSize: "0.75rem",
+      background: ok ? "#dcfce7" : "#f1f5f9", color: ok ? "#166534" : "#64748b" }}>
+      {ok ? "✓ " : "○ "}{label}
+    </a>
+  );
 }

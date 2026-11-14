@@ -20,17 +20,23 @@ class ProgramIn(BaseModel):
     memo: str = ""
 
 
-class TierSyncIn(BaseModel):
-    code: str
-    on: bool
-
-
 def _scope(current_user: Dict[str, Any]):
     """관리자는 None(전체), 교사는 자기 학급 코드 판별 함수."""
     if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
         return None
     user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
     return lambda code: get_student_class_code(str(code).strip()) == user_class
+
+
+def _targets_of(program_id: int) -> List[str]:
+    return next((p["targets"] for p in sst.list_programs() if p["id"] == program_id), [])
+
+
+def _mirror(result: Dict[str, Any], codes: List[str]):
+    """프로그램이 바뀐 학생만 이번 달 TierStatus Tier2(SST) 칸을 맞춘다."""
+    from app.services.tier_monthly import mirror_after_change, current_month, SST_COLS
+    result["mirror"] = mirror_after_change(current_month(), set(codes), SST_COLS)
+    return result
 
 
 def _raise(result: Dict[str, Any]):
@@ -52,17 +58,19 @@ def get_programs(current_user: Dict[str, Any] = Depends(require_authenticated_us
 
 @router.post("/programs")
 def create_program(req: ProgramIn, current_admin: Dict[str, Any] = Depends(require_admin)):
-    return _raise(sst.save_program(req.model_dump()))
+    return _mirror(_raise(sst.save_program(req.model_dump())), req.targets)
 
 
 @router.put("/programs/{program_id}")
 def update_program(program_id: int, req: ProgramIn, current_admin: Dict[str, Any] = Depends(require_admin)):
-    return _raise(sst.save_program(req.model_dump(), program_id))
+    before = _targets_of(program_id)
+    return _mirror(_raise(sst.save_program(req.model_dump(), program_id)), before + req.targets)
 
 
 @router.delete("/programs/{program_id}")
 def remove_program(program_id: int, current_admin: Dict[str, Any] = Depends(require_admin)):
-    return _raise(sst.delete_program(program_id))
+    before = _targets_of(program_id)
+    return _mirror(_raise(sst.delete_program(program_id)), before)
 
 
 @router.get("/programs/{program_id}/monitor")
@@ -76,19 +84,3 @@ def monitor(program_id: int, current_user: Dict[str, Any] = Depends(require_auth
             raise HTTPException(status_code=403, detail="우리 반 학생이 없는 프로그램입니다.")
     return _raise(sst.monitor_program(program_id, allowed))
 
-
-@router.get("/tier-sync")
-def tier_sync(month: int, current_admin: Dict[str, Any] = Depends(require_admin)):
-    if month < 1 or month > 12:
-        raise HTTPException(status_code=400, detail="Month must be 1-12")
-    return sst.tier_sync_status(month)
-
-
-@router.post("/tier-sync")
-def apply_tier_sync(req: TierSyncIn, current_admin: Dict[str, Any] = Depends(require_admin)):
-    """Tier현황 'Tier2(SST)' 한 칸만 O/X로 바꾼다(다른 단계·메모는 그대로)."""
-    from app.services.sheets import update_student_tier
-    from app.adapters.sheets.client import invalidate_cache
-    result = _raise(update_student_tier(req.code, {"Tier2(SST)": "O" if req.on else "X"}))
-    invalidate_cache("sheet:cico:report")  # CICO 판정(SST 병행 여부)이 바로 반영되게
-    return result

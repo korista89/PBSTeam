@@ -33,6 +33,7 @@ def generate_cico_sheet(req: GenerateSheetRequest, current_admin: Dict[str, Any]
     result = create_monthly_cico_sheet(req.year, req.month)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
+    result["mirror"] = _mirror(req.month, result.get("codes", []))
     return result
 
 
@@ -315,6 +316,12 @@ class TargetActiveRequest(BaseModel):
     active: bool
 
 
+def _mirror(month: int, codes):
+    """이번 달 CICO 표가 바뀌면 TierStatus의 Tier2(CICO) 칸을 맞춘다(그 칸만)."""
+    from app.services.tier_monthly import mirror_after_change, CICO_COLS
+    return mirror_after_change(month, codes, CICO_COLS)
+
+
 def _check_month(month: int):
     if month < 1 or month > 12:
         raise HTTPException(status_code=400, detail="Month must be 1-12")
@@ -341,6 +348,7 @@ def post_cico_target(req: TargetAddRequest, current_admin: Dict[str, Any] = Depe
     result = add_cico_target(req.year, req.month, req.student_code)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+    result["mirror"] = _mirror(req.month, [req.student_code])
     return result
 
 
@@ -351,6 +359,7 @@ def post_cico_target_active(req: TargetActiveRequest, current_admin: Dict[str, A
     result = set_cico_target_active(req.month, req.set_row, req.active)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+    result["mirror"] = _mirror(req.month, [result.get("code", "")])
     return result
 
 
@@ -361,4 +370,5 @@ def post_cico_copy_prev(req: GenerateSheetRequest, current_admin: Dict[str, Any]
     result = copy_prev_month_targets(req.year, req.month)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+    result["mirror"] = _mirror(req.month, result.get("codes", []))
     return result

@@ -19,12 +19,10 @@ interface Overview {
   history: Record<string, Record<string, string>>; names: Record<string, { name: string; class: string }>; rows: Row[];
 }
 interface Student { 학생코드: string; 학생이름: string; 학급: string; 재학여부?: string; }
-interface Diff { code: string; name: string; class: string; monthly: string; tierstatus: string; }
 
 const SCHOOL_MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2];
 const C = { t3: "#ef4444", t3p: "#7f1d1d", fresh: "#10b981", ended: "#64748b", up: "#b91c1c", down: "#3b82f6" };
 const nowMonth = () => new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1;
-const lv = (l: string) => l || "없음";
 
 export default function Tier3Page() {
   const { isAdmin } = useAuth();
@@ -34,7 +32,6 @@ export default function Tier3Page() {
   const [roster, setRoster] = useState<Student[]>([]);
   const [pick, setPick] = useState("");
   const [pickLevel, setPickLevel] = useState("Tier3");
-  const [diff, setDiff] = useState<Diff[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -44,16 +41,12 @@ export default function Tier3Page() {
     try {
       const { data } = await axios.get(`${API_BASE_URL}/api/v1/tier3-monthly/overview`, { params: { month } });
       setData(data);
-      if (admin && data.is_current) {
-        const r = await axios.get(`${API_BASE_URL}/api/v1/tier3-monthly/tier-sync`, { params: { month } });
-        setDiff(r.data.diff || []);
-      } else setDiff(null);
     } catch (e: any) {
       setStatus(`⚠ 불러오기 실패 — ${e?.response?.data?.detail || e.message}`);
     } finally {
       setLoading(false);
     }
-  }, [month, admin]);
+  }, [month]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!admin) return;
@@ -288,39 +281,9 @@ export default function Tier3Page() {
               )}
             </div>
 
-            {admin && data.is_current && diff && (
-              <div className="card" style={{ padding: 16 }}>
-                <div style={{ fontWeight: 800 }}>🔗 Tier현황 맞추기 ({month}월 = 이번 달)</div>
-                <p style={{ fontSize: "0.72rem", color: "#64748b", margin: "6px 0 10px" }}>
-                  사이트 전체(대시보드 Tier 인원, CICO 병행 판정, 브리핑)는 Tier현황의 Tier3·Tier3+ 칸을 따릅니다. 이번 달 명단과 다르면 학생별로 맞추세요. Tier3+는 Tier3 칸도 함께 켭니다(기존 시트 관례).
-                </p>
-                {active.length === 0 ? (
-                  <div style={{ color: "#94a3b8", fontSize: "0.8rem" }}>이번 달 명단이 비어 있어 비교하지 않습니다(Tier현황 Tier3·Tier3+ 그대로). 먼저 위에서 ‘Tier현황으로 채우기’나 ‘지난달 명단 가져오기’로 명단을 만드세요.</div>
-                ) : diff.length === 0 ? <div style={{ color: "#10b981", fontSize: "0.8rem" }}>✓ 이번 달 명단과 Tier현황이 모두 같습니다.</div> : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: "0.8rem" }}>
-                    {diff.map(d => (
-                      <div key={d.code} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ minWidth: 180 }}><strong>{maskName(d.name) || d.code}</strong> <span style={{ color: "#94a3b8" }}>{d.class}</span></span>
-                        <span>명단 <strong>{lv(d.monthly)}</strong> · Tier현황 <strong>{lv(d.tierstatus)}</strong></span>
-                        <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: "0.72rem" }} disabled={busy}
-                          onClick={() => {
-                            if (d.monthly === "" && !window.confirm(`${maskName(d.name) || d.code} 학생의 Tier현황 Tier3·Tier3+를 끌까요?`)) return;
-                            void run("Tier현황 반영", () => post("tier-sync", { code: d.code, level: d.monthly }));
-                          }}>
-                          Tier현황을 ‘{lv(d.monthly)}’로
-                        </button>
-                        {!d.monthly && (
-                          <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: "0.72rem" }} disabled={busy}
-                            onClick={() => run("명단에 추가", () => post("students", { month, code: d.code, level: d.tierstatus }))}>
-                            명단에 ‘{d.tierstatus}’로 추가
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <p style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+              ※ 이번 달 명단을 바꾸면 Tier현황의 Tier3·Tier3+ 칸이 그 학생만 자동으로 맞춰집니다(Tier3+는 Tier3 칸도 O). 전교생 차이는 Tier현황 탭에서 확인합니다.
+            </p>
           </div>
         )}
       </AppShell>

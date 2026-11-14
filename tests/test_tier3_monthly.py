@@ -29,18 +29,3 @@ def test_copy_prev_skips_existing_and_excluded_prev_rows():
     assert [(i["code"], i["level"]) for i in added] == [("B", "Tier3+")] and res["added"] == 1
     assert "error" in t3.copy_prev(3)
 
-
-def test_sync_diff_and_write_keeps_tier3_on_for_tier3_plus():
-    from app.services import tier3_monthly as t3, sheets
-    rows = [_r(2, 11, "A", "Tier3+"), _r(3, 11, "B", "Tier3")]
-    roster = {"A": {"Tier3": "O", "Tier3+": "X"}, "B": {"Tier3": "O"}, "D": {"Tier3": "O"}}
-    with mock.patch.object(t3, "_rows", return_value=rows), mock.patch.object(t3, "school_year", return_value=2026), \
-         mock.patch.object(t3, "_roster", return_value=roster):
-        s = t3.tier_sync_status(11)
-    assert [(d["code"], d["monthly"], d["tierstatus"]) for d in s["diff"]] == [("A", "Tier3+", "Tier3"), ("D", "", "Tier3")]
-    calls = []
-    with mock.patch.object(sheets, "update_student_tier", lambda code, v: calls.append((code, v)) or {"message": "ok"}), \
-         mock.patch.object(t3, "invalidate_cache", lambda *a: None):
-        t3.apply_to_tierstatus("A", "Tier3+")
-        t3.apply_to_tierstatus("D", "")
-    assert calls == [("A", {"Tier3": "O", "Tier3+": "O"}), ("D", {"Tier3": "X", "Tier3+": "X"})]

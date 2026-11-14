@@ -27,19 +27,18 @@ class RowIn(BaseModel):
     excluded: Optional[bool] = None
 
 
-class SyncIn(BaseModel):
-    code: str
-    level: str  # "Tier3" | "Tier3+" | ""
-
-
 def _month(m: int):
     if m < 1 or m > 12:
         raise HTTPException(status_code=400, detail="Month must be 1-12")
 
 
-def _ok(result: Dict[str, Any]):
+def _ok(result: Dict[str, Any], month: Optional[int] = None, codes=()):
+    """성공하면 이번 달 TierStatus Tier3·Tier3+ 칸을 그 학생들만 맞춘다(전교생 차이는 Tier현황의 '모두 반영'으로만)."""
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+    if month is not None:
+        from app.services.tier_monthly import mirror_after_change, T3_COLS
+        result["mirror"] = mirror_after_change(month, codes, T3_COLS)
     return result
 
 
@@ -60,33 +59,26 @@ def get_overview(month: int, current_user: Dict[str, Any] = Depends(require_auth
 @router.post("/fill")
 def post_fill(req: MonthIn, current_admin: Dict[str, Any] = Depends(require_admin)):
     _month(req.month)
-    return _ok(t3.fill_from_tierstatus(req.month))
+    res = t3.fill_from_tierstatus(req.month)
+    return _ok(res, req.month, res.get("codes", []))
 
 
 @router.post("/copy-prev")
 def post_copy_prev(req: MonthIn, current_admin: Dict[str, Any] = Depends(require_admin)):
     _month(req.month)
-    return _ok(t3.copy_prev(req.month))
+    res = t3.copy_prev(req.month)
+    return _ok(res, req.month, res.get("codes", []))
 
 
 @router.post("/students")
 def post_student(req: AddIn, current_admin: Dict[str, Any] = Depends(require_admin)):
     _month(req.month)
-    return _ok(t3.add_student(req.month, req.code, req.level))
+    return _ok(t3.add_student(req.month, req.code, req.level), req.month, [req.code])
 
 
 @router.post("/row")
 def post_row(req: RowIn, current_admin: Dict[str, Any] = Depends(require_admin)):
     _month(req.month)
-    return _ok(t3.update_row(req.month, req.row, req.level, req.memo, req.excluded))
+    res = t3.update_row(req.month, req.row, req.level, req.memo, req.excluded)
+    return _ok(res, req.month if req.memo is None else None, [res.get("code", "")])
 
-
-@router.get("/tier-sync")
-def get_sync(month: int, current_admin: Dict[str, Any] = Depends(require_admin)):
-    _month(month)
-    return t3.tier_sync_status(month)
-
-
-@router.post("/tier-sync")
-def post_sync(req: SyncIn, current_admin: Dict[str, Any] = Depends(require_admin)):
-    return _ok(t3.apply_to_tierstatus(req.code, req.level))

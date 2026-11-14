@@ -2,8 +2,8 @@
 
 - 저장: 운영 시트 숨김 탭 'Tier3_월별'(처음 저장할 때 앱이 만든다). 학년도·월·학생 한 줄, 단계는 Tier3 또는 Tier3+.
   명단 정정으로 뺀 줄은 상태='제외'로 남긴다(월 중도 해제 개념은 없다 — 변화는 지난달 대비로 본다).
-- TierStatus의 Tier3/Tier3+ 칸은 '지금' 상태이고 사이트 전체가 쓴다. 이 표는 달마다의 기록이다.
-  이번 달 명단과 TierStatus가 다르면 화면에서 학생별로 맞춘다.
+- 이 표가 Tier3/Tier3+의 달마다 출처다. TierStatus의 Tier3·Tier3+ 칸은 이번 달의 거울로,
+  바뀌면 tier_monthly.mirror_after_change가 맞춘다.
 """
 
 import logging
@@ -110,7 +110,8 @@ def fill_from_tierstatus(month: int) -> Dict[str, Any]:
     items = [{"code": c, "name": s.get("학생이름", ""), "class": s.get("학급", ""), "level": tierstatus_level(s)}
              for c, s in _roster().items() if tierstatus_level(s) and c not in have]
     _append(sy, month, items)
-    return {"message": f"Tier현황에서 {len(items)}명을 넣었습니다." if items else "빠진 학생이 없습니다.", "added": len(items)}
+    return {"message": f"Tier현황에서 {len(items)}명을 넣었습니다." if items else "빠진 학생이 없습니다.", "added": len(items),
+            "codes": [i["code"] for i in items]}
 
 
 def copy_prev(month: int) -> Dict[str, Any]:
@@ -126,7 +127,8 @@ def copy_prev(month: int) -> Dict[str, Any]:
     items = [{"code": r["학생코드"], "name": r.get("학생명", ""), "class": r.get("학급", ""), "level": r.get("단계", "Tier3"),
               "memo": r.get("메모", "")} for r in prev if r["학생코드"] not in have]
     _append(sy, month, items)
-    return {"message": f"{pm}월에서 {len(items)}명을 가져왔습니다(이미 있음 {len(prev) - len(items)}명).", "added": len(items)}
+    return {"message": f"{pm}월에서 {len(items)}명을 가져왔습니다(이미 있음 {len(prev) - len(items)}명).", "added": len(items),
+            "codes": [i["code"] for i in items]}
 
 
 def add_student(month: int, code: str, level: str) -> Dict[str, Any]:
@@ -154,7 +156,8 @@ def _own_row(month: int, row: int) -> Optional[Dict[str, Any]]:
 
 def update_row(month: int, row: int, level: Optional[str] = None, memo: Optional[str] = None,
                excluded: Optional[bool] = None) -> Dict[str, Any]:
-    if not _own_row(month, row):
+    own = _own_row(month, row)
+    if not own:
         return {"error": "이 달 명단의 줄이 아닙니다."}
     if level is not None:
         if level not in LEVELS:
@@ -164,7 +167,7 @@ def update_row(month: int, row: int, level: Optional[str] = None, memo: Optional
         _set(row, "메모", memo)
     if excluded is not None:
         _set(row, "상태", "제외" if excluded else "")
-    return {"message": "저장했습니다."}
+    return {"message": "저장했습니다.", "code": own["학생코드"]}
 
 
 # ── 화면 자료 ───────────────────────────────────────────
@@ -227,30 +230,3 @@ def overview(month: int) -> Dict[str, Any]:
         } for r in rows],
     }
 
-
-def tier_sync_status(month: int) -> Dict[str, Any]:
-    """이 달 명단(제외 빼고) ↔ TierStatus 지금 단계. 단계가 다르거나 한쪽에만 있으면 목록에 올린다."""
-    sy = school_year()
-    listed = {r["학생코드"]: r.get("단계", "Tier3") for r in month_rows(sy, month)}
-    roster = _roster()
-    now = {c: tierstatus_level(s) for c, s in roster.items() if tierstatus_level(s)}
-    diff = []
-    for c in sorted(set(listed) | set(now)):
-        a, b = listed.get(c, ""), now.get(c, "")
-        if a != b:
-            s = roster.get(c, {})
-            diff.append({"code": c, "name": s.get("학생이름", ""), "class": s.get("학급", ""), "monthly": a, "tierstatus": b})
-    return {"month": month, "diff": diff, "matched": sum(1 for c in listed if listed[c] == now.get(c))}
-
-
-def apply_to_tierstatus(code: str, level: str) -> Dict[str, Any]:
-    """TierStatus의 Tier3·Tier3+ 두 칸만 바꾼다. level: 'Tier3' | 'Tier3+' | ''(둘 다 끔).
-
-    기존 시트 관례대로 Tier3+ 학생은 Tier3 칸도 O다(대시보드 Tier3 인원이 Tier3 칸으로 센다).
-    """
-    from app.services.sheets import update_student_tier
-    if level not in LEVELS + [""]:
-        return {"error": "단계 값이 올바르지 않습니다."}
-    res = update_student_tier(code, {"Tier3": "O" if level else "X", "Tier3+": "O" if level == "Tier3+" else "X"})
-    invalidate_cache("sheet:cico:report")  # CICO 판정(Tier3 병행)이 바로 반영되게
-    return res

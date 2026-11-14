@@ -22,8 +22,6 @@ interface Monitor {
   months: MonitorMonth[];
   students: { code: string; name: string; class: string; crisis: Record<string, number>; cico: Record<string, number | null> }[];
 }
-interface SyncRow { code: string; name: string; class: string; programs: string[]; }
-interface Sync { month: number; running: string[]; need_on: SyncRow[]; need_off: SyncRow[]; matched: number; unknown: string[]; }
 
 const SCHOOL_MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2];
 const EMPTY: Omit<Program, "id"> = { name: "", type: "의사소통", start: 3, end: 5, targets: [], skills: "", staff: "", memo: "" };
@@ -47,8 +45,6 @@ export default function SstPage() {
   const [editing, setEditing] = useState<(Omit<Program, "id"> & { id?: number }) | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [monitor, setMonitor] = useState<Monitor | null>(null);
-  const [syncMonth, setSyncMonth] = useState(nowMonth);
-  const [sync, setSync] = useState<Sync | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -65,16 +61,8 @@ export default function SstPage() {
       setLoading(false);
     }
   }, []);
-  const loadSync = useCallback(async () => {
-    if (!admin) return;
-    try {
-      const { data } = await axios.get(`${API_BASE_URL}/api/v1/sst/tier-sync`, { params: { month: syncMonth } });
-      setSync(data);
-    } catch { setSync(null); }
-  }, [admin, syncMonth]);
 
   useEffect(() => { void loadPrograms(); }, [loadPrograms]);
-  useEffect(() => { void loadSync(); }, [loadSync]);
   useEffect(() => {
     axios.get(`${API_BASE_URL}/api/v1/tier/status`)
       .then(r => setRoster((r.data.students || []).filter((s: Student) => s.학생코드 && String(s.재학여부 ?? "O").trim() !== "X")))
@@ -95,7 +83,7 @@ export default function SstPage() {
       const res = await fn();
       setStatus(`✓ ${res?.data?.message || label + " 완료"}`);
       after?.();
-      await Promise.all([loadPrograms(), loadSync()]);
+      await loadPrograms();
     } catch (e: any) {
       setStatus(`⚠ ${label} 실패 — ${e?.response?.data?.detail || e.message}`);
     } finally {
@@ -110,11 +98,6 @@ export default function SstPage() {
   const remove = (p: Program) => {
     if (!window.confirm(`'${p.name}' 프로그램을 삭제할까요? (시트에는 '삭제' 표시로 남습니다)`)) return;
     void run("삭제", () => axios.delete(`${API_BASE_URL}/api/v1/sst/programs/${p.id}`), () => { if (selected === p.id) setSelected(null); });
-  };
-  const setTier = (code: string, on: boolean) => run(on ? "SST 켜기" : "SST 끄기", () => axios.post(`${API_BASE_URL}/api/v1/sst/tier-sync`, { code, on }));
-  const turnOnAll = async () => {
-    if (!sync) return;
-    for (const r of sync.need_on) await setTier(r.code, true);
   };
 
   const nameOf = useMemo(() => {
@@ -183,34 +166,9 @@ export default function SstPage() {
 
           {selected != null && <MonitorPanel data={monitor} nameOf={nameOf} />}
 
-          {admin && (
-            <div className="card" style={{ padding: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                <div style={{ fontWeight: 800 }}>🔗 Tier현황 SST 맞추기</div>
-                <select value={syncMonth} onChange={e => setSyncMonth(Number(e.target.value))} style={selectStyle}>
-                  {SCHOOL_MONTHS.map(m => <option key={m} value={m}>{m}월 기준</option>)}
-                </select>
-              </div>
-              <p style={{ fontSize: "0.72rem", color: "#64748b", margin: "6px 0 10px" }}>
-                사이트의 SST 표시(대시보드 Tier 인원, CICO 병행 판정, 브리핑)는 Tier현황의 ‘Tier2(SST)’ 칸을 따릅니다. 이 달 운영 중인 프로그램 대상과 다르면 여기서 맞추세요.
-              </p>
-              {!sync ? <p style={{ color: "#94a3b8", fontSize: "0.8rem" }}>불러오는 중...</p> : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: "0.8rem" }}>
-                  <div>운영 중: {sync.running.length ? sync.running.join(", ") : "없음"} · 일치 {sync.matched}명</div>
-                  <SyncList title="프로그램 대상인데 Tier현황 SST가 꺼진 학생" color="#f59e0b" rows={sync.need_on} busy={busy}
-                    action="SST 켜기" onAction={c => setTier(c, true)}
-                    bulk={sync.need_on.length > 1 ? { label: `모두 켜기 (${sync.need_on.length}명)`, run: turnOnAll } : undefined} />
-                  {sync.running.length > 0 ? (
-                    <SyncList title="Tier현황 SST가 켜져 있는데 이 달 프로그램이 없는 학생" color="#64748b" rows={sync.need_off} busy={busy}
-                      action="SST 끄기" onAction={c => { if (window.confirm(`${maskName(sync.need_off.find(r => r.code === c)?.name || c)} 학생의 Tier현황 SST를 끌까요?`)) void setTier(c, false); }} />
-                  ) : (
-                    <div style={{ color: "#94a3b8" }}>이 달 운영 중인 프로그램이 없어 ‘끄기’ 후보는 보여 주지 않습니다(Tier현황 SST {sync.need_off.length}명 그대로).</div>
-                  )}
-                  {sync.unknown.length > 0 && <div style={{ color: "#ef4444" }}>※ Tier현황에 없는 학생코드: {sync.unknown.join(", ")}</div>}
-                </div>
-              )}
-            </div>
-          )}
+          <p style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+            ※ 그 달 운영 중인 프로그램의 대상 학생이 그 달의 SST 대상입니다. 프로그램을 저장·삭제하면 이번 달 Tier현황의 SST 칸이 그 학생들만 자동으로 맞춰집니다. 월별 현황은 Tier현황 탭에서 봅니다.
+          </p>
         </div>
       </AppShell>
     </AuthCheck>
@@ -355,30 +313,6 @@ function MonitorPanel({ data, nameOf }: { data: Monitor | null; nameOf: (c: stri
   );
 }
 
-function SyncList({ title, color, rows, busy, action, onAction, bulk }: {
-  title: string; color: string; rows: SyncRow[]; busy: boolean; action: string;
-  onAction: (code: string) => void; bulk?: { label: string; run: () => void };
-}) {
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <strong style={{ color }}>{title} {rows.length}명</strong>
-        {bulk && <button className="btn btn-secondary" style={smallBtn} disabled={busy} onClick={bulk.run}>{bulk.label}</button>}
-      </div>
-      {rows.length === 0 ? <div style={{ color: "#94a3b8", marginTop: 4 }}>없음</div> : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-          {rows.map(r => (
-            <span key={r.code} style={{ ...chip(color), display: "inline-flex", alignItems: "center", gap: 6 }}>
-              {maskName(r.name) || r.code} <span style={{ opacity: 0.7 }}>{r.class}</span>
-              <button disabled={busy} onClick={() => onAction(r.code)} style={{ border: "none", background: "#fff", color, borderRadius: 6, padding: "1px 6px", cursor: "pointer", fontSize: "0.7rem", fontWeight: 700 }}>{action}</button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label style={{ display: "block" }}><span style={{ display: "block", fontSize: "0.72rem", color: "#64748b", fontWeight: 700, marginBottom: 4 }}>{label}</span>{children}</label>;
 }
@@ -386,5 +320,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const chip = (color: string): React.CSSProperties => ({ padding: "2px 8px", borderRadius: 999, background: `${color}15`, color, fontSize: "0.72rem" });
 const smallBtn: React.CSSProperties = { padding: "4px 10px", fontSize: "0.75rem" };
 const inputStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.85rem", background: "#fff" };
-const selectStyle: React.CSSProperties = { padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.8rem", background: "#fff" };
 const cell: React.CSSProperties = { padding: "6px 8px", verticalAlign: "top", textAlign: "left" };
