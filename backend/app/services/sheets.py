@@ -1838,6 +1838,67 @@ def add_cico_target(year: int, month: int, student_code: str) -> Dict[str, Any]:
     return {"message": f"{month}월 CICO에 추가했습니다.", "goal": max(goals + [0]) + 1}
 
 
+# 지난달에서 그대로 옮기는 목표 설정 칸(기록·수행률·메모는 옮기지 않는다)
+CICO_COPY_FIELDS = ["학급", "학생명", "Tier3", "목표행동", "목표행동 유형", "척도", "기록방식",
+                    "입력 기준(베이스라인)", "목표 달성 기준"]
+
+
+def copy_prev_month_targets(year: int, month: int) -> Dict[str, Any]:
+    """지난달 대상자(Tier2=O, 차월 대상여부≠X)를 목표 설정까지 이 달로 가져온다.
+
+    이 달에 없는 학생은 목표 줄을 모두 새로 붙인다. 이 달에 이미 있는 학생은 목표행동이 빈 줄
+    (명단 맞추기로 생긴 줄)만 채운다(그 학생 줄이 모두 비었을 때만) — 교사가 달마다 목표 문구를 고치므로 문구가 다르다고 새 목표를
+    덧붙이면 같은 목표가 두 줄이 된다.
+    """
+    from app.adapters.sheets.cico_store import open_store, school_year
+    if month == 3:
+        return {"error": "3월은 학년도 첫 달이라 가져올 지난달이 없습니다."}
+    prev_month = 12 if month == 1 else month - 1
+    sy = school_year()
+    store = open_store(open_main_sheet())
+    prev = [r for r in store.month_rows(sy, prev_month)
+            if str(r.get("Tier2", "")).strip().upper() == "O" and str(r.get("차월 대상여부", "")).strip().upper() != "X"]
+    if not prev:
+        return {"error": f"{prev_month}월 CICO 대상자가 없습니다."}
+    cur = store.month_rows(sy, month)
+    number = max([int(r.get("번호") or 0) for r in cur if str(r.get("번호", "")).isdigit()] + [0])
+    goals: Dict[str, int] = {}
+    for r in cur:
+        g = str(r.get("목표") or "1")
+        goals[r.get("학생코드", "")] = max(goals.get(r.get("학생코드", ""), 0), int(g) if g.isdigit() else 1)
+    present = {r.get("학생코드", "") for r in cur}
+    blank = {}  # 학생코드 → 이 달 줄이 모두 목표행동 빈칸인 학생의 줄들(하나라도 채워졌으면 손대지 않음)
+    for r in cur:
+        blank.setdefault(r.get("학생코드", ""), []).append(r)
+    blank = {c: rs for c, rs in blank.items() if all(not str(r.get("목표행동", "")).strip() for r in rs)}
+
+    fills, appends, skipped = [], [], 0
+    for p in prev:
+        code = p.get("학생코드", "")
+        if code in present and not blank.get(code):
+            skipped += 1
+            continue
+        if blank.get(code):
+            r = blank[code].pop(0)
+            fills += [(r["_row"], f, p.get(f, "")) for f in CICO_COPY_FIELDS if f not in ("학급", "학생명")]
+            fills.append((r["_row"], "Tier2", "O"))
+            continue
+        number += 1
+        goals[code] = goals.get(code, 0) + 1
+        appends.append({**{f: p.get(f, "") for f in CICO_COPY_FIELDS}, "학생명": mask_name(p.get("학생명", "")),
+                        "학년도": sy, "월": month, "번호": number, "학생코드": code, "목표": goals[code],
+                        "Tier2": "O", "수행/발생률": "-", "목표 달성 여부": "-"})
+    if fills:
+        store.update_settings(fills)
+    dates = [] if store.month_dates(sy, month) else get_business_days(year, month, get_holidays_from_config())
+    if appends or dates:
+        store.add_month(sy, month, appends, list(dates))
+    _invalidate_cico_caches()
+    filled = len({r for r, _, _ in fills})
+    return {"message": f"{prev_month}월에서 {len(appends) + filled}줄을 가져왔습니다(새 줄 {len(appends)}, 빈 목표 채움 {filled}, 이미 있음 {skipped}).",
+            "added": len(appends), "filled": filled, "skipped": skipped}
+
+
 def set_cico_target_active(month: int, set_row: int, active: bool) -> Dict[str, Any]:
     """대상 해제·복원. 줄과 기록은 지우지 않고 Tier2만 X/O로 바꾼다(기록 탭·분석에서 빠진다)."""
     from app.adapters.sheets.cico_store import open_store, school_year

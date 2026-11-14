@@ -80,3 +80,34 @@ def test_deactivate_only_flips_tier2_of_this_month_row():
     assert "error" in _run(store, lambda: sheets.set_cico_target_active(6, 99, False))
     _run(store, lambda: sheets.set_cico_target_active(6, 11, False))
     assert store.cells == [(11, "Tier2", "X")]
+
+
+def test_copy_prev_month_skips_existing_fills_blank_and_appends():
+    from app.services import sheets
+    prev = [
+        {"_row": 2, "월": "5", "학생코드": "3124", "목표": "1", "Tier2": "O", "목표행동": "옷 벗는 행동", "척도": "0~7교시", "목표 달성 기준": "10% 이하", "학생명": "홍O동"},
+        {"_row": 3, "월": "5", "학생코드": "3124", "목표": "2", "Tier2": "O", "목표행동": "타인 공격", "척도": "O/X(발생)", "학생명": "홍O동"},
+        {"_row": 4, "월": "5", "학생코드": "2211", "목표": "1", "Tier2": "O", "목표행동": "기다리기", "학생명": "김O수"},
+        {"_row": 7, "월": "5", "학생코드": "5000", "목표": "1", "Tier2": "O", "목표행동": "자리 이탈", "척도": "0~5", "학생명": "박O"},
+        {"_row": 8, "월": "5", "학생코드": "5000", "목표": "2", "Tier2": "O", "목표행동": "소리 지르기", "학생명": "박O"},
+        {"_row": 5, "월": "5", "학생코드": "9999", "목표": "1", "Tier2": "X", "목표행동": "해제됨"},
+        {"_row": 6, "월": "5", "학생코드": "8888", "목표": "1", "Tier2": "O", "목표행동": "다음달 제외", "차월 대상여부": "X"},
+    ]
+    cur = [
+        {"_row": 20, "월": "6", "번호": "1", "학생코드": "3124", "목표": "1", "Tier2": "O", "목표행동": "옷 벗는 행동"},
+        {"_row": 21, "월": "6", "번호": "2", "학생코드": "2211", "목표": "1", "Tier2": "O", "목표행동": ""},
+    ]
+    store = FakeStore(prev + cur)
+    res = _run(store, lambda: sheets.copy_prev_month_targets(2026, 6))
+    # 3124는 이미 이 달에 있다 → 문구가 다른 목표 2도 새로 붙이지 않는다
+    assert (res["added"], res["filled"], res["skipped"]) == (2, 1, 2)
+    # 이 달에 없는 5000은 목표 둘을 모두 가져오고 번호가 이어진다
+    assert [(r["학생코드"], r["목표"], r["번호"], r["목표행동"], r["척도"]) for r in store.added] == [
+        ("5000", 1, 3, "자리 이탈", "0~5"), ("5000", 2, 4, "소리 지르기", "")]
+    # 2211은 목표행동이 빈 이 달 줄(21행)을 채운다
+    assert (21, "목표행동", "기다리기") in store.cells and all(r == 21 for r, _, _ in store.cells)
+
+
+def test_copy_prev_month_march_has_no_previous():
+    from app.services import sheets
+    assert "error" in _run(FakeStore([]), lambda: sheets.copy_prev_month_targets(2026, 3))

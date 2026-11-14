@@ -75,6 +75,8 @@ export default function CicoManagePage() {
 
   const syncRoster = () => run("명단 맞추기", () =>
     axios.post(`${API_BASE_URL}/api/v1/cico/generate`, { year: cicoYear(month), month }));
+  const copyPrev = () => run("지난달 가져오기", () =>
+    axios.post(`${API_BASE_URL}/api/v1/cico/targets/copy-prev`, { year: cicoYear(month), month }));
   const addTarget = () => pick && run("추가", () =>
     axios.post(`${API_BASE_URL}/api/v1/cico/targets`, { year: cicoYear(month), month, student_code: pick }).then(r => { setPick(""); return r; }));
   const setActive = (t: Target, active: boolean) => run(active ? "복원" : "대상 해제", () =>
@@ -133,6 +135,10 @@ export default function CicoManagePage() {
                 </select>
               </div>
               <button onClick={addTarget} disabled={busy || !pick} className="btn btn-primary">➕ {month}월 대상에 추가</button>
+              <button onClick={copyPrev} disabled={busy || month === 3} className="btn btn-secondary"
+                title="지난달 대상자를 목표행동·유형·척도·기록방식·기준까지 가져옵니다. 이 달에 이미 있는 학생은 목표가 빈 줄만 채웁니다. 기록은 옮기지 않습니다">
+                📋 {month === 3 ? "지난달 없음" : `${month - 1}월 대상자 그대로 가져오기`}
+              </button>
               <button onClick={syncRoster} disabled={busy} className="btn btn-secondary"
                 title="Tier현황에서 CICO(O)인 학생 중 이 달 명단에 없는 학생을 넣습니다. 없는 달이면 새로 만듭니다">
                 🗓️ Tier현황으로 명단 맞추기
@@ -154,7 +160,7 @@ export default function CicoManagePage() {
             ) : targets.length === 0 ? (
               <p style={{ color: "#94a3b8" }}>
                 {exists ? "이 달 대상자가 없습니다." : `${month}월 CICO가 아직 없습니다.`}
-                {admin && " 위에서 학생을 추가하거나 명단 맞추기를 누르세요."}
+                {admin && " 위에서 지난달 대상자를 가져오거나, 학생을 추가하거나, 명단 맞추기를 누르세요."}
               </p>
             ) : (
               <div style={{ overflowX: "auto" }}>

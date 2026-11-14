@@ -13,6 +13,7 @@ from app.services.sheets import (
     list_cico_targets,
     add_cico_target,
     set_cico_target_active,
+    copy_prev_month_targets,
 )
 from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, get_student_class_code
 from app.core.time import now_kst
@@ -349,3 +350,12 @@ def post_cico_target_active(req: TargetActiveRequest, current_admin: Dict[str, A
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
+
+@router.post("/targets/copy-prev")
+def post_cico_copy_prev(req: GenerateSheetRequest, current_admin: Dict[str, Any] = Depends(require_admin)):
+    """지난달 대상자를 목표 설정까지 이 달로 가져온다(기록은 옮기지 않음) - Admin only."""
+    _check_month(req.month)
+    result = copy_prev_month_targets(req.year, req.month)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
