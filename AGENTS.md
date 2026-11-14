@@ -27,6 +27,7 @@
 - CICO는 월별 탭(3월·4월…)이 아니라 `CICO_설정`(학년도·월·학생·목표 순번·기록방식)·`CICO_기록`(날짜·학생·목표·교시·값)·`CICO_달력`(월별 기록일) 3개 표다.
   `adapters/sheets/cico_store.py`의 `MonthSheet`가 예전 월별 탭 모양을 만들어 주므로 `get_worksheet_fuzzy(sheet, "10월")`로 연다. 월별 탭을 새로 만들지 않는다.
 - CICO 기록 방식은 일별(기본)과 분포도기록지(교시별, 초등은 3교시 뒤·그 외는 4교시 뒤 점심) 중 고른다.
+- SST 프로그램은 숨김 탭 `SST_프로그램`(학년도당 최대 6개, 앱이 처음 저장할 때 만든다, 삭제는 상태='삭제'). 사이트의 SST 표시는 여전히 TierStatus `Tier2(SST)`가 기준이고, SST관리 화면의 'Tier현황 SST 맞추기'로 맞춘다(`backend/app/services/sst.py`).
 - 그림말누리제(`PW_*`·`평가문장`)는 별도 파일 `PW_SHEET_URL`(`open_pw_sheet()`). 옛 월별 탭·안 쓰는 탭은 보관 파일 `26경은PBST 보관 (2026-11-01 정리)`에 있다.
 
 ## 실행

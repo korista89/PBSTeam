@@ -2954,6 +2954,7 @@ def get_cico_report_data(month: int):
                 "cico_only": cico_only,
                 "has_sst": has_sst,
                 "has_t3": has_t3,
+                "has_t3plus": str(ts.get("Tier3+", "")).strip() == "O",  # 대시보드 병행 조합(Tier3 / Tier3+) 구분용
                 "decision": decision,
                 "decision_color": decision_color,
                 "team_talk": team_talk,

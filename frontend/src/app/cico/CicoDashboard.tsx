@@ -9,10 +9,19 @@ import { maskName } from "../utils";
 
 // CICO 관리 탭 상단 대시보드: 이 달 대상 현황 숫자 + 월별 추이·학급별·판정 분포 차트
 export interface DashTarget { code: string; class: string; active: boolean; target_behavior: string; record_count: number; }
-export interface DashDecision { code: string; name?: string; decision: string; decision_color: string; has_sst?: boolean; has_t3?: boolean; }
+export interface DashDecision { code: string; name?: string; decision: string; decision_color: string; has_sst?: boolean; has_t3?: boolean; has_t3plus?: boolean; }
 
 const MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const C = { keep: "#3b82f6", fresh: "#10b981", ended: "#ef4444", muted: "#94a3b8" };
+// 병행 조합 6가지: SST 여부 × (없음 / Tier3 / Tier3+)
+const COMBOS = [
+  { title: "CICO + SST + Tier3+", sst: true, t3: "plus", color: "#7f1d1d" },
+  { title: "CICO + Tier3+", sst: false, t3: "plus", color: "#b91c1c" },
+  { title: "CICO + SST + Tier3", sst: true, t3: "t3", color: "#db2777" },
+  { title: "CICO + Tier3", sst: false, t3: "t3", color: "#ef4444" },
+  { title: "CICO + SST", sst: true, t3: "", color: "#8b5cf6" },
+  { title: "CICO만", sst: false, t3: "", color: "#3b82f6" },
+];
 const DECISION_COLORS: Record<string, string> = {
   "Tier1 하향": "#10b981", "양호": "#3b82f6", "병행": "#8b5cf6", "수정 검토": "#f59e0b", "Tier3 상향": "#ef4444", "기록 부족": "#94a3b8",
 };
@@ -76,20 +85,16 @@ export default function CicoDashboard({ month, targets, history, names, decision
     return [...map.values()].sort((a, b) => b.value - a.value);
   }, [decisions]);
 
-  // 병행 지원: 학생 단위(목표 여러 줄이어도 1명). Tier3는 Tier3+ 포함, Tier현황의 지금 상태 기준
-  const tiers = useMemo(() => {
+  // 병행 지원 조합: 학생 단위(목표 여러 줄이어도 1명), 서로 겹치지 않게 나눈다. Tier3+가 있으면 Tier3+로 센다.
+  const combos = useMemo(() => {
     const byCode = new Map<string, DashDecision>();
     decisions.forEach(d => {
       const prev = byCode.get(d.code);
-      byCode.set(d.code, { ...d, has_sst: !!(prev?.has_sst || d.has_sst), has_t3: !!(prev?.has_t3 || d.has_t3) });
+      byCode.set(d.code, { ...d, has_sst: !!(prev?.has_sst || d.has_sst), has_t3: !!(prev?.has_t3 || d.has_t3), has_t3plus: !!(prev?.has_t3plus || d.has_t3plus) });
     });
     const all = [...byCode.values()];
-    return {
-      t3: all.filter(d => d.has_t3),
-      sst: all.filter(d => d.has_sst),
-      only: all.filter(d => !d.has_sst && !d.has_t3),
-      both: all.filter(d => d.has_sst && d.has_t3).length,
-    };
+    const t3 = (d: DashDecision) => (d.has_t3plus ? "plus" : d.has_t3 ? "t3" : "");
+    return COMBOS.map(c => ({ ...c, items: all.filter(d => !!d.has_sst === c.sst && t3(d) === c.t3) }));
   }, [decisions]);
 
   const label = (c: string) => `${maskName(names[c]?.name || "") || c}`;
@@ -108,16 +113,11 @@ export default function CicoDashboard({ month, targets, history, names, decision
 
       <div className="card" style={{ padding: 14 }}>
         <div style={{ fontWeight: 800, fontSize: "0.85rem", marginBottom: 10 }}>
-          🧩 병행 지원 현황 <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#94a3b8" }}>· 이 달 CICO 학생 기준, Tier현황의 지금 상태(Tier3는 Tier3+ 포함)</span>
+          🧩 병행 지원 현황 <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#94a3b8" }}>· 이 달 CICO 학생 {combos.reduce((n, c) => n + c.items.length, 0)}명을 겹치지 않게 나눔, Tier현황의 지금 상태 기준</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          <TierGroup title="Tier3 + CICO" color="#ef4444" items={tiers.t3} />
-          <TierGroup title="Tier2-SST + CICO" color="#8b5cf6" items={tiers.sst} />
-          <TierGroup title="Tier2-CICO만" color={C.keep} items={tiers.only} />
+          {combos.map(c => <TierGroup key={c.title} title={c.title} color={c.color} items={c.items} />)}
         </div>
-        {tiers.both > 0 && (
-          <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: 8 }}>※ Tier3와 SST를 함께 받는 학생 {tiers.both}명은 두 칸에 모두 들어 있습니다.</div>
-        )}
       </div>
 
       {stats.hasPrev && (stats.fresh.length > 0 || stats.ended.length > 0) && (

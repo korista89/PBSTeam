@@ -183,6 +183,8 @@ app.include_router(roster.router, prefix="/api/v1/roster", tags=["roster"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(tier.router, prefix="/api/v1/tier", tags=["tier"])
 app.include_router(cico.router, prefix="/api/v1/cico", tags=["cico"])
+from app.api.endpoints import sst as sst_endpoints
+app.include_router(sst_endpoints.router, prefix="/api/v1/sst", tags=["sst"])
 app.include_router(meeting_notes.router, prefix="/api/v1/meeting-notes", tags=["meeting-notes"])
 from app.api.endpoints import board
 app.include_router(board.router, prefix="/api/v1/board", tags=["board"])
