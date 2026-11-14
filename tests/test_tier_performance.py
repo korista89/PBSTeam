@@ -87,3 +87,20 @@ def test_tier1_tokens_per_student_and_spread():
     assert [c["per_student"] for c in t["classes"]] == [2.0, 6.0, None]
     assert (t["entered"], t["mean"], t["sd"]) == (2, 4.0, 2.0)
     assert tier1.save_teaching("2026-11-03", "A반", True, "", [], "", "t")["error"].startswith("주는 월요일")
+
+
+def test_tier1_briefing_line_windows():
+    from datetime import date
+    from app.services import tier1
+    rows_teach = [{"학년도": "2026", "주": "2026-11-16", "학급": "A반", "실시": "O"}]
+    rows_tok = [{"학년도": "2026", "월": "10", "학급": "A반", "1000원토큰": "5"}]
+    with mock.patch.object(tier1, "classes", return_value=[{"class": "A반", "students": 5}, {"class": "B반", "students": 4}]), \
+         mock.patch.object(tier1.TEACH, "rows", return_value=rows_teach), mock.patch.object(tier1.TOKENS, "rows", return_value=rows_tok), \
+         mock.patch.object(tier1, "school_year", return_value=2026), \
+         mock.patch.object(tier1, "school_weeks", return_value=["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"]):
+        mid = tier1.briefing_line(date(2026, 11, 25))      # 지난주(16일 주) B반 없음 + 월말 11월 토큰 둘 다 없음
+        early = tier1.briefing_line(date(2026, 11, 3))     # 월초: 10월 토큰 B반 없음, 지난주(10/26) 기록 없음
+        quiet = tier1.briefing_line(date(2026, 11, 12))    # 지난주(2일 주) 둘 다 없음, 토큰은 알리지 않는 기간
+    assert mid == "🌱 Tier1: 지난주 기대행동 교수 기록 없음 1학급 · 11월 1000원 토큰 미입력 2학급 (Tier1관리 탭)"
+    assert "10월 1000원 토큰 미입력 1학급" in early
+    assert quiet == "🌱 Tier1: 지난주 기대행동 교수 기록 없음 2학급 (Tier1관리 탭)"

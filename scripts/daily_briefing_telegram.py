@@ -8,6 +8,7 @@
   (없으면 TELEGRAM_ALLOWED_USERS 첫 번째)을 쓴다. 값은 출력하지 않는다.
 - 학생은 별칭·학생코드로만 나온다(시트에 실명 없음).
 - 끝에 월별 Tier 정합성 점검(app/services/tier_audit.py) 결과를 한 줄 붙인다.
+- 알릴 것이 있으면 Tier1 입력 알림(app/services/tier1.briefing_line)을 한 줄 더 붙인다.
 """
 import os
 import sys
@@ -38,6 +39,16 @@ def tier_audit_line() -> str:
     return f"⚠️ Tier 정합성: 문제 {len(problems)}건 — {problems[0]}{more} (Tier현황 탭 확인)"
 
 
+def tier1_line():
+    """Tier1 입력 알림(지난주 교수 기록·월말/월초 토큰 미입력). 알릴 것이 없거나 실패하면 줄을 넣지 않는다."""
+    try:
+        from app.services.tier1 import briefing_line
+        return briefing_line()
+    except Exception as e:
+        print(f"Tier1 알림 줄 실패: {type(e).__name__}")
+        return None
+
+
 def main():
     from app.core.time import now_kst
     today = today_kst()
@@ -52,7 +63,7 @@ def main():
     text = "\n".join(
         [f"🗞️ 경은PBST 관리자 브리핑 ({today.month}. {today.day}.)", ""]
         + [f"{i}. {line}" for i, line in enumerate(b["ten_lines"], 1)]
-        + ["", tier_audit_line(), f"자세히 보기: {SITE}"]
+        + ["", tier_audit_line()] + [x for x in [tier1_line()] if x] + [f"자세히 보기: {SITE}"]
     )
     if "--dry" in sys.argv:
         print(text)

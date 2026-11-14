@@ -507,3 +507,30 @@ def dashboard(allowed_codes: Optional[set] = None) -> Dict[str, Any]:
     cur = now_kst().month
     return {**base, "classes": cls, "this_month": tokens(cur, cls), "teach_now": teaching(cur, names),
             "fidelity": fidelity(current_semester(), names), "semester": current_semester()}
+
+
+def briefing_line(today: Optional[_date] = None) -> Optional[str]:
+    """아침 브리핑 한 줄: 지난주 기대행동 교수 기록 없는 학급, 월말(22일~)·월초(~5일) 1000원 토큰 미입력 학급.
+    알릴 것이 없으면 None."""
+    today = today or now_kst().date()
+    names = [c["class"] for c in classes()]
+    if not names:
+        return None
+    parts = []
+    last_monday = (today - _td(days=today.weekday() + 7)).isoformat()
+    lm = _date.fromisoformat(last_monday)
+    if last_monday in school_weeks(lm.month) or (lm + _td(days=4)).month != lm.month:
+        sy = str(school_year())
+        done = {r["학급"] for r in TEACH.rows() if r.get("학년도") == sy and r.get("주") == last_monday and r.get("실시") == "O"}
+        missing = [n for n in names if n not in done]
+        if missing:
+            parts.append(f"지난주 기대행동 교수 기록 없음 {len(missing)}학급")
+    token_month = today.month if today.day >= 22 else (today.month - 1 or 12) if today.day <= 5 else None
+    if token_month:
+        sy = str(school_year())
+        entered = {r["학급"] for r in TOKENS.rows() if r.get("학년도") == sy and r.get("월") == str(token_month)
+                   and str(r.get("1000원토큰", "")).strip().isdigit()}
+        missing = [n for n in names if n not in entered]
+        if missing:
+            parts.append(f"{token_month}월 1000원 토큰 미입력 {len(missing)}학급")
+    return ("🌱 Tier1: " + " · ".join(parts) + " (Tier1관리 탭)") if parts else None
