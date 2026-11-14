@@ -328,6 +328,9 @@ def get_cico_targets(month: int, current_user: Dict[str, Any] = Depends(require_
     if str(current_user.get("role", "")).lower() not in ["admin", "superadmin"]:
         user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
         data["targets"] = [t for t in data["targets"] if get_student_class_code(str(t["code"]).strip()) == user_class]
+        data["history"] = {m: [c for c in codes if get_student_class_code(str(c).strip()) == user_class]
+                           for m, codes in data.get("history", {}).items()}
+        data["names"] = {c: v for c, v in data.get("names", {}).items() if get_student_class_code(str(c).strip()) == user_class}
     return data
 
 

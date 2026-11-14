@@ -6,6 +6,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { maskName, cicoYear } from "../utils";
 import { API_BASE_URL } from "@/app/lib/api";
+import CicoDashboard, { DashDecision } from "./CicoDashboard";
 
 // CICO 관리 탭: 월별 대상자(목표 줄) 추가·해제·복원. 일일 기록은 CICO 기록 탭(/cico-record).
 interface Target {
@@ -32,6 +33,9 @@ export default function CicoManagePage() {
   const [month, setMonth] = useState(defaultMonth);
   const [targets, setTargets] = useState<Target[]>([]);
   const [exists, setExists] = useState(true);
+  const [history, setHistory] = useState<Record<string, string[]>>({});
+  const [names, setNames] = useState<Record<string, { name: string; class: string }>>({});
+  const [decisions, setDecisions] = useState<DashDecision[]>([]);
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [pick, setPick] = useState("");
   const [loading, setLoading] = useState(true);
@@ -41,9 +45,15 @@ export default function CicoManagePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/api/v1/cico/targets`, { params: { month } });
+      const [{ data }, report] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/v1/cico/targets`, { params: { month } }),
+        axios.get(`${API_BASE_URL}/api/v1/cico/report`, { params: { month } }).catch(() => null),
+      ]);
       setTargets(data.targets || []);
       setExists(!!data.exists);
+      setHistory(data.history || {});
+      setNames(data.names || {});
+      setDecisions(report?.data?.students || []);
     } catch (e: any) {
       setStatus(`⚠ 불러오기 실패 — ${e?.response?.data?.detail || e.message}`);
     } finally {
@@ -117,6 +127,7 @@ export default function CicoManagePage() {
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {!loading && <CicoDashboard month={month} targets={targets} history={history} names={names} decisions={decisions} />}
           {admin ? (
             <div className="card" style={{ padding: 16, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
               <div style={{ flex: "1 1 320px" }}>

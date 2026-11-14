@@ -1,6 +1,7 @@
 """CICO 관리 탭: 대상자 추가(같은 학생이면 목표 순번+1)·해제/복원(Tier2만 바꿈)."""
 import os
 import sys
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend"))
@@ -9,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 class FakeStore:
     def __init__(self, rows):
         self.rows, self.added, self.cells = rows, [], []
+        self.settings = SimpleNamespace(rows=lambda: self.rows)
 
     def month_rows(self, sy, month):
         return [r for r in self.rows if r["월"] == str(month)]
@@ -53,8 +55,8 @@ def _run(store, fn):
 
 
 ROWS = [
-    {"_row": 10, "월": "6", "번호": "3", "학생코드": "3124", "목표": "1", "Tier2": "O", "학생명": "홍O동"},
-    {"_row": 11, "월": "6", "번호": "4", "학생코드": "3124", "목표": "2", "Tier2": "O", "학생명": "홍O동"},
+    {"_row": 10, "학년도": "2026", "월": "6", "번호": "3", "학생코드": "3124", "목표": "1", "Tier2": "O", "학생명": "홍O동"},
+    {"_row": 11, "학년도": "2026", "월": "6", "번호": "4", "학생코드": "3124", "목표": "2", "Tier2": "O", "학생명": "홍O동"},
 ]
 
 
@@ -70,7 +72,9 @@ def test_add_existing_student_gets_next_goal_and_masked_name():
 def test_list_marks_grid_rows_and_record_counts():
     from app.services import sheets
     store = FakeStore(list(ROWS))
-    t = _run(store, lambda: sheets.list_cico_targets(6))["targets"]
+    data = _run(store, lambda: sheets.list_cico_targets(6))
+    t = data["targets"]
+    assert data["history"] == {"6": ["3124", "3124"]}
     assert [(x["row"], x["goal"], x["record_count"]) for x in t] == [(2, "1", 0), (3, "2", 1)]
 
 

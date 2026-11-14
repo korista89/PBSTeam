@@ -1798,9 +1798,18 @@ def list_cico_targets(month: int) -> Dict[str, Any]:
     for (date, code, goal, _p), r in store.record_map(sy).items():
         if len(date) == 10 and int(date[5:7]) == month and r.get("값", "") != "":
             counts[(code, goal)] = counts.get((code, goal), 0) + 1
+    # 대시보드용: 학년도 각 달의 대상(Tier2=O) 학생코드 — 신규·종료·추이를 화면에서 센다
+    history: Dict[str, List[str]] = {}
+    names: Dict[str, Dict[str, str]] = {}
+    for r in store.settings.rows():
+        if r.get("학년도") == str(sy) and str(r.get("Tier2", "")).strip().upper() == "O" and r.get("학생코드"):
+            history.setdefault(str(r.get("월")), []).append(r["학생코드"])
+            names[r["학생코드"]] = {"name": r.get("학생명", ""), "class": r.get("학급", "")}
     return {
         "month": month,
         "exists": store.has_month(sy, month),
+        "history": history,
+        "names": names,
         "targets": [{
             "set_row": r["_row"],
             "row": i,  # CICO 기록 탭의 행 번호와 같다
