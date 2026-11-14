@@ -43,7 +43,6 @@ export default function CicoDashboard({ month, targets, history, names, decision
       goals: active.length,
       fresh: prev ? [...cur].filter(c => !prev.has(c)) : [],
       ended: prev ? [...prev].filter(c => !cur.has(c)) : [],
-      released: targets.filter(t => !t.active).length,
       unset: active.filter(t => !t.target_behavior.trim()).length,
       noRecord: active.filter(t => t.record_count === 0).length,
       hasPrev: !!prev,
@@ -106,7 +105,6 @@ export default function CicoDashboard({ month, targets, history, names, decision
         <Kpi label="목표 줄" value={stats.goals} unit="줄" color="#6366f1" hint="학생 1명이 목표 여러 개면 여러 줄" />
         <Kpi label="신규" value={stats.hasPrev ? stats.fresh.length : "-"} unit={stats.hasPrev ? "명" : ""} color={C.fresh} hint={stats.hasPrev ? `${month - 1}월에 없던 학생` : "3월은 학년도 첫 달"} />
         <Kpi label="종료" value={stats.hasPrev ? stats.ended.length : "-"} unit={stats.hasPrev ? "명" : ""} color={C.ended} hint={stats.hasPrev ? `${month - 1}월에 있다 빠진 학생` : "3월은 학년도 첫 달"} />
-        <Kpi label="이 달 해제 줄" value={stats.released} unit="줄" color={C.muted} hint="대상 해제한 목표 줄" />
         <Kpi label="목표 미설정" value={stats.unset} unit="줄" color={stats.unset ? "#f59e0b" : C.muted} hint="목표행동이 빈 줄" />
         <Kpi label="기록 없음" value={stats.noRecord} unit="줄" color={stats.noRecord ? "#f59e0b" : C.muted} hint="이 달 기록이 하루도 없는 줄" />
       </div>
