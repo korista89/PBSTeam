@@ -279,3 +279,228 @@ def annual(allowed_codes: Optional[set] = None) -> Dict[str, Any]:
             "tier1_only_pct": round((n - len(t2 | t3)) / n * 100, 1) if n else None,
         })
     return {"year": sy, "students": len(codes), "trend": trend}
+
+
+# ══ 보편적 지원 운영(운영계획 Ⅰ): 기대행동 교수 기록 · 토큰 집계 · 실행충실도 ══════════════
+import json as _json
+import os as _os
+from datetime import date as _date, timedelta as _td
+
+_PLAN_PATH = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "tier1_plan.json")
+_plan_cache: Optional[Dict[str, Any]] = None
+
+
+def plan() -> Dict[str, Any]:
+    """운영계획에서 옮긴 고정 자료(장소별 IEP 세부목표, 교수 전략, 토큰 단계, 경은마트, 실행충실도 문항)."""
+    global _plan_cache
+    if _plan_cache is None:
+        with open(_PLAN_PATH, encoding="utf-8") as f:
+            _plan_cache = _json.load(f)
+    return _plan_cache
+
+
+class _Table:
+    """숨김 탭 하나. keys 열이 같으면 같은 줄로 보고 고쳐 쓴다(없으면 붙인다)."""
+
+    def __init__(self, tab: str, headers: List[str], keys: List[str]):
+        self.tab, self.headers, self.keys = tab, headers, keys
+        self.cache_key = f"sheet:tier1:{tab}"
+
+    def _ws(self):
+        ss = open_main_sheet()
+        try:
+            return ss.worksheet(self.tab)
+        except Exception:
+            ws = ss.add_worksheet(title=self.tab, rows=1000, cols=len(self.headers))
+            ws.update(range_name="A1", values=[self.headers])
+            try:
+                ws.hide()
+            except Exception:
+                logger.warning("%s 탭 숨기기 실패", self.tab, exc_info=True)
+            return ws
+
+    def rows(self) -> List[Dict[str, Any]]:
+        cached = get_cached(self.cache_key, ttl=60)
+        if cached is not None:
+            return cached
+        try:
+            values = safe_get_all_values(open_main_sheet().worksheet(self.tab))
+        except Exception:
+            values = []
+        hdr = values[0] if values else self.headers
+        out = []
+        for i, row in enumerate(values[1:], start=2):
+            r = {h: (row[j] if j < len(row) else "") for j, h in enumerate(hdr)}
+            r["_row"] = i
+            out.append(r)
+        set_cached(self.cache_key, out)
+        return out
+
+    def upsert(self, rec: Dict[str, Any]):
+        rec = {**rec, "수정시각": now_kst().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")}
+        values = [str(rec.get(h, "")) for h in self.headers]
+        hit = next((r for r in self.rows() if all(str(r.get(k, "")) == str(rec.get(k, "")) for k in self.keys)), None)
+        ws = self._ws()
+        if hit:
+            ws.update(range_name=f"A{hit['_row']}", values=[values], value_input_option="RAW")
+        else:
+            ws.append_rows([values], value_input_option="RAW", table_range="A1")
+        invalidate_cache(self.cache_key)
+
+
+TEACH = _Table("Tier1_교수기록", ["학년도", "주", "학급", "실시", "지도규칙", "교수전략", "메모", "입력자", "수정시각"], ["학년도", "주", "학급"])
+TOKENS = _Table("Tier1_토큰집계", ["학년도", "월", "학급", "1000원토큰", "적용단계", "메모", "입력자", "수정시각"], ["학년도", "월", "학급"])
+FIDELITY = _Table("Tier1_충실도", ["학년도", "학기", "학급", "점수", "점검자", "점검일", "메모", "수정시각"], ["학년도", "학기", "학급"])
+
+
+def classes(allowed_codes: Optional[set] = None) -> List[Dict[str, Any]]:
+    """재학생이 있는 학급과 인원(교사는 자기 학급만)."""
+    cnt: Counter = Counter()
+    for c, s in _enrolled().items():
+        if s.get("학급") and (allowed_codes is None or c in allowed_codes):
+            cnt[s["학급"]] += 1
+    return [{"class": k, "students": v} for k, v in sorted(cnt.items())]
+
+
+def school_weeks(month: int) -> List[str]:
+    """그 달 수업일이 하루라도 있는 주의 월요일(YYYY-MM-DD)."""
+    from app.services.sheets import get_business_days, get_holidays_from_config
+    sy = school_year()
+    y = calendar_year(sy, month)
+    days = get_business_days(y, month, get_holidays_from_config()) or []
+    weeks = set()
+    for d in days:
+        mm, dd = (int(x) for x in str(d).split("-")[-2:])
+        day = _date(y, mm, dd)
+        weeks.add((day - _td(days=day.weekday())).isoformat())
+    return sorted(weeks)
+
+
+def _in(rows, field, values):
+    return [r for r in rows if r.get(field) in values]
+
+
+def teaching(month: int, class_names: List[str]) -> Dict[str, Any]:
+    sy = str(school_year())
+    weeks = school_weeks(month)
+    recs = [r for r in TEACH.rows() if r.get("학년도") == sy and r.get("주") in weeks and r.get("학급") in class_names]
+    by = {(r["학급"], r["주"]): r for r in recs}
+    out = []
+    for cls in class_names:
+        cells = []
+        for w in weeks:
+            r = by.get((cls, w))
+            cells.append({"week": w, "done": bool(r and r.get("실시") == "O"), "rule": (r or {}).get("지도규칙", ""),
+                          "strategies": [x for x in str((r or {}).get("교수전략", "")).split(SEP) if x], "memo": (r or {}).get("메모", "")})
+        done = sum(1 for c in cells if c["done"])
+        out.append({"class": cls, "weeks": cells, "done": done, "rate": round(done / len(weeks) * 100, 1) if weeks else None})
+    return {"month": month, "weeks": weeks, "classes": out}
+
+
+def save_teaching(week: str, cls: str, done: bool, rule: str, strategies: List[str], memo: str, by: str) -> Dict[str, Any]:
+    try:
+        d = _date.fromisoformat(week)
+    except ValueError:
+        return {"error": "주(월요일 날짜)가 올바르지 않습니다."}
+    if d.weekday() != 0:
+        return {"error": "주는 월요일 날짜로 적습니다."}
+    TEACH.upsert({"학년도": school_year(), "주": week, "학급": cls, "실시": "O" if done else "",
+                  "지도규칙": rule, "교수전략": SEP.join(strategies), "메모": memo, "입력자": by})
+    return {"message": "저장했습니다."}
+
+
+def _digital_bills(month: int) -> Counter:
+    """디지털 토큰판 기록(TokenLog)에서 그 달 학급별 100원 지급 합 ÷ 10 = 1000원 환산(참고용)."""
+    from app.services.sheets import get_token_log, fetch_student_status
+    key = _month_key(school_year(), month)
+    cls_of = {str(s.get("학생코드", "")).strip(): s.get("학급", "") for s in fetch_student_status() or []}
+    tokens: Counter = Counter()
+    try:
+        log = get_cached("sheet:tier1:tokenlog", ttl=60)
+        if log is None:
+            log = get_token_log(limit=100000)
+            set_cached("sheet:tier1:tokenlog", log)
+        for r in log:
+            if str(r.get("Date", ""))[:7] == key and r.get("Category") != "1000원 사용":
+                tokens[cls_of.get(str(r.get("StudentCode", "")).strip(), "")] += int(r.get("Delta") or 0)
+    except Exception:
+        logger.warning("토큰 기록 읽기 실패", exc_info=True)
+    return Counter({k: max(0, v) // 10 for k, v in tokens.items()})
+
+
+def tokens(month: int, class_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    sy = str(school_year())
+    recs = {r["학급"]: r for r in TOKENS.rows() if r.get("학년도") == sy and r.get("월") == str(month)}
+    digital = _digital_bills(month)
+    out = []
+    for c in class_list:
+        r = recs.get(c["class"])
+        bills = int(r["1000원토큰"]) if r and str(r.get("1000원토큰", "")).strip().isdigit() else None
+        out.append({**c, "bills": bills, "stage": (r or {}).get("적용단계", ""), "memo": (r or {}).get("메모", ""),
+                    "per_student": round(bills / c["students"], 2) if bills is not None and c["students"] else None,
+                    "digital": digital.get(c["class"], 0)})
+    vals = [x["per_student"] for x in out if x["per_student"] is not None]
+    mean = round(sum(vals) / len(vals), 2) if vals else None
+    sd = round((sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5, 2) if len(vals) > 1 else None
+    return {"month": month, "classes": out, "entered": len(vals), "mean": mean, "sd": sd}
+
+
+def save_tokens(month: int, cls: str, bills: int, stage: str, memo: str, by: str) -> Dict[str, Any]:
+    if bills < 0:
+        return {"error": "토큰 수량은 0 이상입니다."}
+    TOKENS.upsert({"학년도": school_year(), "월": month, "학급": cls, "1000원토큰": bills, "적용단계": stage, "메모": memo, "입력자": by})
+    return {"message": "저장했습니다."}
+
+
+def fidelity(semester: int, class_names: List[str]) -> Dict[str, Any]:
+    sy = str(school_year())
+    items = plan()["fidelity_items"]
+    recs = {r["학급"]: r for r in FIDELITY.rows() if r.get("학년도") == sy and r.get("학기") == str(semester)}
+    out = []
+    for cls in class_names:
+        r = recs.get(cls)
+        scores = [int(x) if x.strip().isdigit() else None for x in str((r or {}).get("점수", "")).split(",")] if r else []
+        scores = (scores + [None] * len(items))[:len(items)]
+        filled = [s for s in scores if s is not None]
+        pct = round(sum(filled) / (2 * len(items)) * 100, 1) if len(filled) == len(items) else None
+        out.append({"class": cls, "scores": scores, "pct": pct, "checker": (r or {}).get("점검자", ""),
+                    "date": (r or {}).get("점검일", ""), "memo": (r or {}).get("메모", ""),
+                    "needs_support": pct is not None and pct < plan()["fidelity_threshold"]})
+    done = [x["pct"] for x in out if x["pct"] is not None]
+    by_item = [round(sum(x["scores"][i] for x in out if x["pct"] is not None) / (2 * len(done)) * 100, 1) if done else None
+               for i in range(len(items))]
+    return {"semester": semester, "items": items, "classes": out, "done": len(done),
+            "mean": round(sum(done) / len(done), 1) if done else None, "by_item": by_item}
+
+
+def save_fidelity(semester: int, cls: str, scores: List[int], memo: str, by: str) -> Dict[str, Any]:
+    n = len(plan()["fidelity_items"])
+    if semester not in (1, 2):
+        return {"error": "학기는 1 또는 2입니다."}
+    if len(scores) != n or any(s not in (0, 1, 2) for s in scores):
+        return {"error": f"{n}개 문항 모두 0·1·2로 점검해 주세요."}
+    FIDELITY.upsert({"학년도": school_year(), "학기": semester, "학급": cls, "점수": ",".join(map(str, scores)),
+                     "점검자": by, "점검일": now_kst().strftime("%Y-%m-%d"), "메모": memo})
+    return {"message": "저장했습니다."}
+
+
+def current_semester() -> int:
+    return 1 if 3 <= now_kst().month <= 8 else 2
+
+
+def dashboard(allowed_codes: Optional[set] = None) -> Dict[str, Any]:
+    """대시보드: 연간 Tier1 현황 + 월별 교수 실행률·1인당 토큰 + 학급별 이번 달 토큰·이번 학기 충실도."""
+    base = annual(allowed_codes)
+    cls = classes(allowed_codes)
+    names = [c["class"] for c in cls]
+    for t in base["trend"]:
+        m = t["month"]
+        te = teaching(m, names)
+        rates = [c["rate"] for c in te["classes"] if c["rate"] is not None]
+        t["teach_rate"] = round(sum(rates) / len(rates), 1) if rates and te["weeks"] else None
+        tk = tokens(m, cls)
+        t["tokens_per_student"] = tk["mean"]
+        t["tokens_entered"] = tk["entered"]
+    cur = now_kst().month
+    return {**base, "classes": cls, "this_month": tokens(cur, cls), "teach_now": teaching(cur, names),
+            "fidelity": fidelity(current_semester(), names), "semester": current_semester()}

@@ -61,3 +61,29 @@ def test_tier1_monitor_goal_verdict():
         r = tier1.monitor_program(2)
     assert [(m["month"], m["count"]) for m in r["months"]] == [(4, 10), (5, 5), (6, 0)]
     assert r["summary"]["change_pct"] == -50.0 and r["summary"]["verdict"] == "목표 달성"
+
+
+def test_tier1_fidelity_scoring_and_validation():
+    from app.services import tier1
+    n = len(tier1.plan()["fidelity_items"])
+    assert "모두" in tier1.save_fidelity(2, "A반", [2] * (n - 1), "", "t")["error"]
+    assert "모두" in tier1.save_fidelity(2, "A반", [3] * n, "", "t")["error"]
+    rows = [{"학년도": "2026", "학기": "2", "학급": "A반", "점수": ",".join(["2"] * (n - 2) + ["0", "1"])},
+            {"학년도": "2026", "학기": "2", "학급": "B반", "점수": ",".join(["1"] * n)}]
+    with mock.patch.object(tier1.FIDELITY, "rows", return_value=rows), mock.patch.object(tier1, "school_year", return_value=2026):
+        f = tier1.fidelity(2, ["A반", "B반", "C반"])
+    pct = {c["class"]: (c["pct"], c["needs_support"]) for c in f["classes"]}
+    assert pct["A반"] == (round((2 * (n - 2) + 1) / (2 * n) * 100, 1), False)
+    assert pct["B반"] == (50.0, True) and pct["C반"] == (None, False)
+    assert f["done"] == 2
+
+
+def test_tier1_tokens_per_student_and_spread():
+    from app.services import tier1
+    rows = [{"학년도": "2026", "월": "11", "학급": "A반", "1000원토큰": "10"}, {"학년도": "2026", "월": "11", "학급": "B반", "1000원토큰": "30"}]
+    with mock.patch.object(tier1.TOKENS, "rows", return_value=rows), mock.patch.object(tier1, "school_year", return_value=2026), \
+         mock.patch.object(tier1, "_digital_bills", return_value={}):
+        t = tier1.tokens(11, [{"class": "A반", "students": 5}, {"class": "B반", "students": 5}, {"class": "C반", "students": 4}])
+    assert [c["per_student"] for c in t["classes"]] == [2.0, 6.0, None]
+    assert (t["entered"], t["mean"], t["sd"]) == (2, 4.0, 2.0)
+    assert tier1.save_teaching("2026-11-03", "A반", True, "", [], "", "t")["error"].startswith("주는 월요일")
