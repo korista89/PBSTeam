@@ -9,7 +9,7 @@ import { maskName } from "../utils";
 
 // CICO 관리 탭 상단 대시보드: 이 달 대상 현황 숫자 + 월별 추이·학급별·판정 분포 차트
 export interface DashTarget { code: string; class: string; active: boolean; target_behavior: string; record_count: number; }
-export interface DashDecision { code: string; decision: string; decision_color: string; }
+export interface DashDecision { code: string; name?: string; decision: string; decision_color: string; has_sst?: boolean; has_t3?: boolean; }
 
 const MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const C = { keep: "#3b82f6", fresh: "#10b981", ended: "#ef4444", muted: "#94a3b8" };
@@ -76,6 +76,22 @@ export default function CicoDashboard({ month, targets, history, names, decision
     return [...map.values()].sort((a, b) => b.value - a.value);
   }, [decisions]);
 
+  // 병행 지원: 학생 단위(목표 여러 줄이어도 1명). Tier3는 Tier3+ 포함, Tier현황의 지금 상태 기준
+  const tiers = useMemo(() => {
+    const byCode = new Map<string, DashDecision>();
+    decisions.forEach(d => {
+      const prev = byCode.get(d.code);
+      byCode.set(d.code, { ...d, has_sst: !!(prev?.has_sst || d.has_sst), has_t3: !!(prev?.has_t3 || d.has_t3) });
+    });
+    const all = [...byCode.values()];
+    return {
+      t3: all.filter(d => d.has_t3),
+      sst: all.filter(d => d.has_sst),
+      only: all.filter(d => !d.has_sst && !d.has_t3),
+      both: all.filter(d => d.has_sst && d.has_t3).length,
+    };
+  }, [decisions]);
+
   const label = (c: string) => `${maskName(names[c]?.name || "") || c}`;
 
   return (
@@ -88,6 +104,20 @@ export default function CicoDashboard({ month, targets, history, names, decision
         <Kpi label="이 달 해제 줄" value={stats.released} unit="줄" color={C.muted} hint="대상 해제한 목표 줄" />
         <Kpi label="목표 미설정" value={stats.unset} unit="줄" color={stats.unset ? "#f59e0b" : C.muted} hint="목표행동이 빈 줄" />
         <Kpi label="기록 없음" value={stats.noRecord} unit="줄" color={stats.noRecord ? "#f59e0b" : C.muted} hint="이 달 기록이 하루도 없는 줄" />
+      </div>
+
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: "0.85rem", marginBottom: 10 }}>
+          🧩 병행 지원 현황 <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#94a3b8" }}>· 이 달 CICO 학생 기준, Tier현황의 지금 상태(Tier3는 Tier3+ 포함)</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <TierGroup title="Tier3 + CICO" color="#ef4444" items={tiers.t3} />
+          <TierGroup title="Tier2-SST + CICO" color="#8b5cf6" items={tiers.sst} />
+          <TierGroup title="Tier2-CICO만" color={C.keep} items={tiers.only} />
+        </div>
+        {tiers.both > 0 && (
+          <div style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: 8 }}>※ Tier3와 SST를 함께 받는 학생 {tiers.both}명은 두 칸에 모두 들어 있습니다.</div>
+        )}
       </div>
 
       {stats.hasPrev && (stats.fresh.length > 0 || stats.ended.length > 0) && (
@@ -154,6 +184,25 @@ function Kpi({ label, value, unit, color, hint }: { label: string; value: number
       <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: "1.6rem", fontWeight: 900, color }}>{value}<span style={{ fontSize: "0.8rem", marginLeft: 2 }}>{unit}</span></div>
       {hint && <div style={{ fontSize: "0.65rem", color: "#94a3b8" }}>{hint}</div>}
+    </div>
+  );
+}
+
+function TierGroup({ title, color, items }: { title: string; color: string; items: DashDecision[] }) {
+  return (
+    <div style={{ border: "1px solid #e2e8f0", borderTop: `3px solid ${color}`, borderRadius: 10, padding: "10px 12px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#475569" }}>{title}</span>
+        <span style={{ fontSize: "1.4rem", fontWeight: 900, color }}>{items.length}<span style={{ fontSize: "0.75rem", marginLeft: 2 }}>명</span></span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+        {items.length === 0 ? <span style={{ fontSize: "0.72rem", color: "#cbd5e1" }}>없음</span> : items.map(d => (
+          <a key={d.code} href={`/cico-record?student=${encodeURIComponent(d.code)}`}
+            style={{ padding: "2px 8px", borderRadius: 999, background: `${color}15`, color, fontSize: "0.72rem", textDecoration: "none" }}>
+            {maskName(d.name || "") || d.code}
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
