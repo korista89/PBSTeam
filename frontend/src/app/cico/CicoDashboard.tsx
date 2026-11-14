@@ -13,6 +13,9 @@ export interface DashDecision { code: string; decision: string; decision_color: 
 
 const MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const C = { keep: "#3b82f6", fresh: "#10b981", ended: "#ef4444", muted: "#94a3b8" };
+const DECISION_COLORS: Record<string, string> = {
+  "Tier1 하향": "#10b981", "양호": "#3b82f6", "병행": "#8b5cf6", "수정 검토": "#f59e0b", "Tier3 상향": "#ef4444", "기록 부족": "#94a3b8",
+};
 
 export default function CicoDashboard({ month, targets, history, names, decisions }: {
   month: number;
@@ -64,7 +67,9 @@ export default function CicoDashboard({ month, targets, history, names, decision
   const byDecision = useMemo(() => {
     const map = new Map<string, { name: string; value: number; color: string }>();
     decisions.forEach(d => {
-      const e = map.get(d.decision) || { name: d.decision, value: 0, color: d.decision_color };
+      // 서버 판정색은 유지·병행·기록부족이 모두 파랑이라 원그래프에서 구분되도록 따로 칠한다
+      const color = Object.entries(DECISION_COLORS).find(([k]) => d.decision.includes(k))?.[1] || d.decision_color;
+      const e = map.get(d.decision) || { name: d.decision, value: 0, color };
       e.value += 1;
       map.set(d.decision, e);
     });
