@@ -50,6 +50,7 @@ interface GridData {
 interface TrendItem { month: string; rate: string; }
 interface DailyEntry { date: string; value: string; is_prev: boolean; }
 interface ReportStudent {
+  row?: number;  // 월별 표 행 — GridStudent.row와 같다. 목표가 둘 이상인 학생을 구분한다
   code: string;
   name?: string;
   class: string;
@@ -181,7 +182,8 @@ export default function CICOPage() {
   const [loading, setLoading] = useState(true);
   const [is404, setIs404] = useState(false);
   const [error, setError] = useState("");
-  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  // 목표가 둘 이상인 학생은 같은 코드로 여러 행이 있으므로 행으로 고른다. 코드는 달이 바뀔 때 같은 학생을 다시 찾는 데 쓴다.
+  const [selected, setSelected] = useState<{ row: number; code: string } | null>(null);
   const [pendingUpdates, setPendingUpdates] = useState<{ row: number; col: number; value: string; period?: string }[]>([]);
   const [saveStatus, setSaveStatus] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -238,10 +240,12 @@ export default function CICOPage() {
 
       setGridData(monthlyData);
       setReportData(overview.report);
-      setSelectedCode(prev => {
-        const wanted = prev || studentParam;
-        if (wanted) return monthlyData.students.some(s => s.학생코드 === wanted) ? wanted : null;
-        return monthlyData.students[0]?.학생코드 || null;
+      setSelected(prev => {
+        const rows = monthlyData.students;
+        const pick = (s?: GridStudent) => (s ? { row: s.row, code: s.학생코드 } : null);
+        if (prev) return pick(rows.find(s => s.row === prev.row && s.학생코드 === prev.code) || rows.find(s => s.학생코드 === prev.code));
+        if (studentParam) return pick(rows.find(s => s.학생코드 === studentParam));
+        return pick(rows[0]);
       });
     } catch (err: any) {
       if (err.response?.status === 404) {
@@ -361,8 +365,8 @@ export default function CICOPage() {
     }
   };
 
-  const gridStudent = gridData?.students.find(s => s.학생코드 === selectedCode) || null;
-  const reportStudent = reportData?.students.find(s => s.code === selectedCode) || null;
+  const gridStudent = gridData?.students.find(s => s.row === selected?.row) || null;
+  const reportStudent = reportData?.students.find(s => s.row === selected?.row) || null;
 
   return (
     <AuthCheck>
@@ -419,11 +423,12 @@ export default function CICOPage() {
                 {/* 학생 목록 */}
                 <div className="card cico-student-list" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6, maxHeight: 720, overflowY: "auto" }}>
                   {reportData?.students.map(rs => {
-                    const active = rs.code === selectedCode;
+                    const active = rs.row === selected?.row;
+                    const multiGoal = (reportData?.students.filter(o => o.code === rs.code).length || 0) > 1;
                     return (
                       <button
-                        key={rs.code}
-                        onClick={() => setSelectedCode(rs.code)}
+                        key={rs.row ?? rs.code}
+                        onClick={() => { if (rs.row) { setSelected({ row: rs.row, code: rs.code }); setAiState({ loading: false, text: "" }); } }}
                         style={{
                           textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer",
                           border: active ? "2px solid #3b82f6" : "1px solid #e2e8f0",
@@ -436,6 +441,7 @@ export default function CICOPage() {
                           <span style={{ fontWeight: 800, fontSize: "0.82rem", color: getRateColor(rs.rate_num) }}>{rs.rate || "-"}</span>
                         </div>
                         <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{rs.class}</div>
+                        {multiGoal && <div style={{ fontSize: "0.72rem", color: "#334155", fontWeight: 600 }}>🎯 {rs.target_behavior || "목표 미설정"}</div>}
                         <span style={{ alignSelf: "flex-start", padding: "2px 8px", borderRadius: 6, fontSize: "0.65rem", fontWeight: 700, color: rs.decision_color, background: `${rs.decision_color}15` }}>
                           {rs.decision}
                         </span>
@@ -455,6 +461,7 @@ export default function CICOPage() {
                       <a href={`/target-behavior?student=${encodeURIComponent(gridStudent.학생코드)}`}>개별 행동중재 검토 →</a>
                     </div>
                     <StudentCICOPanel
+                      key={gridStudent.row}
                       gridStudent={gridStudent}
                       reportStudent={reportStudent}
                       dayColumns={gridData.day_columns}

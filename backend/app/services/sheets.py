@@ -2648,7 +2648,7 @@ def get_cico_report_data(month: int):
         except Exception:
             pass
 
-        for row in all_values[1:]:
+        for row_idx, row in enumerate(all_values[1:], start=2):
             if tier2_idx < 0 or len(row) <= tier2_idx:
                 continue
             if str(row[tier2_idx]).strip() != "O":
@@ -2799,6 +2799,7 @@ def get_cico_report_data(month: int):
                     decision_color = "#ef4444"
 
             students.append({
+                "row": row_idx,  # 월별 표 행 번호 — 월별 그리드의 row와 같다(목표가 둘 이상인 학생 구분용)
                 "code": code,
                 "name": name,
                 "class": row[col_idx.get("학급", 1)] if col_idx.get("학급", 1) < len(row) else "",

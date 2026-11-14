@@ -111,3 +111,18 @@ def test_empty_daily_records_do_not_reuse_stale_rate():
     assert result["rate_num"] is None
     assert result["decision"] == "기록 부족: 판단 보류"
     assert all(t["rate"] == "-" for t in result["trend"])
+
+
+def test_multi_goal_student_rows_are_distinguishable():
+    """목표가 둘인 학생은 같은 코드로 두 행이 나온다. 화면은 row로 고르므로 행 번호가 실려야 한다."""
+    from app.services import sheets
+    second = _row("50%")
+    second[5] = "타인 공격"
+    data = {7: [HEADERS, _row("70%"), second]}
+    with mock.patch.object(sheets, "get_cached", return_value=None), \
+         mock.patch.object(sheets, "get_cico_raw_sheet_values", side_effect=lambda m: data.get(m, [])), \
+         mock.patch.object(sheets, "fetch_student_status", return_value=[]), \
+         mock.patch.object(sheets, "get_beable_code_mapping", return_value={}), \
+         mock.patch.object(sheets, "set_cached", return_value=None):
+        students = sheets.get_cico_report_data(7)["students"]
+    assert [(s["row"], s["code"], s["target_behavior"]) for s in students] == [(2, "9001", "수업참여"), (3, "9001", "타인 공격")]
