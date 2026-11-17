@@ -868,7 +868,7 @@ function TeamRequestSuggestionCard({
       ) : (
         <div className="empty-state">
           <div className="empty-state-icon">📮</div>
-          <div className="empty-state-title">우리 반 데이터를 기반으로 학교행동중재지원팀에 요청할 사항을 AI가 정리해드립니다</div>
+          <div className="empty-state-title">{teacherClassName.includes("과정") ? "우리 과정" : "우리 반"} 데이터를 기반으로 학교행동중재지원팀에 요청할 사항을 AI가 정리해드립니다</div>
           <div className="empty-state-text">생성 후 바로 수기로 수정한 뒤 저장할 수 있습니다.</div>
         </div>
       )}
