@@ -7,11 +7,22 @@ import { useAuth } from "../components/AuthProvider";
 import { CLASS_LIST } from "../constants";
 import { API_BASE_URL } from "@/app/lib/api";
 
+// 과정부장·늘봄실장 계정(Users 시트 ID와 같아야 한다)
+const STAFF_ACCOUNTS = [
+    { id: "초등저학년부장", name: "초등저학년부장 (유치원·초1·초2)" },
+    { id: "초등고학년부장", name: "초등고학년부장 (초3~초6)" },
+    { id: "중학교부장", name: "중학교부장" },
+    { id: "고등학교부장", name: "고등학교부장" },
+    { id: "전공과부장", name: "전공과부장" },
+    { id: "늘봄실장", name: "늘봄실장 (교내 방과후)" },
+];
+
 export default function LoginPage() {
     const router = useRouter();
     const { login } = useAuth();
 
-    const [loginType, setLoginType] = useState<"admin" | "teacher">("teacher");
+    const [loginType, setLoginType] = useState<"admin" | "teacher" | "staff">("teacher");
+    const [staffId, setStaffId] = useState(STAFF_ACCOUNTS[0].id);
     const [teacherList, setTeacherList] = useState<{id: string, name: string}[]>([]);
     const [selectedUserId, setSelectedUserId] = useState("");
     const [password, setPassword] = useState("");
@@ -46,6 +57,8 @@ export default function LoginPage() {
                     setLoading(false);
                     return;
                 }
+            } else if (loginType === "staff") {
+                userId = staffId;
             } else {
                 // Admin: Fixed to "admin" (System Admin)
                 userId = "admin";
@@ -62,8 +75,8 @@ export default function LoginPage() {
             const userData = response.data.user;
             login(userData);
 
-            // Dashboard is the landing page for both admins (school-wide) and teachers (class-scoped)
-            router.push('/');
+            // 첫 화면: 대시보드(관리자 전교·과정부장 과정·담임 학급), 늘봄실장은 위기행동기록
+            router.push(userData?.role === "afterschool" ? '/behavior' : '/');
 
         } catch (err: any) {
             setError(err.response?.data?.detail || "로그인에 실패했습니다.");
@@ -190,6 +203,21 @@ export default function LoginPage() {
                             👨‍🏫 담임교사
                         </button>
                         <button
+                            type="button"
+                            onClick={() => { setLoginType("staff"); setPassword(""); setError(""); }}
+                            style={{
+                                flex: 1, padding: '12px', border: 'none',
+                                background: loginType === "staff" ? 'white' : 'transparent',
+                                borderRadius: '8px',
+                                boxShadow: loginType === "staff" ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
+                                color: loginType === "staff" ? '#6d28d9' : '#64748b',
+                                fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            🏫 부장·늘봄
+                        </button>
+                        <button
                             onClick={() => { setLoginType("admin"); setPassword(""); setError(""); }}
                             style={{
                                 flex: 1, padding: '12px', border: 'none',
@@ -223,6 +251,23 @@ export default function LoginPage() {
                                     {teacherList.map(t => (
                                         <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
+                                </select>
+                            </div>
+                        ) : loginType === "staff" ? (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: '700', color: '#334155', fontSize: '0.88rem' }}>
+                                    계정 선택
+                                </label>
+                                <select
+                                    value={staffId}
+                                    onChange={(e) => setStaffId(e.target.value)}
+                                    aria-label="과정부장·늘봄실장 계정"
+                                    style={{
+                                        width: '100%', padding: '14px', border: '1.5px solid #e2e8f0',
+                                        borderRadius: '12px', fontSize: '1rem', backgroundColor: '#fff', outline: 'none'
+                                    }}
+                                >
+                                    {STAFF_ACCOUNTS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                 </select>
                             </div>
                         ) : (
