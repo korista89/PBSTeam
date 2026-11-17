@@ -415,7 +415,7 @@ export default function Home() {
     } finally {
       if (!silent && requestId === dashboardRequestRef.current) setLoading(false);
     }
-  }, [startDate, endDate, user?.class_id, user?.id, pickClass]);
+  }, [startDate, endDate, user?.class_id, user?.id, pickClass, isAdmin, isDivisionHead]);
 
   useEffect(() => { void fetchDashboard(); }, [fetchDashboard]);
   useSheetLiveSync(() => fetchDashboard(true));

@@ -224,6 +224,9 @@ class CicoStore:
     def _add_columns(self, ws, hdr, names):
         from gspread.utils import rowcol_to_a1
         new = [n for n in dict.fromkeys(names) if n not in hdr]
+        need = len(hdr) + len(new) - ws.col_count
+        if need > 0:  # 탭에 빈 열이 없으면 쓰기가 400(exceeds grid limits)으로 실패한다
+            ws.add_cols(need)
         ws.update(range_name=rowcol_to_a1(1, len(hdr) + 1), values=[new])
         return hdr + new
 

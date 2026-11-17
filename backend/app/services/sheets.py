@@ -1,4 +1,5 @@
 import logging
+import uuid
 import gspread
 from app.core.config import settings
 import pandas as pd
@@ -1225,7 +1226,7 @@ def fetch_meeting_notes(meeting_type: str = None, student_code: str = None):
                 "content": r.get('Content'),
                 "author": r.get('Author'),
                 "created_at": r.get('CreatedAt') or r.get('Date'),
-                "student_code": r.get('StudentCode', ''),
+                "student_code": str(r.get('StudentCode', '')),
                 "period_start": r.get('PeriodStart', ''),
                 "period_end": r.get('PeriodEnd', ''),
                 "uuid": uid
@@ -3975,7 +3976,15 @@ def _ensure_uuid_header(ws):
     마지막 열에 한 번만 추가한다 — MeetingNotes 시트가 이미 쓰는 패턴과 동일."""
     headers = ws.row_values(1)
     if "UUID" not in headers:
-        ws.update_cell(1, len(headers) + 1, "UUID")
+        col = len(headers) + 1
+        # 탭이 머리글 수만큼만 열을 가진 경우 칸이 없어 쓰기가 실패했다(400 exceeds grid limits)
+        # → 탭을 못 열어 측정값·실행충실도 저장이 모두 막혔다. 열을 먼저 늘린다.
+        if col > ws.col_count:
+            ws.add_cols(col - ws.col_count)
+        # 예전 행도 수정·삭제할 수 있게 UUID를 함께 채운다
+        n = len(ws.col_values(1))
+        values = [["UUID"]] + [[str(uuid.uuid4())] for _ in range(n - 1)]
+        ws.update(range_name=gspread.utils.rowcol_to_a1(1, col), values=values)
 
 
 def ensure_target_behavior_data_sheet():
@@ -4025,7 +4034,9 @@ def get_target_behaviors(student_code: str) -> list:
     try:
         records = safe_get_all_records(ws)
         # 삭제한 표적행동은 행을 남기고(되돌릴 수 있게) 목록에서만 뺀다
-        return [r for r in records if str(r.get("StudentCode", "")).strip() == clean and str(r.get("Status", "")).strip() != "삭제"]
+        # 시트가 숫자만 든 칸(정의 '1', 기저선 3 등)을 숫자로 돌려주면 화면의 문자열 처리가 깨진다 → 모두 글자로
+        return [{k: str(v) for k, v in r.items()} for r in records
+                if str(r.get("StudentCode", "")).strip() == clean and str(r.get("Status", "")).strip() != "삭제"]
     except SheetUnavailable:
         raise
     except Exception as e:

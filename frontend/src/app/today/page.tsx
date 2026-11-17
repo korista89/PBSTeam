@@ -74,7 +74,7 @@ export default function TodayPage() {
       const isSchoolDay = (res.data.day_columns || []).some((c: { label: string }) => c.label === todayStr);
       setCicoItems(isSchoolDay ? (res.data.students || []).map((s: any) => ({ code: s.학생코드, name: s.학생명, checkedIn: s0(s) })) : []);
     }).catch(() => setCicoItems([]));
-  }, [apiUrl, user?.class_id, isAdmin]);
+  }, [apiUrl, user?.class_id, isAdmin, isDivisionHead]);
 
   // 학급 규칙 설정 여부 (담임 본인 학급만)
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function TodayPage() {
     axios.get(`${apiUrl}/api/v1/class-rules/${encodeURIComponent(user.class_id)}`).then(res => {
       setClassRulesSet(Boolean(res.data.rule));
     }).catch(() => setClassRulesSet(null));
-  }, [apiUrl, user?.class_id, isAdmin]);
+  }, [apiUrl, user?.class_id, isAdmin, isDivisionHead]);
 
   // 확인 완료: 신호를 닫는다. 같은 학생에게 새 기록이 생기면 새 신호로 다시 뜬다.
   const [acking, setAcking] = useState(false);
