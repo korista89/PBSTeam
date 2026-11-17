@@ -136,4 +136,6 @@ export interface User {
     class_id?: string;
     class_name?: string;
     name?: string;
+    scope?: string | null;   // null=전교, 과정명(과정부장), 학급(담임)
+    classes?: string[];      // 볼 수 있는 학급
 }

@@ -3,7 +3,7 @@ from app.adapters.sheets.client import open_main_sheet
 from app.adapters.sheets.resilience import SheetUnavailable
 from typing import Optional, List, Dict, Any
 from app.services.sheets import fetch_all_records, get_sheets_client, clear_cache, normalize_date_string, FORM_REPORT_HEADERS
-from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
+from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, user_scope, student_in_scope, in_scope
 from app.adapters.sheets.tier_status import TierStatusAdapter
 import uuid
 import datetime
@@ -118,6 +118,17 @@ REPORT_REQUIRED = {
 
 def _is_admin(user: Dict[str, Any]) -> bool:
     return str(user.get("role", "")).lower() in ["admin", "superadmin"]
+
+
+def _afterschool_visible(r: dict, user: Dict[str, Any]) -> bool:
+    """늘봄실장: 늘봄 참여 학생의 늘봄 시간(11구간) 기록과 본인이 입력한 기록만."""
+    if str(user.get("role", "")).lower() != "afterschool":
+        return False
+    if _is_author(r.get("입력교사명", ""), user):
+        return True
+    from app.services.afterschool import participant_codes
+    code = str(r.get("학생코드") or r.get("코드번호") or "").strip()
+    return code in participant_codes() and "11구간" in str(r.get("시간대", ""))
 
 
 def _author_label(user: Dict[str, Any]) -> str:
@@ -276,13 +287,13 @@ def get_approval_inbox(
     states = fetch_approval_states()
     out = []
     code_cls = {s.student_code.strip(): normalize_class_identifier(s.class_name) for s in TierStatusAdapter.fetch_students()}
-    user_class = None if _is_admin(current_user) else (normalize_class_identifier(current_user.get("class_id") or current_user.get("id")) or "__none__")
+    user_class = user_scope(current_user)
     for r in fetch_all_records(force_refresh=False):
         log_id = str(r.get("Log_ID", "")).strip()
         if not log_id:
             continue  # 결재 단계는 Log_ID 로 연결된다(Log_ID 없는 옛 폼 기록 제외)
         cls = code_cls.get(str(r.get("학생코드") or r.get("코드번호") or "").strip(), "")
-        if user_class and cls != user_class:
+        if user_class is not None and not in_scope(cls, user_class) and not _afterschool_visible(r, current_user):
             continue
         is_report = str(r.get("물리적제지여부", "")).startswith("O")
         if (kind == "report" and not is_report) or (kind == "data" and is_report):
@@ -459,12 +470,12 @@ def get_all_logs(
     students = TierStatusAdapter.fetch_students()
     code_to_class = {s.student_code.strip(): normalize_class_identifier(s.class_name) for s in students}
 
-    role = str(current_user.get("role", "")).lower()
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    user_class = user_scope(current_user)
+    if user_class is not None:
         records = [
             r for r in records
-            if code_to_class.get(str(r.get("학생코드") or r.get("코드번호") or "").strip()) == user_class
+            if in_scope(code_to_class.get(str(r.get("학생코드") or r.get("코드번호") or "").strip()), user_class)
+            or _afterschool_visible(r, current_user)
         ]
 
     if status and status != "전체":

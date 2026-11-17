@@ -186,15 +186,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
     # --- Class Filtering ---
     if class_id and not df.empty:
         try:
-            from app.api.deps import normalize_class_identifier, get_student_class_code
-            target_canonical = normalize_class_identifier(class_id)
-            def _matches_class(sc):
-                sc_str = str(sc).strip()
-                if sc_str.startswith(str(class_id)):
-                    return True
-                resolved = get_student_class_code(sc_str)
-                return resolved == target_canonical
-            df = df[df['student_code'].apply(_matches_class)]
+            from app.api.deps import student_in_scope
+            df = df[df['student_code'].apply(lambda sc: student_in_scope(sc, class_id))]
         except SheetUnavailable:
             raise
         except Exception:
@@ -210,14 +203,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
             mdf['강도'] = mdf['강도'].apply(lambda x: extract_numeric(x, 0))
         if class_id and not mdf.empty:
             try:
-                from app.api.deps import normalize_class_identifier, get_student_class_code
-                target_canonical = normalize_class_identifier(class_id)
-                def _mdf_matches_class(sc):
-                    sc_str = str(sc).strip()
-                    if sc_str.startswith(str(class_id)):
-                        return True
-                    return get_student_class_code(sc_str) == target_canonical
-                mdf = mdf[mdf['student_code'].apply(_mdf_matches_class)]
+                from app.api.deps import student_in_scope
+                mdf = mdf[mdf['student_code'].apply(lambda sc: student_in_scope(sc, class_id))]
             except SheetUnavailable:
                 raise
             except Exception:
@@ -474,13 +461,8 @@ def get_analytics_data(start_date: str = None, end_date: str = None, class_id: s
         # 담임교사는 본인 학급만 봐야 하므로, 전교 TierStatus를 class_id 기준으로 스코프 좁힘
         if class_id:
             try:
-                from app.api.deps import normalize_class_identifier
-                target_canonical = normalize_class_identifier(class_id)
-                all_status = [
-                    s for s in all_status
-                    if str(s.get('학생코드', '')).strip().startswith(str(class_id))
-                    or normalize_class_identifier(s.get('학급', '')) == target_canonical
-                ]
+                from app.api.deps import in_scope
+                all_status = [s for s in all_status if in_scope(s.get('학급', ''), class_id)]
             except SheetUnavailable:
                 raise
             except Exception:

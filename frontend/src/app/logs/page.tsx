@@ -67,7 +67,7 @@ function sortValue(log: any, key: SortKey): string | number {
 }
 
 export default function LogsPage() {
-    const { isAdmin } = useAuth();
+    const { isAdmin, isDivisionHead, isAfterschool, scopeLabel } = useAuth();
     const { startDate, endDate } = useDateRange();
 
     const [logs, setLogs] = useState<any[]>([]);
@@ -191,7 +191,7 @@ export default function LogsPage() {
             <AppShell
                 currentPage="logs"
                 title="🗂️ 전체 로그"
-                subtitle={isAdmin() ? `전교 데이터 입력 현황 · 총 ${total}건` : `담당 학급 데이터 입력 현황 · 총 ${total}건`}
+                subtitle={isAdmin() ? `전교 데이터 입력 현황 · 총 ${total}건` : isAfterschool() ? `늘봄 참여 학생의 늘봄 시간 기록 · 총 ${total}건` : isDivisionHead() ? `${scopeLabel()} 과정 데이터 입력 현황 · 총 ${total}건` : `담당 학급 데이터 입력 현황 · 총 ${total}건`}
                 headerActions={
                     <button onClick={() => void fetchLogs()} className="btn btn-secondary">
                         🔄 새로고침

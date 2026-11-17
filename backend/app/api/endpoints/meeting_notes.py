@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from app.services.sheets import add_meeting_note, fetch_meeting_notes, update_meeting_note, delete_meeting_note
-from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier, get_student_class_code
+from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier, get_student_class_code, user_scope, student_in_scope, in_scope
 
 router = APIRouter()
 
@@ -71,11 +71,11 @@ def get_meeting_notes(
 
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"] and not student_code:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        user_class = user_scope(current_user)
         scoped_notes = []
         for n in notes:
             st_code = str(n.get("student_code", "")).strip()
-            if not st_code or get_student_class_code(st_code) == user_class:
+            if not st_code or student_in_scope(st_code, user_class):
                 scoped_notes.append(n)
         notes = scoped_notes
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.services.sheets import fetch_student_codes, update_student_codes
 from typing import Dict, Any
-from app.api.deps import require_authenticated_user, require_admin, get_student_class_code, normalize_class_identifier
+from app.api.deps import require_authenticated_user, require_admin, get_student_class_code, normalize_class_identifier, user_scope, student_in_scope, in_scope
 
 router = APIRouter()
 
@@ -11,7 +11,7 @@ def get_roster(current_user: Dict[str, Any] = Depends(require_authenticated_user
 
     status_records = fetch_student_status()
     role = str(current_user.get("role", "")).lower()
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id")) if role not in ["admin", "superadmin"] else None
+    user_class = user_scope(current_user) if role not in ["admin", "superadmin"] else None
 
     # Count students per canonical class
     class_counts = {}
@@ -33,7 +33,7 @@ def get_roster(current_user: Dict[str, Any] = Depends(require_authenticated_user
     for sec in sections_def:
         matched_classes = []
         for cname in sec["classes"]:
-            if user_class and cname != user_class:
+            if user_class is not None and not in_scope(cname, user_class):
                 continue
             matched_classes.append({
                 "class_name": cname,
@@ -52,10 +52,10 @@ def get_codes(current_user: Dict[str, Any] = Depends(require_authenticated_user)
     mapping = fetch_student_codes()
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        user_class = user_scope(current_user)
         scoped_mapping = {}
         for name, code in mapping.items():
-            if get_student_class_code(str(code)) == user_class:
+            if student_in_scope(str(code), user_class):
                 scoped_mapping[name] = code
         return scoped_mapping
     return mapping

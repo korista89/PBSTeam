@@ -94,3 +94,6 @@ export const BIP_STRATEGIES: { [key: string]: { prevention: string, teaching: st
         consequence: "- 부적절한 행동 중단 및 대체 감각 활동 유도\n- 감각 행동이 타인에게 피해를 주지 않도록 제한"
     }
 };
+
+// CLASS_LIST.id → 서버가 쓰는 학급 이름(유1·유2·예비). 과정부장의 user.classes와 맞춰 볼 때 쓴다.
+export const canonicalClassId = (id: string) => ({ 유난초: "유1", 유백합: "유2", 예비관리자: "예비" } as Record<string, string>)[id] || id;

@@ -11,7 +11,7 @@ from app.services.picture_words import (
     fetch_class_overview, fetch_certification_status,
     init_picture_word_system, get_evaluation_sentences
 )
-from app.api.deps import require_authenticated_user, require_admin, normalize_class_identifier
+from app.api.deps import require_authenticated_user, require_admin, normalize_class_identifier, user_scope, student_in_scope, in_scope
 
 router = APIRouter()
 
@@ -19,9 +19,9 @@ def _check_class_permission(class_id: str, current_user: Dict[str, Any]):
     role = str(current_user.get("role", "")).lower()
     if role in ["admin", "superadmin"]:
         return
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    user_class = user_scope(current_user)
     req_class = normalize_class_identifier(class_id)
-    if not user_class or req_class != user_class:
+    if not in_scope(req_class, user_class):
         raise HTTPException(status_code=403, detail="Forbidden: You do not have permission for this class.")
 
 # ─────────────────────────────────────────────────────────────
@@ -39,8 +39,8 @@ def get_all_students(current_user: Dict[str, Any] = Depends(require_authenticate
     students = fetch_all_students()
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        students = [s for s in students if normalize_class_identifier(s.get("학급ID") or s.get("학급명")) == user_class]
+        user_class = user_scope(current_user)
+        students = [s for s in students if in_scope(s.get("학급ID") or s.get("학급명"), user_class)]
     return students
 
 @router.get("/students/by-class/{class_id}")
@@ -157,9 +157,9 @@ def patch_minute(req: MinuteUpdateRequest, current_user: Dict[str, Any] = Depend
         if role not in ["admin", "superadmin"]:
             if req.source_type == "lessons":
                 raise HTTPException(status_code=403, detail="수업가이드 수정은 관리자만 가능합니다.")
-            user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+            user_class = user_scope(current_user)
             entry_class = normalize_class_identifier(target.get("학급ID") or target.get("class_id"))
-            if not user_class or entry_class != user_class:
+            if not in_scope(entry_class, user_class):
                 raise HTTPException(status_code=403, detail="본인 학급의 협의록만 수정할 수 있습니다.")
 
         result = update_minute_entry(req.source_type, req.row_index, req.updates)
@@ -186,9 +186,9 @@ def remove_minute(source_type: str, row_index: int, current_user: Dict[str, Any]
         if role not in ["admin", "superadmin"]:
             if source_type == "lessons":
                 raise HTTPException(status_code=403, detail="수업가이드 삭제는 관리자만 가능합니다.")
-            user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+            user_class = user_scope(current_user)
             entry_class = normalize_class_identifier(target.get("학급ID") or target.get("class_id"))
-            if not user_class or entry_class != user_class:
+            if not in_scope(entry_class, user_class):
                 raise HTTPException(status_code=403, detail="본인 학급의 협의록만 삭제할 수 있습니다.")
 
         result = delete_minute_entry(source_type, row_index)

@@ -20,7 +20,7 @@ from app.services.ai_insight import (
     generate_medication_response_report
 )
 from app.services.fba_evidence import fba_data_gate
-from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
+from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, user_scope, DIVISIONS, narrow_scope, student_in_scope
 
 logger = logging.getLogger(__name__)
 
@@ -121,17 +121,13 @@ def ai_section_analysis(
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     """② 🤖 5대 심층 영역별(시간/장소/유형/강도/기능) AI 분석 (교사 학급 스코프 격리)"""
-    role = str(current_user.get("role", "")).lower()
-    user_class = None
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    user_class = user_scope(current_user)
 
     normalized_logs = _get_normalized_records(req.start_date, req.end_date)
-    if user_class:
-        from app.api.deps import get_student_class_code
+    if user_class is not None:
         normalized_logs = [
             l for l in normalized_logs
-            if get_student_class_code(str(l.get("student_code", "")).strip()) == user_class
+            if student_in_scope(str(l.get("student_code", "")).strip(), user_class)
         ]
     quality_report = calculate_data_quality_report(normalized_logs)
 
@@ -159,10 +155,7 @@ def ai_cico_analysis(
 ):
     """③ 🤖 CICO AI 성과 분석 및 Tier 조정 의사결정 (교사 학급 스코프 격리)"""
     from app.services.sheets import get_cico_report_data
-    role = str(current_user.get("role", "")).lower()
-    user_class = None
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    user_class = user_scope(current_user)
 
     if req.students_data:
         students = req.students_data
@@ -172,27 +165,24 @@ def ai_cico_analysis(
             return {"analysis": f"데이터 로드 실패: {data['error']}"}
         students = data.get("students", [])
 
-    if user_class:
-        from app.api.deps import get_student_class_code
+    if user_class is not None:
         students = [
             s for s in students
-            if get_student_class_code(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()) == user_class
+            if student_in_scope(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip(), user_class)
         ]
 
     normalized_logs = _get_normalized_records()
-    if user_class:
-        from app.api.deps import get_student_class_code
+    if user_class is not None:
         normalized_logs = [
             l for l in normalized_logs
-            if get_student_class_code(str(l.get("student_code", "")).strip()) == user_class
+            if student_in_scope(str(l.get("student_code", "")).strip(), user_class)
         ]
 
     status_records = fetch_student_status()
-    if user_class:
-        from app.api.deps import get_student_class_code
+    if user_class is not None:
         status_records = [
             s for s in status_records
-            if get_student_class_code(str(s.get("학생코드") or s.get("Code") or s.get("학번") or "").strip()) == user_class
+            if student_in_scope(str(s.get("학생코드") or s.get("Code") or s.get("학번") or "").strip(), user_class)
         ]
 
     result = generate_bcba_cico_analysis(
@@ -205,10 +195,7 @@ def ai_cico_analysis(
 
 
 def _meeting_scope(current_user: Dict[str, Any]):
-    role = str(current_user.get("role", "")).lower()
-    if role in ["admin", "superadmin"]:
-        return None
-    return normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+    return user_scope(current_user)
 
 
 @router.get("/meeting-draft/plan")
@@ -221,7 +208,8 @@ def meeting_draft_plan(current_user: Dict[str, Any] = Depends(require_authentica
     if cls:
         # 기본 기간: 이번 달 1일부터(월초 첫 주면 지난달 1일부터)
         start = today.replace(day=1) if today.day >= 8 else (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-        return {"scope": "class", "title": f"{cls} 학급 협의회", "attendees": M.CLASS_ATTENDEES,
+        unit = "과정" if cls in DIVISIONS else "학급"
+        return {"scope": "class", "title": f"{cls} {unit} 협의회", "attendees": M.CLASS_ATTENDEES,
                 "agenda": M.CLASS_AGENDA, "period_start": start.isoformat(), "period_end": today.isoformat()}
     no = M.pick_session(today)
     return {"scope": "school", "title": "학교행동중재지원팀 협의회", "attendees": M.SCHOOL_ATTENDEES, "selected": no,
@@ -245,7 +233,7 @@ def meeting_draft(req: MeetingDraftRequest, current_user: Dict[str, Any] = Depen
         raise HTTPException(status_code=400, detail="안건이 비었습니다.")
     facts = M.build_facts(req.start_date, req.end_date, cls)
     attendees = M.CLASS_ATTENDEES if cls else M.SCHOOL_ATTENDEES
-    audience = f"{cls} 학급(담임·부담임·교과·지원인력)" if cls else "학교행동중재지원팀(전교)"
+    audience = (f"{cls} 과정(과정부장·담임)" if cls in DIVISIONS else f"{cls} 학급(담임·부담임·교과·지원인력)") if cls else "학교행동중재지원팀(전교)"
     return {"draft": M.generate_draft(req.title, attendees, agenda, facts, audience), "facts": facts}
 
 
@@ -357,10 +345,7 @@ def get_dashboard_summary(
     class_id: str = None,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    role = str(current_user.get("role", "")).lower()
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        class_id = user_class
+    class_id = narrow_scope(current_user, class_id)
     return get_analytics_data(start_date, end_date, class_id)
 
 @router.get("/tier3-report")
@@ -372,10 +357,7 @@ def get_tier3_report(
 ):
     import traceback
     try:
-        role = str(current_user.get("role", "")).lower()
-        if role not in ["admin", "superadmin"]:
-            user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-            class_id = user_class
+        class_id = narrow_scope(current_user, class_id)
         data = get_tier3_report_data(start_date, end_date, class_id)
         if isinstance(data, dict) and "error" in data:
             raise HTTPException(status_code=500, detail=data["error"])

@@ -12,6 +12,9 @@ interface AuthContextType {
     login: (userData: User) => void;
     logout: () => Promise<void>;
     isAdmin: () => boolean;
+    isDivisionHead: () => boolean;
+    isAfterschool: () => boolean;
+    scopeLabel: () => string;
     refreshUser: () => Promise<void>;
 }
 
@@ -21,6 +24,9 @@ const AuthContext = createContext<AuthContextType>({
     login: () => {},
     logout: async () => {},
     isAdmin: () => false,
+    isDivisionHead: () => false,
+    isAfterschool: () => false,
+    scopeLabel: () => "",
     refreshUser: async () => {},
 });
 
@@ -42,7 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     Role: me.role,
                     class_id: me.class_id || "",
                     class_name: me.class_name || "",
-                    name: me.name || ""
+                    name: me.name || "",
+                    scope: me.scope ?? null,
+                    classes: me.classes || []
                 });
             } else {
                 setUser(null);
@@ -70,7 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const login = useCallback((userData: User) => {
         // Update in-memory state only (HttpOnly session cookie is already set by backend /auth/login)
         setUser(userData);
-    }, []);
+        void fetchCurrentUser();  // 열람 범위(scope·classes)는 /me 가 준다
+    }, [fetchCurrentUser]);
 
     const logout = useCallback(async () => {
         try {
@@ -88,9 +97,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isAdmin = useCallback(() => {
         return (user?.role || user?.Role)?.toLowerCase() === "admin";
     }, [user?.role, user?.Role]);
+    const isDivisionHead = useCallback(() => (user?.role || "").toLowerCase() === "division_head", [user?.role]);
+    const isAfterschool = useCallback(() => (user?.role || "").toLowerCase() === "afterschool", [user?.role]);
+    // 화면 머리말에 쓰는 범위 이름: 전교 / 중학교 / 초1-1 / 늘봄
+    const scopeLabel = useCallback(() => {
+        if (isAdmin()) return "전교";
+        if (isAfterschool()) return "늘봄";
+        return user?.scope || user?.class_id || "학급";
+    }, [isAdmin, isAfterschool, user?.scope, user?.class_id]);
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, refreshUser: fetchCurrentUser }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, isAdmin, isDivisionHead, isAfterschool, scopeLabel, refreshUser: fetchCurrentUser }}>
             {children}
         </AuthContext.Provider>
     );
@@ -100,8 +117,10 @@ export function useAuth() {
     return useContext(AuthContext);
 }
 
+export const AFTERSCHOOL_PAGES = ["/behavior", "/logs", "/afterschool", "/protocol", "/settings", "/privacy"];
+
 export function AuthCheck({ children, requireAdmin = false }: { children: ReactNode; requireAdmin?: boolean }) {
-    const { user, loading, isAdmin } = useAuth();
+    const { user, loading, isAdmin, isAfterschool } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
 
@@ -110,12 +129,16 @@ export function AuthCheck({ children, requireAdmin = false }: { children: ReactN
             if (!user && pathname !== "/login") {
                 router.push("/login");
             }
+            // 늘봄실장은 늘봄 기록에 필요한 화면만 쓴다(다른 화면은 학급 자료라 비어 보인다)
+            if (user && isAfterschool() && !AFTERSCHOOL_PAGES.some(p => pathname === p || pathname.startsWith(p + "/"))) {
+                router.replace("/behavior");
+            }
             if (requireAdmin && !isAdmin()) {
                 alert("관리자 권한이 필요합니다.");
                 router.push("/");
             }
         }
-    }, [user, loading, pathname, router, requireAdmin, isAdmin]);
+    }, [user, loading, pathname, router, requireAdmin, isAdmin, isAfterschool]);
 
     if (loading) {
         return (

@@ -15,7 +15,7 @@ from app.services.sheets import (
     set_cico_target_active,
     copy_prev_month_targets,
 )
-from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, get_student_class_code
+from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, get_student_class_code, user_scope, student_in_scope, in_scope
 from app.core.time import now_kst
 
 router = APIRouter()
@@ -70,10 +70,10 @@ def get_cico_report(
         # data is the shared cached object; scope a copy so other users' next
         # request doesn't receive this teacher's filtered list/summary.
         data = dict(data)
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        user_class = user_scope(current_user)
         scoped_students = [
             s for s in data.get("students", [])
-            if get_student_class_code(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()) == user_class
+            if student_in_scope(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip(), user_class)
         ]
         data["students"] = scoped_students
 
@@ -110,11 +110,11 @@ def get_cico_monthly(
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"] and isinstance(data, dict) and "students" in data:
         data = dict(data)  # scope a copy, never the shared cached object
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        user_class = user_scope(current_user)
         scoped_students = []
         for s in data.get("students", []):
             st_code = str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip()
-            if get_student_class_code(st_code) == user_class:
+            if student_in_scope(st_code, user_class):
                 scoped_students.append(s)
         data["students"] = scoped_students
 
@@ -333,11 +333,11 @@ def get_cico_targets(month: int, current_user: Dict[str, Any] = Depends(require_
     _check_month(month)
     data = list_cico_targets(month)
     if str(current_user.get("role", "")).lower() not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        data["targets"] = [t for t in data["targets"] if get_student_class_code(str(t["code"]).strip()) == user_class]
-        data["history"] = {m: [c for c in codes if get_student_class_code(str(c).strip()) == user_class]
+        user_class = user_scope(current_user)
+        data["targets"] = [t for t in data["targets"] if student_in_scope(str(t["code"]).strip(), user_class)]
+        data["history"] = {m: [c for c in codes if student_in_scope(str(c).strip(), user_class)]
                            for m, codes in data.get("history", {}).items()}
-        data["names"] = {c: v for c, v in data.get("names", {}).items() if get_student_class_code(str(c).strip()) == user_class}
+        data["names"] = {c: v for c, v in data.get("names", {}).items() if student_in_scope(str(c).strip(), user_class)}
     return data
 
 
@@ -377,8 +377,8 @@ def _only_my_students(data: Dict[str, Any], current_user: Dict[str, Any]) -> Dic
     """연간 성과: 교사는 학생별 표에 자기 학급만(월별 합계는 학교 전체 그대로)."""
     if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
         return data
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    return {**data, "students": [s for s in data["students"] if get_student_class_code(str(s["code"])) == user_class]}
+    user_class = user_scope(current_user)
+    return {**data, "students": [s for s in data["students"] if student_in_scope(str(s["code"]), user_class)]}
 
 
 @router.get("/annual")

@@ -3084,12 +3084,8 @@ def get_tier3_report_data(start_date: str = None, end_date: str = None, class_id
     # Filter by class_id if specified (class managers see only their class)
     if class_id:
         try:
-            from app.api.deps import normalize_class_identifier
-            target_canonical = normalize_class_identifier(class_id)
-            tier3_students = [
-                s for s in tier3_students
-                if str(s["code"]).startswith(str(class_id)) or normalize_class_identifier(s.get("class")) == target_canonical
-            ]
+            from app.api.deps import in_scope
+            tier3_students = [s for s in tier3_students if in_scope(s.get("class"), class_id)]
         except SheetUnavailable:
             raise
         except Exception:

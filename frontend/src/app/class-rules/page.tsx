@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
-import { API_BASE_URL, CLASS_LIST } from "../constants";
+import { API_BASE_URL, CLASS_LIST, canonicalClassId } from "../constants";
 import { maskName } from "../utils";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 
@@ -23,7 +23,7 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 const billMonth = (ym: string) => { const m = Number(ym.split("-")[1]); return m ? `${m}월` : ""; };
 
 export default function ClassRulesPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDivisionHead } = useAuth();
   const [classId, setClassId] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [rule, setRule] = useState<Behavior | null>(null);
@@ -40,8 +40,8 @@ export default function ClassRulesPage() {
   const [log, setLog] = useState<TokenLogEntry[]>([]);
 
   useEffect(() => {
-    if (!isAdmin() && user?.class_id) setClassId(user.class_id);
-  }, [user, isAdmin]);
+    if (!isAdmin() && !isDivisionHead() && user?.class_id) setClassId(user.class_id);
+  }, [user, isAdmin, isDivisionHead]);
 
   useEffect(() => {
     axios.get(`${API_BASE_URL}/api/v1/class-rules/catalog`).then(res => setCatalog(res.data)).catch(() => {});
@@ -164,12 +164,12 @@ export default function ClassRulesPage() {
       >
         <style>{CSS}</style>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          {isAdmin() && (
+          {(isAdmin() || isDivisionHead()) && (
             <div className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 10 }}>
               <label style={{ fontWeight: 700, fontSize: "0.85rem" }}>학급 선택:</label>
               <select value={classId} onChange={e => setClassId(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1" }}>
                 <option value="">-- 학급 선택 --</option>
-                {CLASS_LIST.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {CLASS_LIST.filter(c => isAdmin() || (user?.classes || []).includes(canonicalClassId(c.id))).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )}

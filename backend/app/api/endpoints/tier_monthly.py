@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user
+from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
 from app.services import tier_monthly as tm
 
 router = APIRouter()
@@ -37,8 +37,8 @@ def get_overview(month: int, current_user: Dict[str, Any] = Depends(require_auth
     _month(month)
     data = tm.overview(month)
     if str(current_user.get("role", "")).lower() not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        data["students"] = [s for s in data["students"] if get_student_class_code(str(s["학생코드"])) == user_class]
+        user_class = user_scope(current_user)
+        data["students"] = [s for s in data["students"] if student_in_scope(str(s["학생코드"]), user_class)]
     return data
 
 

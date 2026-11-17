@@ -17,7 +17,7 @@ const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 1
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
 export default function MeetingPage() {
-    const { user, isAdmin } = useAuth();
+    const { user, isAdmin, isDivisionHead } = useAuth();
     const meetingType = isAdmin() ? "tier1" : `tier1_class_${user?.class_id || user?.id || "unknown"}`;
     const [plan, setPlan] = useState<Plan | null>(null);
     const [no, setNo] = useState(0);
@@ -84,8 +84,8 @@ export default function MeetingPage() {
     return (
         <AuthCheck>
             <AppShell currentPage="meeting" hideDateFilter={true}
-                title={isAdmin() ? "🤝 학교행동중재지원팀 협의회" : "🤝 학급 협의회"}
-                subtitle={isAdmin() ? "전교 자료로 차수별 협의록 초안을 만듭니다 · 고쳐서 저장·인쇄합니다" : "담임·부담임·교과·지원인력이 함께 볼 학급 자료 기반 협의록 초안을 만듭니다"}>
+                title={isAdmin() ? "🤝 학교행동중재지원팀 협의회" : isDivisionHead() ? `🤝 ${user?.scope || ""} 과정 협의회` : "🤝 학급 협의회"}
+                subtitle={isDivisionHead() ? "과정 자료로 협의록 초안을 만듭니다 · 고쳐서 저장·인쇄합니다" : isAdmin() ? "전교 자료로 차수별 협의록 초안을 만듭니다 · 고쳐서 저장·인쇄합니다" : "담임·부담임·교과·지원인력이 함께 볼 학급 자료 기반 협의록 초안을 만듭니다"}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     {msg && <div className="card" style={{ padding: 12, color: msg.startsWith("✓") ? "#15803d" : "#b91c1c" }}>{msg}</div>}
 

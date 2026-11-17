@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user
+from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
 from app.services import tier3_monthly as t3
 
 router = APIRouter()
@@ -48,8 +48,8 @@ def get_overview(month: int, current_user: Dict[str, Any] = Depends(require_auth
     _month(month)
     data = t3.overview(month)
     if str(current_user.get("role", "")).lower() not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        mine = lambda c: get_student_class_code(str(c).strip()) == user_class  # noqa: E731
+        user_class = user_scope(current_user)
+        mine = lambda c: student_in_scope(str(c).strip(), user_class)  # noqa: E731
         data["rows"] = [r for r in data["rows"] if mine(r["code"])]
         data["history"] = {m: {c: v for c, v in h.items() if mine(c)} for m, h in data["history"].items()}
         data["names"] = {c: v for c, v in data["names"].items() if mine(c)}
@@ -86,8 +86,8 @@ def _only_my_students(data: Dict[str, Any], current_user: Dict[str, Any]) -> Dic
     """연간 성과: 교사는 학생별 표에 자기 학급만(월별 합계는 학교 전체 그대로)."""
     if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
         return data
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    return {**data, "students": [s for s in data["students"] if get_student_class_code(str(s["code"])) == user_class]}
+    user_class = user_scope(current_user)
+    return {**data, "students": [s for s in data["students"] if student_in_scope(str(s["code"]), user_class)]}
 
 
 @router.get("/annual")

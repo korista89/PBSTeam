@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user
+from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
 from app.services import tier3plus as t3p
 
 router = APIRouter()
@@ -24,8 +24,8 @@ class ProgramIn(BaseModel):
 def _mine(current_user: Dict[str, Any]):
     if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
         return None
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    return lambda code: get_student_class_code(str(code).strip()) == user_class
+    user_class = user_scope(current_user)
+    return lambda code: student_in_scope(str(code).strip(), user_class)
 
 
 def _ok(result: Dict[str, Any]):

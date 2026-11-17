@@ -6,7 +6,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from app.api.deps import require_authenticated_user, normalize_class_identifier
+from app.api.deps import require_authenticated_user, normalize_class_identifier, user_scope, student_in_scope, in_scope
 
 router = APIRouter()
 
@@ -28,8 +28,8 @@ def _check_class_scope(class_id: str, current_user: Dict[str, Any]) -> str:
     role = str(current_user.get("role", "")).lower()
     if role in ["admin", "superadmin"]:
         return clean
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    if not user_class or clean != user_class:
+    user_class = user_scope(current_user)
+    if not in_scope(clean, user_class):
         raise HTTPException(status_code=403, detail="본인 학급만 접근할 수 있습니다.")
     return clean
 

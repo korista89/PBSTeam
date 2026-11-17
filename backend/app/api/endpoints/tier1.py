@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user
+from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
 from app.services import tier1
 
 router = APIRouter()
@@ -28,8 +28,8 @@ def _allowed(current_user: Dict[str, Any]) -> Optional[set]:
     """관리자는 None(전교), 교사는 자기 학급 학생코드."""
     if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
         return None
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    return {c for c in tier1._enrolled() if get_student_class_code(c) == user_class}
+    user_class = user_scope(current_user)
+    return {c for c in tier1._enrolled() if student_in_scope(c, user_class)}
 
 
 def _ok(result: Dict[str, Any]):

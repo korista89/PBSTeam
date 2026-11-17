@@ -35,7 +35,7 @@ export default function AppShell({
     children,
     hideDateFilter = false
 }: AppShellProps) {
-    const { user, logout, isAdmin } = useAuth();
+    const { user, logout, isAdmin, isDivisionHead, isAfterschool } = useAuth();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     // Date state with localStorage persistence
@@ -65,13 +65,32 @@ export default function AppShell({
     };
 
     const admin = isAdmin();
-    const navGroups: NavGroup[] = [
+    const division = isDivisionHead();
+    const unit = admin ? "전체" : division ? "과정" : "학급";
+    // 계정 종류별 표시: 관리자·과정부장·늘봄실장·담임
+    const roleBadge = admin ? { mark: "관", color: "#f59e0b", text: "관리자" }
+        : division ? { mark: "부", color: "#7c3aed", text: `${user?.scope || ""} 과정부장` }
+        : isAfterschool() ? { mark: "늘", color: "#059669", text: "늘봄실장" }
+        : { mark: "담", color: "#2563eb", text: user?.class_id || "담임교사" };
+    const afterschoolNav: NavGroup[] = [
+        {
+            groupTitle: "늘봄 위기행동",
+            items: [
+                { href: "/behavior", label: "위기행동기록", key: "behavior", icon: "🚨" },
+                { href: "/logs", label: "늘봄 기록 조회", key: "logs", icon: "🗂️" },
+                { href: "/afterschool", label: "늘봄 참여 학생", key: "afterschool", icon: "🌙" },
+                { href: "/protocol", label: "프로토콜 안내", key: "protocol", icon: "📜" },
+                { href: "/settings", label: "내 설정", key: "settings", icon: "⚙️" }
+            ]
+        }
+    ];
+    const navGroups: NavGroup[] = isAfterschool() ? afterschoolNav : [
         {
             groupTitle: "운영",
             items: [
                 // 담임도 관리자와 같은 메뉴를 쓰고, 화면은 자기 학급 범위로 열린다
-                { href: "/", label: admin ? "전체대시보드" : "학급대시보드", key: "dashboard", icon: "📊" },
-                { href: "/briefing", label: admin ? "관리자 브리핑" : "학급 브리핑", key: "briefing", icon: "🗞️" },
+                { href: "/", label: `${unit}대시보드`, key: "dashboard", icon: "📊" },
+                { href: "/briefing", label: admin ? "관리자 브리핑" : `${unit} 브리핑`, key: "briefing", icon: "🗞️" },
                 { href: "/today", label: "오늘 할 일", key: "today", icon: "🧭" },
                 { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" }
             ]
@@ -114,14 +133,14 @@ export default function AppShell({
         {
             groupTitle: "협의회",
             items: [
-                { href: "/meeting", label: admin ? "학교 협의회" : "학급 협의회", key: "meeting", icon: "🤝" }
+                { href: "/meeting", label: admin ? "학교 협의회" : `${unit} 협의회`, key: "meeting", icon: "🤝" }
             ]
         },
         {
             groupTitle: "관리",
             items: [
                 { href: "/tier-status", label: "Tier현황", key: "tier-status", icon: "📋" },
-                { href: "/roster", label: admin ? "학생 명단" : "우리 반 명단", key: "roster", icon: "🏫" },
+                { href: "/roster", label: admin ? "학생 명단" : division ? "과정 학생 명단" : "우리 반 명단", key: "roster", icon: "🏫" },
                 admin
                     ? { href: "/admin", label: "관리자설정", key: "admin", icon: "⚙️" }
                     : { href: "/settings", label: "내 설정", key: "settings", icon: "⚙️" }
@@ -202,15 +221,15 @@ export default function AppShell({
                 <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", background: "rgba(0,0,0,0.2)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
-                            <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: isAdmin() ? "#f59e0b" : "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", color: "white", fontWeight: 700, flexShrink: 0 }}>
-                                {isAdmin() ? "관" : "담"}
+                            <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: roleBadge.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", color: "white", fontWeight: 700, flexShrink: 0 }}>
+                                {roleBadge.mark}
                             </div>
                             <div className="sidebar-link-text" style={{ overflow: "hidden" }}>
                                 <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "white", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
                                     {user.name || user.id}
                                 </div>
                                 <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>
-                                    {isAdmin() ? "관리자" : (user.class_id || "담임교사")}
+                                    {roleBadge.text}
                                 </div>
                             </div>
                         </div>
@@ -284,7 +303,7 @@ export default function AppShell({
 
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", paddingLeft: "8px", borderLeft: "1px solid var(--border-subtle)", flexShrink: 0, whiteSpace: "nowrap" }}>
                             <span className={`badge ${isAdmin() ? "badge-tier2" : "badge-neutral"}`} style={{ fontSize: "0.72rem" }}>
-                                {isAdmin() ? "🛡️ 관리자" : `👨‍🏫 ${user.class_id || user.id}`}
+                                {admin ? "🛡️ 관리자" : `👨‍🏫 ${roleBadge.text}`}
                             </span>
                             <button
                                 onClick={logout}

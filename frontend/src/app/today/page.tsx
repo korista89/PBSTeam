@@ -35,7 +35,7 @@ const SIGNAL_ROUTE: Record<string, string> = {
 
 export default function TodayPage() {
   const router = useRouter();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDivisionHead, scopeLabel } = useAuth();
   const [data, setData] = useState<TodayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export default function TodayPage() {
 
   // 오늘 CICO 체크인 여부 (담임 본인 학급만) — 관리자는 특정 학급이 없어 생략
   useEffect(() => {
-    if (isAdmin() || !user?.class_id) { setCicoItems(null); return; }
+    if (isAdmin() || isDivisionHead() || !user?.class_id) { setCicoItems(null); return; }
     const now = new Date();
     const month = now.getMonth() + 1;
     if (month < 3 || month > 12) { setCicoItems([]); return; }
@@ -78,7 +78,7 @@ export default function TodayPage() {
 
   // 학급 규칙 설정 여부 (담임 본인 학급만)
   useEffect(() => {
-    if (isAdmin() || !user?.class_id) { setClassRulesSet(null); return; }
+    if (isAdmin() || isDivisionHead() || !user?.class_id) { setClassRulesSet(null); return; }
     axios.get(`${apiUrl}/api/v1/class-rules/${encodeURIComponent(user.class_id)}`).then(res => {
       setClassRulesSet(Boolean(res.data.rule));
     }).catch(() => setClassRulesSet(null));
@@ -142,7 +142,7 @@ export default function TodayPage() {
                   : "위에서부터 확인하세요. 처리했으면 '확인 완료'로 닫습니다. 새 기록이 생기면 다시 뜹니다."}
               </div>
               <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
-                {isAdmin() ? "학교 전체" : "우리 학급"} 재학 {data?.total_enrolled || 0}명 · 최근 14일 기록 {data?.recent_14d_events_count || 0}건
+                {isAdmin() ? "학교 전체" : isDivisionHead() ? `${scopeLabel()} 과정` : "우리 학급"} 재학 {data?.total_enrolled || 0}명 · 최근 14일 기록 {data?.recent_14d_events_count || 0}건
               </div>
             </div>
 

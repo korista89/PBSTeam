@@ -5,7 +5,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends
 
 from app.adapters.sheets.client import get_cached, set_cached
-from app.api.deps import require_authenticated_user, normalize_class_identifier
+from app.api.deps import require_authenticated_user, normalize_class_identifier, user_scope, student_in_scope, in_scope
 from app.adapters.sheets.tier_status import TierStatusAdapter
 from app.core.time import today_kst
 from app.services.briefing import build_briefing, semester_range
@@ -21,7 +21,7 @@ def class_scope(current_user: Dict[str, Any]):
     """관리자는 None(전교), 담임은 자기 학급 식별자."""
     if str(current_user.get("role", "")).lower() in ("admin", "superadmin"):
         return None
-    return normalize_class_identifier(current_user.get("class_id") or current_user.get("id")) or "__none__"
+    return user_scope(current_user)
 
 
 def scope_records(records: list, students: list, cls):
@@ -29,8 +29,8 @@ def scope_records(records: list, students: list, cls):
     if cls is None:
         return records, students
     code_cls = {s.student_code.strip(): normalize_class_identifier(s.class_name) for s in TierStatusAdapter.fetch_students()}
-    recs = [r for r in records if code_cls.get(str(r.get("학생코드") or r.get("코드번호") or "").strip()) == cls]
-    studs = [s for s in students if code_cls.get(str(s.get("학생코드", "")).strip()) == cls]
+    recs = [r for r in records if in_scope(code_cls.get(str(r.get("학생코드") or r.get("코드번호") or "").strip()), cls)]
+    studs = [s for s in students if in_scope(code_cls.get(str(s.get("학생코드", "")).strip()), cls)]
     return recs, studs
 
 

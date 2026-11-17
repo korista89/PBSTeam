@@ -9,7 +9,7 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
 
 export default function RosterPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isDivisionHead, scopeLabel } = useAuth();
   const [roster, setRoster] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,8 +33,8 @@ export default function RosterPage() {
     <AuthCheck>
       <AppShell
         currentPage="roster"
-        title={isAdmin() ? "🏫 전교 학급 및 학생 명렬표 관리" : "🏫 우리 반 명단"}
-        subtitle={isAdmin() ? "34개 학급별 학생 명단 및 고유 학생 코드 배정 현황" : "담당 학급 학생 명단과 학생 코드 (수정은 관리자에게 요청)"}
+        title={isAdmin() ? "🏫 전교 학급 및 학생 명렬표 관리" : isDivisionHead() ? `🏫 ${scopeLabel()} 과정 학생 명단` : "🏫 우리 반 명단"}
+        subtitle={isAdmin() ? "34개 학급별 학생 명단 및 고유 학생 코드 배정 현황" : isDivisionHead() ? "관할 학급별 학생 명단과 학생 코드 (수정은 관리자에게 요청)" : "담당 학급 학생 명단과 학생 코드 (수정은 관리자에게 요청)"}
         hideDateFilter={true}
         headerActions={isAdmin() ? (
           <Link href="/roster/edit" className="btn btn-primary">

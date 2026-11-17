@@ -30,7 +30,7 @@ type StepKey = (typeof STEPS)[number]["key"];
 const isT3 = (s: any) => String(s?.Tier3 || "").toUpperCase() === "O" || String(s?.["Tier3+"] || "").toUpperCase() === "O";
 
 export default function InterventionPage() {
-    const { user, isAdmin } = useAuth();
+    const { user, isAdmin, scopeLabel } = useAuth();
     const [students, setStudents] = useState<any[]>([]);
     const [selected, setSelected] = useState<any>(null);
     const [keyword, setKeyword] = useState("");
@@ -131,7 +131,7 @@ export default function InterventionPage() {
                     <div className="card" style={{ padding: 16 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                             <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>👥 학생 ({list.length}명)</div>
-                            <span className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>{isAdmin() ? "전교생" : (user?.class_id || "학급")}</span>
+                            <span className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>{isAdmin() ? "전교생" : scopeLabel()}</span>
                         </div>
                         <input type="text" placeholder="이름 또는 학번 검색..." value={keyword} onChange={e => setKeyword(e.target.value)}
                             style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-subtle)", fontSize: "0.82rem", marginBottom: 8, boxSizing: "border-box" }} />

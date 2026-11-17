@@ -12,7 +12,7 @@ import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport
 const TIME_SLOTS = [
   "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
   "5구간: 초등점심/중등4교시", "6구간: 초등4교시/중등점심", "7구간: 5교시",
-  "8구간: 6교시", "9구간: 7교시", "10구간: 하교시간"
+  "8구간: 6교시", "9구간: 7교시", "10구간: 하교시간", "11구간: 늘봄(교내 방과후)"
 ];
 // 2026.9.10 구글 폼 개편과 동일한 24개 장소 목록 — 두 입력 경로(구글 폼/사이트)가
 // 같은 어휘를 쓰도록 맞춘다(분석 시 장소가 갈라지지 않게 하기 위함).
@@ -140,6 +140,8 @@ function VagueHint({ text }: { text: string }) {
 
 export default function BehaviorForm({ studentId, studentName, onLogSubmitted, defaultMode, studentClass }: { studentId: string, studentName: string, onLogSubmitted: () => void, defaultMode?: string, studentClass?: string }) {
   const { user } = useAuth();
+  // 늘봄실장 기록은 늘봄 시간(11구간)이 기본
+  const defaultSlots: string[] = user?.role === 'afterschool' ? [TIME_SLOTS[10]] : [];
   const [loading, setLoading] = useState(false);
   // 두 갈래: 보고서 사안이 아닌 위기행동은 '데이터만 입력', 제지·개별학생교육지원·상해가
   // 있었으면 '보고서 작성'(보고서 필수). 서버도 같은 규칙으로 검사한다.
@@ -147,7 +149,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
   const [formData, setFormData] = useState({
     행동발생날짜: new Date().toISOString().split('T')[0],
-    시간대: [] as string[],
+    시간대: defaultSlots,
     장소: '', 장소기타: '',
     행동유형: '',
     강도: '',
@@ -240,7 +242,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
       if (res.data.success) {
         setMessage(res.data.status === 'Pending' ? '✅ 위기행동 데이터와 보고서가 제출되었습니다 (관리자 승인 대기).' : '✅ 위기행동 데이터가 저장되었습니다 (보고서 없음).');
         setFormData({
-          행동발생날짜: new Date().toISOString().split('T')[0], 시간대: [], 장소: '', 장소기타: '',
+          행동발생날짜: new Date().toISOString().split('T')[0], 시간대: defaultSlots, 장소: '', 장소기타: '',
           행동유형: '', 강도: '', 기능: '', 기능기타: '',
           발생횟수: '', 발생횟수기타: '', 특기사항: ''
         });

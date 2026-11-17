@@ -5,7 +5,7 @@ from app.services.sheets import (
 )
 from pydantic import BaseModel
 from typing import Optional, Union, Dict, Any
-from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier
+from app.api.deps import require_authenticated_user, require_admin, check_student_scope, normalize_class_identifier, user_scope, student_in_scope, in_scope
 
 router = APIRouter()
 
@@ -42,12 +42,18 @@ def get_all_status(current_user: Dict[str, Any] = Depends(require_authenticated_
     status = fetch_student_status()
     role = str(current_user.get("role", "")).lower()
 
-    if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-        from app.api.deps import get_student_class_code
+    if role == "afterschool":
+        # 늘봄실장: 늘봄 참여 학생의 기본 정보만(Tier 칸은 보내지 않는다)
+        from app.services.afterschool import participant_codes
+        codes = participant_codes()
+        keep = ("학생코드", "학생이름", "학급", "재학여부")
+        status = [{k: s.get(k, "") for k in keep} for s in status if str(s.get("학생코드", "")).strip() in codes]
+        enrolled_count = len(status)
+    elif role not in ["admin", "superadmin"]:
+        user_class = user_scope(current_user)
         status = [
             s for s in status
-            if get_student_class_code(str(s.get("학생코드") or s.get("Code") or s.get("학번") or "").strip()) == user_class
+            if student_in_scope(str(s.get("학생코드") or s.get("Code") or s.get("학번") or "").strip(), user_class)
         ]
         enrolled_count = len([s for s in status if str(s.get("재학여부", s.get("재학상태", "O"))).strip() in ["O", "o", "재학", "True", "true"]])
     else:

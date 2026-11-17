@@ -98,10 +98,12 @@ export default function PictureWordPage() {
   const [loading, setLoading] = useState(false);
 
   // ── 로그인 유저 정보 ─────────────────────────────────────
-  const { user, isAdmin: checkIsAdmin } = useAuth();
+  const { user, isAdmin: checkIsAdmin, isDivisionHead } = useAuth();
   const userClassId = user?.class_id || "";
   const userRole = (user?.role || user?.Role || "").toLowerCase();
   const isAdmin = checkIsAdmin();
+  // 관리자·과정부장은 학급을 골라 본다(과정부장 목록은 서버가 관할 학급으로 좁힌다)
+  const multiClass = isAdmin || isDivisionHead();
 
   // ── 학생 명부 ────────────────────────────────────────────
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -139,7 +141,7 @@ export default function PictureWordPage() {
     // userRole가 로드된 후에만 실행
     if (userRole === "") return;
     // 교사인데 classId가 없으면 로드 안 함
-    if (!isAdmin && !userClassId) return;
+    if (!multiClass && !userClassId) return;
     loadStudents();
     loadSentences();
   }, [userClassId, userRole]);
@@ -161,7 +163,7 @@ export default function PictureWordPage() {
 
   const loadStudents = useCallback(async () => {
     try {
-      const res = isAdmin
+      const res = multiClass
         ? await axios.get(`${API}/students`)
         : await axios.get(`${API}/students/by-class/${userClassId}`);
       const list: Student[] = res.data;
@@ -175,12 +177,12 @@ export default function PictureWordPage() {
       }));
       setAvailableClasses(classes);
       // 기본 학급 선택: 관리자는 첫 번째, 교사는 자기 학급
-      const defaultClass = isAdmin ? classes[0]?.id || "" : String(userClassId);
+      const defaultClass = multiClass ? classes[0]?.id || "" : String(userClassId);
       setSelectedClassId(String(defaultClass));
     } catch (e) {
       console.error(e);
     }
-  }, [isAdmin, userClassId]);
+  }, [multiClass, userClassId]);
 
   useEffect(() => {
     if (!selectedClassId) return;
@@ -232,7 +234,7 @@ export default function PictureWordPage() {
 
   const loadOverview = () =>
     withLoading(async () => {
-      const classIdToUse = isAdmin ? selectedClassId : userClassId;
+      const classIdToUse = multiClass ? selectedClassId : userClassId;
       const url = classIdToUse
         ? `${API}/overview?class_id=${classIdToUse}`
         : `${API}/overview`;
@@ -248,7 +250,7 @@ export default function PictureWordPage() {
 
   const loadMinutes = () =>
     withLoading(async () => {
-      const classIdToUse = isAdmin ? selectedClassId : userClassId;
+      const classIdToUse = multiClass ? selectedClassId : userClassId;
       const url = classIdToUse
         ? `${API}/minutes?class_id=${classIdToUse}`
         : `${API}/minutes`;
@@ -338,11 +340,11 @@ export default function PictureWordPage() {
     }
     try {
       const classInfo = availableClasses.find(
-        (c) => c.id === String(isAdmin ? selectedClassId : userClassId),
+        (c) => c.id === String(multiClass ? selectedClassId : userClassId),
       );
       await axios.post(`${API}/minutes`, {
         ...newMinute,
-        class_id: isAdmin ? selectedClassId : String(userClassId),
+        class_id: multiClass ? selectedClassId : String(userClassId),
         class_name: classInfo?.name || "",
       });
       setNewMinute({ date: "", kind: "수업협의", source: "", content: "" });
@@ -418,7 +420,7 @@ export default function PictureWordPage() {
     <div style={{ width: "220px", flexShrink: 0 }}>
       <div style={cardStyle}>
         {/* 학급 정보 표시 (교사용) */}
-        {!isAdmin && (
+        {!multiClass && (
           <div
             style={{
               padding: "10px",
@@ -444,7 +446,7 @@ export default function PictureWordPage() {
           }}
         >
           👤 학생 선택{" "}
-          {isAdmin
+          {multiClass
             ? ""
             : `(${availableClasses.find((c) => c.id === String(selectedClassId))?.name || ""})`}
         </div>
@@ -2012,7 +2014,7 @@ export default function PictureWordPage() {
           </div>
 
           {/* 학급 선택 (관리자 전용 글로벌 필터) */}
-          {isAdmin && (
+          {multiClass && (
             <div
               style={{
                 ...cardStyle,

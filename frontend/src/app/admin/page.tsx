@@ -8,6 +8,8 @@ import { useAuth } from "../components/AuthProvider";
 import { API_BASE_URL } from "@/app/lib/api";
 
 // 34 Classes Definition
+// 과정부장 계정의 ClassID 값(서버 deps.DIVISIONS와 같아야 한다)
+const DIVISIONS = ["초등저학년", "초등고학년", "중학교", "고등학교", "전공과"];
 const ALL_CLASSES = [
     "유1", "유2",
     "초1-1", "초1-2", "초2-1", "초2-2", "초3-1", "초3-2", "초4-1", "초4-2", "초5-1", "초5-2", "초6-1", "초6-2",
@@ -378,8 +380,11 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
                     onChange={e => setRole(e.target.value)}
                     style={{ width: '100%', padding: '5px' }}
                 >
+                    <option value="class_teacher">담임 (Class Teacher)</option>
                     <option value="teacher">교사 (Teacher)</option>
                     <option value="class_manager">학급관리자 (Class Manager)</option>
+                    <option value="division_head">과정부장 (담당 학급 칸에 과정)</option>
+                    <option value="afterschool">늘봄실장</option>
                     <option value="admin">최고관리자 (Admin)</option>
                 </select>
             </div>
@@ -394,6 +399,9 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
                     {ALL_CLASSES.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                     ))}
+                    <optgroup label="과정(과정부장)">
+                        {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </optgroup>
                 </select>
             </div>
             <div style={{ marginBottom: '8px' }}>
@@ -499,6 +507,9 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
                     {ALL_CLASSES.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                     ))}
+                    <optgroup label="과정(과정부장)">
+                        {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </optgroup>
                 </select>
             </div>
             <div>
@@ -509,6 +520,8 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
                 >
                     <option value="teacher">교사</option>
                     <option value="class_manager">학급관리자</option>
+                    <option value="division_head">과정부장</option>
+                    <option value="afterschool">늘봄실장</option>
                     <option value="admin">관리자</option>
                 </select>
             </div>

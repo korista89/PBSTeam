@@ -107,6 +107,7 @@ const TIME_SLOT_RANGES: Record<string, string> = {
   "8구간": "6교시 · 약 14:00~14:40",
   "9구간": "7교시/방과후 · 약 14:50~15:30",
   "10구간": "하교 및 종례 · 약 15:30~16:00",
+  "11구간": "늘봄(교내 방과후) · 하교 뒤",
 };
 
 function TimeSlotXAxisTick({ x, y, payload }: any) {
@@ -384,8 +385,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [interpretation, setInterpretation] = useState<{ title: string; loading: boolean; text: string } | null>(null);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDivisionHead, scopeLabel } = useAuth();
   const { startDate, endDate } = useDateRange();
+  // 과정부장: 과정 전체('') 또는 과정 안 학급 하나를 골라 본다
+  const [pickClass, setPickClass] = useState("");
   const dashboardRequestRef = React.useRef(0);
 
   const fetchDashboard = useCallback(async (silent = false) => {
@@ -394,7 +397,8 @@ export default function Home() {
     const params = new URLSearchParams();
     params.append("start_date", startDate);
     params.append("end_date", endDate);
-    if (!isAdminUser && user?.class_id) params.append("class_id", user.class_id);
+    if (isDivisionHead()) { if (pickClass) params.append("class_id", pickClass); }
+    else if (!isAdminUser && user?.class_id) params.append("class_id", user.class_id);
     const requestId = ++dashboardRequestRef.current;
     try {
       if (!silent) setLoading(true);
@@ -411,7 +415,7 @@ export default function Home() {
     } finally {
       if (!silent && requestId === dashboardRequestRef.current) setLoading(false);
     }
-  }, [startDate, endDate, user?.class_id, user?.id]);
+  }, [startDate, endDate, user?.class_id, user?.id, pickClass]);
 
   useEffect(() => { void fetchDashboard(); }, [fetchDashboard]);
   useSheetLiveSync(() => fetchDashboard(true));
@@ -449,15 +453,23 @@ export default function Home() {
     <AuthCheck>
       <AppShell
         currentPage="dashboard"
-        title={isAdmin() ? "📊 전교 PBST 종합 통계 대시보드" : "📊 학급 PBST 지원 대시보드"}
-        subtitle={`${user?.class_name || user?.class_id || (isAdmin() ? "전교 통합" : "담임")} · ${startDate} ~ ${endDate} 기준`}
+        title={isAdmin() ? "📊 전교 PBST 종합 통계 대시보드" : isDivisionHead() ? `📊 ${scopeLabel()} 과정 PBST 대시보드` : "📊 학급 PBST 지원 대시보드"}
+        subtitle={`${isDivisionHead() ? (pickClass || `${scopeLabel()} 전체`) : (user?.class_name || user?.class_id || (isAdmin() ? "전교 통합" : "담임"))} · ${startDate} ~ ${endDate} 기준`}
         headerActions={
+          <>
+          {isDivisionHead() && (
+            <select value={pickClass} onChange={e => setPickClass(e.target.value)} className="no-print" aria-label="볼 학급" style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+              <option value="">{scopeLabel()} 전체</option>
+              {(user?.classes || []).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           <button
             onClick={() => window.print()}
             className="btn btn-secondary no-print"
           >
             📄 PDF 내보내기
           </button>
+          </>
         }
       >
         {loading && !data && (
@@ -499,7 +511,7 @@ export default function Home() {
                 <div className="kpi-value" style={{ color: "var(--text-primary)" }}>
                   {summary.enrolled_count || 0}명
                 </div>
-                <div className="kpi-subtext">{isAdmin() ? "전교 긍정적 행동지원 모수" : "우리 반 긍정적 행동지원 모수"}</div>
+                <div className="kpi-subtext">{isAdmin() ? "전교 긍정적 행동지원 모수" : isDivisionHead() ? "과정 긍정적 행동지원 모수" : "우리 반 긍정적 행동지원 모수"}</div>
               </div>
 
               <div className="kpi-card">
@@ -569,7 +581,7 @@ export default function Home() {
             {/* 6종 핵심 차트 (4열 2행: 1행=지원단계별분포 1칸+주별추이 3칸, 2행=시간대/장소/유형/기능) */}
             <div className="section-heading"><span>01</span> 행동 데이터 종합 분석</div>
             <div className="grid-4">
-              <ChartBox title="🎯 지원 단계별 분포" description={isAdmin() ? "전교생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다." : "우리 반 학생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다."}>
+              <ChartBox title="🎯 지원 단계별 분포" description={isAdmin() || isDivisionHead() ? `${scopeLabel()} 학생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다.` : "우리 반 학생이 Tier1~3+ 중 어느 지원 단계에 얼마나 분포되어 있는지 보여줍니다."}>
                 <PieChart>
                   <Pie data={tierDist} cx="50%" cy="50%" outerRadius={110} innerRadius={70} paddingAngle={4} dataKey="value" stroke="none" label={(e: any) => e.value} labelLine={false}>
                     {tierDist.map((entry: any, index: number) => (

@@ -87,7 +87,7 @@ function DayCard({ title, day }: { title: string; day: Day }) {
 }
 
 export default function BriefingPage() {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, isDivisionHead, user } = useAuth();
   const [data, setData] = useState<Briefing | null>(null);
   const [cico, setCico] = useState<{ month: string; ratio: number | null }[]>([]);
   const [cicoReview, setCicoReview] = useState<{ status: string; students: any[] }>({ status: "loading", students: [] });
@@ -123,7 +123,7 @@ export default function BriefingPage() {
   }, []);
   useEffect(() => {
     if (!user) return;
-    if (isAdmin() || !user.class_id) { setClassSupport({ status: "choose" }); return; }
+    if (isAdmin() || isDivisionHead() || !user.class_id) { setClassSupport({ status: "choose" }); return; }
     let active = true;
     const base = `${API_BASE_URL}/api/v1/class-rules/${encodeURIComponent(user.class_id)}`;
     Promise.all([axios.get(base), axios.get(`${base}/tokens`)]).then(([rule, tokens]) => {
@@ -138,7 +138,7 @@ export default function BriefingPage() {
     <AuthCheck>
       <AppShell
         currentPage="briefing"
-        title={isAdmin() ? "🗞️ 관리자 브리핑" : `🗞️ 학급 브리핑${data?.scope ? ` (${data.scope})` : ""}`}
+        title={isAdmin() ? "🗞️ 관리자 브리핑" : `🗞️ ${isDivisionHead() ? "과정" : "학급"} 브리핑${data?.scope ? ` (${data.scope})` : ""}`}
         subtitle={data ? `${kdate(data.today)} 기준 · 급하면 맨 위 10줄만 읽으세요` : "학교에서 있었던 일을 한눈에"}
         hideDateFilter={true}
         headerActions={

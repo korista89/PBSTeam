@@ -84,9 +84,9 @@ def build_facts(start: str, end: str, class_id: Optional[str]) -> Dict[str, Any]
     }
     try:
         from app.services.sheets import get_cico_report_data
-        from app.api.deps import get_student_class_code
+        from app.api.deps import student_in_scope
         rep = get_cico_report_data(d1.month)
-        rows = [r for r in rep.get("students", []) if not class_id or get_student_class_code(str(r.get("code", ""))) == class_id]
+        rows = [r for r in rep.get("students", []) if student_in_scope(str(r.get("code", "")), class_id or None)]
         facts["CICO"] = [f"{r.get('code')} {r.get('target_behavior') or '목표 미설정'} 수행률 {r.get('rate') or '-'} → {r.get('decision') or '-'}" for r in rows]
     except Exception:
         facts["CICO"] = []

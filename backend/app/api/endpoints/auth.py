@@ -97,8 +97,17 @@ def get_current_user_profile(current_user: Dict[str, Any] = Depends(require_auth
         "role": current_user.get("role"),
         "class_id": current_user.get("class_id", ""),
         "class_name": current_user.get("class_name", ""),
-        "name": current_user.get("name", "")
+        "name": current_user.get("name", ""),
+        **_scope_info(current_user),
     }
+
+
+def _scope_info(user: Dict[str, Any]) -> Dict[str, Any]:
+    """화면이 쓰는 열람 범위: scope=None(전교)·과정명·학급, classes=고를 수 있는 학급."""
+    from app.api.deps import user_scope, classes_in_scope, NO_SCOPE
+    scope = user_scope(user)
+    return {"scope": None if scope == NO_SCOPE else scope,
+            "classes": [] if scope == NO_SCOPE else classes_in_scope(scope)}
 
 @router.post("/logout")
 def logout(response: Response):

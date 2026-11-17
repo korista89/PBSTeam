@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user
+from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
 from app.services import sst
 
 router = APIRouter()
@@ -24,8 +24,8 @@ def _scope(current_user: Dict[str, Any]):
     """관리자는 None(전체), 교사는 자기 학급 코드 판별 함수."""
     if str(current_user.get("role", "")).lower() in ["admin", "superadmin"]:
         return None
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    return lambda code: get_student_class_code(str(code).strip()) == user_class
+    user_class = user_scope(current_user)
+    return lambda code: student_in_scope(str(code).strip(), user_class)
 
 
 def _targets_of(program_id: int) -> List[str]:

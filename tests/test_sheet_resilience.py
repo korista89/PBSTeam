@@ -181,7 +181,7 @@ class TeacherScopingDoesNotMutateCacheTests(unittest.TestCase):
         cached = {"month": 9, "students": [{"학생코드": "A"}, {"학생코드": "B"}]}
         teacher = {"role": "teacher", "class_id": "초1-1", "id": "초1-1"}
         with mock.patch.object(cico, "get_monthly_cico_data", return_value=cached), \
-             mock.patch.object(cico, "get_student_class_code", side_effect=lambda c: "초1-1" if c == "A" else "초2-1"):
+             mock.patch("app.api.deps.get_student_class_code", side_effect=lambda c: "초1-1" if c == "A" else "초2-1"):
             scoped = cico.get_cico_monthly(month=9, current_user=teacher)
         self.assertEqual([s["학생코드"] for s in scoped["students"]], ["A"])
         self.assertEqual(len(cached["students"]), 2)

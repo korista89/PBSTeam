@@ -11,7 +11,7 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 
 export default function BehaviorPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, scopeLabel } = useAuth();
   // 학생 프로파일의 "빠른 위기 기록" 버튼 등에서 ?mode=quick&student=코드 로 들어오면
   // 해당 학생을 바로 선택한다(mode=report 면 보고서 작성으로 연다) — 예전 별도 페이지(behavior-log/quick)를
   // 여기 하나로 합쳤기 때문에 진입 경로만 쿼리스트링으로 이어준다.
@@ -89,7 +89,7 @@ export default function BehaviorPage() {
                 👥 학생 목록 ({filteredStudents.length}명)
               </div>
               <span className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>
-                {isAdmin() ? "전교생" : (user?.class_id || "학급")}
+                {isAdmin() ? "전교생" : scopeLabel()}
               </span>
             </div>
 

@@ -61,6 +61,12 @@ npm run dev                            # next dev
 - 작업 전부터 있던 커밋 안 된 변경은 섞지 않고 이번에 바꾼 파일만 올린다. 비밀값·실명 자료가 보이면 멈추고 알린다.
 - 푸시 뒤 Vercel 반영(`gespbs.com`)을 확인하고 보고한다.
 
+## 계정과 열람 범위 (2026-11-17)
+
+- 역할은 관리자(admin)·담임(class_teacher)·**과정부장(division_head)**·**늘봄실장(afterschool)** 네 가지다. 과정부장은 Users.ClassID에 과정명(초등저학년=유치원·초1·초2, 초등고학년, 중학교, 고등학교, 전공과)을 적는다.
+- 범위 판정은 `api/deps.py`의 `user_scope`·`in_scope`·`student_in_scope`·`narrow_scope` 하나로 한다. 새 코드에서 `user_class == ...`로 학급을 직접 비교하지 않는다. 결재(require_admin)는 관리자 전용 그대로다.
+- 늘봄실장은 숨김 탭 `늘봄_참여학생`의 학생만 기록·조회하고, 늘봄 시간 기록은 시간대 `11구간: 늘봄(교내 방과후)`이다.
+
 ## 학생 이름
 
 시트(Log_Main·TierStatus·월별 탭·PW_어휘데이터 등)에는 실명이 아니라 **별칭**(김O준, 이O, 겹치면 김O준-1011)만 저장한다.

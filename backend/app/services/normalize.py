@@ -39,7 +39,7 @@ STANDARD_BEHAVIORS = [
 def parse_time_slots(raw: str) -> List[int]:
     """
     시간대 필드가 쉼표로 다중 선택된 경우 (예: '2구간: 1교시, 5구간: 초등점심/중등4교시')
-    각 구간 번호(1~10)를 정수 배열로 파싱합니다.
+    각 구간 번호(1~11, 11=늘봄)를 정수 배열로 파싱합니다.
     """
     if not raw:
         return []
@@ -52,7 +52,7 @@ def parse_time_slots(raw: str) -> List[int]:
     for m in matches:
         try:
             val = int(m)
-            if 1 <= val <= 10:
+            if 1 <= val <= 11:
                 slots.add(val)
         except ValueError:
             pass
@@ -75,7 +75,9 @@ def parse_time_slots(raw: str) -> List[int]:
             slots.add(7)
         if "6교시" in raw_str:
             slots.add(8)
-        if "7교시" in raw_str or "방과후" in raw_str:
+        if "늘봄" in raw_str:
+            slots.add(11)
+        elif "7교시" in raw_str or "방과후" in raw_str:
             slots.add(9)
         if "하교" in raw_str or "종례" in raw_str:
             slots.add(10)
@@ -86,7 +88,7 @@ def parse_time_slots(raw: str) -> List[int]:
         for p in parts:
             if p.isdigit():
                 val = int(p)
-                if 1 <= val <= 10:
+                if 1 <= val <= 11:
                     slots.add(val)
 
     return sorted(list(slots))
@@ -141,7 +143,8 @@ def resolve_slot_label(slot_no: int, course_level: str = "초") -> str:
         7: "7구간: 5교시",
         8: "8구간: 6교시",
         9: "9구간: 7교시/방과후",
-        10: "10구간: 하교 및 종례"
+        10: "10구간: 하교 및 종례",
+        11: "11구간: 늘봄(교내 방과후)"
     }
     
     if slot_no in slot_map:

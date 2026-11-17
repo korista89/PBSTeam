@@ -71,7 +71,82 @@ def normalize_role(role_val: Optional[str]) -> str:
         return r
     if r in ["class_teacher", "teacher", "담임", "교사"]:
         return "teacher"
+    if r in ["division_head", "과정부장", "부장"]:
+        return "division_head"
+    if r in ["afterschool", "늘봄", "늘봄실장"]:
+        return "afterschool"
     return r
+
+
+# ── 열람 범위 ────────────────────────────────────────────────
+# 관리자: 전교(None). 과정부장: Users.ClassID에 적힌 과정 하나. 담임: 자기 학급 하나.
+# 늘봄실장: 학급 단위 자료가 없다(늘봄 참여 학생만 check_student_scope에서 따로 허용).
+DIVISIONS = ["초등저학년", "초등고학년", "중학교", "고등학교", "전공과"]
+NO_SCOPE = "__none__"
+
+
+def division_of(cls: Optional[str]) -> str:
+    """학급 → 과정. 유치원·초1·초2는 초등저학년, 초3~6은 초등고학년. 예비 학급은 어느 과정에도 들지 않는다."""
+    c = normalize_class_identifier(cls)
+    if c.startswith("유") or c.startswith(("초1-", "초2-")):
+        return "초등저학년"
+    if c.startswith("초"):
+        return "초등고학년"
+    return {"중": "중학교", "고": "고등학교", "전": "전공과"}.get(c[:1], "")
+
+
+def is_admin_user(user: Dict[str, Any]) -> bool:
+    return str(user.get("role", "")).lower() in ["admin", "superadmin"]
+
+
+def user_scope(user: Dict[str, Any]) -> Optional[str]:
+    """None=전교, 과정명(DIVISIONS)=과정, 그 밖=학급 하나. 맞는 학급이 없으면 NO_SCOPE."""
+    if is_admin_user(user):
+        return None
+    role = str(user.get("role", "")).lower()
+    if role == "division_head":
+        cid = str(user.get("class_id", "")).strip()
+        return cid if cid in DIVISIONS else NO_SCOPE
+    if role == "afterschool":
+        return NO_SCOPE
+    return normalize_class_identifier(user.get("class_id") or user.get("id")) or NO_SCOPE
+
+
+def in_scope(cls: Optional[str], scope: Optional[str]) -> bool:
+    """학급(이름·코드 무엇이든)이 범위 안인가."""
+    if scope is None:
+        return True
+    c = normalize_class_identifier(cls)
+    if not c or scope == NO_SCOPE:
+        return False
+    if scope in DIVISIONS:
+        return division_of(c) == scope
+    return c == normalize_class_identifier(scope)
+
+
+def student_in_scope(student_code: str, scope: Optional[str]) -> bool:
+    return scope is None or in_scope(get_student_class_code(str(student_code or "").strip()), scope)
+
+
+def narrow_scope(user: Dict[str, Any], requested: Optional[str] = None) -> Optional[str]:
+    """화면에서 고른 학급·과정이 내 범위 안이면 그것으로 좁히고, 아니면 내 범위 그대로."""
+    base = user_scope(user)
+    req = str(requested or "").strip()
+    if not req:
+        return base
+    if req in DIVISIONS:
+        return req if base is None or req == base else base
+    req = normalize_class_identifier(req)
+    return req if in_scope(req, base) else base
+
+
+def classes_in_scope(scope: Optional[str]) -> list:
+    """범위 안 학급 목록(학교 순서). 화면의 학급 고르기에 쓴다."""
+    seen = []
+    for v in CLASS_MAP.values():
+        if v not in seen and in_scope(v, scope):
+            seen.append(v)
+    return seen
 
 
 _INACTIVE_FLAGS = ["false", "0", "inactive", "x", "no"]
@@ -136,6 +211,13 @@ def require_authenticated_user(current_user: Dict[str, Any] = Depends(get_curren
     return current_user
 
 
+def require_school_view(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """관리자 또는 과정부장(여러 학급을 보는 계정). 결과는 user_scope로 다시 좁힌다."""
+    if not is_admin_user(current_user) and str(current_user.get("role", "")).lower() != "division_head":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: 관리자·과정부장만 볼 수 있습니다.")
+    return current_user
+
+
 def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Requires ADMIN role. Returns HTTP 403 if user is not admin."""
     if current_user.get("role") not in ["admin", "superadmin"]:
@@ -171,12 +253,13 @@ def check_student_scope(student_code: str, current_user: Dict[str, Any]) -> None
     """
     Enforces student-level authorization:
     - Admin: School-wide access permitted.
+    - Division head: students of classes in their division.
+    - After-school lead: students on the 늘봄 participant list.
     - Teacher: Access permitted ONLY if student's class matches teacher's assigned class.
     - Raises HTTP 404 if student does not exist.
     - Raises HTTP 403 if student belongs to another class.
     """
-    role = str(current_user.get("role", "")).lower()
-    if role in ["admin", "superadmin"]:
+    if is_admin_user(current_user):
         return
 
     student_class = get_student_class_code(student_code)
@@ -186,8 +269,13 @@ def check_student_scope(student_code: str, current_user: Dict[str, Any]) -> None
             detail=f"Student with code '{student_code}' not found."
         )
 
-    user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
-    if not user_class or student_class != user_class:
+    if str(current_user.get("role", "")).lower() == "afterschool":
+        from app.services.afterschool import participant_codes
+        if str(student_code).strip() in participant_codes():
+            return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="늘봄 참여 학생으로 등록된 학생만 볼 수 있습니다.")
+
+    if not in_scope(student_class, user_scope(current_user)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: You do not have permission to access student data outside your assigned class."

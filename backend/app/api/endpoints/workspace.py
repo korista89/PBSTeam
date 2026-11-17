@@ -8,7 +8,7 @@ from app.domain.models import BehaviorEvent, DecisionSignal, SignalSeverity
 from app.adapters.sheets.tier_status import TierStatusAdapter
 from app.adapters.sheets.log_main import LogMainAdapter
 from app.services.decision.signals import evaluate_decision_signals
-from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier
+from app.api.deps import require_authenticated_user, check_student_scope, normalize_class_identifier, user_scope, student_in_scope, in_scope
 
 router = APIRouter()
 
@@ -27,9 +27,9 @@ def get_today_decision_center(current_user: Dict[str, Any] = Depends(require_aut
 
     role = str(current_user.get("role", "")).lower()
     if role not in ["admin", "superadmin"]:
-        user_class = normalize_class_identifier(current_user.get("class_id") or current_user.get("id"))
+        user_class = user_scope(current_user)
         from app.api.deps import get_student_class_code
-        students = [s for s in students if get_student_class_code(s.student_code) == user_class]
+        students = [s for s in students if student_in_scope(s.student_code, user_class)]
         student_codes = {s.student_code for s in students}
         all_events = [e for e in all_events if e.student_code in student_codes]
 

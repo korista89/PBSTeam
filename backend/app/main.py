@@ -193,6 +193,8 @@ from app.api.endpoints import tier1 as tier1_endpoints
 app.include_router(tier1_endpoints.router, prefix="/api/v1/tier1", tags=["tier1"])
 from app.api.endpoints import tier3plus as tier3plus_endpoints
 app.include_router(tier3plus_endpoints.router, prefix="/api/v1/tier3plus", tags=["tier3plus"])
+from app.api.endpoints import afterschool as afterschool_endpoints
+app.include_router(afterschool_endpoints.router, prefix="/api/v1/afterschool", tags=["afterschool"])
 app.include_router(meeting_notes.router, prefix="/api/v1/meeting-notes", tags=["meeting-notes"])
 from app.api.endpoints import board
 app.include_router(board.router, prefix="/api/v1/board", tags=["board"])
