@@ -5,7 +5,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import { useAuth } from './AuthProvider';
 import DropdownTextarea from './DropdownTextarea';
-import { maskName } from '../utils';
+import { maskName, todayStr } from '../utils';
 import ReportSheet from './ReportSheet';
 import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES, autoFill, duplicatesB, OPTIONAL_FOLLOWUPS, NOT_APPLICABLE } from '../crisisReport';
 
@@ -148,7 +148,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
   const [mode, setModeState] = useState<'data' | 'report'>(defaultMode === 'report' ? 'report' : 'data');
 
   const [formData, setFormData] = useState({
-    행동발생날짜: new Date().toISOString().split('T')[0],
+    행동발생날짜: todayStr(),
     시간대: defaultSlots,
     장소: '', 장소기타: '',
     행동유형: '',
@@ -242,7 +242,7 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
       if (res.data.success) {
         setMessage(res.data.status === 'Pending' ? '✅ 위기행동 데이터와 보고서가 제출되었습니다 (관리자 승인 대기).' : '✅ 위기행동 데이터가 저장되었습니다 (보고서 없음).');
         setFormData({
-          행동발생날짜: new Date().toISOString().split('T')[0], 시간대: defaultSlots, 장소: '', 장소기타: '',
+          행동발생날짜: todayStr(), 시간대: defaultSlots, 장소: '', 장소기타: '',
           행동유형: '', 강도: '', 기능: '', 기능기타: '',
           발생횟수: '', 발생횟수기타: '', 특기사항: ''
         });

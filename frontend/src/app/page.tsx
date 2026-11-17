@@ -14,7 +14,7 @@ import AppShell from "./components/AppShell";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
 import SectionAIButton from "./components/SectionAIButton";
 import ReadableAIResult from "./components/ReadableAIResult";
-import { maskName, formatWeek } from "./utils";
+import { maskName, formatWeek, todayStr } from "./utils";
 import { useSheetLiveSync } from "./hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
 
@@ -830,7 +830,7 @@ function TeamRequestSuggestionCard({
     try {
       await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
         meeting_type: "teacher_request",
-        date: new Date().toISOString().split('T')[0],
+        date: todayStr(),
         content: result,
         author: user?.id || "Teacher"
       });

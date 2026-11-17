@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { todayStr } from "../utils";
 import axios from "axios";
 import {
     ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
@@ -66,8 +67,8 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
     const [chart, setChart] = useState<any>(null);
     const [showNewForm, setShowNewForm] = useState(false);
     const [newForm, setNewForm] = useState({ type: "문제행동", definition: "", measurement_type: "빈도", baseline: "", bip_start_date: defaultStart, bip_end_date: "" });
-    const [dataForm, setDataForm] = useState({ date: new Date().toISOString().split("T")[0], value: "", memo: "" });
-    const [fidelityForm, setFidelityForm] = useState({ date: new Date().toISOString().split("T")[0], implemented: "O", memo: "" });
+    const [dataForm, setDataForm] = useState({ date: todayStr(), value: "", memo: "" });
+    const [fidelityForm, setFidelityForm] = useState({ date: todayStr(), implemented: "O", memo: "" });
     const [decision, setDecision] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
     const [editingDataUuid, setEditingDataUuid] = useState<string>("");
     const [editDataDraft, setEditDataDraft] = useState({ date: "", value: "", memo: "" });

@@ -9,15 +9,13 @@
  * 다시 계산한다 - 같은 날 안에서 페이지를 옮겨다닐 때 고른 기간은 유지되고,
  * 날짜가 바뀌면 자동으로 최신 기준으로 리셋된다.
  */
-export function todayStr(): string {
-  return new Date().toISOString().split('T')[0];
+// 한국 시간 기준 날짜(YYYY-MM-DD). toISOString()은 UTC라 오전 0~9시에 어제 날짜가 나온다.
+export function todayStr(offsetDays = 0): string {
+  return new Date(Date.now() + 9 * 3600_000 + offsetDays * 86400_000).toISOString().slice(0, 10);
 }
 
 export function computeDefaultDateRange(): { start: string; end: string } {
-  const today = new Date();
-  const prev = new Date();
-  prev.setDate(today.getDate() - 28);
-  return { start: prev.toISOString().split('T')[0], end: today.toISOString().split('T')[0] };
+  return { start: todayStr(-28), end: todayStr() };
 }
 
 export function persistDateRange(start: string, end: string) {

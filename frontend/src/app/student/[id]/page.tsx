@@ -17,7 +17,7 @@ import AppShell from "../../components/AppShell";
 import { useSheetLiveSync } from "../../hooks/useSheetLiveSync";
 import ReadableAIResult from "../../components/ReadableAIResult";
 import LogDetailPanel from "../../components/LogDetailPanel";
-import { maskName } from "../../utils";
+import { maskName, todayStr } from "../../utils";
 import { API_BASE_URL } from "@/app/lib/api";
 
 // ── 디자인 토큰(이 화면 전용) ────────────────────────────────
@@ -774,7 +774,7 @@ function ConsultationLog({ studentCode }: { studentCode: string }) {
     setLoading(true);
     try {
       await axios.post(`${apiUrl}/api/v1/meeting-notes`, {
-        meeting_type: "consultation", date: new Date().toISOString().split('T')[0],
+        meeting_type: "consultation", date: todayStr(),
         content, author: user?.id || "Admin", student_code: studentCode
       });
       setContent(""); fetchNotes();

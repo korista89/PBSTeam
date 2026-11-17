@@ -191,27 +191,27 @@ export default function LoginPage() {
                         <button
                             onClick={() => { setLoginType("teacher"); setPassword(""); setError(""); }}
                             style={{
-                                flex: 1, padding: '12px', border: 'none',
+                                flex: 1, padding: '12px 4px', border: 'none',
                                 background: loginType === "teacher" ? 'white' : 'transparent',
                                 borderRadius: '8px',
                                 boxShadow: loginType === "teacher" ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
                                 color: loginType === "teacher" ? '#1e3a8a' : '#64748b',
-                                fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer',
+                                fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', whiteSpace: 'nowrap',
                                 transition: 'all 0.2s'
                             }}
                         >
-                            👨‍🏫 담임교사
+                            👨‍🏫 담임
                         </button>
                         <button
                             type="button"
                             onClick={() => { setLoginType("staff"); setPassword(""); setError(""); }}
                             style={{
-                                flex: 1, padding: '12px', border: 'none',
+                                flex: 1, padding: '12px 4px', border: 'none',
                                 background: loginType === "staff" ? 'white' : 'transparent',
                                 borderRadius: '8px',
                                 boxShadow: loginType === "staff" ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
                                 color: loginType === "staff" ? '#6d28d9' : '#64748b',
-                                fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer',
+                                fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', whiteSpace: 'nowrap',
                                 transition: 'all 0.2s'
                             }}
                         >
@@ -220,12 +220,12 @@ export default function LoginPage() {
                         <button
                             onClick={() => { setLoginType("admin"); setPassword(""); setError(""); }}
                             style={{
-                                flex: 1, padding: '12px', border: 'none',
+                                flex: 1, padding: '12px 4px', border: 'none',
                                 background: loginType === "admin" ? 'white' : 'transparent',
                                 borderRadius: '8px',
                                 boxShadow: loginType === "admin" ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
                                 color: loginType === "admin" ? '#ef4444' : '#64748b',
-                                fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer',
+                                fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', whiteSpace: 'nowrap',
                                 transition: 'all 0.2s'
                             }}
                         >

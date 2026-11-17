@@ -11,7 +11,7 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 
 export default function BehaviorPage() {
-  const { user, isAdmin, scopeLabel } = useAuth();
+  const { user, isAdmin, isAfterschool, scopeLabel } = useAuth();
   // 학생 프로파일의 "빠른 위기 기록" 버튼 등에서 ?mode=quick&student=코드 로 들어오면
   // 해당 학생을 바로 선택한다(mode=report 면 보고서 작성으로 연다) — 예전 별도 페이지(behavior-log/quick)를
   // 여기 하나로 합쳤기 때문에 진입 경로만 쿼리스트링으로 이어준다.
@@ -116,7 +116,9 @@ export default function BehaviorPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
               {filteredStudents.length === 0 ? (
                 <div style={{ padding: "24px 12px", textAlign: "center", color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                  검색 결과가 없습니다.
+                  {isAfterschool() && !students.length ? (
+                    <>늘봄 참여 학생이 아직 없습니다.<br /><a href="/afterschool" style={{ fontWeight: 700, color: "#059669" }}>🌙 늘봄 참여 학생 고르기 →</a></>
+                  ) : "검색 결과가 없습니다."}
                 </div>
               ) : (
                 filteredStudents.map((s) => {

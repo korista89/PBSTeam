@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { todayStr } from "../utils";
 import axios from "axios";
 
 // ====== 회의록/협의기록 섹션 (학급 공통 또는 학생별, 누적기록) ======
@@ -25,7 +26,7 @@ export default function MeetingNotesSection({ apiUrl, meetingType, title, studen
     if (!content.trim()) return;
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/v1/meeting-notes`, { meeting_type: meetingType, date: new Date().toISOString().split('T')[0], content, author: "Teacher", student_code: studentCode || "" });
+      await axios.post(`${apiUrl}/api/v1/meeting-notes`, { meeting_type: meetingType, date: todayStr(), content, author: "Teacher", student_code: studentCode || "" });
       setContent(""); fetchNotes(); alert("저장되었습니다.");
     } catch { alert("저장 실패"); } finally { setLoading(false); }
   };
