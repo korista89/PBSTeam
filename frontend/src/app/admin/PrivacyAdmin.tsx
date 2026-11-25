@@ -40,7 +40,8 @@ export default function PrivacyAdmin() {
         setBusy(true);
         try {
             const pre = (await axios.post(`${API_BASE_URL}/api/v1/privacy/wizard/${path}`, { confirm: "" }, { timeout: 280000 })).data;
-            const typed = window.prompt(`[${label}] 점검 결과: ${JSON.stringify(pre.cells || pre.accounts || pre, null, 0).slice(0, 400)}\n\n실행하려면 '${word}'를 입력하세요.`);
+            const amb = pre.ambiguous && Object.keys(pre.ambiguous).length ? `\n누구인지 못 가려 그대로 둘 칸(동명이인): ${JSON.stringify(pre.ambiguous)}` : "";
+            const typed = window.prompt(`[${label}] 점검 결과: ${JSON.stringify(pre.cells || pre.accounts || pre, null, 0).slice(0, 400)}${amb}\n\n실행하려면 '${word}'를 입력하세요.`);
             if (typed !== word) { say(`${label}: 취소`); return; }
             const done = (await axios.post(`${API_BASE_URL}/api/v1/privacy/wizard/${path}`, { confirm: word }, { timeout: 280000 })).data;
             say(`✅ ${label} 완료 ${done.written != null ? `(${done.written}칸)` : ""}`);

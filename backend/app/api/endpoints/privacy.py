@@ -91,19 +91,16 @@ class WizardIn(BaseModel):
 def wizard_reset_passwords(req: WizardIn, current_user: Dict[str, Any] = Depends(require_account_admin)):
     """① 사용 중인 전 계정(본인 제외) 비밀번호를 무작위로 바꾸고 배부표를 이번 응답에만 준다."""
     _require_2027()
-    from app.services.sheets import get_all_users, update_user_password
+    from app.services.sheets import get_all_users, update_user_passwords_bulk
     users = [u for u in get_all_users()
              if str(u.get("Active", "true")).strip().lower() not in ("false", "0", "inactive", "x", "no")
              and str(u.get("ID")) != current_user.get("sub")]
     if req.confirm != "초기화":
         return {"preview": True, "accounts": len(users)}
     alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
-    table = []
-    for u in users:
-        temp = "".join(secrets.choice(alphabet) for _ in range(8))
-        if "error" not in update_user_password(str(u["ID"]), temp):
-            table.append({"id": u["ID"], "temp_password": temp})
-    return {"preview": False, "table": table}
+    temps = {str(u["ID"]): "".join(secrets.choice(alphabet) for _ in range(8)) for u in users}
+    done = update_user_passwords_bulk(temps)
+    return {"preview": False, "table": [{"id": i, "temp_password": temps[i]} for i in done]}
 
 
 @router.post("/wizard/purge-graduates")

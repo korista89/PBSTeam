@@ -93,39 +93,97 @@ def ensure_analyzable(code: str) -> None:
 SKIP_TABS = {"Users", "날짜 관리", "평가문장", "접속기록", CONSENT_TAB}
 SKIP_COLS = {"입력교사명", "Author", "RecordedBy", "입력자", "ID", "Password", "작성자", "UpdatedBy", "By", "수정자", "담당"}
 NAME_COLS = {"학생명", "학생이름", "학생명(코드)", "Name"}
+KEY_COLS = {"학생코드", "StudentCode"}
+
+
+def build_maps(students: Iterable[Dict[str, Any]], year: int):
+    """학생마다 익명코드 하나. 돌려주는 값: ({표기: 익명코드}(표기가 한 학생뿐), {겹치는 표기: [(학생코드, 학급, 익명코드)]}).
+    동명이인처럼 표기가 같은 학생도 서로 다른 코드를 받는다(같은 코드로 합쳐지면 두 학생 기록이 섞인다)."""
+    students = list(students)
+    taken = {str(s.get("학생이름", "")).strip() for s in students if is_anon_code(s.get("학생이름"))}
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for s in students:
+        name = str(s.get("학생이름", "")).strip()
+        if name and not is_anon_code(name):
+            groups.setdefault(name, []).append(s)
+    code_map: Dict[str, str] = {}
+    dup: Dict[str, List[Tuple[str, str, str]]] = {}
+    for name, ss in groups.items():
+        codes = []
+        for _ in ss:
+            codes.append(new_anon_code(taken, year))
+            taken.add(codes[-1])
+        if len(ss) == 1:
+            code_map[name] = codes[0]
+        else:
+            dup[name] = [(str(s.get("학생코드", "")).strip(), str(s.get("학급", "")).strip(), c) for s, c in zip(ss, codes)]
+    return code_map, dup
 
 
 def build_code_map(students: Iterable[Dict[str, Any]], year: int) -> Dict[str, str]:
-    """{이전 표기(별칭): 익명코드}. 이미 익명코드인 학생은 그대로 두고, 같은 표기는 같은 코드."""
-    taken = {str(s.get("학생이름", "")).strip() for s in students if is_anon_code(s.get("학생이름"))}
-    out: Dict[str, str] = {}
-    for s in students:
-        name = str(s.get("학생이름", "")).strip()
-        if not name or is_anon_code(name) or name in out:
-            continue
-        out[name] = new_anon_code(taken, year)
-        taken.add(out[name])
-    return out
+    """{표기: 익명코드} — 표기가 한 학생뿐인 것만(겹치는 표기는 build_maps의 두 번째 값)."""
+    return build_maps(students, year)[0]
 
 
 def _bare(name: str) -> str:
     return re.sub(r"\(\d+\)$", "", name.strip()).strip()
 
 
-def plan_changes(tabs: Dict[str, List[List[str]]], code_map: Dict[str, str]) -> Dict[str, List[Tuple[int, int, str, str]]]:
-    """{탭: [(행, 열, 이전값, 새값)]}. 이름 칸은 통째로, 그 밖의 글 칸은 글 속 표기를 바꾼다. 교사 칸은 건드리지 않는다."""
-    # '김O준-2513'처럼 접미사가 붙은 표기와 접미사 없는 표기를 모두 찾는다
-    text_map = dict(code_map)
+def _base_map(code_map: Dict[str, str], others: Iterable[str] = ()) -> Dict[str, str]:
+    """'김O준-2513'처럼 접미사가 붙은 표기는 접미사 없는 표기로도 찾는다(그 바탕을 쓰는 표기가 하나뿐일 때).
+    others = 겹치는 표기들(바탕이 겹치는지 셀 때 함께 센다)."""
+    out = dict(code_map)
+    all_aliases = list(code_map) + list(others)
     for alias, code in code_map.items():
         base = alias.split("-")[0]
-        if base != alias and sum(1 for a in code_map if a.split("-")[0] == base) == 1:
-            text_map.setdefault(base, code)
+        if base != alias and not is_anon_code(alias) and sum(1 for a in all_aliases if a.split("-")[0] == base) == 1:
+            out.setdefault(base, code)
+    return out
+
+
+def _row_extra(row: List[Any], kc, nc, cc, dup) -> Tuple[Dict[str, str], List[str]]:
+    """겹치는 표기를 이 행의 학생코드(없으면 학급명, 학급ID=학생코드 앞자리)로 가린다. (정해진 것, 못 정한 표기)"""
+    cell = lambda i: str(row[i]).strip() if i is not None and i < len(row) else ""
+    code = cell(kc)
+    if not code:
+        m = re.search(r"\((\d+)\)$", cell(nc))
+        code = m.group(1) if m else ""
+    classes = [cell(i) for i in cc if cell(i)]
+    extra, unknown = {}, []
+    for alias, cands in dup.items():
+        pick = [a for sc, cl, a in cands if code and sc == code] or \
+            [a for sc, cl, a in cands if any(c == cl or (c.isdigit() and sc.startswith(c)) for c in classes)]
+        if len(pick) == 1:
+            extra[alias] = pick[0]
+            base = alias.split("-")[0]
+            if base != alias:
+                extra.setdefault(base, pick[0])
+        else:
+            unknown.append(alias)
+    return extra, unknown
+
+
+def plan_changes(tabs: Dict[str, List[List[str]]], code_map: Dict[str, str],
+                 dup: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
+                 ambiguous: Optional[Dict[str, int]] = None) -> Dict[str, List[Tuple[int, int, str, str]]]:
+    """{탭: [(행, 열, 이전값, 새값)]}. 이름 칸은 통째로, 그 밖의 글 칸은 글 속 표기를 바꾼다. 교사 칸은 건드리지 않는다.
+    dup(겹치는 표기)는 행의 학생코드·학급으로 가리고, 못 가린 칸은 그대로 두고 ambiguous에 센다."""
+    dup = dup or {}
+    text_map = _base_map(code_map, dup)
     changes: Dict[str, List[Tuple[int, int, str, str]]] = {}
     for tab, rows in tabs.items():
         if tab in SKIP_TABS or not rows:
             continue
         hdr = rows[0]
+        kc = next((i for i, h in enumerate(hdr) if h in KEY_COLS), None)
+        nc = next((i for i, h in enumerate(hdr) if h in NAME_COLS), None)
+        cc = [i for i, h in enumerate(hdr) if h in ("학급", "학급명", "학급ID")]
         for ri in range(1, len(rows)):
+            rmap, unknown = text_map, []
+            if dup:
+                extra, unknown = _row_extra(rows[ri], kc, nc, cc, dup)
+                # 못 가린 표기는 자기 자신으로 두어, 그 안의 바탕 표기가 다른 학생 코드로 바뀌지 않게 한다
+                rmap = {**text_map, **{a: a for a in unknown}, **extra}
             for ci, cell in enumerate(rows[ri]):
                 if not isinstance(cell, str) or not cell or cell.startswith("="):
                     continue
@@ -134,12 +192,16 @@ def plan_changes(tabs: Dict[str, List[List[str]]], code_map: Dict[str, str]) -> 
                     continue
                 if h in NAME_COLS:
                     m = re.match(r"^(.*?)(\(\d+\))?$", cell.strip())
-                    code = text_map.get(m.group(1).strip())
+                    code = rmap.get(m.group(1).strip())
                     new = code + (m.group(2) or "") if code else cell
                 else:
-                    new = anonymize_text(cell, text_map)
+                    new = anonymize_text(cell, rmap)
                 if new != cell:
                     changes.setdefault(tab, []).append((ri, ci, cell, new))
+                if unknown and ambiguous is not None and any(
+                        (h in NAME_COLS and _bare(cell) == a) or (h not in NAME_COLS and anonymize_text(new, {a: "#"}) != new)
+                        for a in unknown):
+                    ambiguous[tab] = ambiguous.get(tab, 0) + 1
     return changes
 
 
@@ -163,15 +225,12 @@ def write_changes(ss, changes: Dict[str, List[Tuple[int, int, str, str]]], use_o
 
 
 def read_tabs(ss) -> Dict[str, List[List[str]]]:
-    out = {}
-    for ws in ss.worksheets():
-        if ws.title in SKIP_TABS:
-            continue
-        try:
-            out[ws.title] = ws.get_all_values(value_render_option="FORMULA")
-        except Exception:
-            logger.warning("탭 읽기 실패: %s", ws.title, exc_info=True)
-    return out
+    """모든 탭을 읽기 요청 한 번으로 읽는다(탭마다 읽으면 분당 읽기 한도 60회를 넘는다)."""
+    titles = [ws.title for ws in ss.worksheets() if ws.title not in SKIP_TABS]
+    if not titles:
+        return {}
+    res = ss.values_batch_get([f"'{t}'" for t in titles], params={"valueRenderOption": "FORMULA"})
+    return {t: vr.get("values", []) for t, vr in zip(titles, res.get("valueRanges", []))}
 
 
 def migrate_to_anon(apply: bool, year: Optional[int] = None) -> Dict[str, Any]:
@@ -179,23 +238,27 @@ def migrate_to_anon(apply: bool, year: Optional[int] = None) -> Dict[str, Any]:
     from app.services.sheets import fetch_student_status, clear_cache
     year = year or now_kst().year
     students = [s for s in fetch_student_status() if str(s.get("재학여부", "")).strip().upper() != "X"]
-    code_map = build_code_map(students, year)
+    code_map, dup = build_maps(students, year)
     targets = [("main", open_main_sheet())]
     try:
         from app.adapters.sheets.client import open_pw_sheet
         targets.append(("pw", open_pw_sheet()))
     except Exception:
         pass
-    summary, total = {}, 0
+    summary, ambiguous, total = {}, {}, 0
     for label, ss in targets:
-        changes = plan_changes(read_tabs(ss), code_map)
+        amb: Dict[str, int] = {}
+        changes = plan_changes(read_tabs(ss), code_map, dup, amb)
         summary.update({f"{label}:{t}": len(c) for t, c in changes.items()})
+        ambiguous.update({f"{label}:{t}": n for t, n in amb.items()})
         if apply and changes:
             total += write_changes(ss, changes)
     if apply:
         clear_cache()
-    return {"students": len(code_map), "cells": summary, "written": total,
-            "code_map": {code: alias for alias, code in code_map.items()}}
+    reverse = {code: alias for alias, code in code_map.items()}
+    reverse.update({c: alias for alias, cands in dup.items() for _, _, c in cands})
+    return {"students": len(reverse), "same_label_students": sum(len(c) for c in dup.values()),
+            "cells": summary, "ambiguous": ambiguous, "written": total, "code_map": reverse}
 
 
 # ── 졸업·전출생 서술 기록 파기 ─────────────────────────────
@@ -203,7 +266,6 @@ def migrate_to_anon(apply: bool, year: Optional[int] = None) -> Dict[str, Any]:
 NARRATIVE_HINTS = ("특기사항", "경위", "방법", "내용", "상해를 입은 사람", "담당한 교사", "메모", "Memo", "Content",
                    "Hypothesis", "Strategies", "Plan", "Definition", "Goals", "Info", "Considerations", "Report",
                    "Crisis", "Home", "Support", "BIP(JSON)", "팀 협의", "목표행동", "15열", "Wish")
-KEY_COLS = {"학생코드", "StudentCode"}
 PURGED = "[파기]"
 
 

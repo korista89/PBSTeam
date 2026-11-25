@@ -54,3 +54,38 @@ def test_rollback_map_restores():
     tabs = {"Log_Main": [["학생명", "특기사항(기타)"], [code + "(3124)", f"{code}이 울음"]]}
     back = {(r, c): new for r, c, old, new in Z.plan_changes(tabs, {code: "김O준"})["Log_Main"]}
     assert back == {(1, 0): "김O준(3124)", (1, 1): "김O준이 울음"}
+
+
+def test_same_label_students_get_own_codes():
+    students = [{"학생이름": "이O", "학생코드": "2524", "학급": "초5-2"},
+                {"학생이름": "이O", "학생코드": "5123", "학급": "전1-2"},
+                {"학생이름": "박O"}]
+    cm, dup = Z.build_maps(students, 2027)
+    a, b = (c for _, _, c in dup["이O"])
+    assert a != b and "이O" not in cm
+    tabs = {"TierStatus": [["학생코드", "학급", "학생이름"], ["2524", "초5-2", "이O"], ["5123", "전1-2", "이O"]],
+            "Log_Main": [["학생명", "특기사항(기타)"], ["이O(5123)", "이O가 울음"]],
+            "CICO_설정": [["학급", "학생", "메모"], ["초5-2", "x", "이O 칭찬"]],
+            "메모": [["내용"], ["이O와 박O 다툼"]]}
+    amb = {}
+    ch = Z.plan_changes(tabs, cm, dup, amb)
+    ts = {(r, c): n for r, c, o, n in ch["TierStatus"]}
+    assert ts == {(1, 2): a, (2, 2): b}                                    # 학생코드로 가림
+    assert {(r, c): n for r, c, o, n in ch["Log_Main"]} == {(1, 0): f"{b}(5123)", (1, 1): f"{b}가 울음"}  # 이름 칸 (코드)
+    assert [n for *_, n in ch["CICO_설정"]] == [f"{a} 칭찬"]                 # 학급으로 가림
+    assert [n for *_, n in ch["메모"]] == [f"이O와 {cm['박O']} 다툼"]       # 못 가린 표기는 그대로
+    assert amb == {"메모": 1}
+    back = Z.plan_changes({"TierStatus": [["학생이름"], [a], [b]]}, {a: "이O", b: "이O"})
+    assert [n for *_, n in back["TierStatus"]] == ["이O", "이O"]
+
+
+def test_unresolved_label_not_split_into_other_student():
+    # '김O준-2513'을 두 학생이 함께 쓰고, '김O준-1011'은 한 학생만 쓴다
+    students = [{"학생이름": "김O준-2513", "학생코드": "2513", "학급": "A"},
+                {"학생이름": "김O준-2513", "학생코드": "5113", "학급": "B"},
+                {"학생이름": "김O준-1011", "학생코드": "1011", "학급": "C"}]
+    cm, dup = Z.build_maps(students, 2027)
+    ch = Z.plan_changes({"메모": [["내용"], ["김O준-2513 결석"], ["김O준 결석"]]}, cm, dup, amb := {})
+    assert "메모" not in ch and amb == {"메모": 1}   # 못 가린 표기는 통째로 그대로, 바탕 '김O준'도 누구인지 몰라 그대로
+    pw = Z.plan_changes({"PW_어휘데이터": [["학급ID", "학급명", "학생이름"], ["511", "Unknown", "김O준-2513"]]}, cm, dup)
+    assert [n for *_, n in pw["PW_어휘데이터"]] == [dup["김O준-2513"][1][2]]   # 학급ID(학생코드 앞자리)로 가림

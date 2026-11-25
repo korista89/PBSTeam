@@ -642,6 +642,28 @@ def update_user_password(user_id: str, new_password: str):
             logger.error("Error updating password")
         return {"error": str(e)}
 
+def update_user_passwords_bulk(new_passwords: Dict[str, str]) -> List[str]:
+    """여러 계정 비밀번호를 한 번 읽고 한 번에 쓴다(계정마다 읽으면 분당 읽기 한도를 넘는다). 바꾼 ID 목록을 돌려준다."""
+    from gspread.utils import rowcol_to_a1
+    from app.core.security import hash_password
+    ws = get_users_worksheet()
+    if not ws:
+        return []
+    values = ws.get_all_values()
+    hdr = [str(h).strip().lower() for h in values[0]]
+    id_col, pw_col = hdr.index("id"), hdr.index("password")
+    updates, done = [], []
+    for ri, row in enumerate(values[1:], start=2):
+        uid = row[id_col] if id_col < len(row) else ""
+        if uid in new_passwords:
+            updates.append({"range": rowcol_to_a1(ri, pw_col + 1), "values": [[hash_password(new_passwords[uid])]]})
+            done.append(uid)
+    if updates:
+        ws.batch_update(updates, value_input_option="RAW")
+        clear_cache("users")
+    return done
+
+
 def set_user_field(user_id: str, header: str, value: str) -> bool:
     """Users 한 칸 쓰기(칸이 없으면 맨 끝에 만든다). 비밀번호 만료일(PwExpires) 해제 등에 쓴다."""
     ws = get_users_worksheet()

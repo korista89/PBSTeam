@@ -40,7 +40,11 @@ def main(path):
             csv.writer(f).writerows([["student_code", "익명코드", "학급", "student_name"], *rows])
     amap_path = os.path.expanduser("~/data/pbst_alias_map.json")
     saved = json.load(open(amap_path))
-    to_code = {al: code for code, al in code_map.items()}
+    # 동명이인처럼 두 학생이 같은 표기를 쓰면 어느 코드인지 몰라 옛 표기를 그대로 둔다(다른 학생 코드로 가리지 않게)
+    n_al = {}
+    for al in code_map.values():
+        n_al[al] = n_al.get(al, 0) + 1
+    to_code = {al: code for code, al in code_map.items() if n_al[al] == 1}
     if any(v in to_code for v in saved["alias"].values()):
         os.replace(amap_path, amap_path + ".before_anon")
         saved["alias"] = {real: to_code.get(al, al) for real, al in saved["alias"].items()}
