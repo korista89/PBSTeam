@@ -1,7 +1,7 @@
 "use client";
 
-// ⑤ 데이터 기반 의사결정, ⑥ 의료협력의뢰서·추가지원신청서.
-// 따로 시트 칸을 만들지 않고 BIP 행의 ProgressReport JSON 안(decision·medical·support)에 함께 저장한다.
+// ⑤ 데이터 기반 의사결정, ⑥ 의료협력의뢰서·추가지원신청서, ⑧ 다음 학년도 인수인계 자료.
+// 따로 시트 칸을 만들지 않고 BIP 행의 ProgressReport JSON 안(decision·medical·support·handover)에 함께 저장한다.
 import React, { useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
@@ -197,6 +197,96 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
             <div style={sheetBox}><SectionSheet heading={d.heading} s={head} meta={meta} sections={sections} /></div>
+        </div>
+    );
+}
+
+// ⑧ 다음 학년도 인수인계 자료 ─────────────────────────────
+// 새 담임이 3월 전에 이것만 읽고 행동 특성·패턴·기능을 알고 행동중재계획을 바로 실행하도록 한 장으로 묶는다.
+// ProgressReport JSON의 handover 키에 저장한다.
+const HANDOVER: [string, string, string][] = [
+    ["한눈에 보는 학생", "summary", "가장 주의할 행동 · 그 행동의 기능 · 첫날 꼭 할 일 1가지"],
+    ["표적행동과 정의", "behavior", "관찰·측정 가능한 정의(빈도·지속시간·강도 기준)"],
+    ["행동 패턴(언제·어디서·무엇 다음에)", "pattern", "많이 발생한 시간대·장소·선행사건과 건수"],
+    ["행동 기능과 근거", "function", "(상황)일 때 (행동)을 하고 (결과)를 얻는다/피한다 + 근거 수치"],
+    ["효과 있었던 지원과 피해야 할 대응", "works", "효과가 확인된 예방·교수·강화 전략 / 행동을 키울 수 있는 대응"],
+    ["강화제와 의사소통 방법", "comm", "좋아하는 것, 요구·거부 표현 방법(AAC·몸짓·그림카드 등)"],
+    ["위기 대응 절차", "crisis", "초록(전조)·노랑(행동 시작)·빨강(위험) 단계별 교사 행동, 연락 순서"],
+    ["3월 첫 2주 실행 계획", "march", "1주차·2주차 할 일(기저선 재측정, 강화제 재평가, 보호자 면담, 지원인력 공유)"],
+    ["남은 과제·확인 필요", "todo", "자료가 부족하거나 확인하지 못한 것"],
+];
+const schoolYearStart = () => { const t = today(); const y = +t.slice(0, 4), m = +t.slice(5, 7); return `${m >= 3 ? y : y - 1}-03-01`; };
+const BIP_LABELS: [string, string][] = [
+    ["TargetBehavior", "표적행동"], ["OperationalDefinition", "조작적 정의"], ["MedicationStatus", "약물"], ["Hypothesis", "기능평가 결과"],
+    ["ReinforcerInfo", "강화제"], ["Goals", "중재목표"], ["PreventionStrategies", "예방"], ["TeachingStrategies", "교수"], ["ReinforcementStrategies", "강화"],
+    ["CrisisPlan", "위기(예방·완화)"], ["CrisisNotify", "위기(알림·대처)"], ["CrisisReturn", "위기(복귀)"], ["CrisisHome", "위기(가정학습)"],
+    ["HomeSupport", "가정 연계"], ["SupportTeam", "지원팀"], ["OtherConsiderations", "기타"],
+];
+
+export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
+    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
+}) {
+    const { cur, set } = useStore(bip, setBip, "handover");
+    const [ai, setAi] = useState({ loading: false, text: "" });
+    const start = schoolYearStart();
+    const y = +start.slice(0, 4);
+    // AI 없이 지금까지 작성한 계획에서 옮겨 채운다(AI가 실패해도 쓸 수 있는 바탕)
+    const fill = () => {
+        const j = (...ks: string[]) => ks.map(k => (bip[k] || "").trim()).filter(Boolean).join("\n");
+        set(mergeInto(cur, {
+            behavior: [j("OperationalDefinition") || j("TargetBehavior"), dataSummary(logs, behaviors, bip.PlanStart || "")].filter(Boolean).join("\n"),
+            function: j("Hypothesis"),
+            works: ["PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies"].map(k => bip[k] ? `[${BIP_LABELS.find(x => x[0] === k)?.[1]}] ${bip[k].trim()}` : "").filter(Boolean).join("\n"),
+            comm: j("ReinforcerInfo"),
+            crisis: j("CrisisPlan", "CrisisNotify", "CrisisReturn"),
+        }, "empty"));
+    };
+    const runAI = async () => {
+        setAi({ loading: true, text: "" });
+        const pr = parseJson<any>(bip.ProgressReport, {});
+        const fba = parseJson<any>(bip.FBAReport, {}).sections || {};
+        const ctx = [
+            "[자료 요약]", dataSummary(logs, behaviors, bip.PlanStart || ""),
+            "[행동중재계획]", ...BIP_LABELS.map(([k, l]) => bip[k] ? `${l}: ${bip[k]}` : ""),
+            "[FBA 결과 보고서]", ...Object.entries(fba).map(([k, v]) => v ? `${k}: ${v}` : ""),
+            "[중재 결과 보고서]", ...Object.entries(pr.sections || {}).map(([k, v]) => v ? `${k}: ${v}` : ""),
+            pr.decision?.choice ? `[최근 의사결정] ${pr.decision.choice} — ${pr.decision.rationale || ""}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
+                { kind: "handover", context: ctx, start_date: start, end_date: today() }, { timeout: 240000 });
+            setAi({ loading: false, text: r.data.analysis || "" });
+        } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
+    };
+    const apply = (mode: "empty" | "append") => {
+        const parsed = splitNumbered(ai.text, HANDOVER.map(x => x[0]));
+        if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
+        const patch: Record<string, string> = {};
+        HANDOVER.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
+        set(mergeInto(cur, patch, mode));
+    };
+    const dateVal = cur.date || today();
+    const yearVal = cur.year || `${y}학년도 → ${y + 1}학년도`;
+    const author = cur.author ?? bip.Teacher ?? "";
+    const metaDef: [string, string, string][] = [["인계 학년도", "year", yearVal], ["작성일", "date", dateVal], ["인계 교사", "author", author], ["인수 교사", "receiver", cur.receiver || ""]];
+    const printMeta: [string, string][] = metaDef.map(([k, f, v]) => [k, f === "date" ? kDate(v) : v]);
+    const meta: [string, React.ReactNode][] = metaDef.map(([k, f, v]) => [k, <Inp key={f} type={f === "date" ? "date" : "text"} value={v} onChange={x => set({ [f]: x })} />]);
+    const sections: [string, React.ReactNode][] = HANDOVER.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={3} />]);
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={card}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 인수인계 자료 초안 받기(올해 자료 전체)</button>
+                    <button className="btn btn-secondary" onClick={fill}>📋 행동중재계획에서 옮겨 채우기</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: HANDOVER.map(([t, f]) => [t, cur[f] || ""]) })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
+                    AI는 {kDate(start)}부터 오늘까지의 행동기록과 ②FBA·③행동중재계획·⑤의사결정·⑦결과 보고서를 함께 읽습니다. 먼저 ③·⑦을 저장해 두면 더 정확합니다. &lsquo;확인 필요&rsquo;는 직접 채워 주세요.
+                </div>
+                <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
+            </div>
+            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} /></div>
         </div>
     );
 }

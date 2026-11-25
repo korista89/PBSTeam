@@ -2,7 +2,7 @@
 
 // 개별학생 행동중재 — 학생 선택부터 자료 확인, FBA 보고서, 행동중재계획(BIP), 중재 자료 입력, 결과 보고서까지 한 화면에서 한다.
 // Tier3 학생이 목록 위에 오고, 담임은 자기 반 학생 누구나 골라 개별 중재를 시작할 수 있다.
-// 의사결정·의뢰서는 ProgressReport JSON에 함께 저장한다.
+// 의사결정·의뢰서·인수인계 자료는 ProgressReport JSON에 함께 저장한다.
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
@@ -12,7 +12,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 import Tracker from "./Tracker";
-import { DecisionStep, ReferralStep } from "./Docs";
+import { DecisionStep, HandoverStep, ReferralStep } from "./Docs";
 import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
 import { Bip, StudentHead, kDate, today } from "./shared";
 
@@ -24,6 +24,7 @@ const STEPS = [
     { key: "decision", label: "⑤ 데이터 기반 의사결정" },
     { key: "refer", label: "⑥ 의료협력의뢰서·추가지원신청서" },
     { key: "report", label: "⑦ 중재 결과 보고서" },
+    { key: "handover", label: "⑧ 다음 학년도 인수인계 자료" },
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
@@ -126,7 +127,7 @@ export default function InterventionPage() {
     return (
         <AuthCheck>
             <AppShell currentPage="target-behavior" title="🧩 개별학생 행동중재"
-                subtitle="자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서를 한 화면에서">
+                subtitle="자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서 → 인수인계를 한 화면에서">
                 <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20, alignItems: "start" }}>
                     <div className="card" style={{ padding: 16 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -188,6 +189,7 @@ export default function InterventionPage() {
                                 {step === "decision" && <DecisionStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "refer" && <ReferralStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "report" && <ProgressStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} logs={logs} />}
+                                {step === "handover" && <HandoverStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                             </div>
                         )}
                     </div>

@@ -1671,6 +1671,15 @@ DOCUMENT_SPECS = {
                 "관리자·교육청이 읽는 문서다. 4절은 인력·공간·전문가 자문·교구 중 근거가 있는 것만 구체적으로(누가·언제·얼마나) 쓰고, 5절에는 지원을 줄이거나 끝낼 수치 기준을 쓴다."),
     "progress": ("개별학생 행동중재 결과 보고서", ["중재 실행 현황", "종합 의견", "향후 계획"],
                  "1절은 교사가 준 중재 전·후 수치를 그대로 옮기고 해석을 덧붙이지 않는다. 2절은 효과·실행충실도·한계를 쓴다. 3절은 유지·수정·종료·의뢰 중 근거 있는 방향 1개와 다음 점검 시점을 쓴다."),
+    "handover": ("다음 학년도 행동지원 인수인계 자료", ["한눈에 보는 학생", "표적행동과 정의", "행동 패턴(언제·어디서·무엇 다음에)", "행동 기능과 근거",
+                  "효과 있었던 지원과 피해야 할 대응", "강화제와 의사소통 방법", "위기 대응 절차", "3월 첫 2주 실행 계획", "남은 과제·확인 필요"],
+                 "이 학생을 처음 만나는 새 담임이 3월 전에 이것만 읽고 바로 중재를 실행할 수 있게 쓴다. "
+                 "1절은 3줄: 가장 주의할 행동, 그 행동의 기능, 첫날 꼭 할 일 1가지. "
+                 "3절은 많이 발생한 시간대·장소·선행사건을 건수·비율로 쓴다. 4절은 '(상황)일 때 (행동)을 하고 (결과)를 얻는다/피한다' 형식과 근거 수치를 쓴다. "
+                 "5절은 중재 전후 수치로 효과가 확인된 전략을 먼저 쓰고, 행동을 강화할 위험이 있는 대응(예: 요구 철회, 과도한 관심)을 '피할 것'으로 따로 쓴다. "
+                 "7절은 초록(전조)·노랑(행동 시작)·빨강(위험) 단계별로 교사가 할 행동을 한 줄씩 쓴다. "
+                 "8절은 1주차·2주차로 나눠 기저선 재측정, 강화제 선호도 재평가, 보호자 면담, 지원인력 공유 등 할 일을 체크리스트로 쓴다. "
+                 "9절은 자료가 부족하거나 확인되지 않은 것을 쓴다. 각 절 2~6줄."),
 }
 
 
@@ -1683,7 +1692,7 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
     sections = "\n".join(f"{i}. {t}" for i, t in enumerate(secs, 1))
     prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
 [누적 행동기록 근거 요약(결정론적 집계)] {json.dumps(evidence_summary, ensure_ascii=False)[:10000]}
-[교사가 입력한 계획·수치·맥락] {context[:6000] or '없음'}
+[교사가 입력한 계획·수치·맥락] {context[:9000] or '없음'}
 
 [지시사항]
 위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 2~5줄로 쓴다.
@@ -1694,7 +1703,7 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 2. 행동은 관찰·측정 가능한 용어와 숫자(건수, 기간, 강도)로 쓴다.
 3. {extra}
 4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2000)
+    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4000 if kind == "handover" else 2000)
 
 
 def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_context: str = "", sample_size: int = 0) -> str:

@@ -290,7 +290,7 @@ def ai_fba_report(
 
 
 class AIDocumentDraftRequest(BaseModel):
-    kind: Literal["medical", "support", "progress"]
+    kind: Literal["medical", "support", "progress", "handover"]
     context: str = ""
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -302,7 +302,7 @@ def ai_document_draft(
     req: AIDocumentDraftRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    """의료협력의뢰서·추가지원신청서·중재 결과 보고서 초안 — 누적 행동기록 근거 요약 + 화면의 계획·수치."""
+    """의료협력의뢰서·추가지원신청서·중재 결과 보고서·다음 학년도 인수인계 자료 초안 — 누적 행동기록 근거 요약 + 화면의 계획·수치."""
     check_student_scope(student_code, current_user)
     from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
     from app.services.ai_insight import generate_document_draft
