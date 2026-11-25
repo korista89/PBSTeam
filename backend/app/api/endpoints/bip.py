@@ -124,6 +124,8 @@ def save_student_bip(
 @router.get("/students/{student_code}/fba-evidence")
 def get_student_fba_evidence(
     student_code: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
     """Deterministic FBA evidence summary for the profile dashboard — no LLM call.
@@ -140,6 +142,10 @@ def get_student_fba_evidence(
 
     beable_code = _resolve_beable_code(student_code)
     raw_logs = _filter_student_logs(fetch_all_records(), student_code, beable_code)
+    if start_date and end_date:  # 인수인계 차트: 올해 기록만 세어 월별 차트와 기준을 맞춘다
+        from app.services.sheets import normalize_date_string
+        sd, ed = normalize_date_string(start_date), normalize_date_string(end_date)
+        raw_logs = [r for r in raw_logs if sd <= normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") <= ed]
     student_info = _build_student_info(student_code, fetch_student_status())
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
 

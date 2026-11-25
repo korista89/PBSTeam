@@ -22,3 +22,15 @@ def test_handover_strips_slot_numbers(monkeypatch):
     monkeypatch.setattr(ai_insight, "_call_llm", lambda sys_p, prompt, n: seen.setdefault("p", prompt) and "1. 한눈에 보는 학생\n- a")
     ai_insight.generate_document_draft("handover", {"code": "S01"}, {"time": [{"item": "3구간: 2교시", "count": 11}]}, "", 50)
     assert "3구간" not in seen["p"] and "2교시" in seen["p"]
+
+
+def test_handover_sections_match_frontend_order():
+    """AI 절 순서와 ⑧ 탭 칸 순서(Docs.tsx)가 어긋나면 칸이 엉뚱하게 채워진다."""
+    from pathlib import Path
+    from app.services.ai_insight import DOCUMENT_SPECS
+    secs = DOCUMENT_SPECS["handover"][1]
+    assert len(secs) == 19 and secs[14] == "행동 단계별 대응"
+    src = (Path(__file__).resolve().parents[1] / "frontend/src/app/target-behavior/Docs.tsx").read_text(encoding="utf-8")
+    body = src[src.index("export const HANDOVER_P1"):src.index("const STAGE_TITLE")]
+    pos = [body.find(f'["{t}"') for t in secs if t != "행동 단계별 대응"]
+    assert -1 not in pos and pos == sorted(pos)

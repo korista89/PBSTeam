@@ -46,7 +46,9 @@ export function parseJson<T>(v: string | undefined, fallback: T): T {
 export function splitNumbered(text: string, titles: string[]): Record<string, string> {
     const out: Record<string, string> = {};
     titles.forEach((t, i) => {
-        const cur = new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?\\**\\[?${i + 1}\\s*[.)][^\\n]*\\n([\\s\\S]*?)(?=\\n\\s*(?:#{1,6}\\s*)?\\**\\[?${i + 2}\\s*[.)]|$)`);
+        // AI가 절 하나를 빼먹어도 다음 절이 앞 절에 붙지 않게, 뒤에 오는 어느 절 번호에서든 끊는다
+        const later = titles.map((_, k) => k + 1).filter(n => n > i + 1).reverse().join("|") || "\\d+";
+        const cur = new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?\\**\\[?${i + 1}\\s*[.)][^\\n]*\\n([\\s\\S]*?)(?=\\n\\s*(?:#{1,6}\\s*)?\\**\\[?(?:${later})\\s*[.)]|$)`);
         const m = text.match(cur);
         if (m) out[t] = m[1].replace(/\*\*/g, "").trim();
     });
@@ -121,8 +123,8 @@ export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; be
     );
 }
 
-export function SectionSheet({ heading, s, meta, sections, extra }: {
-    heading: string; s: StudentHead; meta: [string, React.ReactNode][]; sections: [string, React.ReactNode][]; extra?: React.ReactNode;
+export function SectionSheet({ heading, s, meta, sections, extra, after }: {
+    heading: string; s: StudentHead; meta: [string, React.ReactNode][]; sections: [string, React.ReactNode][]; extra?: React.ReactNode; after?: React.ReactNode;
 }) {
     return (
         <>
@@ -136,11 +138,40 @@ export function SectionSheet({ heading, s, meta, sections, extra }: {
                     ))}
                     {extra && <tr><td style={{ ...td, padding: 8 }} colSpan={4}>{extra}</td></tr>}
                     {sections.map(([k, v]) => (
-                        <tr key={k}><th style={th}>{k}</th><td style={{ ...td, minHeight: 60 }} colSpan={3}>{v}</td></tr>
+                        <tr key={k} style={noSplit}><th style={th}>{k}</th><td style={{ ...td, minHeight: 60 }} colSpan={3}>{v}</td></tr>
                     ))}
                 </tbody>
             </table>
+            {after}
         </>
+    );
+}
+
+const noSplit: React.CSSProperties = { breakInside: "avoid", pageBreakInside: "avoid" };
+const groupHead: React.CSSProperties = { fontSize: "11pt", fontWeight: 700, margin: "10px 0 4px" };
+
+// 인수인계 자료 2쪽: 가. 핵심 행동지원 방법 / 나. 행동 단계별 대응(3열) / 다. 새 학년도 초기 실행계획. 인쇄하면 새 쪽에서 시작한다.
+export type HandoverPage2Data<T = React.ReactNode> = { support: [string, T][]; stages: [string, T, T][]; plan: [string, T][] };
+export function HandoverPage2({ d }: { d: HandoverPage2Data }) {
+    const rows = (list: [string, React.ReactNode][]) => (
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <colgroup><col style={{ width: "19%" }} /><col style={{ width: "81%" }} /></colgroup>
+            <tbody>{list.map(([k, v]) => <tr key={k} style={noSplit}><th style={th}>{k}</th><td style={td}>{v}</td></tr>)}</tbody>
+        </table>
+    );
+    return (
+        <div style={{ breakBefore: "page", pageBreakBefore: "always", paddingTop: 6 }}>
+            <div style={{ ...groupHead, marginTop: 0 }}>가. 핵심 행동지원 방법</div>
+            {rows(d.support)}
+            <div style={groupHead}>나. 행동 단계별 대응</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                <colgroup><col style={{ width: "13%" }} /><col style={{ width: "37%" }} /><col style={{ width: "50%" }} /></colgroup>
+                <thead><tr><th style={th}>단계</th><th style={th}>학생의 행동 신호</th><th style={th}>교사의 구체적인 대응</th></tr></thead>
+                <tbody>{d.stages.map(([k, a, b]) => <tr key={k} style={noSplit}><th style={th}>{k}</th><td style={td}>{a}</td><td style={td}>{b}</td></tr>)}</tbody>
+            </table>
+            <div style={groupHead}>다. 새 학년도 초기 실행계획</div>
+            {rows(d.plan)}
+        </div>
     );
 }
 
@@ -191,7 +222,7 @@ export function SummaryTable({ rows, crisis }: { rows: BehaviorSummary[]; crisis
 
 // 인수인계 자료용 차트 2개(월별 행동 건수·많이 일어난 시간). 인쇄에도 그대로 나오도록 라이브러리 없이 그린다.
 type Ranked = { item: string; count: number };
-export type HandoverChartData = { monthly: { label: string; count: number }[]; times: Ranked[]; places?: Ranked[]; functions?: Ranked[]; types?: Ranked[]; levels?: Ranked[]; total: number };
+export type HandoverChartData = { monthly: { label: string; count: number }[]; times: Ranked[]; places?: Ranked[]; functions?: Ranked[]; types?: Ranked[]; levels?: Ranked[]; total: number; note?: string };
 
 // 인수인계 차트 6개: 추세(나아지고 있나)·언제·어디서·왜(기능)·어떤 행동·얼마나 심했나(위기 대응 준비). CSS 막대라 인쇄에도 그대로 나온다.
 const printExact: React.CSSProperties = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
@@ -243,6 +274,7 @@ export function HandoverCharts({ d }: { d: HandoverChartData }) {
                 <BarList title="⑤ 어떤 행동이 많았나" rows={d.types || []} color="#9333ea" empty="행동 기록 없음" />
                 <BarList title="⑥ 얼마나 심했나 (강도 1 약함 ~ 5 매우 심함)" rows={d.levels || []} color="#dc2626" empty="강도 기록 없음" />
             </div>
+            {d.note && <div style={{ fontSize: "7.5pt", color: "#333" }}>{d.note}</div>}
         </div>
     );
 }

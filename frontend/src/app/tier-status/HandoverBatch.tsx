@@ -9,7 +9,7 @@ import { maskName } from "../utils";
 import { useAuth } from "../components/AuthProvider";
 import { parseJson, today } from "../target-behavior/shared";
 import { mergeInto } from "../target-behavior/Steps";
-import { parseHandover, requestHandoverDraft } from "../target-behavior/Docs";
+import { parseHandover, requestHandoverDraft, upgradeHandover } from "../target-behavior/Docs";
 
 type Status = { state: "대기" | "진행 중" | "완료" | "건너뜀" | "실패"; note?: string };
 
@@ -33,7 +33,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
         const bip: Record<string, string> = {};
         Object.entries(b).forEach(([k, v]) => { bip[k] = v == null ? "" : String(v); });
         const pr = parseJson<any>(bip.ProgressReport, {});
-        const cur: Record<string, string> = pr.handover || {};
+        const cur: Record<string, string> = upgradeHandover(pr.handover || {});
         if (skipDone && (cur.summary || "").trim()) return mark(code, { state: "건너뜀", note: "이미 작성됨" });
         const text = await requestHandoverDraft(code, bip, l, t);
         const patch = parseHandover(text);
