@@ -1692,6 +1692,8 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
     if not gate["eligible"]:
         return gate["notice"]
     title, secs, extra = DOCUMENT_SPECS[kind]
+    if kind == "handover":  # '3구간: 2교시'의 3을 교시로 잘못 읽지 않도록 구간 번호를 뗀다
+        evidence_summary = json.loads(re.sub(r"\d+\s*구간\s*:\s*", "", json.dumps(evidence_summary, ensure_ascii=False)))
     sections = "\n".join(f"{i}. {t}" for i, t in enumerate(secs, 1))
     prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
 [누적 행동기록 근거 요약(결정론적 집계)] {json.dumps(evidence_summary, ensure_ascii=False)[:10000]}

@@ -14,3 +14,11 @@ def test_plain_numbers():
     assert plain_numbers("약 30%임") == "약 10번 중 3번꼴임"
     assert plain_numbers("총 24건(절반 가까이)") == "총 24건(절반 가까이)"
     assert plain_numbers("2교시(14.7%, n=11/75)로 많음") == "2교시(75번 중 11번)로 많음"
+
+
+def test_handover_strips_slot_numbers(monkeypatch):
+    from app.services import ai_insight
+    seen = {}
+    monkeypatch.setattr(ai_insight, "_call_llm", lambda sys_p, prompt, n: seen.setdefault("p", prompt) and "1. 한눈에 보는 학생\n- a")
+    ai_insight.generate_document_draft("handover", {"code": "S01"}, {"time": [{"item": "3구간: 2교시", "count": 11}]}, "", 50)
+    assert "3구간" not in seen["p"] and "2교시" in seen["p"]
