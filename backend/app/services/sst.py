@@ -9,6 +9,7 @@
   프로그램을 저장·삭제하면 tier_monthly.mirror_after_change가 그 학생들만 맞춘다.
 """
 
+import gspread
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -57,7 +58,7 @@ class ProgramBook:
         ss = open_main_sheet()
         try:
             return ss.worksheet(self.tab)
-        except Exception:
+        except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
             ws = ss.add_worksheet(title=self.tab, rows=200, cols=len(self.headers))
             ws.update(range_name="A1", values=[self.headers])
             try:

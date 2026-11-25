@@ -7,6 +7,7 @@
 - 연간 현황: 전교 월별 위기행동 기록과 Tier 분포(Tier1만·Tier2·Tier3, 월별 표 기준).
 """
 
+import gspread
 import logging
 from collections import Counter
 from typing import Any, Dict, List, Optional
@@ -36,7 +37,7 @@ def _ws():
     ss = open_main_sheet()
     try:
         return ss.worksheet(TAB)
-    except Exception:
+    except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
         ws = ss.add_worksheet(title=TAB, rows=200, cols=len(HEADERS))
         ws.update(range_name="A1", values=[HEADERS])
         try:
@@ -310,7 +311,7 @@ class _Table:
         ss = open_main_sheet()
         try:
             return ss.worksheet(self.tab)
-        except Exception:
+        except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
             ws = ss.add_worksheet(title=self.tab, rows=1000, cols=len(self.headers))
             ws.update(range_name="A1", values=[self.headers])
             try:

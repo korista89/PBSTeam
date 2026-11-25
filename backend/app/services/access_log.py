@@ -5,6 +5,7 @@
 서명 = HMAC(AUTH_SECRET, 앞 8칸) 앞 16자. 시트에서 칸을 고치면 서명이 맞지 않아 드러난다(verify_row).
 보관: 최소 2년. 이 탭을 지우는 코드는 만들지 않는다.
 """
+import gspread
 import hashlib
 import hmac
 import logging
@@ -72,7 +73,7 @@ def _ws():
     ss = open_main_sheet()
     try:
         ws = ss.worksheet(TAB)
-    except Exception:
+    except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
         ws = ss.add_worksheet(title=TAB, rows=1000, cols=len(HEADERS))
         ws.update(range_name="A1", values=[HEADERS])
         try:

@@ -5,6 +5,7 @@
 - 늘봄 시간 기록은 시간대 '11구간: 늘봄(교내 방과후)'로 남겨 정규 일과 기록과 나눠 본다.
 """
 
+import gspread
 import logging
 from typing import Dict, List
 
@@ -24,7 +25,7 @@ def _ws():
     ss = open_main_sheet()
     try:
         return ss.worksheet(TAB)
-    except Exception:
+    except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
         ws = ss.add_worksheet(title=TAB, rows=300, cols=len(HEADERS))
         ws.update(range_name="A1", values=[HEADERS])
         try:

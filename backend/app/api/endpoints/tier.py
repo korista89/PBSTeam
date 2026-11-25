@@ -1,3 +1,4 @@
+import gspread
 from fastapi import APIRouter, HTTPException, Depends
 from app.adapters.sheets.resilience import SheetUnavailable
 from app.services.sheets import (
@@ -113,7 +114,7 @@ def _handover_ws(create: bool = False):
     sh = ws.spreadsheet
     try:
         return sh.worksheet(HANDOVER_TAB)
-    except Exception:
+    except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
         if not create:
             return None
         new = sh.add_worksheet(HANDOVER_TAB, rows=500, cols=3)

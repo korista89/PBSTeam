@@ -11,6 +11,7 @@
 만들어 돌려주고(get_all_values) 칸 쓰기(batch_update·update_cell)를 위 표로 옮겨 적는다.
 """
 
+import gspread
 import logging
 import re
 import threading
@@ -91,7 +92,7 @@ class _Table:
     def ws(self):
         try:
             return self.ss.worksheet(self.title)
-        except Exception:
+        except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
             ws = self.ss.add_worksheet(title=self.title, rows=1000, cols=len(self.headers))
             ws.update(range_name="A1", values=[self.headers])
             return ws

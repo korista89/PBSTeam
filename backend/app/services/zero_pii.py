@@ -5,6 +5,7 @@
   대응표(익명코드→이전 표기)는 서버에 두지 않고 관리자에게 한 번 내려준다(되돌리기·오프라인 보관용).
 - 졸업·전출생 서술 기록 파기: 재학여부 X 학생의 서술 칸만 비우고 날짜·유형·강도 같은 통계 칸은 남긴다.
 """
+import gspread
 import logging
 import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -33,7 +34,7 @@ def _consent_ws():
     ss = open_main_sheet()
     try:
         return ss.worksheet(CONSENT_TAB)
-    except Exception:
+    except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
         ws = ss.add_worksheet(title=CONSENT_TAB, rows=400, cols=len(CONSENT_HEADERS))
         ws.update(range_name="A1", values=[CONSENT_HEADERS])
         try:

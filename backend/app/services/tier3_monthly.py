@@ -6,6 +6,7 @@
   바뀌면 tier_monthly.mirror_after_change가 맞춘다.
 """
 
+import gspread
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -42,7 +43,7 @@ def _ws():
     ss = open_main_sheet()
     try:
         return ss.worksheet(TAB)
-    except Exception:
+    except gspread.WorksheetNotFound:  # 없을 때만 만든다(일시 장애에 같은 이름 탭을 또 만들지 않게)
         ws = ss.add_worksheet(title=TAB, rows=1000, cols=len(HEADERS))
         ws.update(range_name="A1", values=[HEADERS])
         try:
