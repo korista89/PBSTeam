@@ -46,3 +46,16 @@ def test_handover_long_draft_is_shrunk_once(monkeypatch):
     out = ai_insight.generate_document_draft("handover", {"code": "S01"}, {}, "", 50)
     assert len(calls) == 2 and "1,200" not in calls[1] and out.startswith("1. 한눈에 보는 학생\n- 짧음(57번 중 24번)")
     assert ai_insight.handover_lengths(long.split("\n\n---")[0]) == (1202, len("- 전조 | 확인 필요 | 쉬기"))
+
+
+def test_student_year_months_in_school_order(monkeypatch):
+    """3월부터 이번 달까지 학년도 순서로, 그 달 단계(CICO·SST·Tier3)를 돌려준다."""
+    from app.services import tier_monthly as tm
+    monkeypatch.setattr(tm, "current_month", lambda: 5)
+    states = {3: {"cico": {"S01"}, "sst": {}, "t3": {}, "ready": {"cico": True, "sst": False, "t3": True}},
+              4: {"cico": set(), "sst": {"S01": ["사회성"]}, "t3": {"S01": "Tier3"}, "ready": {"cico": True, "sst": True, "t3": True}},
+              5: {"cico": set(), "sst": {}, "t3": {"S01": "Tier3+"}, "ready": {"cico": True, "sst": True, "t3": True}}}
+    monkeypatch.setattr(tm, "month_state", lambda m: states[m])
+    out = tm.student_year("S01")
+    assert [m["month"] for m in out] == [3, 4, 5]
+    assert out[0]["cico"] and out[1]["sst"] == ["사회성"] and out[2]["t3"] == "Tier3+"

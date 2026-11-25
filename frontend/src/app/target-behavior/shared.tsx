@@ -227,7 +227,9 @@ export function SummaryTable({ rows, crisis }: { rows: BehaviorSummary[]; crisis
 
 // 인수인계 자료용 차트 2개(월별 행동 건수·많이 일어난 시간). 인쇄에도 그대로 나오도록 라이브러리 없이 그린다.
 type Ranked = { item: string; count: number };
-export type HandoverChartData = { monthly: { label: string; count: number }[]; times: Ranked[]; places?: Ranked[]; functions?: Ranked[]; types?: Ranked[]; levels?: Ranked[]; total: number; note?: string };
+export type HandoverChartData = { monthly: { label: string; count: number }[]; times: Ranked[]; places?: Ranked[]; functions?: Ranked[]; types?: Ranked[]; levels?: Ranked[]; tiers?: TierMonth[]; total: number; note?: string };
+// 월별 지원 단계: level은 '', Tier1, Tier2, Tier3, Tier3+ ('' = 그 달 표 없음), detail은 CICO·SST 등
+export type TierMonth = { month: number; level: string; detail: string };
 
 // 인수인계 차트 6개: 추세(나아지고 있나)·언제·어디서·왜(기능)·어떤 행동·얼마나 심했나(위기 대응 준비). CSS 막대라 인쇄에도 그대로 나온다.
 const printExact: React.CSSProperties = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
@@ -248,6 +250,35 @@ function BarList({ title, rows, color, empty }: { title: string; rows: Ranked[];
                     <span style={{ width: 30, textAlign: "right" }}>{r.count}번</span>
                 </div>
             ))}
+        </div>
+    );
+}
+
+const TIER_COLOR: Record<string, [string, string]> = { Tier1: ["#e2e8f0", "#000"], Tier2: ["#fde68a", "#000"], Tier3: ["#fca5a5", "#000"], "Tier3+": ["#b91c1c", "#fff"] };
+// ⑦ 달마다 지원 단계: 달마다 칸 하나, 단계가 바뀐 달은 굵은 테두리와 아래 '바뀐 점' 줄로 알린다.
+function TierStrip({ tiers }: { tiers: TierMonth[] }) {
+    const changes = tiers.slice(1).map((t, i) => ({ t, prev: tiers[i] })).filter(({ t, prev }) => t.level && prev.level && t.level !== prev.level);
+    return (
+        <div style={chartBox}>
+            <div style={chartHead}>⑦ 달마다 지원 단계(Tier)는 어떻게 바뀌었나</div>
+            <div style={{ display: "flex", gap: 2 }}>
+                {tiers.map((t, i) => {
+                    const [bg, fg] = TIER_COLOR[t.level] || ["#fff", "#64748b"];
+                    const changed = i > 0 && t.level && tiers[i - 1].level && t.level !== tiers[i - 1].level;
+                    return (
+                        <div key={t.month} style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: "7.5pt", lineHeight: 1.25 }}>
+                            <div>{t.month}월</div>
+                            <div style={{ background: bg, color: fg, border: changed ? "2px solid #000" : "1px solid #94a3b8", padding: "2px 0", fontWeight: 700, ...printExact }}>
+                                {t.level || "표 없음"}
+                                {t.detail && <div style={{ fontWeight: 400, fontSize: "6.5pt" }}>{t.detail}</div>}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            <div style={{ fontSize: "8pt", marginTop: 2 }}>
+                {changes.length ? <>바뀐 점: {changes.map(({ t, prev }) => `${t.month}월 ${prev.level} → ${t.level}`).join(", ")}</> : "올해 단계 변화 없음"}
+            </div>
         </div>
     );
 }
@@ -279,6 +310,7 @@ export function HandoverCharts({ d }: { d: HandoverChartData }) {
                 <BarList title="⑤ 어떤 행동이 많았나" rows={d.types || []} color="#9333ea" empty="행동 기록 없음" />
                 <BarList title="⑥ 얼마나 심했나 (강도 1 약함 ~ 5 매우 심함)" rows={d.levels || []} color="#dc2626" empty="강도 기록 없음" />
             </div>
+            {d.tiers && d.tiers.length > 0 && <TierStrip tiers={d.tiers} />}
             {d.note && <div style={{ fontSize: "7.5pt", color: "#333" }}>{d.note}</div>}
         </div>
     );

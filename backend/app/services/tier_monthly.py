@@ -133,6 +133,17 @@ def mirror_after_change(month: int, codes: Optional[Iterable[str]], cols: Iterab
 
 
 # ── Tier현황 탭: 월별 보기·고치기 ─────────────────────────
+def student_year(code: str) -> List[Dict[str, Any]]:
+    """한 학생의 학년도 3월~이번 달 월별 단계(인수인계 자료의 Tier 변화 차트). ready=그 달 표가 있는 단계."""
+    order = sst_svc.SCHOOL_MONTHS
+    cur = current_month()
+    out = []
+    for m in order[: order.index(cur) + 1]:
+        st = month_state(m)
+        out.append({"month": m, "cico": code in st["cico"], "sst": st["sst"].get(code, []), "t3": st["t3"].get(code, ""), "ready": st["ready"]})
+    return out
+
+
 def overview(month: int) -> Dict[str, Any]:
     from app.services.sheets import fetch_student_status
     state = month_state(month)

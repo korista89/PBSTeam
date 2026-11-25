@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
+from app.api.deps import check_student_scope, get_student_class_code, normalize_class_identifier, require_admin, require_authenticated_user, user_scope, student_in_scope, in_scope
 from app.services import tier_monthly as tm
 
 router = APIRouter()
@@ -40,6 +40,13 @@ def get_overview(month: int, current_user: Dict[str, Any] = Depends(require_auth
         user_class = user_scope(current_user)
         data["students"] = [s for s in data["students"] if student_in_scope(str(s["학생코드"]), user_class)]
     return data
+
+
+@router.get("/student/{code}")
+def get_student_year(code: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """한 학생의 올해 월별 Tier(3월~이번 달)."""
+    check_student_scope(code, current_user)
+    return {"months": tm.student_year(code)}
 
 
 @router.post("/student")

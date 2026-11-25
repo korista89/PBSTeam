@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
-import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, HandoverPage2, HandoverPage2Data } from "./shared";
+import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, HandoverPage2, HandoverPage2Data, TierMonth } from "./shared";
 import { AIBox, ApplyMode, AutoArea, card, dOf, err, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
@@ -296,13 +296,29 @@ export function handoverStats(logs: Log[], start: string) {
     ].join("\n");
 }
 
+// 올해 월별 Tier(월별 표 기준). 그 달 표가 하나도 없으면 level ''.
+export async function fetchTierMonths(code: string): Promise<TierMonth[]> {
+    try {
+        const r = await axios.get(`${API_BASE_URL}/api/v1/tier-monthly/student/${encodeURIComponent(code)}`);
+        return (r.data?.months || []).map((m: any) => {
+            const any = m.ready?.cico || m.ready?.sst || m.ready?.t3;
+            const two = [m.cico ? "CICO" : "", m.sst?.length ? "SST" : ""].filter(Boolean).join("·");
+            const level = m.t3 === "Tier3+" ? "Tier3+" : m.t3 ? "Tier3" : two ? "Tier2" : any ? "Tier1" : "";
+            return { month: m.month, level, detail: level === "Tier2" ? two : level.startsWith("Tier3") && two ? `+${two}` : "" };
+        });
+    } catch { return []; }
+}
+const tierText = (t: TierMonth[]) => t.length ? t.map(x => `${x.month}월 ${x.level || "표 없음"}${x.detail ? `(${x.detail})` : ""}`).join(", ") : "자료 없음";
+
 // ⑧ 탭과 Tier 현황 '인수인계 자료 일괄 생성'이 함께 쓴다.
 export async function requestHandoverDraft(code: string, bip: Bip, logs: Log[], behaviors: any[]): Promise<string> {
     const pr = parseJson<any>(bip.ProgressReport, {});
     const fba = parseJson<any>(bip.FBAReport, {}).sections || {};
     const obj = (label: string, o: any) => o && Object.values(o).some(Boolean) ? [label, ...Object.entries(o).map(([k, v]) => v ? `${k}: ${v}` : "")] : [];
+    const tiers = await fetchTierMonths(code);
     const ctx = [
         "[시스템 집계 — 수치는 이 값만 쓴다]", handoverStats(logs, schoolYearStart()),
+        `- 올해 월별 지원 단계(월별 Tier 표): ${tierText(tiers)}`,
         "[자료 요약]", dataSummary(logs, behaviors, bip.PlanStart || ""),
         "[행동중재계획]", ...BIP_LABELS.map(([k, l]) => bip[k] ? `${l}: ${bip[k]}` : ""),
         "[FBA 결과 보고서]", ...Object.entries(fba).map(([k, v]) => v ? `${k}: ${v}` : ""),
@@ -340,6 +356,8 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const set = (patch: Record<string, string>) => store.set({ ...cur, ...patch });
     const [ai, setAi] = useState({ loading: false, text: "" });
     const start = schoolYearStart();
+    const [tiers, setTiers] = useState<TierMonth[]>([]);
+    useEffect(() => { let alive = true; setTiers([]); fetchTierMonths(head.code).then(t => { if (alive) setTiers(t); }); return () => { alive = false; }; }, [head.code]);
     const [dist, setDist] = useState<Pick<HandoverChartData, "times" | "places" | "functions" | "types"> & { unknown?: number }>({ times: [] });
     useEffect(() => {
         let alive = true;
@@ -366,8 +384,8 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
         const { unknown, ...rest } = dist;
         const note = `집계 ${kDate(start)} ~ ${kDate(today())}, 행동기록 1건을 1번으로 셈. ②~⑤는 많은 순 일부만 표시(미상 제외).`
             + (unknown != null ? ` ④ 기능 미기록 ${unknown}번, 한 기록에 기능이 둘 이상일 수 있음.` : "");
-        return { monthly, ...rest, levels: levels.some(x => x.count) ? levels : [], total: ds.length, note };
-    }, [logs, start, dist]);
+        return { monthly, ...rest, levels: levels.some(x => x.count) ? levels : [], tiers, total: ds.length, note: note + " ⑦은 월별 Tier 표 기준." };
+    }, [logs, start, dist, tiers]);
     const len = (keys: string[]) => keys.reduce((n, f) => n + (cur[f] || "").length, 0);
     const p1 = len(HANDOVER_P1.map(r => r[1])), p2 = len([...HANDOVER_SUPPORT, ...HANDOVER_PLAN].map(r => r[1]).concat(STAGE_KEYS));
     const y = +start.slice(0, 4);
