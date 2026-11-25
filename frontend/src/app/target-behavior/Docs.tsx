@@ -252,7 +252,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const { cur, set } = useStore(bip, setBip, "handover");
     const [ai, setAi] = useState({ loading: false, text: "" });
     const start = schoolYearStart();
-    const [dist, setDist] = useState<Pick<HandoverChartData, "times" | "places" | "functions">>({ times: [] });
+    const [dist, setDist] = useState<Pick<HandoverChartData, "times" | "places" | "functions" | "types">>({ times: [] });
     useEffect(() => {
         let alive = true;
         setDist({ times: [] });
@@ -261,19 +261,21 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 if (!alive) return;
                 const m = r.data?.deterministic_metrics || {};
                 const top = (k: string, n: number) => (m[k] || []).filter((x: any) => x.item && x.item !== "미상").slice(0, n);
-                setDist({ times: top("time_slot_distribution", 5), places: top("location_hotspot_distribution", 4), functions: top("teacher_inferred_function_distribution", 4) });
+                setDist({ times: top("time_slot_distribution", 5), places: top("location_hotspot_distribution", 4), functions: top("teacher_inferred_function_distribution", 4), types: top("behavior_type_distribution", 4) });
             }).catch(() => {});
         return () => { alive = false; };
     }, [head.code]);
     const charts: HandoverChartData = useMemo(() => {
-        const ds = logs.map(dOf).filter(d => d && d >= start && d <= today());
+        const inYear = logs.filter(l => { const d = dOf(l); return d && d >= start && d <= today(); });
+        const ds = inYear.map(dOf);
+        const levels = [1, 2, 3, 4, 5].map(n => ({ item: `강도 ${n}`, count: inYear.filter(l => String(l["강도"] ?? "").trim().charAt(0) === String(n)).length }));
         const monthly: { label: string; count: number }[] = [];
         for (let i = 0; i < 12; i++) {
             const d = new Date(Date.UTC(+start.slice(0, 4), 2 + i, 1)), key = d.toISOString().slice(0, 7);
             if (key > today().slice(0, 7)) break;
             monthly.push({ label: `${d.getUTCMonth() + 1}월`, count: ds.filter(x => x.startsWith(key)).length });
         }
-        return { monthly, ...dist, total: ds.length };
+        return { monthly, ...dist, levels: levels.some(x => x.count) ? levels : [], total: ds.length };
     }, [logs, start, dist]);
     const chars = HANDOVER.reduce((n, [, f]) => n + (cur[f] || "").length, 0);
     const y = +start.slice(0, 4);
