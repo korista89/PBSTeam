@@ -155,6 +155,7 @@ export function SectionSheet({ heading, s, meta, sections, extra, after, dense }
 const noSplit: React.CSSProperties = { breakInside: "avoid", pageBreakInside: "avoid" };
 const groupHead: React.CSSProperties = { fontSize: "11pt", fontWeight: 700, margin: "10px 0 4px" };
 
+const refNote: React.CSSProperties = { fontSize: "8.5pt", marginTop: 2 };
 // 인수인계 자료 2쪽: 가. 핵심 행동지원 방법 / 나. 행동 단계별 대응(3열) / 다. 새 학년도 초기 실행계획. 인쇄하면 새 쪽에서 시작한다.
 export type HandoverPage2Data<T = React.ReactNode> = { support: [string, T][]; stages: [string, T, T][]; plan: [string, T][] };
 export function HandoverPage2({ d, split = true }: { d: HandoverPage2Data; split?: boolean }) {
@@ -168,12 +169,14 @@ export function HandoverPage2({ d, split = true }: { d: HandoverPage2Data; split
         <div data-page2 style={split ? { breakBefore: "page", pageBreakBefore: "always", paddingTop: 6 } : { paddingTop: 6 }}>
             <div style={{ ...groupHead, marginTop: 0 }}>가. 핵심 행동지원 방법</div>
             {rows(d.support)}
+            <div style={refNote}>※ 예방·교수·강화의 세부 방법은 행동중재계획을 참고한다.</div>
             <div style={groupHead}>나. 행동 단계별 대응</div>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <colgroup><col style={{ width: "13%" }} /><col style={{ width: "37%" }} /><col style={{ width: "50%" }} /></colgroup>
                 <thead><tr><th style={thD}>단계</th><th style={thD}>학생의 행동 신호</th><th style={thD}>교사의 구체적인 대응</th></tr></thead>
                 <tbody>{d.stages.map(([k, a, b]) => <tr key={k} style={noSplit}><th style={thD}>{k}</th><td style={tdD}>{a}</td><td style={tdD}>{b}</td></tr>)}</tbody>
             </table>
+            <div style={refNote}>※ 자세한 절차는 행동중재계획(위기관리계획)을 참고한다.</div>
             <div style={groupHead}>다. 새 학년도 초기 실행계획</div>
             {rows(d.plan)}
         </div>
