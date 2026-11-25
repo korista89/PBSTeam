@@ -216,7 +216,7 @@ export function HandoverCharts({ d }: { d: HandoverChartData }) {
                 {d.times.length === 0 && <div style={{ fontSize: "8.5pt" }}>시간 기록 없음</div>}
                 {d.times.map(t => (
                     <div key={t.item} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "8pt", marginBottom: 3 }}>
-                        <span style={{ width: 62, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{t.item}</span>
+                        <span style={{ width: 66, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{t.item.replace(/^\s*\d+\s*구간\s*:\s*/, "").replace(/\(.*?\)/g, "").trim()}</span>
                         <div style={{ flex: 1, height: 9 }}><div style={{ width: `${(t.count / tMax) * 100}%`, height: "100%", background: "#f59e0b", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }} /></div>
                         <span style={{ width: 30, textAlign: "right" }}>{t.count}번</span>
                     </div>

@@ -7,7 +7,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
 import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData } from "./shared";
-import { AIBox, AutoArea, card, dOf, err, mergeInto, openPrint } from "./Steps";
+import { AIBox, ApplyMode, AutoArea, card, dOf, err, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
 
@@ -51,7 +51,7 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => set(mergeInto(cur, { rationale: ai.text.replace(/\*\*/g, "") }, mode));
+    const apply = (mode: ApplyMode) => set(mergeInto(cur, { rationale: ai.text.replace(/\*\*/g, "") }, mode));
     // 개별화교육지원팀 협의회 전 협의록 초안: 지금까지 자료 + 지난 협의 기록 + 고른 결정으로 미리 채운다
     const [minutes, setMinutes] = useState({ loading: false, text: "" });
     const [notesKey, setNotesKey] = useState(0);
@@ -166,7 +166,7 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => {
+    const apply = (mode: ApplyMode) => {
         const parsed = splitNumbered(ai.text, titles);
         if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
         const patch: Record<string, string> = {};
@@ -288,7 +288,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
         try { setAi({ loading: false, text: await requestHandoverDraft(head.code, bip, logs, behaviors) }); }
         catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => {
+    const apply = (mode: ApplyMode) => {
         const patch = parseHandover(ai.text);
         if (!patch) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
         set(mergeInto(cur, patch, mode));
@@ -318,7 +318,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                         <button className="btn btn-secondary" onClick={() => set({ ai: "" })}>검토 완료</button>
                     </div>
                 )}
-                <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
+                <AIBox text={ai.text} loading={ai.loading} onApply={apply} canReplace />
             </div>
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: chars > 1600 ? "#dc2626" : "#475569" }}>
                 본문 {chars.toLocaleString()}자 / 권장 1,600자 이하 {chars > 1600 ? "— 인쇄하면 2쪽을 넘을 수 있습니다. 줄여 주세요." : "(차트 포함 2쪽 안)"}

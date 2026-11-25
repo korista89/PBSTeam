@@ -62,18 +62,19 @@ function Bars({ title, items }: { title: string; items: { item: string; count: n
 }
 
 // AI 결과를 절별로 반영: 빈 칸만 채우거나 뒤에 덧붙인다.
-export function mergeInto(base: Record<string, string>, add: Record<string, string>, mode: "empty" | "append") {
+export type ApplyMode = "empty" | "append" | "replace";
+export function mergeInto(base: Record<string, string>, add: Record<string, string>, mode: ApplyMode) {
     const next = { ...base };
     for (const [k, v] of Object.entries(add)) {
         if (!v) continue;
         const cur = (next[k] || "").trim();
-        if (!cur) next[k] = v;
+        if (!cur || mode === "replace") next[k] = v;
         else if (mode === "append") next[k] = `${cur}\n\n${v}`;
     }
     return next;
 }
 
-export function AIBox({ text, loading, onApply }: { text: string; loading: boolean; onApply?: (mode: "empty" | "append") => void }) {
+export function AIBox({ text, loading, onApply, canReplace }: { text: string; loading: boolean; onApply?: (mode: ApplyMode) => void; canReplace?: boolean }) {
     if (loading) return <div style={{ padding: 16, color: "#7c3aed", fontWeight: 700, fontSize: "0.85rem" }}>⏳ AI가 자료를 분석하고 있습니다… (1~2분)</div>;
     if (!text) return null;
     return (
@@ -82,6 +83,7 @@ export function AIBox({ text, loading, onApply }: { text: string; loading: boole
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                     <button className="btn btn-primary" onClick={() => onApply("empty")}>✅ 빈 칸에만 반영</button>
                     <button className="btn btn-secondary" onClick={() => onApply("append")}>➕ 모든 칸 뒤에 덧붙이기</button>
+                    {canReplace && <button className="btn btn-secondary" onClick={() => confirm("지금 칸 내용을 모두 지우고 AI 결과로 바꿉니다. 저장하기 전에는 페이지를 새로 고치면 원래대로 돌아갑니다. 바꿀까요?") && onApply("replace")}>🔄 AI 결과로 모두 바꾸기</button>}
                     <span style={{ fontSize: "0.75rem", color: "#64748b", alignSelf: "center" }}>반영 뒤 고치고 &lsquo;저장&rsquo;을 눌러야 남습니다.</span>
                 </div>
             )}
@@ -179,7 +181,7 @@ export function FbaStep({ head, bip, setBip, save }: { head: StudentHead; bip: B
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => {
+    const apply = (mode: ApplyMode) => {
         const parsed = splitNumbered(ai.text, FBA_SECTIONS);
         if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다. 필요한 부분을 복사해 넣어 주세요."); return; }
         setF({ sections: mergeInto(secs, parsed, mode) });
@@ -240,7 +242,7 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => {
+    const apply = (mode: ApplyMode) => {
         const parsed = parseBIPAIResult(ai.text);
         delete parsed.MedicationStatus; // 약물 정보는 교사 입력만 쓴다
         if (parsed.TargetBehavior) { parsed.OperationalDefinition = parsed.TargetBehavior; delete parsed.TargetBehavior; }
@@ -346,7 +348,7 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
-    const apply = (mode: "empty" | "append") => {
+    const apply = (mode: ApplyMode) => {
         const parsed = splitNumbered(ai.text, PROGRESS_SECTIONS);
         if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
         setP({ sections: mergeInto(secs, parsed, mode) });

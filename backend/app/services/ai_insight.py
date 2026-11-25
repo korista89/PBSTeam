@@ -1681,7 +1681,8 @@ DOCUMENT_SPECS = {
                  "8절은 1주차·2주차로 나눠 기저선 재측정, 강화제 선호도 재평가, 보호자 면담, 지원인력 공유 등 할 일을 체크리스트로 쓴다. "
                  "9절은 자료가 부족하거나 확인되지 않은 것을 쓴다. "
                  "숫자는 새 담임이 바로 읽게 쉬운 말로 쓴다: '57번 중 24번', '가장 많음', '절반 가까이'. 백분율(%)·n=·괄호 안 통계 표기는 쓰지 않는다. "
-                 "인쇄 2쪽(차트 포함) 안에 들어가야 하므로 각 절은 1~3줄, 한 줄 45자 안팎, 전체 1,300자 이내로 쓴다. 8절만 1주차·2주차 각 3줄까지 허용한다."),
+                 "인쇄 2쪽(차트 포함) 안에 들어가야 한다. 전체 1,200자를 넘기지 않는다. 각 절은 '- '로 시작하는 한 문장 1~3줄이고, 들여쓴 하위 목록은 만들지 않는다. "
+                 "8절만 '1주차:'와 '2주차:' 줄 아래 각 3줄까지 허용한다."),
 }
 
 
@@ -1707,8 +1708,19 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
     text = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4000 if kind == "handover" else 2000)
     if kind == "handover":  # 인수인계 자료는 새 담임에게 그대로 전달하므로 모델 표시 꼬리말을 뗀다
-        text = re.sub(r"\n+-{3,}\s*\n>[^\n]*(?:AI 모델)[^\n]*\s*$", "", text).rstrip()
+        text = plain_numbers(re.sub(r"\n+-{3,}\s*\n>[^\n]*(?:AI 모델)[^\n]*\s*$", "", text).rstrip())
     return text
+
+
+def plain_numbers(text: str) -> str:
+    """새 담임이 읽기 어려운 통계 표기를 지운다: '(42.1%, n=24/57)' 삭제, 남은 '56.9%'는 '10번 중 6번꼴'로."""
+    text = re.sub(r"\d+(?:\.\d+)?\s*%\s*\(\s*n\s*=\s*(\d+)\s*/\s*(\d+)\s*\)", lambda m: f"{m.group(2)}번 중 {m.group(1)}번", text)
+    # n=24/57 이 들어 있으면 '(57번 중 24번)'으로, 나머지 %·n= 괄호는 지운다
+    text = re.sub(r"\(([^()\n]*?)\bn\s*=\s*(\d+)\s*/\s*(\d+)[^()\n]*\)", lambda m: f"({m.group(3)}번 중 {m.group(2)}번)", text)
+    text = re.sub(r"\s*\([^()\n]*?(?:%|\bn\s*=)[^()\n]*\)", "", text)
+    text = re.sub(r"\s*\(?\bn\s*=\s*\d+(?:\s*/\s*\d+)?\)?", "", text)
+    text = re.sub(r"(\d+(?:\.\d+)?)\s*%", lambda m: f"10번 중 {max(1, round(float(m.group(1)) / 10))}번꼴", text)
+    return re.sub(r"번로(?=[\s,.])", "번으로", text)  # 괄호 뒤 조사는 앞말에 붙은 것이라 그대로 둔다
 
 
 def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_context: str = "", sample_size: int = 0) -> str:
