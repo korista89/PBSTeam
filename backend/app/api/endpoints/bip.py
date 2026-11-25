@@ -323,7 +323,27 @@ def ai_document_draft(
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    return {"analysis": generate_document_draft(req.kind, student_info, evidence, req.context, len(norm_logs)), **gate}
+    context = req.context
+    if req.kind == "handover":
+        context = _handover_extra_context(student_code) + "\n" + context
+    return {"analysis": generate_document_draft(req.kind, student_info, evidence, context, len(norm_logs)), **gate}
+
+
+def _handover_extra_context(student_code: str) -> str:
+    """인수인계 자료: 화면에 없는 서버 자료(사례 협의 기록·그림말 인증)를 덧붙여, 1년간 기록한 교사가 고칠 게 적도록 한다."""
+    from app.services.sheets import fetch_meeting_notes, fetch_student_status
+    lines = []
+    for s in fetch_student_status() or []:
+        if str(s.get("학생코드", "")).strip() == student_code and str(s.get("그림말인증", "")).strip():
+            lines.append(f"[의사소통 참고] 그림말누리제 인증: {s.get('그림말인증')}")
+    try:
+        notes = fetch_meeting_notes("tier3", student_code)[:8]
+    except Exception:
+        notes = []
+    if notes:
+        lines.append("[사례 협의 기록(최근 순)]")
+        lines += [f"- {n.get('date', '')}: {str(n.get('content', ''))[:300]}" for n in notes]
+    return "\n".join(lines)
 
 
 class AIBIPFullRequest(BaseModel):

@@ -194,6 +194,7 @@ export type BehaviorSummary = {
     id: string; label: string; type: string; unit: string; baseline: string;
     preMean: number | null; preN: number; postMean: number | null; postN: number;
     fidelity: number | null; fidelityN: number;
+    recentMean?: number | null; // 중재 중 최근 4회 평균
 };
 
 export function SummaryTable({ rows, crisis }: { rows: BehaviorSummary[]; crisis: { pre: number; post: number; preWeeks: number; postWeeks: number } }) {

@@ -286,6 +286,27 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
 }
 
 // ⑥ 중재 현황·결과 보고서 ────────────────────────────────
+// 표적행동별 중재 전·중 평균과 실행충실도(⑦ 결과 보고서·⑧ 인수인계가 함께 쓴다)
+export async function fetchBehaviorSummaries(code: string, behaviors: any[], start: string, end: string): Promise<BehaviorSummary[]> {
+    const list = behaviors.filter(b => b.Status !== "삭제");
+    const charts = await Promise.all(list.map(b => axios.get(`${API_BASE_URL}/api/v1/target-behaviors/${b.BehaviorID}/chart`, { params: { student_code: code } })
+        .then(r => r.data).catch(() => null)));
+    return list.map((b, i) => {
+        const c = charts[i] || {};
+        const s = b.BIPStartDate || start;
+        const pts = (c.data_points || []).map((d: any) => ({ d: String(d.Date), v: Number(d.Value) })).filter((p: any) => !isNaN(p.v));
+        const pre = pts.filter((p: any) => s && p.d < s), post = pts.filter((p: any) => (!s || p.d >= s) && p.d <= end);
+        const mean = (a: any[]) => (a.length ? a.reduce((x, p) => x + p.v, 0) / a.length : null);
+        const fid = (c.fidelity_points || []).filter((f: any) => String(f.Date) <= end && (!s || String(f.Date) >= s));
+        return {
+            id: b.BehaviorID, label: b.Definition, type: b.Type, unit: b.MeasurementType, baseline: b.Baseline || "",
+            preMean: mean(pre), preN: pre.length, postMean: mean(post), postN: post.length,
+            fidelity: fid.length ? Math.round(fid.filter((f: any) => String(f.Implemented).toUpperCase() === "O").length / fid.length * 100) : null, fidelityN: fid.length,
+            recentMean: mean(post.slice(-4)),
+        };
+    });
+}
+
 export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; behaviors: any[]; logs: Log[];
 }) {
@@ -299,24 +320,7 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
 
     useEffect(() => {
         let alive = true;
-        const list = behaviors.filter(b => b.Status !== "삭제");
-        Promise.all(list.map(b => axios.get(`${API_BASE_URL}/api/v1/target-behaviors/${b.BehaviorID}/chart`, { params: { student_code: head.code } })
-            .then(r => r.data).catch(() => null))).then(charts => {
-                if (!alive) return;
-                setRows(list.map((b, i) => {
-                    const c = charts[i] || {};
-                    const s = b.BIPStartDate || start;
-                    const pts = (c.data_points || []).map((d: any) => ({ d: String(d.Date), v: Number(d.Value) })).filter((p: any) => !isNaN(p.v));
-                    const pre = pts.filter((p: any) => s && p.d < s), post = pts.filter((p: any) => (!s || p.d >= s) && p.d <= end);
-                    const mean = (a: any[]) => (a.length ? a.reduce((x, p) => x + p.v, 0) / a.length : null);
-                    const fid = (c.fidelity_points || []).filter((f: any) => String(f.Date) <= end && (!s || String(f.Date) >= s));
-                    return {
-                        id: b.BehaviorID, label: b.Definition, type: b.Type, unit: b.MeasurementType, baseline: b.Baseline || "",
-                        preMean: mean(pre), preN: pre.length, postMean: mean(post), postN: post.length,
-                        fidelity: fid.length ? Math.round(fid.filter((f: any) => String(f.Implemented).toUpperCase() === "O").length / fid.length * 100) : null, fidelityN: fid.length,
-                    };
-                }));
-            });
+        fetchBehaviorSummaries(head.code, behaviors, start, end).then(r => { if (alive) setRows(r); });
         return () => { alive = false; };
     }, [behaviors, head.code, start, end]);
 

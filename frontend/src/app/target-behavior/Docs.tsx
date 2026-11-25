@@ -7,7 +7,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
 import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, HandoverPage2, HandoverPage2Data, TierMonth } from "./shared";
-import { AIBox, ApplyMode, AutoArea, card, dOf, err, mergeInto, openPrint } from "./Steps";
+import { AIBox, ApplyMode, AutoArea, card, dOf, err, fetchBehaviorSummaries, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
 
@@ -315,10 +315,13 @@ export async function requestHandoverDraft(code: string, bip: Bip, logs: Log[], 
     const pr = parseJson<any>(bip.ProgressReport, {});
     const fba = parseJson<any>(bip.FBAReport, {}).sections || {};
     const obj = (label: string, o: any) => o && Object.values(o).some(Boolean) ? [label, ...Object.entries(o).map(([k, v]) => v ? `${k}: ${v}` : "")] : [];
-    const tiers = await fetchTierMonths(code);
+    const [tiers, sums] = await Promise.all([fetchTierMonths(code), fetchBehaviorSummaries(code, behaviors, pr.start || bip.PlanStart || "", today()).catch(() => [])]);
+    const r1 = (v: number | null | undefined) => (v == null ? "기록 없음" : String(Math.round(v * 10) / 10));
+    const measured = sums.map(r => `- [${r.type}] ${r.label} (${r.unit}): 중재 전 ${r.preN ? `${r.preN}회 평균 ${r1(r.preMean)}` : (r.baseline || "기록 없음")} → 중재 중 ${r.postN}회 평균 ${r1(r.postMean)}, 최근 4회 평균 ${r1(r.recentMean)}, 실행충실도 ${r.fidelity == null ? "기록 없음" : `${r.fidelityN}회 중 ${r.fidelity}%`}`);
     const ctx = [
         "[시스템 집계 — 수치는 이 값만 쓴다]", handoverStats(logs, schoolYearStart()),
         `- 올해 월별 지원 단계(월별 Tier 표): ${tierText(tiers)}`,
+        ...(measured.length ? ["[표적행동별 측정 결과 — 효과·습득 판단 근거]", ...measured] : []),
         "[자료 요약]", dataSummary(logs, behaviors, bip.PlanStart || ""),
         "[행동중재계획]", ...BIP_LABELS.map(([k, l]) => bip[k] ? `${l}: ${bip[k]}` : ""),
         "[FBA 결과 보고서]", ...Object.entries(fba).map(([k, v]) => v ? `${k}: ${v}` : ""),
