@@ -1,5 +1,6 @@
 # backend/app/api/deps.py
 
+import re
 from typing import Optional, Dict, Any
 from fastapi import Request, HTTPException, status, Depends
 from app.core.config import settings
@@ -75,7 +76,33 @@ def normalize_role(role_val: Optional[str]) -> str:
         return "division_head"
     if r in ["afterschool", "늘봄", "늘봄실장"]:
         return "afterschool"
+    if r in ["pbst_staff", "pbst", "담당자"]:
+        return "pbst_staff"
     return r
+
+
+def _split(v: Any) -> list:
+    return [x.strip() for x in re.split(r"[,;/]", str(v or "")) if x.strip()]
+
+
+_RANK = ["admin", "division_head", "teacher", "afterschool"]
+
+
+def account_profile(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Users 한 줄 → 실제로 쓰는 권한. 겸임은 Roles(여러 개)·AssignedClasses(여러 학급) 칸으로 적는다.
+    - 화면·API가 쓰는 role은 가장 넓은 것 하나(admin > division_head > teacher > afterschool).
+    - pbst_staff(기능별 담당자): 배정 학급이 없으면 전교를 보므로 admin처럼 동작하고, 있으면 그 학급들만 본다.
+    - account_admin: 계정·비밀번호 관리는 Role이 진짜 admin인 계정(학교관리자 등)만 한다."""
+    roles = [normalize_role(x) for x in [row.get("Role", "teacher"), *_split(row.get("Roles"))] if str(x).strip()] or ["teacher"]
+    assigned = [normalize_class_identifier(c) for c in _split(row.get("AssignedClasses"))]
+    eff = ["admin" if r in ("admin", "superadmin") or (r == "pbst_staff" and not assigned)
+           else "teacher" if r == "pbst_staff" else r for r in roles]
+    role = min(eff, key=lambda r: _RANK.index(r) if r in _RANK else len(_RANK))
+    group = ("ADMIN" if any(r in ("admin", "superadmin") for r in roles) else
+             "PBST_STAFF" if any(r in ("pbst_staff", "afterschool") for r in roles) else
+             "DEPT_HEAD" if "division_head" in roles else "TEACHER")
+    return {"role": role, "roles": roles, "assigned": assigned, "group": group,
+            "account_admin": any(r in ("admin", "superadmin") for r in roles)}
 
 
 # ── 열람 범위 ────────────────────────────────────────────────
@@ -104,18 +131,24 @@ def user_scope(user: Dict[str, Any]) -> Optional[str]:
     if is_admin_user(user):
         return None
     role = str(user.get("role", "")).lower()
+    parts = []
     if role == "division_head":
         cid = str(user.get("class_id", "")).strip()
-        return cid if cid in DIVISIONS else NO_SCOPE
-    if role == "afterschool":
-        return NO_SCOPE
-    return normalize_class_identifier(user.get("class_id") or user.get("id")) or NO_SCOPE
+        if cid in DIVISIONS:
+            parts.append(cid)
+    elif role != "afterschool" and not user.get("assigned"):
+        parts.append(normalize_class_identifier(user.get("class_id") or user.get("id")))
+    parts += [c for c in user.get("assigned") or [] if c]
+    parts = list(dict.fromkeys(p for p in parts if p))
+    return ",".join(parts) if parts else NO_SCOPE  # 여러 학급(겸임)은 쉼표로 잇는다
 
 
 def in_scope(cls: Optional[str], scope: Optional[str]) -> bool:
     """학급(이름·코드 무엇이든)이 범위 안인가."""
     if scope is None:
         return True
+    if "," in scope:
+        return any(in_scope(cls, p) for p in scope.split(","))
     c = normalize_class_identifier(cls)
     if not c or scope == NO_SCOPE:
         return False
@@ -135,7 +168,7 @@ def narrow_scope(user: Dict[str, Any], requested: Optional[str] = None) -> Optio
     if not req:
         return base
     if req in DIVISIONS:
-        return req if base is None or req == base else base
+        return req if base is None or req in str(base).split(",") else base
     req = normalize_class_identifier(req)
     return req if in_scope(req, base) else base
 
@@ -190,10 +223,11 @@ def resolve_session_user(request: Request) -> Dict[str, Any]:
     if is_active in _INACTIVE_FLAGS:
         raise _unauthorized("User account is deactivated.")
 
+    prof = account_profile(user)
     return {
+        **prof,
         "id": str(user_id),
         "sub": str(user_id),
-        "role": normalize_role(user.get("Role", "teacher")),
         "class_id": str(user.get("ClassID", "")).strip(),
         "class_name": str(user.get("ClassName", "")).strip(),
         "name": str(user.get("Name", "")).strip(),
@@ -215,6 +249,13 @@ def require_school_view(current_user: Dict[str, Any] = Depends(get_current_user)
     """관리자 또는 과정부장(여러 학급을 보는 계정). 결과는 user_scope로 다시 좁힌다."""
     if not is_admin_user(current_user) and str(current_user.get("role", "")).lower() != "division_head":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: 관리자·과정부장만 볼 수 있습니다.")
+    return current_user
+
+
+def require_account_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """계정·비밀번호 관리: Role이 admin인 계정(학교관리자·행동중재지원팀장 등)만. 기능 담당자(pbst_staff)는 안 된다."""
+    if not current_user.get("account_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: 계정 관리는 관리자 계정만 할 수 있습니다.")
     return current_user
 
 

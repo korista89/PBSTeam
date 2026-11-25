@@ -1,5 +1,6 @@
 "use client";
 
+import PrintGuard, { requestPrint } from "../components/PrintGuard";
 import React from "react";
 import Link from "next/link";
 import { AuthCheck } from "../components/AuthProvider";
@@ -75,7 +76,7 @@ export default function ProtocolPage() {
                 currentPage="protocol"
                 title="📜 프로토콜 안내"
                 subtitle="학교 PBS 운영 기준과 이 사이트의 사용 흐름을 한 화면에서 봅니다"
-                headerActions={<button onClick={() => window.print()} className="btn btn-secondary no-print">🖨️ 인쇄 / PDF 저장</button>}
+                headerActions={<><PrintGuard doc="위기행동 대응 프로토콜" /><button onClick={requestPrint} className="btn btn-secondary no-print">🖨️ 인쇄 / PDF 저장</button></>}
             >
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                     <div style={{ ...small, background: "#f8fafc", border: "1px solid var(--border, #e2e8f0)", borderRadius: 8, padding: "10px 14px" }}>

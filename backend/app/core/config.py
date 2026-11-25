@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     AUTH_SECRET: str = os.getenv("AUTH_SECRET", "")
     AUTH_TOKEN_TTL_MINUTES: int = int(os.getenv("AUTH_TOKEN_TTL_MINUTES", "480"))
     AUTH_COOKIE_NAME: str = "pbst_session"
+    # 개인정보 보호 단계: 2026_HYBRID_RBAC(기본, 별칭 표시) | 2027_FULL_ZERO_PII(익명코드·사유 선택·동의 필터)
+    PRIVACY_MODE: str = os.getenv("PRIVACY_MODE", "2026_HYBRID_RBAC")
     
     class Config:
         env_file = ".env"

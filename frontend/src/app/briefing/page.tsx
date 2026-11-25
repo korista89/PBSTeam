@@ -1,6 +1,7 @@
 "use client";
 
 // 관리자 브리핑 — 급할 때는 맨 위 '오늘의 10줄'만 읽으면 된다. 아래는 근거(기간별 그래프·학생 목록).
+import PrintGuard, { requestPrint } from "../components/PrintGuard";
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import {
@@ -144,7 +145,7 @@ export default function BriefingPage() {
         headerActions={
           <div style={{ display: "flex", gap: 8 }} className="no-print">
             <button onClick={() => void load(true)} className="btn btn-secondary" disabled={loading}>🔄 새로고침</button>
-            <button onClick={() => window.print()} className="btn btn-secondary">🖨️ 인쇄</button>
+            <PrintGuard doc="오늘의 브리핑" /><button onClick={requestPrint} className="btn btn-secondary">🖨️ 인쇄</button>
           </div>
         }
       >

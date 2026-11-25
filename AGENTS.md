@@ -67,6 +67,15 @@ npm run dev                            # next dev
 - 범위 판정은 `api/deps.py`의 `user_scope`·`in_scope`·`student_in_scope`·`narrow_scope` 하나로 한다. 새 코드에서 `user_class == ...`로 학급을 직접 비교하지 않는다. 결재(require_admin)는 관리자 전용 그대로다.
 - 늘봄실장은 숨김 탭 `늘봄_참여학생`의 학생만 기록·조회하고, 늘봄 시간 기록은 시간대 `11구간: 늘봄(교내 방과후)`이다.
 
+## 개인정보 보호 (2026-11-25)
+
+- `PRIVACY_MODE`(환경변수, 기본 `2026_HYBRID_RBAC`) — `2027_FULL_ZERO_PII`면 인쇄 사유 선택 등이 켜진다. `/auth/me`가 프론트에 알린다.
+- 계정은 직책·학급 1:1 아이디. 겸임은 Users의 `Roles`(쉼표)·`AssignedClasses`(쉼표, ClassID 대신) 칸. 권한 계산은 `deps.account_profile` 하나로 한다.
+  `pbst_staff`(기능 담당자)는 배정 학급이 없으면 admin처럼 동작하되 계정 관리(`require_account_admin`)는 못 한다. 이관은 `scripts/migrate_accounts.py`.
+- 국외 AI 호출은 `_call_llm` 한 곳을 지난다: 별칭·학생코드를 '학생A'로 바꿔 보내고 답에서 되돌린다(`services/ai_privacy.py`). 차트 해석은 `chart_payload`로 집계만 보낸다.
+- 감사로그는 숨김 탭 `접속기록`(덧붙이기만, 줄마다 HMAC 서명). 고치거나 지우는 코드를 만들지 않는다. 인쇄 버튼은 `window.print()` 대신 `PrintGuard`의 `requestPrint()`.
+- 인쇄물 실명은 인쇄 화면에서 직접 입력(`RealNameInput`)한 값으로만 바꾼다. 저장·전송하지 않는다.
+
 ## 학생 이름
 
 시트(Log_Main·TierStatus·월별 탭·PW_어휘데이터 등)에는 실명이 아니라 **별칭**(김O준, 이O, 겹치면 김O준-1011)만 저장한다.

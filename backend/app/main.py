@@ -93,6 +93,52 @@ async def verify_origin_header(request: Request, call_next):
 POLL_MAX_AGE_SECONDS = 20
 
 
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "")
+
+
+@app.middleware("http")
+async def access_log_middleware(request: Request, call_next):
+    """감사로그: 개별 학생 조회·쓰기·삭제·거부를 응답을 보낸 뒤 '접속기록' 탭에 덧붙인다."""
+    response = await call_next(request)
+    path = request.url.path
+    if not path.startswith("/api/v1/"):
+        return response
+    token = request.cookies.get(settings.AUTH_COOKIE_NAME)
+    if not token:
+        return response
+    try:
+        from app.core.security import decode_access_token
+        user = decode_access_token(token)
+    except Exception:
+        return response
+    method, status_code, query, ip = request.method, response.status_code, dict(request.query_params), _client_ip(request)
+
+    def _log():
+        from app.services import access_log
+        if access_log.from_request(path, method, status_code, query, user, ip):
+            access_log.flush()
+
+    from starlette.background import BackgroundTask
+    prev = response.background
+
+    async def _after():
+        if prev is not None:
+            await prev()
+        await run_in_threadpool(_log)
+    response.background = BackgroundTask(_after)
+    return response
+
+
+from app.services.ai_privacy import PIIBlocked
+
+
+@app.exception_handler(PIIBlocked)
+async def pii_blocked_handler(request: Request, exc: PIIBlocked):
+    return JSONResponse(status_code=400, content={"detail": f"개인정보 보호: {exc}"})
+
+
 @app.exception_handler(SheetUnavailable)
 async def sheet_unavailable_handler(request: Request, exc: SheetUnavailable):
     logger.warning("시트 응답 없음 → 503: %s %s (%s)", request.method, request.url.path, exc)

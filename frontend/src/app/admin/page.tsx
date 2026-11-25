@@ -235,9 +235,12 @@ export default function AdminPage() {
                     </div>
                 </div>
 
-                {/* User List & Role Management */}
-                <div className={styles.card}>
-                    <h2 style={{ marginBottom: '20px' }}>👥 사용자 권한 관리</h2>
+                {/* User List & Role Management (계정 관리는 관리자 계정만, 기능 담당자에게는 숨김) */}
+                {user?.account_admin !== false && <div className={styles.card}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: '20px' }}>
+                        <h2 style={{ margin: 0 }}>👥 사용자 권한 관리</h2>
+                        <a href={`${API_BASE_URL}/api/v1/auth/users/ledger.csv`} className="btn btn-secondary" style={{ fontSize: '0.85rem' }}>📥 계정-권한 관리대장 CSV</a>
+                    </div>
                     <div style={{ padding: '10px', backgroundColor: '#eef2ff', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', borderLeft: '4px solid #6366f1' }}>
                         💡 사용자를 클릭하여 역할, 담당 학급, 이름, 메모, 비밀번호를 수정할 수 있습니다.
                     </div>
@@ -310,7 +313,7 @@ export default function AdminPage() {
                             </div>
                         ))}
                     </div>
-                </div>
+                </div>}
             </div>
         </AppShell>
     );
@@ -322,6 +325,7 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
     const [name, setName] = useState(user.Name || "");
     const [memo, setMemo] = useState(user.Memo || "");
     const [newPassword, setNewPassword] = useState("");
+    const [temp, setTemp] = useState("");
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -330,6 +334,7 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
         setName(user.Name || "");
         setMemo(user.Memo || "");
         setNewPassword("");
+        setTemp("");
     }, [user]);
 
     const handleSave = async () => {
@@ -370,7 +375,7 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
                     value={name}
                     onChange={e => setName(e.target.value)}
                     style={{ width: '100%', padding: '5px' }}
-                    placeholder="교사 이름"
+                    placeholder="직책 표시 이름 (실명 넣지 않음)"
                 />
             </div>
             <div style={{ marginBottom: '8px' }}>
@@ -385,6 +390,7 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
                     <option value="class_manager">학급관리자 (Class Manager)</option>
                     <option value="division_head">과정부장 (담당 학급 칸에 과정)</option>
                     <option value="afterschool">늘봄실장</option>
+                    <option value="pbst_staff">기능 담당자 (위기행동·Tier·그림말 등)</option>
                     <option value="admin">최고관리자 (Admin)</option>
                 </select>
             </div>
@@ -424,6 +430,19 @@ function RoleEditor({ user, onUpdate }: { user: User, onUpdate: () => void }) {
                 />
             </div>
 
+            <button
+                type="button"
+                onClick={async () => {
+                    try {
+                        const r = await axios.post(`${API_BASE_URL}/api/v1/auth/users/${encodeURIComponent(user.ID)}/reset-password`);
+                        setTemp(r.data?.temp_password || "");
+                    } catch { setTemp("초기화 실패"); }
+                }}
+                style={{ width: '100%', padding: '7px', marginBottom: 6, background: '#fff7ed', color: '#9a3412', border: '1px solid #fdba74', borderRadius: '4px', cursor: 'pointer' }}
+            >
+                🔑 비밀번호 즉시 초기화
+            </button>
+            {temp && <div style={{ marginBottom: 8, padding: 6, background: '#fef3c7', borderRadius: 4 }}>임시 비밀번호: <b style={{ fontFamily: 'monospace', fontSize: 15 }}>{temp}</b><br />이 화면을 닫으면 다시 볼 수 없습니다. 종이로 전달하세요.</div>}
             <button
                 onClick={handleSave}
                 disabled={loading}

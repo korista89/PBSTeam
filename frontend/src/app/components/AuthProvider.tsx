@@ -50,7 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     class_name: me.class_name || "",
                     name: me.name || "",
                     scope: me.scope ?? null,
-                    classes: me.classes || []
+                    classes: me.classes || [],
+                    group: me.group || "",
+                    account_admin: !!me.account_admin,
+                    privacy_mode: me.privacy_mode || "2026_HYBRID_RBAC"
                 });
             } else {
                 setUser(null);

@@ -1,5 +1,6 @@
 "use client";
 
+import PrintGuard, { requestPrint } from "./components/PrintGuard";
 import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import {
@@ -463,8 +464,9 @@ export default function Home() {
               {(user?.classes || []).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           )}
+          <PrintGuard doc="대시보드" />
           <button
-            onClick={() => window.print()}
+            onClick={requestPrint}
             className="btn btn-secondary no-print"
           >
             📄 PDF 내보내기

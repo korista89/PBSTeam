@@ -28,6 +28,25 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    // 직책별 1:1 아이디(Users 시트가 원본). 못 불러오면 예전 고정 목록으로 동작한다.
+    const [accounts, setAccounts] = useState<{ id: string; tab: string }[]>([]);
+    const [adminId, setAdminId] = useState("admin");
+    useEffect(() => {
+        axios.get(`${API_BASE_URL}/api/v1/auth/accounts`).then(r => {
+            const list: { id: string; tab: string }[] = Array.isArray(r.data) ? r.data : [];
+            setAccounts(list);
+            const admins = list.filter(a => a.tab === "admin");
+            if (admins.length) setAdminId(admins[0].id);
+        }).catch(() => { });
+    }, []);
+    const adminAccounts = accounts.filter(a => a.tab === "admin");
+    const staffAccounts = [...STAFF_ACCOUNTS, ...accounts.filter(a => a.tab === "staff" && !STAFF_ACCOUNTS.some(s => s.id === a.id)).map(a => ({ id: a.id, name: a.id }))];
+    // 부담임 등 같은 학급 계정(예: "초1-1 부담임")은 담임 바로 아래에, 교과전담 등 나머지는 맨 끝에 둔다.
+    const extraTeachers = accounts.filter(a => a.tab === "teacher" && !teacherList.some(t => t.id === a.id));
+    const teacherAccounts = [
+        ...teacherList.flatMap(t => [t, ...extraTeachers.filter(a => a.id.startsWith(`${t.id} `)).map(a => ({ id: a.id, name: `${t.name.replace(/ \(.*\)$/, "")} ${a.id.slice(t.id.length + 1)} (${a.id})` }))]),
+        ...extraTeachers.filter(a => !teacherList.some(t => a.id.startsWith(`${t.id} `))).map(a => ({ id: a.id, name: a.id })),
+    ];
 
     useEffect(() => {
         // Initialize teacher account selector using non-sensitive static CLASS_LIST
@@ -60,8 +79,7 @@ export default function LoginPage() {
             } else if (loginType === "staff") {
                 userId = staffId;
             } else {
-                // Admin: Fixed to "admin" (System Admin)
-                userId = "admin";
+                userId = adminId;
             }
 
             const apiUrl = API_BASE_URL;
@@ -248,7 +266,7 @@ export default function LoginPage() {
                                         outline: 'none', transition: 'border-color 0.2s'
                                     }}
                                 >
-                                    {teacherList.map(t => (
+                                    {teacherAccounts.map(t => (
                                         <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
@@ -267,7 +285,24 @@ export default function LoginPage() {
                                         borderRadius: '12px', fontSize: '1rem', backgroundColor: '#fff', outline: 'none'
                                     }}
                                 >
-                                    {STAFF_ACCOUNTS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    {staffAccounts.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                            </div>
+                        ) : adminAccounts.length > 0 ? (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: '700', color: '#334155', fontSize: '0.88rem' }}>
+                                    계정 선택
+                                </label>
+                                <select
+                                    value={adminId}
+                                    onChange={(e) => setAdminId(e.target.value)}
+                                    aria-label="관리자·담당자 계정"
+                                    style={{
+                                        width: '100%', padding: '14px', border: '1.5px solid #e2e8f0',
+                                        borderRadius: '12px', fontSize: '1rem', backgroundColor: '#fff', outline: 'none'
+                                    }}
+                                >
+                                    {adminAccounts.map(t => <option key={t.id} value={t.id}>{t.id}</option>)}
                                 </select>
                             </div>
                         ) : (
@@ -322,6 +357,9 @@ export default function LoginPage() {
                         <a href="/privacy" style={{ fontSize: '0.78rem', color: '#94a3b8', textDecoration: 'underline', marginTop: '6px', display: 'inline-block' }}>
                             개인정보처리방침 (AI 분석 기능)
                         </a>
+                        <div style={{ marginTop: '10px', fontSize: '0.74rem', color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '6px 10px', lineHeight: 1.5 }}>
+                            🔒 개인정보 보호 조치 적용 중 (1:1 직책 권한 통제 · 접속기록 보관 · AI 비식별 처리) | 2027.02 로컬 암호화 완전 비식별 전환 예정
+                        </div>
                     </div>
                 </div>
             </div>

@@ -2,12 +2,13 @@
 
 // 위기행동 지원 및 개별학생교육지원 보고서 — 학교 양식과 같은 칸 배치로 기록을 채워 보여주고,
 // 브라우저 인쇄(PDF 저장)·한글(hwpx) 내려받기를 한다. 인쇄해 담당자에게 제출한다.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useParams } from "next/navigation";
 import { API_BASE_URL } from "../../../constants";
 import { AuthCheck } from "../../../components/AuthProvider";
 import ReportSheet from "../../../components/ReportSheet";
+import PrintGuard, { RealNameInput, requestPrint, withRealName } from "../../../components/PrintGuard";
 
 type Fields = {
   기록번호: string; 소속: string; 학생: string; 담임교사: string; 보고사유: Record<string, boolean>;
@@ -19,7 +20,9 @@ type Fields = {
 export default function CrisisReportPage() {
   const params = useParams();
   const id = decodeURIComponent(params.id as string);
-  const [f, setF] = useState<Fields | null>(null);
+  const [raw, setF] = useState<Fields | null>(null);
+  const [real, setReal] = useState("");  // 인쇄용 실명(직접 입력, 저장·전송 안 함)
+  const f = useMemo(() => withRealName(raw, raw?.학생 || "", real), [raw, real]);
   const [error, setError] = useState("");
 
   const draft = id === "draft";
@@ -46,10 +49,12 @@ export default function CrisisReportPage() {
         @page { size: A4; margin: 12mm; }
         @media print { .no-print { display: none !important; } body { background: #fff !important; } .sheet { box-shadow: none !important; margin: 0 !important; } }
       `}</style>
+      {raw && <PrintGuard doc={`위기행동 보고서 ${id}`} />}
       <div style={{ background: "#e5e7eb", minHeight: "100vh", padding: "16px 0" }}>
         <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "0 12px" }}>
           <button onClick={() => (draft ? window.close() : window.history.back())} className="btn btn-secondary">{draft ? "✕ 닫기" : "← 돌아가기"}</button>
-          <button onClick={() => window.print()} className="btn btn-primary" disabled={!f}>🖨️ PDF 인쇄</button>
+          <button onClick={requestPrint} className="btn btn-primary" disabled={!f}>🖨️ PDF 인쇄</button>
+          <RealNameInput alias={raw?.학생 || ""} value={real} onChange={setReal} />
           {!draft && <a href={hwpx} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 한글 파일(기록 채움)</a>}
           {draft && <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#b45309" }}>저장 전 미리보기입니다 — 제출해야 기록이 남습니다.</span>}
           <a href={blank} className="btn btn-secondary" style={{ textDecoration: "none" }}>⬇️ 빈 양식(hwpx)</a>

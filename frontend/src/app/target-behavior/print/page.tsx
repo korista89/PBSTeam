@@ -2,12 +2,15 @@
 
 // 개별학생 행동중재 문서(행동중재계획·FBA 결과 보고서·중재 결과 보고서) 미리보기·인쇄.
 // 작성 화면이 저장 전 내용까지 localStorage로 넘기므로 지금 화면 그대로 인쇄된다.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AuthCheck } from "../../components/AuthProvider";
+import PrintGuard, { RealNameInput, requestPrint, withRealName } from "../../components/PrintGuard";
 import { BipSheet, HandoverCharts, HandoverPage2, SectionSheet, SummaryTable } from "../shared";
 
 export default function InterventionPrint() {
-    const [p, setP] = useState<any>(null);
+    const [raw, setP] = useState<any>(null);
+    const [real, setReal] = useState("");  // 인쇄용 실명(직접 입력, 저장·전송 안 함)
+    const p = useMemo(() => withRealName(raw, raw?.s?.name || "", real), [raw, real]);
     const [error, setError] = useState("");
     // 미리보기를 실제 인쇄 쪽(A4, 여백 12mm → 내용 703×1032px)으로 나눠 보여준다.
     // 숨긴 원본(인쇄 때는 이것만 보임)을 같은 너비로 그려 행 단위로 쪽 나눔을 흉내 내고,
@@ -48,10 +51,12 @@ export default function InterventionPrint() {
                 @media screen { .print-src { position: absolute; left: -10000px; top: 0; visibility: hidden; } }
                 @media print { .no-print { display: none !important; } body { background: #fff !important; } .print-bg { background: #fff !important; padding: 0 !important; } }
             `}</style>
+            {raw && <PrintGuard doc={raw.heading || raw.doc || "행동중재 문서"} student={raw.s?.code || ""} />}
             <div className="print-bg" style={{ background: "#e5e7eb", minHeight: "100vh", padding: "16px 0" }}>
                 <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "0 12px" }}>
                     <button onClick={() => window.close()} className="btn btn-secondary">✕ 닫기</button>
-                    <button onClick={() => window.print()} className="btn btn-primary" disabled={!p}>🖨️ 인쇄 / PDF 저장</button>
+                    <button onClick={requestPrint} className="btn btn-primary" disabled={!p}>🖨️ 인쇄 / PDF 저장</button>
+                    <RealNameInput alias={raw?.s?.name || ""} value={real} onChange={setReal} />
                     <span style={{ fontSize: "0.8rem", color: "#475569" }}>작성 화면의 지금 내용입니다. 저장은 작성 화면에서 따로 해야 합니다.</span>
                 </div>
                 {p && pages.length > 0 && (

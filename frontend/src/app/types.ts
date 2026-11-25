@@ -138,4 +138,7 @@ export interface User {
     name?: string;
     scope?: string | null;   // null=전교, 과정명(과정부장), 학급(담임)
     classes?: string[];      // 볼 수 있는 학급
+    group?: string;          // ADMIN·PBST_STAFF·DEPT_HEAD·TEACHER
+    account_admin?: boolean; // 계정·비밀번호 관리 가능
+    privacy_mode?: string;   // 2026_HYBRID_RBAC | 2027_FULL_ZERO_PII
 }

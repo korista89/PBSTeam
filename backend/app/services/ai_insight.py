@@ -549,7 +549,13 @@ def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 8192) -> s
     deliberately turned on), and we cap that attempt tightly so a dead
     tunnel fails fast instead of eating the request budget.
     """
-    user_prompt = _scrub_prompt(user_prompt)
+    # 국외 전송 전: 자유서술 실명 가림 → 별칭·학생코드를 '학생A'로 바꾸고, 답은 원래 표기로 되돌린다.
+    from app.services.ai_privacy import pseudonymize, restore
+    (system_prompt, user_prompt), mapping = pseudonymize([system_prompt, _scrub_prompt(user_prompt)])
+    return restore(_dispatch_llm(system_prompt, user_prompt, max_tokens), mapping)
+
+
+def _dispatch_llm(system_prompt: str, user_prompt: str, max_tokens: int) -> str:
     should_try_local = True
     if _is_serverless_runtime():
         raw_url = os.getenv("LOCAL_LLM_URL", "").strip().lower()
@@ -587,8 +593,11 @@ def generate_bcba_section_analysis(
     - intensity: 강도 4~5 전조, O/X 교차분석, 안전 3대 지표, 최소제한원칙
     - function: 데이터 품질 선행 출력, GO_HOME 태그, 기능적 등가 대체행동
     """
-    raw_summary = raw_summary or {}
-    quality_report = quality_report or {}
+    # 차트 해석은 집계 수치만: 서술 필드·긴 글은 지우고, 남으면 PIIBlocked로 막는다.
+    from app.services.ai_privacy import chart_payload
+    chart_data, top_items = chart_payload(chart_data), chart_payload(top_items)
+    raw_summary = chart_payload(raw_summary or {}) or {}
+    quality_report = quality_report or {}  # 서버가 계산한 집계라 그대로
     chart_data_for_prompt = (
         _redact_list_names(chart_data) if section_type in _STUDENT_KEYED_SECTIONS else chart_data
     )
@@ -1098,7 +1107,8 @@ def generate_bcba_cico_analysis(
         tier_info=tier_info,
         selected_month=selected_month
     )
-    cico_summary_json = json.dumps(summary_payload, ensure_ascii=False, separators=(',', ':'))
+    from app.services.ai_privacy import chart_payload
+    cico_summary_json = json.dumps(chart_payload(summary_payload), ensure_ascii=False, separators=(',', ':'))
     month_text = f"{selected_month}월 " if selected_month else ""
 
     prompt = f"""[분석 대상: {month_text}CICO 정량 집계 및 Tier 의사결정 요약]
