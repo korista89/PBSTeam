@@ -2,11 +2,11 @@
 
 // ⑤ 데이터 기반 의사결정, ⑥ 의료협력의뢰서·추가지원신청서, ⑧ 다음 학년도 인수인계 자료.
 // 따로 시트 칸을 만들지 않고 BIP 행의 ProgressReport JSON 안(decision·medical·support·handover)에 함께 저장한다.
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
-import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox } from "./shared";
+import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData } from "./shared";
 import { AIBox, AutoArea, card, dOf, err, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
@@ -252,6 +252,25 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const { cur, set } = useStore(bip, setBip, "handover");
     const [ai, setAi] = useState({ loading: false, text: "" });
     const start = schoolYearStart();
+    const [times, setTimes] = useState<{ item: string; count: number }[]>([]);
+    useEffect(() => {
+        let alive = true;
+        setTimes([]);
+        axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/fba-evidence`)
+            .then(r => { if (alive) setTimes((r.data?.deterministic_metrics?.time_slot_distribution || []).slice(0, 6)); }).catch(() => {});
+        return () => { alive = false; };
+    }, [head.code]);
+    const charts: HandoverChartData = useMemo(() => {
+        const ds = logs.map(dOf).filter(d => d && d >= start && d <= today());
+        const monthly: { label: string; count: number }[] = [];
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(Date.UTC(+start.slice(0, 4), 2 + i, 1)), key = d.toISOString().slice(0, 7);
+            if (key > today().slice(0, 7)) break;
+            monthly.push({ label: `${d.getUTCMonth() + 1}월`, count: ds.filter(x => x.startsWith(key)).length });
+        }
+        return { monthly, times, total: ds.length };
+    }, [logs, start, times]);
+    const chars = HANDOVER.reduce((n, [, f]) => n + (cur[f] || "").length, 0);
     const y = +start.slice(0, 4);
     // AI 없이 지금까지 작성한 계획에서 옮겨 채운다(AI가 실패해도 쓸 수 있는 바탕)
     const fill = () => {
@@ -287,7 +306,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 인수인계 자료 초안 받기(올해 자료 전체)</button>
                     <button className="btn btn-secondary" onClick={fill}>📋 행동중재계획에서 옮겨 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: HANDOVER.map(([t, f]) => [t, cur[f] || ""]) })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: HANDOVER.map(([t, f]) => [t, cur[f] || ""]), charts })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
@@ -301,7 +320,10 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 )}
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} /></div>
+            <div style={{ fontSize: "0.8rem", fontWeight: 700, color: chars > 1600 ? "#dc2626" : "#475569" }}>
+                본문 {chars.toLocaleString()}자 / 권장 1,600자 이하 {chars > 1600 ? "— 인쇄하면 2쪽을 넘을 수 있습니다. 줄여 주세요." : "(차트 포함 2쪽 안)"}
+            </div>
+            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} extra={<HandoverCharts d={charts} />} /></div>
         </div>
     );
 }

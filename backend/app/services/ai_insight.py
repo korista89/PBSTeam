@@ -1679,7 +1679,9 @@ DOCUMENT_SPECS = {
                  "5절은 중재 전후 수치로 효과가 확인된 전략을 먼저 쓰고, 행동을 강화할 위험이 있는 대응(예: 요구 철회, 과도한 관심)을 '피할 것'으로 따로 쓴다. "
                  "7절은 초록(전조)·노랑(행동 시작)·빨강(위험) 단계별로 교사가 할 행동을 한 줄씩 쓴다. "
                  "8절은 1주차·2주차로 나눠 기저선 재측정, 강화제 선호도 재평가, 보호자 면담, 지원인력 공유 등 할 일을 체크리스트로 쓴다. "
-                 "9절은 자료가 부족하거나 확인되지 않은 것을 쓴다. 각 절 2~6줄."),
+                 "9절은 자료가 부족하거나 확인되지 않은 것을 쓴다. "
+                 "숫자는 새 담임이 바로 읽게 쉬운 말로 쓴다: '57번 중 24번', '가장 많음', '절반 가까이'. 백분율(%)·n=·괄호 안 통계 표기는 쓰지 않는다. "
+                 "인쇄 2쪽(차트 포함) 안에 들어가야 하므로 각 절은 1~3줄, 한 줄 45자 안팎, 전체 1,300자 이내로 쓴다. 8절만 1주차·2주차 각 3줄까지 허용한다."),
 }
 
 
@@ -1695,7 +1697,7 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 [교사가 입력한 계획·수치·맥락] {context[:9000] or '없음'}
 
 [지시사항]
-위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 2~5줄로 쓴다.
+위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 {'1~3' if kind == 'handover' else '2~5'}줄로 쓴다.
 {sections}
 
 [작성 규칙]
@@ -1703,7 +1705,10 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 2. 행동은 관찰·측정 가능한 용어와 숫자(건수, 기간, 강도)로 쓴다.
 3. {extra}
 4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4000 if kind == "handover" else 2000)
+    text = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 4000 if kind == "handover" else 2000)
+    if kind == "handover":  # 인수인계 자료는 새 담임에게 그대로 전달하므로 모델 표시 꼬리말을 뗀다
+        text = re.sub(r"\n+-{3,}\s*\n>[^\n]*(?:AI 모델)[^\n]*\s*$", "", text).rstrip()
+    return text
 
 
 def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_context: str = "", sample_size: int = 0) -> str:

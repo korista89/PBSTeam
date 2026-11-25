@@ -188,3 +188,40 @@ export function SummaryTable({ rows, crisis }: { rows: BehaviorSummary[]; crisis
         </div>
     );
 }
+
+// 인수인계 자료용 차트 2개(월별 행동 건수·많이 일어난 시간). 인쇄에도 그대로 나오도록 라이브러리 없이 그린다.
+export type HandoverChartData = { monthly: { label: string; count: number }[]; times: { item: string; count: number }[]; total: number };
+
+export function HandoverCharts({ d }: { d: HandoverChartData }) {
+    const box: React.CSSProperties = { flex: 1, minWidth: 0, border: "1px solid #000", padding: "6px 8px" };
+    const head: React.CSSProperties = { fontWeight: 700, fontSize: "9pt", marginBottom: 4 };
+    const mMax = Math.max(1, ...d.monthly.map(m => m.count));
+    const tMax = Math.max(1, ...d.times.map(t => t.count));
+    return (
+        <div style={{ display: "flex", gap: 8 }}>
+            <div style={box}>
+                <div style={head}>① 달마다 행동이 몇 번 있었나</div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 92 }}>
+                    {d.monthly.map(m => (
+                        <div key={m.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+                            <div style={{ fontSize: "7.5pt" }}>{m.count || ""}</div>
+                            <div style={{ width: "70%", height: `${(m.count / mMax) * 70}px`, background: "#4f46e5", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }} />
+                            <div style={{ fontSize: "7.5pt", borderTop: "1px solid #000", width: "100%", textAlign: "center" }}>{m.label}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div style={box}>
+                <div style={head}>② 언제 많이 일어났나 (전체 {d.total}번)</div>
+                {d.times.length === 0 && <div style={{ fontSize: "8.5pt" }}>시간 기록 없음</div>}
+                {d.times.map(t => (
+                    <div key={t.item} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "8pt", marginBottom: 3 }}>
+                        <span style={{ width: 62, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{t.item}</span>
+                        <div style={{ flex: 1, height: 9 }}><div style={{ width: `${(t.count / tMax) * 100}%`, height: "100%", background: "#f59e0b", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }} /></div>
+                        <span style={{ width: 30, textAlign: "right" }}>{t.count}번</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
