@@ -204,7 +204,7 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
 // ⑧ 다음 학년도 인수인계 자료 ─────────────────────────────
 // 새 담임이 3월 전에 이것만 읽고 행동 특성·패턴·기능을 알고 행동중재계획을 바로 실행하도록 한 장으로 묶는다.
 // ProgressReport JSON의 handover 키에 저장한다.
-const HANDOVER: [string, string, string][] = [
+export const HANDOVER: [string, string, string][] = [
     ["한눈에 보는 학생", "summary", "가장 주의할 행동 · 그 행동의 기능 · 첫날 꼭 할 일 1가지"],
     ["표적행동과 정의", "behavior", "관찰·측정 가능한 정의(빈도·지속시간·강도 기준)"],
     ["행동 패턴(언제·어디서·무엇 다음에)", "pattern", "많이 발생한 시간대·장소·선행사건과 건수"],
@@ -215,13 +215,36 @@ const HANDOVER: [string, string, string][] = [
     ["3월 첫 2주 실행 계획", "march", "1주차·2주차 할 일(기저선 재측정, 강화제 재평가, 보호자 면담, 지원인력 공유)"],
     ["남은 과제·확인 필요", "todo", "자료가 부족하거나 확인하지 못한 것"],
 ];
-const schoolYearStart = () => { const t = today(); const y = +t.slice(0, 4), m = +t.slice(5, 7); return `${m >= 3 ? y : y - 1}-03-01`; };
+export const schoolYearStart = () => { const t = today(); const y = +t.slice(0, 4), m = +t.slice(5, 7); return `${m >= 3 ? y : y - 1}-03-01`; };
 const BIP_LABELS: [string, string][] = [
     ["TargetBehavior", "표적행동"], ["OperationalDefinition", "조작적 정의"], ["MedicationStatus", "약물"], ["Hypothesis", "기능평가 결과"],
     ["ReinforcerInfo", "강화제"], ["Goals", "중재목표"], ["PreventionStrategies", "예방"], ["TeachingStrategies", "교수"], ["ReinforcementStrategies", "강화"],
     ["CrisisPlan", "위기(예방·완화)"], ["CrisisNotify", "위기(알림·대처)"], ["CrisisReturn", "위기(복귀)"], ["CrisisHome", "위기(가정학습)"],
     ["HomeSupport", "가정 연계"], ["SupportTeam", "지원팀"], ["OtherConsiderations", "기타"],
 ];
+
+// ⑧ 탭과 Tier 현황 '인수인계 자료 일괄 생성'이 함께 쓴다.
+export async function requestHandoverDraft(code: string, bip: Bip, logs: Log[], behaviors: any[]): Promise<string> {
+    const pr = parseJson<any>(bip.ProgressReport, {});
+    const fba = parseJson<any>(bip.FBAReport, {}).sections || {};
+    const ctx = [
+        "[자료 요약]", dataSummary(logs, behaviors, bip.PlanStart || ""),
+        "[행동중재계획]", ...BIP_LABELS.map(([k, l]) => bip[k] ? `${l}: ${bip[k]}` : ""),
+        "[FBA 결과 보고서]", ...Object.entries(fba).map(([k, v]) => v ? `${k}: ${v}` : ""),
+        "[중재 결과 보고서]", ...Object.entries(pr.sections || {}).map(([k, v]) => v ? `${k}: ${v}` : ""),
+        pr.decision?.choice ? `[최근 의사결정] ${pr.decision.choice} — ${pr.decision.rationale || ""}` : "",
+    ].filter(Boolean).join("\n");
+    const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/ai-document-draft`,
+        { kind: "handover", context: ctx, start_date: schoolYearStart(), end_date: today() }, { timeout: 240000 });
+    return r.data.analysis || "";
+}
+// AI 결과를 handover 칸(summary·behavior…)으로 나눈다. 못 나누면 null.
+export function parseHandover(text: string): Record<string, string> | null {
+    const parsed = splitNumbered(text, HANDOVER.map(x => x[0]));
+    const patch: Record<string, string> = {};
+    HANDOVER.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
+    return Object.keys(patch).length ? patch : null;
+}
 
 export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
@@ -243,26 +266,12 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     };
     const runAI = async () => {
         setAi({ loading: true, text: "" });
-        const pr = parseJson<any>(bip.ProgressReport, {});
-        const fba = parseJson<any>(bip.FBAReport, {}).sections || {};
-        const ctx = [
-            "[자료 요약]", dataSummary(logs, behaviors, bip.PlanStart || ""),
-            "[행동중재계획]", ...BIP_LABELS.map(([k, l]) => bip[k] ? `${l}: ${bip[k]}` : ""),
-            "[FBA 결과 보고서]", ...Object.entries(fba).map(([k, v]) => v ? `${k}: ${v}` : ""),
-            "[중재 결과 보고서]", ...Object.entries(pr.sections || {}).map(([k, v]) => v ? `${k}: ${v}` : ""),
-            pr.decision?.choice ? `[최근 의사결정] ${pr.decision.choice} — ${pr.decision.rationale || ""}` : "",
-        ].filter(Boolean).join("\n");
-        try {
-            const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
-                { kind: "handover", context: ctx, start_date: start, end_date: today() }, { timeout: 240000 });
-            setAi({ loading: false, text: r.data.analysis || "" });
-        } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
+        try { setAi({ loading: false, text: await requestHandoverDraft(head.code, bip, logs, behaviors) }); }
+        catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
     const apply = (mode: "empty" | "append") => {
-        const parsed = splitNumbered(ai.text, HANDOVER.map(x => x[0]));
-        if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
-        const patch: Record<string, string> = {};
-        HANDOVER.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
+        const patch = parseHandover(ai.text);
+        if (!patch) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
         set(mergeInto(cur, patch, mode));
     };
     const dateVal = cur.date || today();
@@ -284,6 +293,12 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
                     AI는 {kDate(start)}부터 오늘까지의 행동기록과 ②FBA·③행동중재계획·⑤의사결정·⑦결과 보고서를 함께 읽습니다. 먼저 ③·⑦을 저장해 두면 더 정확합니다. &lsquo;확인 필요&rsquo;는 직접 채워 주세요.
                 </div>
+                {cur.ai && (
+                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "#fffbeb", border: "1px solid #fde68a", fontSize: "0.8rem", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <b style={{ color: "#b45309" }}>⚠️ {cur.ai}</b> 내용을 확인·수정한 뒤 표시를 지우고 저장하세요.
+                        <button className="btn btn-secondary" onClick={() => set({ ai: "" })}>검토 완료</button>
+                    </div>
+                )}
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
             <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} /></div>

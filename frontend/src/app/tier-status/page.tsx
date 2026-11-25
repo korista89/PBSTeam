@@ -9,6 +9,7 @@ import { maskName } from "../utils";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
 import HandoverMatch from "./HandoverMatch";
+import HandoverBatch from "./HandoverBatch";
 
 // Tier현황(월별): CICO·SST·Tier3는 그 달의 관리 탭 표(CICO관리·SST관리·Tier3관리)가 출처다.
 // 여기서 CICO·Tier3를 고치면 그 표에 저장되고, 이번 달이면 TierStatus 시트의 칸(사이트 다른 화면이 읽는 거울)도 그 학생만 맞춘다.
@@ -218,6 +219,7 @@ export default function TierStatusPage() {
           )}
 
           {admin && <HandoverMatch students={students} />}
+          {admin && <HandoverBatch students={students} />}
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <select value={filter} onChange={e => setFilter(e.target.value)} className="form-select">
