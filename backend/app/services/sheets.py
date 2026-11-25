@@ -642,6 +642,25 @@ def update_user_password(user_id: str, new_password: str):
             logger.error("Error updating password")
         return {"error": str(e)}
 
+def set_user_field(user_id: str, header: str, value: str) -> bool:
+    """Users 한 칸 쓰기(칸이 없으면 맨 끝에 만든다). 비밀번호 만료일(PwExpires) 해제 등에 쓴다."""
+    ws = get_users_worksheet()
+    if not ws:
+        return False
+    headers = ws.row_values(1)
+    if header not in headers:
+        headers.append(header)
+        if ws.col_count < len(headers):
+            ws.resize(cols=len(headers))
+        ws.update_cell(1, len(headers), header)
+    ids = ws.col_values(headers.index("ID") + 1)
+    if str(user_id) not in ids:
+        return False
+    ws.update_cell(ids.index(str(user_id)) + 1, headers.index(header) + 1, value)
+    clear_cache("users")
+    return True
+
+
 def update_user_password_cas(user_id: str, expected_stored_password: str, new_plain_password: str) -> bool:
     """
     Best-effort compare-before-write password upgrade for login-time progressive migration.
@@ -749,6 +768,7 @@ def get_all_users():
             "Roles": r.get("Roles", ""),
             "AssignedClasses": r.get("AssignedClasses", ""),
             "Active": r.get("Active", ""),
+            "PwExpires": r.get("PwExpires", ""),
         } for r in records]
     except SheetUnavailable:
         raise

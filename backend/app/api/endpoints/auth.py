@@ -31,6 +31,39 @@ def _log(action: str, user_id: str, role: str, http: Optional[Request], student:
         pass
 
 
+def _pw_expired(user: Dict[str, Any]) -> bool:
+    from app.core.time import today_kst
+    exp = str(user.get("PwExpires", "") or "").strip()
+    return bool(exp) and today_kst().isoformat() > exp
+
+
+class ExpiredPasswordRequest(BaseModel):
+    user_id: str
+    current_password: str
+    new_password: str
+
+
+@router.post("/expired-password")
+def change_expired_password(req: ExpiredPasswordRequest, http: Request):
+    """만료된 임시 비밀번호를 본인 비밀번호로 바꾼다(로그인 전, 현재 비밀번호 확인)."""
+    from app.services.sheets import set_user_field
+    wait = login_throttle.retry_after(req.user_id)
+    if wait:
+        raise HTTPException(status_code=429, detail="잠시 뒤에 다시 시도해 주세요.", headers={"Retry-After": str(wait)})
+    user = get_user_by_id(req.user_id, strict=True) if req.user_id else None
+    stored = str((user or {}).get("Password", ""))
+    if not user or not verify_password_compat(req.current_password, stored).verified:
+        login_throttle.record_failure(req.user_id)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if len(req.new_password) < 8 or req.new_password == req.current_password:
+        raise HTTPException(status_code=400, detail="새 비밀번호는 8자 이상이고 지금 비밀번호와 달라야 합니다.")
+    if not update_user_password_cas(req.user_id, stored, req.new_password):
+        raise HTTPException(status_code=409, detail="비밀번호가 방금 바뀌었습니다. 다시 시도하세요.")
+    set_user_field(req.user_id, "PwExpires", "")
+    _log("UPDATE", req.user_id, "", http, reason="만료 비밀번호 변경", path="/api/v1/auth/expired-password")
+    return {"success": True}
+
+
 @router.post("/login")
 def login(request: LoginRequest, response: Response, http: Request):
     wait = login_throttle.retry_after(request.user_id)
@@ -62,6 +95,12 @@ def login(request: LoginRequest, response: Response, http: Request):
         )
 
     login_throttle.record_success(request.user_id)
+
+    # 공통 임시 비밀번호는 만료일(PwExpires)까지만. 지나면 본인 비밀번호로 바꾼 뒤에 들어온다.
+    if _pw_expired(user):
+        _log("LOGIN_FAIL", request.user_id, "", http, reason="비밀번호 만료")
+        raise HTTPException(status_code=403, detail={"code": "PASSWORD_EXPIRED",
+                            "message": "임시 비밀번호 사용 기간이 끝났습니다. 새 비밀번호를 정해 주세요."})
 
     # Login-time Progressive Rehash (Silent migration to Argon2id with CAS protection)
     if ver_res.needs_rehash:
@@ -164,6 +203,9 @@ def change_my_password(request: MyPasswordRequest, current_user: Dict[str, Any] 
         raise HTTPException(status_code=400, detail="현재 비밀번호가 맞지 않습니다.")
     if not update_user_password_cas(current_user["id"], stored, request.new_password):
         raise HTTPException(status_code=409, detail="비밀번호가 방금 다른 곳에서 바뀌었습니다. 다시 시도하세요.")
+    if str(user.get("PwExpires", "") or "").strip():
+        from app.services.sheets import set_user_field
+        set_user_field(current_user["id"], "PwExpires", "")  # 본인이 바꾸면 공통 임시 비밀번호 만료 대상에서 빠진다
     return {"success": True}
 
 

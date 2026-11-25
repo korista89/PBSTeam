@@ -104,7 +104,7 @@ def flush() -> None:
 
 # ── 요청 → 기록 ──────────────────────────────────────────
 _CODE_IN_PATH = re.compile(r"(?<![0-9])(\d{4})(?![0-9])")
-_SKIP = ("/api/v1/auth/login", "/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/export-log")
+_SKIP = ("/api/v1/auth/login", "/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/export-log", "/api/v1/auth/expired-password")
 
 
 def action_for(method: str, status: int) -> Optional[str]:

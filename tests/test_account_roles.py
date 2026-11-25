@@ -29,3 +29,14 @@ def test_scopes():
     assert deps.in_scope("중1-2", multi) and not deps.in_scope("중2-1", multi)
     assert deps.narrow_scope(_user(Role="class_teacher", ID="x", AssignedClasses="중1-1,중1-2"), "중1-2") == "중1-2"
     assert deps.narrow_scope(_user(Role="class_teacher", ID="x", AssignedClasses="중1-1,중1-2"), "고1-1") == multi
+
+
+def test_password_expiry(monkeypatch):
+    import datetime
+    from app.api.endpoints import auth
+    from app.core import time as t
+    monkeypatch.setattr(t, "today_kst", lambda: datetime.date(2026, 12, 31))
+    assert not auth._pw_expired({"PwExpires": "2026-12-31"})  # 그날까지는 된다
+    monkeypatch.setattr(t, "today_kst", lambda: datetime.date(2027, 1, 1))
+    assert auth._pw_expired({"PwExpires": "2026-12-31"})
+    assert not auth._pw_expired({"PwExpires": ""})

@@ -28,6 +28,10 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    // 공통 임시 비밀번호 기간이 끝나면 여기서 새 비밀번호를 정한다.
+    const [expired, setExpired] = useState(false);
+    const [newPw, setNewPw] = useState("");
+    const [newPw2, setNewPw2] = useState("");
     // 직책별 1:1 아이디(Users 시트가 원본). 못 불러오면 예전 고정 목록으로 동작한다.
     const [accounts, setAccounts] = useState<{ id: string; tab: string }[]>([]);
     const [adminId, setAdminId] = useState("admin");
@@ -60,8 +64,24 @@ export default function LoginPage() {
         }
     }, []);
 
+    const currentId = () => loginType === "teacher" ? selectedUserId : loginType === "staff" ? staffId : adminId;
+    const changeExpired = async () => {
+        if (newPw.length < 8) { setError("새 비밀번호는 8자 이상이어야 합니다."); return; }
+        if (newPw !== newPw2) { setError("새 비밀번호 두 칸이 서로 다릅니다."); return; }
+        setLoading(true);
+        try {
+            await axios.post(`${API_BASE_URL}/api/v1/auth/expired-password`, { user_id: currentId(), current_password: password, new_password: newPw }, { withCredentials: true });
+            setExpired(false); setPassword(newPw); setNewPw(""); setNewPw2("");
+            setError("새 비밀번호로 바꿨습니다. 로그인을 눌러 주세요.");
+        } catch (err: any) {
+            const d = err.response?.data?.detail;
+            setError(typeof d === "string" ? d : "비밀번호를 바꾸지 못했습니다.");
+        } finally { setLoading(false); }
+    };
+
     const handleLogin = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
+        if (expired) { await changeExpired(); return; }
 
         setLoading(true);
         setError("");
@@ -97,7 +117,9 @@ export default function LoginPage() {
             router.push(userData?.role === "afterschool" ? '/behavior' : '/');
 
         } catch (err: any) {
-            setError(err.response?.data?.detail || "로그인에 실패했습니다.");
+            const d = err.response?.data?.detail;
+            if (d?.code === "PASSWORD_EXPIRED") { setExpired(true); setError(d.message); return; }
+            setError(typeof d === "string" ? d : "로그인에 실패했습니다.");
         } finally {
             setLoading(false);
         }
@@ -207,7 +229,7 @@ export default function LoginPage() {
                     {/* Tabs */}
                     <div style={{ display: 'flex', marginBottom: '30px', background: '#f8fafc', padding: '4px', borderRadius: '12px' }}>
                         <button
-                            onClick={() => { setLoginType("teacher"); setPassword(""); setError(""); }}
+                            onClick={() => { setLoginType("teacher"); setPassword(""); setError(""); setExpired(false); }}
                             style={{
                                 flex: 1, padding: '12px 4px', border: 'none',
                                 background: loginType === "teacher" ? 'white' : 'transparent',
@@ -222,7 +244,7 @@ export default function LoginPage() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => { setLoginType("staff"); setPassword(""); setError(""); }}
+                            onClick={() => { setLoginType("staff"); setPassword(""); setError(""); setExpired(false); }}
                             style={{
                                 flex: 1, padding: '12px 4px', border: 'none',
                                 background: loginType === "staff" ? 'white' : 'transparent',
@@ -236,7 +258,7 @@ export default function LoginPage() {
                             🏫 부장·늘봄
                         </button>
                         <button
-                            onClick={() => { setLoginType("admin"); setPassword(""); setError(""); }}
+                            onClick={() => { setLoginType("admin"); setPassword(""); setError(""); setExpired(false); }}
                             style={{
                                 flex: 1, padding: '12px 4px', border: 'none',
                                 background: loginType === "admin" ? 'white' : 'transparent',
@@ -333,6 +355,15 @@ export default function LoginPage() {
                             />
                         </div>
 
+                        {expired && (
+                            <div style={{ display: 'grid', gap: 10 }}>
+                                <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="새 비밀번호 (8자 이상)" autoComplete="new-password"
+                                    style={{ width: '100%', padding: '14px', border: '1.5px solid #f59e0b', borderRadius: '12px', fontSize: '1rem' }} />
+                                <input type="password" value={newPw2} onChange={e => setNewPw2(e.target.value)} placeholder="새 비밀번호 한 번 더" autoComplete="new-password"
+                                    style={{ width: '100%', padding: '14px', border: '1.5px solid #f59e0b', borderRadius: '12px', fontSize: '1rem' }} />
+                            </div>
+                        )}
+
                         <button
                             type="submit"
                             disabled={loading || (loginType === "teacher" && teacherList.length === 0)}
@@ -346,7 +377,7 @@ export default function LoginPage() {
                                 transition: 'transform 0.1s, background 0.2s'
                             }}
                         >
-                            {loading ? "로그인 중..." : "로그인"}
+                            {loading ? "처리 중..." : expired ? "새 비밀번호로 바꾸기" : "로그인"}
                         </button>
                     </form>
 
