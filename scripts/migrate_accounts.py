@@ -38,7 +38,7 @@ def planned(existing):
     rows += [(i, "class_teacher", "", d) for i, d in SUBJECT]
     for u in existing:
         uid, role = str(u.get("ID", "")), str(u.get("Role", "")).lower()
-        if role == "class_teacher" and "순회" not in uid and uid != "예비관리자":
+        if role == "class_teacher" and "순회" not in uid and uid != "예비관리자" and " " not in uid and not u.get("AssignedClasses"):
             rows.append((f"{uid} 부담임", "class_teacher", str(u.get("ClassID", "")), ""))
     have = {str(u.get("ID", "")) for u in existing}
     return [r for r in rows if r[0] not in have]

@@ -737,7 +737,7 @@ def get_all_users():
 
     try:
         records = safe_get_all_records(ws)
-        # Don't return passwords
+        # Don't return passwords (겸임·사용 여부 칸 Roles·AssignedClasses·Active는 함께 준다)
         return [{
             "ID": r.get("ID"),
             "Role": r.get("Role"),
@@ -745,7 +745,10 @@ def get_all_users():
             "ClassID": r.get("ClassID"),
             "ClassName": r.get("ClassName"),
             "Name": r.get("Name"),
-            "Memo": r.get("Memo")
+            "Memo": r.get("Memo"),
+            "Roles": r.get("Roles", ""),
+            "AssignedClasses": r.get("AssignedClasses", ""),
+            "Active": r.get("Active", ""),
         } for r in records]
     except SheetUnavailable:
         raise
