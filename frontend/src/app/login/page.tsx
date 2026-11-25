@@ -35,6 +35,12 @@ export default function LoginPage() {
     // 직책별 1:1 아이디(Users 시트가 원본). 못 불러오면 예전 고정 목록으로 동작한다.
     const [accounts, setAccounts] = useState<{ id: string; tab: string }[]>([]);
     const [adminId, setAdminId] = useState("admin");
+    // 2027 모드: 공용 PC면 실명 매핑을 탭을 닫으면 사라지는 곳(sessionStorage)에만 둔다.
+    const [zeroPii, setZeroPii] = useState(false);
+    const [publicPc, setPublicPc] = useState(false);
+    useEffect(() => {
+        axios.get(`${API_BASE_URL}/api/v1/privacy/mode`).then(r => setZeroPii(r.data?.privacy_mode === "2027_FULL_ZERO_PII")).catch(() => { });
+    }, []);
     useEffect(() => {
         axios.get(`${API_BASE_URL}/api/v1/auth/accounts`).then(r => {
             const list: { id: string; tab: string }[] = Array.isArray(r.data) ? r.data : [];
@@ -110,6 +116,7 @@ export default function LoginPage() {
                 withCredentials: true
             });
 
+            try { if (publicPc) sessionStorage.setItem("pbst_public_pc", "1"); else sessionStorage.removeItem("pbst_public_pc"); } catch { }
             const userData = response.data.user;
             login(userData);
 
@@ -354,6 +361,13 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
+
+                        {zeroPii && (
+                            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.88rem', color: '#334155' }}>
+                                <input type="checkbox" checked={publicPc} onChange={e => setPublicPc(e.target.checked)} />
+                                공용 PC 모드 (실명 매핑을 이 탭에만 두고 닫으면 지움)
+                            </label>
+                        )}
 
                         {expired && (
                             <div style={{ display: 'grid', gap: 10 }}>

@@ -64,7 +64,10 @@ def _get_normalized_records(start_date: str = None, end_date: str = None) -> Lis
         if name:
             tier_info_map[name] = meta
 
-    return [normalize_behavior_log(r, tier_info_map) for r in raw_filtered]
+    logs = [normalize_behavior_log(r, tier_info_map) for r in raw_filtered]
+    from app.services.zero_pii import excluded_codes
+    skip = excluded_codes()  # 2027 모드: 보호자 미동의·철회 학생은 집계에서 뺀다
+    return [l for l in logs if str(l.get("student_code", "")).strip() not in skip] if skip else logs
 
 
 # ============================================================
@@ -256,6 +259,8 @@ def ai_student_analysis(
 
     if target_code:
         check_student_scope(target_code, current_user)
+        from app.services.zero_pii import ensure_analyzable
+        ensure_analyzable(target_code)
 
     beable_code = ""
     for bc, info in beable_mapping.items():

@@ -92,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (err) {
             console.error("Logout request error", err);
         } finally {
+            try { if (sessionStorage.getItem("pbst_public_pc") === "1") sessionStorage.clear(); } catch { } // 공용 PC: 실명 매핑 즉시 파기
             setUser(null);
             router.push("/login");
         }

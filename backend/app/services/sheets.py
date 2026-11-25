@@ -1006,12 +1006,16 @@ def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = No
                 # Update student name (column 4 / D)
                 if student_name is not None:
                     # 실명은 저장하지 않고 별칭만 저장한다(다른 학생과 겹치면 -학생코드 접미사)
-                    from app.core.privacy import alias_for
+                    from app.core.privacy import alias_for, is_anon_code, new_anon_code
                     taken = {str(x.get('학생이름', '')): str(x.get('학생코드')) for x in records if str(x.get('학생코드')) != str(code)}
-                    batch_updates.append({
-                        "range": f"D{row_num}",
-                        "values": [[alias_for(student_name, str(code), taken)]]
-                    })
+                    if settings.PRIVACY_MODE == "2027_FULL_ZERO_PII":
+                        # 완전 비식별: 이름은 받지 않고 익명코드만(이미 코드가 있으면 그대로)
+                        cur = str(r.get('학생이름', '')).strip()
+                        from app.core.time import today_kst
+                        value = cur if is_anon_code(cur) else new_anon_code(taken, today_kst().year)
+                    else:
+                        value = alias_for(student_name, str(code), taken)
+                    batch_updates.append({"range": f"D{row_num}", "values": [[value]]})
 
                 # Update enrollment (column 5 / E)
                 if enrolled is not None:

@@ -53,6 +53,7 @@ export function loadInitialDateRange(): { start: string; end: string } {
  */
 export function maskName(name: string | undefined | null): string {
   if (!name) return '';
+  if (/^K\d{2}-\d{3}$/.test(name.trim())) return name.trim(); // 2027 익명코드는 그대로
   const len = name.length;
   if (len === 2) return name[0] + 'O';
   if (len >= 3) return name[0] + 'O' + name.slice(2);

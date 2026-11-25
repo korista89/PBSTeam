@@ -9,8 +9,28 @@ import re
 from typing import Dict, Iterable, Optional
 
 
+# 2027 완전 비식별 모드의 학생 표기: K + 학년도 끝 두 자리 + 무작위 세 자리(예: K27-418)
+ANON_RE = re.compile(r"K\d{2}-\d{3}")
+
+
+def is_anon_code(s: Optional[str]) -> bool:
+    return bool(ANON_RE.fullmatch(str(s or "").strip()))
+
+
+def new_anon_code(taken: Iterable[str], year: int) -> str:
+    """이미 쓴 코드와 겹치지 않는 무작위 익명코드. 번호에 학급·순서 정보를 담지 않는다."""
+    import secrets
+    used = {str(t).strip() for t in taken}
+    pool = [n for n in range(1, 1000) if f"K{year % 100:02d}-{n:03d}" not in used]
+    if not pool:
+        raise ValueError("익명코드가 모두 찼습니다.")
+    return f"K{year % 100:02d}-{secrets.choice(pool):03d}"
+
+
 def mask_name(name: Optional[str]) -> str:
     n = str(name or "").strip()
+    if is_anon_code(n):
+        return n  # 익명코드는 그대로(멱등)
     if len(n) == 2:
         return n[0] + "O"
     if len(n) >= 3:

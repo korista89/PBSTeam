@@ -6,6 +6,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import AppShell from "../components/AppShell";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
+import NameMapCard from "./NameMapCard";
 
 const input: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: "0.95rem", boxSizing: "border-box" };
 
@@ -55,6 +56,7 @@ export default function SettingsPage() {
                         <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "바꾸는 중..." : "비밀번호 바꾸기"}</button>
                         {msg && <div style={{ fontSize: "0.88rem", fontWeight: 700, color: msg.ok ? "#15803d" : "#dc2626" }}>{msg.ok ? "✅" : "⚠️"} {msg.text}</div>}
                     </form>
+                    {user?.privacy_mode === "2027_FULL_ZERO_PII" && <NameMapCard />}
                 </div>
             </AppShell>
         </AuthCheck>

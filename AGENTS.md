@@ -75,6 +75,9 @@ npm run dev                            # next dev
 - 국외 AI 호출은 `_call_llm` 한 곳을 지난다: 별칭·학생코드를 '학생A'로 바꿔 보내고 답에서 되돌린다(`services/ai_privacy.py`). 차트 해석은 `chart_payload`로 집계만 보낸다.
 - 감사로그는 숨김 탭 `접속기록`(덧붙이기만, 줄마다 HMAC 서명). 고치거나 지우는 코드를 만들지 않는다. 인쇄 버튼은 `window.print()` 대신 `PrintGuard`의 `requestPrint()`.
 - 인쇄물 실명은 인쇄 화면에서 직접 입력(`RealNameInput`)한 값으로만 바꾼다. 저장·전송하지 않는다.
+- 2027 모드(`services/zero_pii.py`, `/api/v1/privacy`): 학생 표기는 익명코드 `K27-418`(`core/privacy.is_anon_code`, `mask_name`은 코드를 건드리지 않음). 보호자 동의는 숨김 탭 `보호자동의`, 미동의·철회는 분석·집계 제외(`excluded_codes`·`ensure_analyzable`).
+  실명은 브라우저에만(`lib/nameMap.ts`, PIN 암호화, 공용 PC면 sessionStorage) — 화면 표시는 `RealNameLayer`가 바꾼다. 마법사 쓰기는 2027 모드·계정 관리자·확인 문구가 모두 있어야 실행.
+- 공통 임시 비밀번호는 Users `PwExpires`(YYYY-MM-DD)가 지나면 로그인 화면에서 새 비밀번호를 정해야 들어온다(`scripts/set_common_passwords.py`).
 
 ## 학생 이름
 

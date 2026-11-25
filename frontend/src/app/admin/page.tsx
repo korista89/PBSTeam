@@ -6,6 +6,7 @@ import styles from "../page.module.css";
 import AppShell from "../components/AppShell";
 import { useAuth } from "../components/AuthProvider";
 import { API_BASE_URL } from "@/app/lib/api";
+import PrivacyAdmin from "./PrivacyAdmin";
 
 // 34 Classes Definition
 // 과정부장 계정의 ClassID 값(서버 deps.DIVISIONS와 같아야 한다)
@@ -314,6 +315,7 @@ export default function AdminPage() {
                         ))}
                     </div>
                 </div>}
+                {user?.account_admin && <PrivacyAdmin />}
             </div>
         </AppShell>
     );

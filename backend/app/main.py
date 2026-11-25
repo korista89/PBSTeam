@@ -262,6 +262,8 @@ app.include_router(workspace.router, prefix="/api/v1/workspace", tags=["workspac
 app.include_router(class_rules.router, prefix="/api/v1/class-rules", tags=["class-rules"])
 app.include_router(target_behavior.router, prefix="/api/v1/target-behaviors", tags=["target-behaviors"])
 app.include_router(briefing.router, prefix="/api/v1/briefing", tags=["briefing"])
+from app.api.endpoints import privacy as privacy_endpoints  # noqa: E402
+app.include_router(privacy_endpoints.router, prefix="/api/v1/privacy", tags=["privacy"])
 
 @app.get("/")
 async def root():

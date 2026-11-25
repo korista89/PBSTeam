@@ -12,6 +12,7 @@ from app.services.ai_insight import (
 )
 from app.services.fba_evidence import build_fba_evidence_summary, fba_data_gate
 from app.api.deps import require_authenticated_user, check_student_scope
+from app.services.zero_pii import ensure_analyzable
 
 router = APIRouter()
 
@@ -138,6 +139,7 @@ def get_student_fba_evidence(
     AI call just to see the underlying numbers.
     """
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status
 
     beable_code = _resolve_beable_code(student_code)
@@ -163,6 +165,7 @@ def ai_bip_hypothesis(
 ):
     """⑦ 🤖 AI 기능적 가설 생성 (BIP Step 4)"""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status
     
     beable_code = _resolve_beable_code(student_code)
@@ -226,6 +229,7 @@ def ai_bip_strategies(
 ):
     """⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)"""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status
     import json
     
@@ -280,6 +284,7 @@ def ai_fba_report(
 ):
     """FBA 결과 보고서 초안(6개 절) — 누적 행동기록 근거 요약 기반."""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
 
     raw_logs = _filter_student_logs(fetch_all_records(), student_code, _resolve_beable_code(student_code))
@@ -310,6 +315,7 @@ def ai_document_draft(
 ):
     """의료협력의뢰서·추가지원신청서·중재 결과 보고서·다음 학년도 인수인계 자료 초안 — 누적 행동기록 근거 요약 + 화면의 계획·수치."""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
     from app.services.ai_insight import generate_document_draft
 
@@ -362,6 +368,7 @@ def ai_bip_full(
 ):
     """⑨ 🤖 AI BIP 전체 계획서 제안 (BIP Step 12)"""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string
     
     beable_code = _resolve_beable_code(student_code)
@@ -469,6 +476,7 @@ def ai_decision_recommendation(
 ):
     """⑩ 🤖 데이터기반 의사결정(DBDM) 제안 — 기간 데이터 + 현재 BIP + EBP 실행충실도 + 팀 협의 기록 종합"""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     student_info, period_data, current_bip, ebp, team_notes, gate = _decision_context(student_code, req)
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
@@ -487,6 +495,7 @@ def ai_team_minutes_draft(
     """개별화교육지원팀 협의회 실시 전 협의록 초안 — 지금까지의 이 학생 자료로 안건·현황·결정(안)을 미리 채운다.
     기록이 적어도 초안은 만든다(자료 한계를 초안에 적는다)."""
     check_student_scope(student_code, current_user)
+    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.ai_insight import generate_iep_team_minutes_draft
     student_info, period_data, current_bip, ebp, team_notes, gate = _decision_context(student_code, req)
     result = generate_iep_team_minutes_draft(

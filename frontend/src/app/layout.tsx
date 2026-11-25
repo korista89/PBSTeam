@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import "./mobile.css";
 import { AuthProvider } from "./components/AuthProvider";
+import RealNameLayer from "./components/RealNameLayer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           {children}
+          <RealNameLayer />
         </AuthProvider>
         <footer style={{ textAlign: "center", padding: "20px", backgroundColor: "#f8f9fa", color: "#6c757d", fontSize: "14px", letterSpacing: "0.5px" }}>
             &copy; 2026 Jongho Park. All rights reserved.
