@@ -1728,9 +1728,38 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 3. {extra}
 4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
     text = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000 if kind == "handover" else 2000)
-    if kind == "handover":  # 인수인계 자료는 새 담임에게 그대로 전달하므로 모델 표시 꼬리말을 뗀다
-        text = plain_numbers(re.sub(r"\n+-{3,}\s*\n>[^\n]*(?:AI 모델)[^\n]*\s*$", "", text).rstrip())
+    if kind != "handover":
+        return text
+    # 인수인계 자료는 새 담임에게 그대로 전달하므로 모델 표시 꼬리말을 떼고 통계 표기를 쉬운 말로 바꾼다
+    clean = lambda t: plain_numbers(re.sub(r"\n+-{3,}\s*\n>[^\n]*(?:AI 모델)[^\n]*\s*$", "", t).rstrip())
+    text = clean(text)
+    # 모델이 글자 수 지시를 잘 안 지키므로, A4 2쪽을 넘길 분량이면 한 번 더 줄이게 한다(인쇄 실측: 1쪽 약 1,000자·2쪽 약 1,700자가 한계)
+    p1, p2 = handover_lengths(text)
+    if p1 > 1000 or p2 > 1700:
+        shrink = f"""아래 '{title}' 초안을 줄여라. 절 번호·제목·순서, 15절의 '- 단계 | 학생의 행동 신호 | 교사의 구체적인 대응' 6줄 형식은 그대로 둔다.
+1~8절 본문 합계 850자, 9~19절 본문 합계 1,400자 이하로 줄인다(지금 {p1}자, {p2}자). 각 절은 '- '로 시작하는 1~2줄.
+중복된 내용과 꾸밈말부터 지우고, 안전 정보·실제 중재 절차·'확인 필요' 표시는 남긴다. 새로운 사실·수치를 더하지 않는다. 문체는 '~함', '~임'.
+
+[초안]
+{text}"""
+        short = clean(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, shrink, 6000))
+        q1, q2 = handover_lengths(short)
+        if q1 + q2 and q1 + q2 < p1 + p2 and "단계별 대응" in short:
+            text = short
     return text
+
+
+def handover_lengths(text: str) -> tuple:
+    """인수인계 초안의 1~8절(1쪽)·9~19절(2쪽) 본문 글자 수."""
+    parts = re.split(r"(?m)^\s*(?:#{1,6}\s*)?\**\[?(\d{1,2})\s*[.)][^\n]*$", text)
+    p1 = p2 = 0
+    for num, body in zip(parts[1::2], parts[2::2]):
+        n = len(body.strip())
+        if int(num) <= 8:
+            p1 += n
+        else:
+            p2 += n
+    return p1, p2
 
 
 def plain_numbers(text: str) -> str:

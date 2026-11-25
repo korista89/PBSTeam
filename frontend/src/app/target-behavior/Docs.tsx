@@ -330,7 +330,7 @@ export function parseHandover(text: string): Record<string, string> | null {
     return Object.keys(patch).length ? patch : null;
 }
 
-const P1_LIMIT = 900, P2_LIMIT = 1600;
+const P1_LIMIT = 1000, P2_LIMIT = 1700; // 인쇄 실측(A4, 여백 12mm) 기준 한계에 맞춘 권장치
 
 export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
