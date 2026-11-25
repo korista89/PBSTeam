@@ -331,3 +331,12 @@ def login_accounts():
         t = "staff" if "afterschool" in p["roles"] else tab[p["group"]]
         out.append({"id": str(u.get("ID", "")), "tab": t})
     return out
+
+
+@router.get("/access-log/verify")
+def verify_access_log(current_admin: Dict[str, Any] = Depends(require_account_admin)):
+    """접속기록 무결성 점검(관리자): 서명이 맞지 않는 줄(시트에서 고친 줄) 번호를 돌려준다."""
+    from app.services import access_log
+    rows = access_log._ws().get_all_values()[1:]
+    bad = [i + 2 for i, r in enumerate(rows) if not access_log.verify_row(r)]
+    return {"rows": len(rows), "tampered_rows": bad[:200], "ok": not bad}
