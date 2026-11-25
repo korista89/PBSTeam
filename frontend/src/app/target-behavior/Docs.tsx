@@ -252,12 +252,17 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const { cur, set } = useStore(bip, setBip, "handover");
     const [ai, setAi] = useState({ loading: false, text: "" });
     const start = schoolYearStart();
-    const [times, setTimes] = useState<{ item: string; count: number }[]>([]);
+    const [dist, setDist] = useState<Pick<HandoverChartData, "times" | "places" | "functions">>({ times: [] });
     useEffect(() => {
         let alive = true;
-        setTimes([]);
+        setDist({ times: [] });
         axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/fba-evidence`)
-            .then(r => { if (alive) setTimes((r.data?.deterministic_metrics?.time_slot_distribution || []).slice(0, 6)); }).catch(() => {});
+            .then(r => {
+                if (!alive) return;
+                const m = r.data?.deterministic_metrics || {};
+                const top = (k: string, n: number) => (m[k] || []).filter((x: any) => x.item && x.item !== "미상").slice(0, n);
+                setDist({ times: top("time_slot_distribution", 5), places: top("location_hotspot_distribution", 4), functions: top("teacher_inferred_function_distribution", 4) });
+            }).catch(() => {});
         return () => { alive = false; };
     }, [head.code]);
     const charts: HandoverChartData = useMemo(() => {
@@ -268,8 +273,8 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
             if (key > today().slice(0, 7)) break;
             monthly.push({ label: `${d.getUTCMonth() + 1}월`, count: ds.filter(x => x.startsWith(key)).length });
         }
-        return { monthly, times, total: ds.length };
-    }, [logs, start, times]);
+        return { monthly, ...dist, total: ds.length };
+    }, [logs, start, dist]);
     const chars = HANDOVER.reduce((n, [, f]) => n + (cur[f] || "").length, 0);
     const y = +start.slice(0, 4);
     // AI 없이 지금까지 작성한 계획에서 옮겨 채운다(AI가 실패해도 쓸 수 있는 바탕)
