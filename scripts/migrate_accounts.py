@@ -57,7 +57,7 @@ def main(argv):
     hdr = values[0]
     records = [dict(zip(hdr, r + [""] * (len(hdr) - len(r)))) for r in values[1:]]
     new = planned(records)
-    name_fix = [i for i, r in enumerate(records) if r.get("Name", "") != r.get("ID", "")]
+    name_fix = [i for i, r in enumerate(records) if "Name" in hdr and r.get("Name", "") != r.get("ID", "")]
     missing = [c for c in NEW_COLS if c not in hdr]
     print(f"계정 {len(records)}개 | 추가할 칸: {missing or '없음'} | 새 계정: {len(new)}개 | 이름 칸 정리: {len(name_fix)}개")
     for r in new:
