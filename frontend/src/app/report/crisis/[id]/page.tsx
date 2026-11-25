@@ -30,7 +30,10 @@ export default function CrisisReportPage() {
     if (draft) {
       // 입력 폼의 '작성 중 보고서 인쇄'가 넘긴 저장 전 내용
       try {
-        const v = localStorage.getItem("pbst_report_draft");
+        // 이 탭으로 옮기고 localStorage에서 지운다(로그아웃 뒤 다른 계정이 볼 수 없게). 새로 고침은 이 탭에서 유지.
+        const fresh = localStorage.getItem("pbst_report_draft");
+        if (fresh) { sessionStorage.setItem("pbst_report_draft", fresh); localStorage.removeItem("pbst_report_draft"); }
+        const v = fresh || sessionStorage.getItem("pbst_report_draft");
         if (v) setF(JSON.parse(v)); else setError("작성 중인 보고서 내용이 없습니다. 입력 화면에서 다시 눌러 주세요.");
       } catch { setError("작성 중인 보고서 내용을 읽지 못했습니다."); }
       return;

@@ -39,7 +39,11 @@ export default function InterventionPrint() {
     }, [src, split]);
     useEffect(() => {
         try {
-            const v = localStorage.getItem("pbst_iv_print");
+            // 넘겨받은 내용은 이 탭(sessionStorage)으로 옮기고 localStorage에서 지운다.
+            // 그대로 두면 로그아웃 뒤 같은 PC의 다른 계정이 이 주소를 열어 볼 수 있다. 이 탭은 새로 고침해도 남는다.
+            const fresh = localStorage.getItem("pbst_iv_print");
+            if (fresh) { sessionStorage.setItem("pbst_iv_print", fresh); localStorage.removeItem("pbst_iv_print"); }
+            const v = fresh || sessionStorage.getItem("pbst_iv_print");
             if (v) setP(JSON.parse(v)); else setError("인쇄할 내용이 없습니다. 작성 화면에서 '미리보기·인쇄'를 다시 눌러 주세요.");
         } catch { setError("인쇄할 내용을 읽지 못했습니다."); }
     }, []);
