@@ -63,9 +63,13 @@ export const kDate = (iso?: string) => {
 };
 
 // ── 인쇄 표 ─────────────────────────────────────────────
-const th: React.CSSProperties = { border: "1px solid #000", background: "#f2f2f2", fontWeight: 700, padding: "5px 6px", textAlign: "center", verticalAlign: "middle", fontSize: "9.5pt", whiteSpace: "pre-line" };
-const td: React.CSSProperties = { border: "1px solid #000", padding: "5px 7px", verticalAlign: "top", fontSize: "9.5pt", whiteSpace: "pre-wrap", wordBreak: "break-word" };
+const thBase: React.CSSProperties = { border: "1px solid #000", background: "#f2f2f2", fontWeight: 700, padding: "5px 6px", textAlign: "center", verticalAlign: "middle", fontSize: "9.5pt", whiteSpace: "pre-line" };
+const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "5px 7px", verticalAlign: "top", fontSize: "9.5pt", whiteSpace: "pre-wrap", wordBreak: "break-word" };
 const title: React.CSSProperties = { textAlign: "center", fontSize: "16pt", margin: "0 0 12px", letterSpacing: 2 };
+// 인수인계 자료(A4 2쪽 제한)만 칸 여백·줄 간격을 줄인다. 글자 크기는 그대로.
+const tight: React.CSSProperties = { padding: "3px 6px", lineHeight: 1.4 };
+const thD: React.CSSProperties = { ...thBase, ...tight }, tdD: React.CSSProperties = { ...tdBase, ...tight };
+const th = thBase, td = tdBase;
 
 export type StudentHead = { name: string; className: string; code: string };
 
@@ -123,9 +127,10 @@ export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; be
     );
 }
 
-export function SectionSheet({ heading, s, meta, sections, extra, after }: {
-    heading: string; s: StudentHead; meta: [string, React.ReactNode][]; sections: [string, React.ReactNode][]; extra?: React.ReactNode; after?: React.ReactNode;
+export function SectionSheet({ heading, s, meta, sections, extra, after, dense }: {
+    heading: string; s: StudentHead; meta: [string, React.ReactNode][]; sections: [string, React.ReactNode][]; extra?: React.ReactNode; after?: React.ReactNode; dense?: boolean;
 }) {
+    const th = dense ? thD : thBase, td = dense ? tdD : tdBase;
     return (
         <>
             <h1 style={title}>{heading}</h1>
@@ -156,7 +161,7 @@ export function HandoverPage2({ d }: { d: HandoverPage2Data }) {
     const rows = (list: [string, React.ReactNode][]) => (
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup><col style={{ width: "19%" }} /><col style={{ width: "81%" }} /></colgroup>
-            <tbody>{list.map(([k, v]) => <tr key={k} style={noSplit}><th style={th}>{k}</th><td style={td}>{v}</td></tr>)}</tbody>
+            <tbody>{list.map(([k, v]) => <tr key={k} style={noSplit}><th style={thD}>{k}</th><td style={tdD}>{v}</td></tr>)}</tbody>
         </table>
     );
     return (
@@ -166,8 +171,8 @@ export function HandoverPage2({ d }: { d: HandoverPage2Data }) {
             <div style={groupHead}>나. 행동 단계별 대응</div>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <colgroup><col style={{ width: "13%" }} /><col style={{ width: "37%" }} /><col style={{ width: "50%" }} /></colgroup>
-                <thead><tr><th style={th}>단계</th><th style={th}>학생의 행동 신호</th><th style={th}>교사의 구체적인 대응</th></tr></thead>
-                <tbody>{d.stages.map(([k, a, b]) => <tr key={k} style={noSplit}><th style={th}>{k}</th><td style={td}>{a}</td><td style={td}>{b}</td></tr>)}</tbody>
+                <thead><tr><th style={thD}>단계</th><th style={thD}>학생의 행동 신호</th><th style={thD}>교사의 구체적인 대응</th></tr></thead>
+                <tbody>{d.stages.map(([k, a, b]) => <tr key={k} style={noSplit}><th style={thD}>{k}</th><td style={tdD}>{a}</td><td style={tdD}>{b}</td></tr>)}</tbody>
             </table>
             <div style={groupHead}>다. 새 학년도 초기 실행계획</div>
             {rows(d.plan)}
@@ -226,8 +231,8 @@ export type HandoverChartData = { monthly: { label: string; count: number }[]; t
 
 // 인수인계 차트 6개: 추세(나아지고 있나)·언제·어디서·왜(기능)·어떤 행동·얼마나 심했나(위기 대응 준비). CSS 막대라 인쇄에도 그대로 나온다.
 const printExact: React.CSSProperties = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
-const chartBox: React.CSSProperties = { flex: 1, minWidth: 0, border: "1px solid #000", padding: "5px 8px" };
-const chartHead: React.CSSProperties = { fontWeight: 700, fontSize: "9pt", marginBottom: 4 };
+const chartBox: React.CSSProperties = { flex: 1, minWidth: 0, border: "1px solid #000", padding: "4px 8px" };
+const chartHead: React.CSSProperties = { fontWeight: 700, fontSize: "9pt", marginBottom: 2 };
 const cleanLabel = (s: string) => s.replace(/^\s*\d+\s*구간\s*:\s*/, "").replace(/\(.*?\)/g, "").trim();
 
 function BarList({ title, rows, color, empty }: { title: string; rows: Ranked[]; color: string; empty: string }) {
@@ -237,7 +242,7 @@ function BarList({ title, rows, color, empty }: { title: string; rows: Ranked[];
             <div style={chartHead}>{title}</div>
             {rows.length === 0 && <div style={{ fontSize: "8.5pt" }}>{empty}</div>}
             {rows.map(r => (
-                <div key={r.item} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "8pt", marginBottom: 2 }}>
+                <div key={r.item} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "8pt", marginBottom: 1, lineHeight: 1.25 }}>
                     <span style={{ width: 72, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{cleanLabel(r.item)}</span>
                     <div style={{ flex: 1, height: 8 }}><div style={{ width: `${(r.count / max) * 100}%`, height: "100%", background: color, ...printExact }} /></div>
                     <span style={{ width: 30, textAlign: "right" }}>{r.count}번</span>
@@ -250,15 +255,15 @@ function BarList({ title, rows, color, empty }: { title: string; rows: Ranked[];
 export function HandoverCharts({ d }: { d: HandoverChartData }) {
     const mMax = Math.max(1, ...d.monthly.map(m => m.count));
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", gap: 8 }}>
                 <div style={chartBox}>
                     <div style={chartHead}>① 달마다 행동이 몇 번 있었나 (전체 {d.total}번)</div>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 66 }}>
                         {d.monthly.map(m => (
                             <div key={m.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
                                 <div style={{ fontSize: "7.5pt" }}>{m.count || ""}</div>
-                                <div style={{ width: "70%", height: `${(m.count / mMax) * 58}px`, background: "#4f46e5", ...printExact }} />
+                                <div style={{ width: "70%", height: `${(m.count / mMax) * 44}px`, background: "#4f46e5", ...printExact }} />
                                 <div style={{ fontSize: "7.5pt", borderTop: "1px solid #000", width: "100%", textAlign: "center" }}>{m.label}</div>
                             </div>
                         ))}

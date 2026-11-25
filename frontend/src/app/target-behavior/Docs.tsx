@@ -434,7 +434,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 {warn(p1, P1_LIMIT, "1쪽 본문")}{warn(p2, P2_LIMIT, "2쪽 본문")}
                 {(p1 > P1_LIMIT || p2 > P2_LIMIT) && <span style={{ color: "#dc2626" }}>— 인쇄하면 2쪽을 넘을 수 있습니다. 중복부터 줄여 주세요.</span>}
             </div>
-            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} extra={<HandoverCharts d={charts} />} after={<HandoverPage2 d={page2} />} /></div>
+            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} extra={<HandoverCharts d={charts} />} after={<HandoverPage2 d={page2} />} dense /></div>
         </div>
     );
 }
