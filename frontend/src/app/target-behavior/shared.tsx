@@ -157,7 +157,7 @@ const groupHead: React.CSSProperties = { fontSize: "11pt", fontWeight: 700, marg
 
 // 인수인계 자료 2쪽: 가. 핵심 행동지원 방법 / 나. 행동 단계별 대응(3열) / 다. 새 학년도 초기 실행계획. 인쇄하면 새 쪽에서 시작한다.
 export type HandoverPage2Data<T = React.ReactNode> = { support: [string, T][]; stages: [string, T, T][]; plan: [string, T][] };
-export function HandoverPage2({ d }: { d: HandoverPage2Data }) {
+export function HandoverPage2({ d, split = true }: { d: HandoverPage2Data; split?: boolean }) {
     const rows = (list: [string, React.ReactNode][]) => (
         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup><col style={{ width: "19%" }} /><col style={{ width: "81%" }} /></colgroup>
@@ -165,7 +165,7 @@ export function HandoverPage2({ d }: { d: HandoverPage2Data }) {
         </table>
     );
     return (
-        <div style={{ breakBefore: "page", pageBreakBefore: "always", paddingTop: 6 }}>
+        <div data-page2 style={split ? { breakBefore: "page", pageBreakBefore: "always", paddingTop: 6 } : { paddingTop: 6 }}>
             <div style={{ ...groupHead, marginTop: 0 }}>가. 핵심 행동지원 방법</div>
             {rows(d.support)}
             <div style={groupHead}>나. 행동 단계별 대응</div>
