@@ -40,8 +40,11 @@ export default function PrivacyAdmin() {
         setBusy(true);
         try {
             const pre = (await axios.post(`${API_BASE_URL}/api/v1/privacy/wizard/${path}`, { confirm: "" }, { timeout: 280000 })).data;
-            const amb = pre.ambiguous && Object.keys(pre.ambiguous).length ? `\n누구인지 못 가려 그대로 둘 칸(동명이인): ${JSON.stringify(pre.ambiguous)}` : "";
-            const typed = window.prompt(`[${label}] 점검 결과: ${JSON.stringify(pre.cells || pre.accounts || pre, null, 0).slice(0, 400)}${amb}\n\n실행하려면 '${word}'를 입력하세요.`);
+            const lines = (o: Record<string, number>) => Object.entries(o).map(([t, n]) => `· ${t.replace(/^(main|pw):/, "")} ${n}칸`).join("\n");
+            const body = pre.accounts != null ? `바꿀 계정 ${pre.accounts}개`
+                : `${pre.students != null ? `학생 ${pre.students}명\n` : ""}${lines(pre.cells || {}) || "바뀔 칸 없음"}`;
+            const amb = pre.ambiguous && Object.keys(pre.ambiguous).length ? `\n\n누구인지 못 가려 그대로 둘 칸(동명이인):\n${lines(pre.ambiguous)}` : "";
+            const typed = window.prompt(`[${label}] 점검 결과\n${body}${amb}\n\n확인 문구: ${word}\n실행하려면 확인 문구를 그대로 입력하세요.`);
             if (typed !== word) { say(`${label}: 취소`); return; }
             const done = (await axios.post(`${API_BASE_URL}/api/v1/privacy/wizard/${path}`, { confirm: word }, { timeout: 280000 })).data;
             say(`✅ ${label} 완료 ${done.written != null ? `(${done.written}칸)` : ""}`);
