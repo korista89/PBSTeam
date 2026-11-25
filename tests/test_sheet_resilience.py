@@ -131,6 +131,8 @@ class EndpointBehaviourTests(unittest.TestCase):
         settings.AUTH_SECRET = os.environ["AUTH_SECRET"]
         sheets.clear_cache("users")
         sheets._users_last_good = [{"ID": "admin", "Role": "admin", "Active": "true", "Name": "관리자"}]
+        # 운영 Users 시트(공용 admin은 사용 중지됨)에 기대지 않게 로그인 사용자를 고정한다.
+        mock.patch("app.api.deps.get_user_by_id", return_value=sheets._users_last_good[0]).start()
         self.client = TestClient(app)
         self.client.cookies.set(settings.AUTH_COOKIE_NAME, create_access_token({"sub": "admin", "role": "admin"}))
         self.addCleanup(setattr, sheets, "_users_last_good", None)
