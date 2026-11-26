@@ -1,29 +1,31 @@
 "use client";
 
 // 개별학생 행동중재 화면과 인쇄 화면이 함께 쓰는 양식 정의·인쇄 표.
-// 학교 'bip 양식.xlsx'(행동중재계획) 칸 순서를 따르고, 표적행동 기록 방법·가정 연계·평가 계획 칸을 더했다.
+// 행동중재계획은 학교 '행동중재계획서' 양식(2026-2)과 같은 칸·순서로 그린다.
 import React from "react";
 
 export type Bip = Record<string, string>;
 
+// 학교 '행동중재계획서' 양식(2026-2) 칸 순서. 인쇄본과 작성 화면이 이 순서를 같이 쓴다.
 export const BIP_ROWS: { key: string; label: string; hint?: string }[] = [
-    { key: "MedicationStatus", label: "약물 복용 정보", hint: "복용 시간, 약물 종류, 용량" },
-    { key: "OperationalDefinition", label: "행동 조작적 정의", hint: "관찰·측정 가능하게(빈도·지속시간·강도 기준)" },
-    { key: "MeasurementMethod", label: "기록 방법", hint: "예: 빈도 기록 — 매일 하교 전 담임이 표적행동 횟수를 기록" },
-    { key: "SupportTeam", label: "행동지원팀 구성", hint: "담임, 부담임, 행동중재 담당, 보호자 등" },
-    { key: "Hypothesis", label: "기능평가 결과", hint: "기능(가설), 주요 선행사건, 주요 후속결과" },
-    { key: "ReinforcerInfo", label: "강화제 정보" },
-    { key: "Goals", label: "중재목표", hint: "감소 목표·증가 목표(기간·기준 포함)" },
-    { key: "PreventionStrategies", label: "행동지원 방법\n(예방)" },
-    { key: "TeachingStrategies", label: "행동지원 방법\n(교수)" },
-    { key: "ReinforcementStrategies", label: "행동지원 방법\n(강화)" },
-    { key: "CrisisPlan", label: "위기관리 계획\n(예방 및 완화)" },
-    { key: "CrisisNotify", label: "위기관리 계획\n(알림 및 대처)" },
-    { key: "CrisisReturn", label: "위기관리 계획\n(개별학생교육지원을\n통한 복귀)" },
-    { key: "CrisisHome", label: "위기관리 계획\n(가정학습 절차)" },
-    { key: "HomeSupport", label: "가정 연계 지원" },
-    { key: "EvaluationPlan", label: "평가 계획", hint: "자료 검토 주기, 중재 수정·종료 기준" },
-    { key: "OtherConsiderations", label: "기타" },
+    { key: "SupportTeam", label: "행동중재지원팀", hint: "예: 교감, 담임교사, 부담임교사, 교내행동중재전문가, 보호자" },
+    { key: "OperationalDefinition", label: "표적 행동\n(조작적 정의)", hint: "관찰·측정 가능하게(빈도·지속시간·강도 기준)" },
+    { key: "Antecedents", label: "주요 선행사건", hint: "배경사건, 선행조건, 전조행동" },
+    { key: "Consequences", label: "주요 후속결과", hint: "행동 뒤 실제로 일어나는 일" },
+    { key: "Hypothesis", label: "기능\n(가설)", hint: "관심·획득·회피/도피·감각·신체 불편 중 근거 있는 기능" },
+    { key: "Goals", label: "지원 목표", hint: "기간·기준이 있는 감소·증가 목표" },
+];
+export const BIP_METHOD_ROWS: { key: string; label: string }[] = [
+    { key: "PreventionStrategies", label: "선행사건\n중재\n(예방)" },
+    { key: "TeachingStrategies", label: "대체행동\n지도\n(교수)" },
+    { key: "ReinforcementStrategies", label: "후속결과\n중재\n(강화)" },
+];
+// 위기관리계획 단계: 신호 CrisisS{n}, 대응 CrisisR{n}
+export const CRISIS_STAGES = ["전조", "고조", "대응·알림", "분리·회복"];
+// 예전 양식에만 있던 칸(새 양식 칸으로 옮겨 적고 비우면 사라진다)
+export const BIP_LEGACY: [string, string][] = [
+    ["PlanName", "중재계획명"], ["CrisisNotify", "위기관리(알림 및 대처)"], ["CrisisReturn", "위기관리(복귀)"],
+    ["CrisisHome", "위기관리(가정학습 절차)"], ["EvaluationPlan", "평가 계획"], ["OtherConsiderations", "기타"],
 ];
 
 export const FBA_SECTIONS = [
@@ -93,36 +95,83 @@ export const sheetBox: React.CSSProperties = { background: "#fff", border: "1px 
 export type BipEdit = { set: (k: string, v: string) => void; extra?: (key: string) => React.ReactNode };
 
 export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; behaviors: any[]; edit?: BipEdit }) {
-    const F = (k: string, ph?: string) => (edit ? <Inp value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} /> : b[k]);
-    const period = b.PlanStart ? `${kDate(b.PlanStart)} ~ ${b.PlanEnd ? kDate(b.PlanEnd) : "진행 중"}` : "";
+    const F = (k: string, ph?: string, type = "text") => (edit ? <Inp type={type} value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} /> : type === "date" ? kDate(b[k]) : b[k]);
+    const A = (k: string, ph?: string, rows = 2) => (edit ? <Area value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} rows={rows} /> : b[k]);
     const tb = behaviors.filter(x => x.Status !== "삭제");
+    const legacy = BIP_LEGACY.filter(([k]) => (b[k] || "").trim());
+    const label2: React.CSSProperties = { ...th, width: "19%" };
+    const med = edit
+        ? <><Sel value={b.MedicationYN} onChange={v => edit.set("MedicationYN", v)} options={["복용", "미복용"]} /><div style={{ marginTop: 4 }}>{A("MedicationStatus", "복용 시간, 약물 종류, 용량")}</div></>
+        : <>{b.MedicationYN === "미복용" ? "☐ 복 용\n☑ 미복용" : `${b.MedicationYN === "복용" ? "☑" : "☐"} 복 용: ${b.MedicationStatus || ""}\n☐ 미복용`}</>;
     return (
         <>
-            <h1 style={title}>행동중재계획</h1>
+            {edit && (
+                <div className="no-print" style={{ border: "1px solid #c7d2fe", background: "#eef2ff", borderRadius: 8, padding: "10px 12px", marginBottom: 12, fontSize: "9pt", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div style={{ gridColumn: "1 / -1", fontWeight: 700, color: "#3730a3" }}>사이트 관리 정보 (인쇄되지 않음 — 모니터링·보고서·인수인계가 이 값을 씁니다)</div>
+                    <label>표적행동 이름{F("TargetBehavior", "예: 자해(머리박기)")}</label>
+                    <label>중재 기간<DateRange a={b.PlanStart} b={b.PlanEnd} onA={v => edit.set("PlanStart", v)} onB={v => edit.set("PlanEnd", v)} /></label>
+                    <label>기록 방법{F("MeasurementMethod", "예: 빈도 기록 — 매일 하교 전 담임이 기록")}
+                        {tb.map(x => <div key={x.BehaviorID}>· [{x.Type}] {x.Definition} — {x.MeasurementType} 기록{x.Baseline ? `, 기저선 ${x.Baseline}` : ""}</div>)}
+                        {edit.extra?.("MeasurementMethod")}</label>
+                </div>
+            )}
+            <h1 style={title}>행동중재계획서</h1>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <colgroup><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /></colgroup>
+                <colgroup><col style={{ width: "6%" }} /><col style={{ width: "13%" }} /><col style={{ width: "31%" }} /><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /></colgroup>
                 <tbody>
-                    <tr><th style={th}>학생명</th><td style={td}>{s.name}</td><th style={th}>소속 학교</th><td style={td}>경은학교</td></tr>
-                    <tr><th style={th}>학년</th><td style={td}>{s.className}</td><th style={th}>성별</th><td style={td}>{F("Gender")}</td></tr>
-                    <tr><th style={th}>장애 유형</th><td style={td}>{F("DisabilityType")}</td><th style={th}>담당교사</th><td style={td}>{F("Teacher")}</td></tr>
-                    <tr><th style={th}>중재계획명</th><td style={td}>{F("PlanName")}</td><th style={th}>중재기간</th><td style={td}>{edit ? <DateRange a={b.PlanStart} b={b.PlanEnd} onA={v => edit.set("PlanStart", v)} onB={v => edit.set("PlanEnd", v)} /> : period}</td></tr>
-                    <tr><th style={th}>표적행동</th><td style={td}>{F("TargetBehavior", "예: 공격 행동, 자해 행동")}</td><th style={th}>약물복용 여부</th><td style={td}>{edit ? <Sel value={b.MedicationYN} onChange={v => edit.set("MedicationYN", v)} options={["복용", "미복용"]} /> : b.MedicationYN}</td></tr>
+                    <tr><th style={th} colSpan={2}>대상 학생</th><td style={td}>{s.name}</td><th style={th}>학년/반</th><td style={td}>{s.className}</td></tr>
+                    <tr><th style={th} colSpan={2}>장애 유형</th><td style={td}>{F("DisabilityType")}</td><th style={th}>성별</th><td style={td}>{edit ? <Sel value={b.Gender} onChange={v => edit.set("Gender", v)} options={["남", "여"]} /> : b.Gender}</td></tr>
+                    <tr><th style={th} colSpan={2}>작성자</th><td style={td}>{F("Teacher")}</td><th style={th}>작성일자</th><td style={td}>{F("AuthoredDate", "", "date")}</td></tr>
+                    <tr><th style={th} colSpan={2}>약물 정보{"\n"}<span style={{ fontWeight: 400, fontSize: "8pt" }}>(복용 시간, 약물 종류, 용량 등)</span></th><td style={td} colSpan={3}>{med}</td></tr>
                     {BIP_ROWS.map(r => (
+                        <tr key={r.key}><th style={label2} colSpan={2}>{r.label}</th><td style={td} colSpan={3}>{A(r.key, r.hint)}{edit?.extra?.(r.key)}</td></tr>
+                    ))}
+                    {BIP_METHOD_ROWS.map((r, i) => (
                         <tr key={r.key}>
+                            {i === 0 && <th style={th} rowSpan={3}>{"행\n동\n중\n재\n방\n법"}</th>}
                             <th style={th}>{r.label}</th>
-                            <td style={td} colSpan={3}>
-                                {edit ? <Area value={b[r.key]} onChange={v => edit.set(r.key, v)} placeholder={r.hint} /> : b[r.key]}
-                                {edit?.extra?.(r.key)}
-                                {r.key === "MeasurementMethod" && tb.length > 0 && (
-                                    <div style={{ marginTop: b[r.key] ? 4 : 0 }}>
-                                        {tb.map(x => <div key={x.BehaviorID}>· [{x.Type}] {x.Definition} — {x.MeasurementType} 기록{x.Baseline ? `, 기저선 ${x.Baseline}` : ""}</div>)}
-                                    </div>
-                                )}
-                            </td>
+                            <td style={td} colSpan={3}>{A(r.key, "", 3)}{edit?.extra?.(r.key)}</td>
                         </tr>
                     ))}
+                    <tr><th style={th} colSpan={2}>강화제{"\n"}목록</th><td style={td} colSpan={3}>{A("ReinforcerInfo")}</td></tr>
+                    {(edit || (b.HomeSupport || "").trim()) && <tr><th style={th} colSpan={2}>가정연계{"\n"}지원</th><td style={td} colSpan={3}>{A("HomeSupport")}</td></tr>}
+                    <tr>
+                        <th style={th} colSpan={2}>위기관리계획</th>
+                        <td style={{ ...td, padding: 0 }} colSpan={3}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                                <colgroup><col style={{ width: "16%" }} /><col style={{ width: "40%" }} /><col style={{ width: "44%" }} /></colgroup>
+                                <tbody>
+                                    <tr><th style={{ ...th, borderTop: 0, borderLeft: 0 }}>단계</th><th style={{ ...th, borderTop: 0 }}>신호</th><th style={{ ...th, borderTop: 0, borderRight: 0 }}>대응</th></tr>
+                                    {CRISIS_STAGES.map((st, i) => (
+                                        <tr key={st}>
+                                            <th style={{ ...th, borderLeft: 0 }}>{st}</th>
+                                            <td style={td}>{A(`CrisisS${i + 1}`, "", 1)}</td>
+                                            <td style={{ ...td, borderRight: 0 }}>{A(`CrisisR${i + 1}`, "", 1)}</td>
+                                        </tr>
+                                    ))}
+                                    {(edit || (b.CrisisPlan || "").trim()) && (
+                                        <tr><th style={{ ...th, borderLeft: 0, borderBottom: 0 }}>기타</th><td style={{ ...td, borderRight: 0, borderBottom: 0 }} colSpan={2}>{A("CrisisPlan", "단계로 나누기 어려운 위기관리 내용", 1)}</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr><th style={th} colSpan={2}>추가 지원 사항</th><td style={td} colSpan={3}>{A("AdditionalSupport", "상태 확인, 교직원 실행, 보호자 연계, 기록·평가 등")}</td></tr>
                 </tbody>
             </table>
+            <div style={{ fontSize: "9.5pt", marginTop: 14, lineHeight: 1.7 }}>
+                <p style={{ margin: 0 }}>본 행동중재계획은 학생의 안전한 학교생활과 교육을 위해 학교와 보호자가 함께 수립하였습니다.</p>
+                <p style={{ margin: 0 }}>보호자는 본 계획의 주요 내용과 절차에 대해 충분한 설명을 듣고 이해하였으며 이에 동의합니다.</p>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 40, marginTop: 14 }}>
+                    <span>담임교사 : {b.Teacher || "　　　　"} (인)</span><span>보호자 : 　　　　　 (인)</span>
+                </div>
+            </div>
+            {edit && legacy.length > 0 && (
+                <div className="no-print" style={{ border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 8, padding: "10px 12px", marginTop: 12, fontSize: "9pt" }}>
+                    <div style={{ fontWeight: 700, color: "#b45309", marginBottom: 6 }}>예전 양식에만 있던 칸 (인쇄되지 않음) — 필요한 내용은 위 칸으로 옮기고 이곳은 비워 주세요</div>
+                    {legacy.map(([k, l]) => <label key={k} style={{ display: "block", marginBottom: 6 }}>{l}{A(k)}</label>)}
+                </div>
+            )}
         </>
     );
 }

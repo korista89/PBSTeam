@@ -246,6 +246,10 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
         const parsed = parseBIPAIResult(ai.text);
         delete parsed.MedicationStatus; // 약물 정보는 교사 입력만 쓴다
         if (parsed.TargetBehavior) { parsed.OperationalDefinition = parsed.TargetBehavior; delete parsed.TargetBehavior; }
+        // 학교 양식에는 평가 계획·기타 칸이 없어 '추가 지원 사항'으로 모은다
+        const extraTxt = [parsed.EvaluationPlan && `기록·평가: ${parsed.EvaluationPlan}`, parsed.OtherConsiderations].filter(Boolean).join("\n");
+        delete parsed.EvaluationPlan; delete parsed.OtherConsiderations;
+        if (extraTxt) parsed.AdditionalSupport = extraTxt;
         if (!Object.keys(parsed).length) { alert("AI 결과를 칸별로 나누지 못했습니다. 필요한 부분을 복사해 넣어 주세요."); return; }
         setBip(mergeInto(bip, parsed, mode));
     };
@@ -346,7 +350,7 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
         try {
             const ctx = ["[중재 전·후 수치]", ...rows.map(r => `- [${r.type}] ${r.label}: 중재 전 ${r.preN ? Math.round((r.preMean || 0) * 10) / 10 : (r.baseline || "기록 없음")} → 중재 중 ${r.postN ? Math.round((r.postMean || 0) * 10) / 10 : "기록 없음"}(${r.unit}), 실행충실도 ${r.fidelity === null ? "기록 없음" : r.fidelity + "%"}`),
                 `- 위기행동 기록: 중재 전 같은 기간 ${crisis.pre}건 → 중재 중 ${crisis.post}건`,
-                ...["Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : "")].filter(Boolean).join("\n");
+                ...["Antecedents", "Consequences", "Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "AdditionalSupport", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : "")].filter(Boolean).join("\n");
             const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
                 { kind: "progress", context: ctx, start_date: start || undefined, end_date: end }, { timeout: 240000 });
             setAi({ loading: false, text: r.data.analysis || "" });

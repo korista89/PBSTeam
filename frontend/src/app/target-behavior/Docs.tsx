@@ -158,7 +158,7 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
         setAi({ loading: true, text: "" });
         const decision = parseJson<any>(bip.ProgressReport, {}).decision || {};
         const ctx = [dataSummary(logs, behaviors, bip.PlanStart || ""),
-            ...["Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "MedicationStatus", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : ""),
+            ...["Antecedents", "Consequences", "Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "MedicationStatus", "AdditionalSupport", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : ""),
             decision.choice ? `의사결정: ${decision.choice} — ${decision.rationale || ""}` : ""].filter(Boolean).join("\n");
         try {
             const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
@@ -254,8 +254,11 @@ export const schoolYearStart = () => { const t = today(); const y = +t.slice(0, 
 const BIP_LABELS: [string, string][] = [
     ["TargetBehavior", "표적행동"], ["OperationalDefinition", "조작적 정의"], ["MedicationStatus", "약물"], ["Hypothesis", "기능평가 결과"],
     ["ReinforcerInfo", "강화제"], ["Goals", "중재목표"], ["PreventionStrategies", "예방"], ["TeachingStrategies", "교수"], ["ReinforcementStrategies", "강화"],
-    ["CrisisPlan", "위기(예방·완화)"], ["CrisisNotify", "위기(알림·대처)"], ["CrisisReturn", "위기(복귀)"], ["CrisisHome", "위기(가정학습)"],
-    ["HomeSupport", "가정 연계"], ["SupportTeam", "지원팀"], ["OtherConsiderations", "기타"],
+    ["Antecedents", "주요 선행사건"], ["Consequences", "주요 후속결과"],
+    ["CrisisS1", "위기(전조) 신호"], ["CrisisR1", "위기(전조) 대응"], ["CrisisS2", "위기(고조) 신호"], ["CrisisR2", "위기(고조) 대응"],
+    ["CrisisS3", "위기(대응·알림) 신호"], ["CrisisR3", "위기(대응·알림) 대응"], ["CrisisS4", "위기(분리·회복) 신호"], ["CrisisR4", "위기(분리·회복) 대응"],
+    ["CrisisPlan", "위기(기타)"], ["CrisisNotify", "위기(알림·대처)"], ["CrisisReturn", "위기(복귀)"], ["CrisisHome", "위기(가정학습)"],
+    ["HomeSupport", "가정 연계"], ["SupportTeam", "지원팀"], ["AdditionalSupport", "추가 지원 사항"], ["OtherConsiderations", "기타"],
 ];
 const lvl = (l: Log) => +String(l["강도"] ?? "").trim().charAt(0) || 0;
 

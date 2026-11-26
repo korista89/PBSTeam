@@ -3499,6 +3499,10 @@ BIP_FORM_HEADERS = [
     "MedicationYN", "OperationalDefinition", "MeasurementMethod", "SupportTeam",
     "CrisisNotify", "CrisisReturn", "CrisisHome", "HomeSupport",
     "FBAReport", "ProgressReport", "Source",
+    # 학교 '행동중재계획서' 양식(2026-2) 칸
+    "AuthoredDate", "Antecedents", "Consequences",
+    "CrisisS1", "CrisisR1", "CrisisS2", "CrisisR2", "CrisisS3", "CrisisR3", "CrisisS4", "CrisisR4",
+    "AdditionalSupport",
 ]
 BIP_REQUIRED_HEADERS = [*BIP_BASE_HEADERS, *BIP_EBP_HEADERS, *BIP_FORM_HEADERS]
 BIP_HISTORY_SHEET = "BIP_이력"

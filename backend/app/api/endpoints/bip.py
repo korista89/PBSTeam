@@ -53,6 +53,19 @@ class BIPData(BaseModel):
     FBAReport: Optional[str] = ""
     ProgressReport: Optional[str] = ""
     Source: Optional[str] = ""
+    # 학교 '행동중재계획서' 양식(2026-2) 칸
+    AuthoredDate: Optional[str] = ""
+    Antecedents: Optional[str] = ""
+    Consequences: Optional[str] = ""
+    CrisisS1: Optional[str] = ""
+    CrisisR1: Optional[str] = ""
+    CrisisS2: Optional[str] = ""
+    CrisisR2: Optional[str] = ""
+    CrisisS3: Optional[str] = ""
+    CrisisR3: Optional[str] = ""
+    CrisisS4: Optional[str] = ""
+    CrisisR4: Optional[str] = ""
+    AdditionalSupport: Optional[str] = ""
 
 def _resolve_beable_code(student_code: str) -> str:
     from app.services.sheets import get_beable_code_mapping
