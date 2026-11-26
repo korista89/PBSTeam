@@ -17,3 +17,18 @@ def test_scope(monkeypatch):
     assert [n["content"] for n in M.get_meeting_notes("crisis", "S01", teacher)["notes"]] == ["결정: 가"]
     assert M.get_meeting_notes("crisis", None, teacher)["notes"] == []
     assert len(M.get_meeting_notes("crisis", None, {"role": "admin"})["notes"]) == 2
+
+
+def test_tier3_read_failure_not_cached_as_empty(monkeypatch):
+    """시트 읽기가 실패하면(할당량 초과 등) 빈 표로 캐시하지 않고 올린다 — Tier3 학생이 Tier2로 잘못 보이던 문제."""
+    import pytest
+    from app.services import tier3_monthly as t3
+    monkeypatch.setattr(t3, "get_cached", lambda k, ttl=None: None)
+    saved = []
+    monkeypatch.setattr(t3, "set_cached", lambda k, v: saved.append(v))
+    def boom():
+        raise RuntimeError("429 quota")
+    monkeypatch.setattr(t3, "open_main_sheet", boom)
+    with pytest.raises(RuntimeError):
+        t3._rows()
+    assert saved == []

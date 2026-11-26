@@ -59,8 +59,9 @@ def _rows() -> List[Dict[str, Any]]:
         return cached
     try:
         values = safe_get_all_values(open_main_sheet().worksheet(TAB))
-    except Exception:
+    except gspread.WorksheetNotFound:
         values = []
+    # 그 밖의 읽기 실패(할당량 초과 등)는 올린다. 예전엔 빈 표로 60초 캐시돼 Tier3 학생이 Tier2·표 없음으로 잘못 보였다.
     hdr = values[0] if values else HEADERS
     out = []
     for i, row in enumerate(values[1:], start=2):

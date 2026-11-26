@@ -50,8 +50,8 @@ def consent_map() -> Dict[str, Dict[str, str]]:
         return cached
     try:
         values = open_main_sheet().worksheet(CONSENT_TAB).get_all_values()
-    except Exception:
-        values = []
+    except gspread.WorksheetNotFound:
+        values = []  # 탭이 없을 때만 빈 표. 할당량 초과 등 읽기 실패는 올린다(빈 표로 캐시하지 않게)
     hdr = values[0] if values else CONSENT_HEADERS
     out = {}
     for r in values[1:]:

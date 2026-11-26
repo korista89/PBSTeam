@@ -57,8 +57,8 @@ def _rows() -> List[Dict[str, Any]]:
         return cached
     try:
         values = safe_get_all_values(open_main_sheet().worksheet(TAB))
-    except Exception:
-        values = []
+    except gspread.WorksheetNotFound:
+        values = []  # 탭이 없을 때만 빈 표. 할당량 초과 등 읽기 실패는 올린다(빈 표로 캐시하지 않게)
     hdr = values[0] if values else HEADERS
     out = []
     for i, row in enumerate(values[1:], start=2):
@@ -326,8 +326,8 @@ class _Table:
             return cached
         try:
             values = safe_get_all_values(open_main_sheet().worksheet(self.tab))
-        except Exception:
-            values = []
+        except gspread.WorksheetNotFound:
+            values = []  # 탭이 없을 때만 빈 표. 할당량 초과 등 읽기 실패는 올린다(빈 표로 캐시하지 않게)
         hdr = values[0] if values else self.headers
         out = []
         for i, row in enumerate(values[1:], start=2):

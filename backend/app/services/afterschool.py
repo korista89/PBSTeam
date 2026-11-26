@@ -41,8 +41,8 @@ def participants() -> List[Dict[str, str]]:
         return cached
     try:
         values = safe_get_all_values(open_main_sheet().worksheet(TAB))
-    except Exception:
-        values = []
+    except gspread.WorksheetNotFound:
+        values = []  # 탭이 없을 때만 빈 표. 할당량 초과 등 읽기 실패는 올린다(빈 표로 캐시하지 않게)
     out = [{"code": r[0].strip(), "name": r[1] if len(r) > 1 else "", "class": r[2] if len(r) > 2 else ""}
            for r in values[1:] if r and r[0].strip()]
     set_cached(CACHE_KEY, out)

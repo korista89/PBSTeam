@@ -89,8 +89,8 @@ class ProgramBook:
             return cached
         try:
             values = safe_get_all_values(open_main_sheet().worksheet(self.tab))
-        except Exception:
-            values = []  # 탭이 아직 없으면 프로그램 0개
+        except gspread.WorksheetNotFound:
+            values = []  # 탭이 없을 때만 빈 표. 읽기 실패(할당량 초과 등)는 올린다
         hdr = values[0] if values else self.headers
         out = []
         for i, row in enumerate(values[1:], start=2):
