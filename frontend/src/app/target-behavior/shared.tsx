@@ -99,6 +99,7 @@ export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; be
     const A = (k: string, ph?: string, rows = 2) => (edit ? <Area value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} rows={rows} /> : b[k]);
     const tb = behaviors.filter(x => x.Status !== "삭제");
     const legacy = BIP_LEGACY.filter(([k]) => (b[k] || "").trim());
+    const showEtc = !!(edit || (b.CrisisPlan || "").trim());
     const label2: React.CSSProperties = { ...th, width: "19%" };
     const med = edit
         ? <><Sel value={b.MedicationYN} onChange={v => edit.set("MedicationYN", v)} options={["복용", "미복용"]} /><div style={{ marginTop: 4 }}>{A("MedicationStatus", "복용 시간, 약물 종류, 용량")}</div></>
@@ -117,46 +118,38 @@ export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; be
             )}
             <h1 style={title}>행동중재계획서</h1>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <colgroup><col style={{ width: "6%" }} /><col style={{ width: "13%" }} /><col style={{ width: "31%" }} /><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /></colgroup>
+                <colgroup><col style={{ width: "6%" }} /><col style={{ width: "13%" }} /><col style={{ width: "10%" }} /><col style={{ width: "21%" }} /><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /></colgroup>
                 <tbody>
-                    <tr><th style={th} colSpan={2}>대상 학생</th><td style={td}>{s.name}</td><th style={th}>학년/반</th><td style={td}>{s.className}</td></tr>
-                    <tr><th style={th} colSpan={2}>장애 유형</th><td style={td}>{F("DisabilityType")}</td><th style={th}>성별</th><td style={td}>{edit ? <Sel value={b.Gender} onChange={v => edit.set("Gender", v)} options={["남", "여"]} /> : b.Gender}</td></tr>
-                    <tr><th style={th} colSpan={2}>작성자</th><td style={td}>{F("Teacher")}</td><th style={th}>작성일자</th><td style={td}>{F("AuthoredDate", "", "date")}</td></tr>
-                    <tr><th style={th} colSpan={2}>약물 정보{"\n"}<span style={{ fontWeight: 400, fontSize: "8pt" }}>(복용 시간, 약물 종류, 용량 등)</span></th><td style={td} colSpan={3}>{med}</td></tr>
+                    <tr><th style={th} colSpan={2}>대상 학생</th><td style={td} colSpan={2}>{s.name}</td><th style={th}>학년/반</th><td style={td}>{s.className}</td></tr>
+                    <tr><th style={th} colSpan={2}>장애 유형</th><td style={td} colSpan={2}>{F("DisabilityType")}</td><th style={th}>성별</th><td style={td}>{edit ? <Sel value={b.Gender} onChange={v => edit.set("Gender", v)} options={["남", "여"]} /> : b.Gender}</td></tr>
+                    <tr><th style={th} colSpan={2}>작성자</th><td style={td} colSpan={2}>{F("Teacher")}</td><th style={th}>작성일자</th><td style={td}>{F("AuthoredDate", "", "date")}</td></tr>
+                    <tr><th style={th} colSpan={2}>약물 정보{"\n"}<span style={{ fontWeight: 400, fontSize: "8pt" }}>(복용 시간, 약물 종류, 용량 등)</span></th><td style={td} colSpan={4}>{med}</td></tr>
                     {BIP_ROWS.map(r => (
-                        <tr key={r.key}><th style={label2} colSpan={2}>{r.label}</th><td style={td} colSpan={3}>{A(r.key, r.hint)}{edit?.extra?.(r.key)}</td></tr>
+                        <tr key={r.key}><th style={label2} colSpan={2}>{r.label}</th><td style={td} colSpan={4}>{A(r.key, r.hint)}{edit?.extra?.(r.key)}</td></tr>
                     ))}
                     {BIP_METHOD_ROWS.map((r, i) => (
                         <tr key={r.key}>
                             {i === 0 && <th style={th} rowSpan={3}>{"행\n동\n중\n재\n방\n법"}</th>}
                             <th style={th}>{r.label}</th>
-                            <td style={td} colSpan={3}>{A(r.key, "", 3)}{edit?.extra?.(r.key)}</td>
+                            <td style={td} colSpan={4}>{A(r.key, "", 3)}{edit?.extra?.(r.key)}</td>
                         </tr>
                     ))}
-                    <tr><th style={th} colSpan={2}>강화제{"\n"}목록</th><td style={td} colSpan={3}>{A("ReinforcerInfo")}</td></tr>
-                    {(edit || (b.HomeSupport || "").trim()) && <tr><th style={th} colSpan={2}>가정연계{"\n"}지원</th><td style={td} colSpan={3}>{A("HomeSupport")}</td></tr>}
-                    <tr>
-                        <th style={th} colSpan={2}>위기관리계획</th>
-                        <td style={{ ...td, padding: 0 }} colSpan={3}>
-                            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                                <colgroup><col style={{ width: "16%" }} /><col style={{ width: "40%" }} /><col style={{ width: "44%" }} /></colgroup>
-                                <tbody>
-                                    <tr><th style={{ ...th, borderTop: 0, borderLeft: 0 }}>단계</th><th style={{ ...th, borderTop: 0 }}>신호</th><th style={{ ...th, borderTop: 0, borderRight: 0 }}>대응</th></tr>
-                                    {CRISIS_STAGES.map((st, i) => (
-                                        <tr key={st}>
-                                            <th style={{ ...th, borderLeft: 0 }}>{st}</th>
-                                            <td style={td}>{A(`CrisisS${i + 1}`, "", 1)}</td>
-                                            <td style={{ ...td, borderRight: 0 }}>{A(`CrisisR${i + 1}`, "", 1)}</td>
-                                        </tr>
-                                    ))}
-                                    {(edit || (b.CrisisPlan || "").trim()) && (
-                                        <tr><th style={{ ...th, borderLeft: 0, borderBottom: 0 }}>기타</th><td style={{ ...td, borderRight: 0, borderBottom: 0 }} colSpan={2}>{A("CrisisPlan", "단계로 나누기 어려운 위기관리 내용", 1)}</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </td>
+                    <tr><th style={th} colSpan={2}>강화제{"\n"}목록</th><td style={td} colSpan={4}>{A("ReinforcerInfo")}</td></tr>
+                    {(edit || (b.HomeSupport || "").trim()) && <tr><th style={th} colSpan={2}>가정연계{"\n"}지원</th><td style={td} colSpan={4}>{A("HomeSupport")}</td></tr>}
+                    {/* 위기관리계획: 단계마다 표의 한 줄(인쇄 때 단계 사이에서 쪽이 나뉠 수 있게) */}
+                    <tr style={noSplit}>
+                        <th style={th} colSpan={2} rowSpan={CRISIS_STAGES.length + 1 + (showEtc ? 1 : 0)}>위기관리계획</th>
+                        <th style={th}>단계</th><th style={th}>신호</th><th style={th} colSpan={2}>대응</th>
                     </tr>
-                    <tr><th style={th} colSpan={2}>추가 지원 사항</th><td style={td} colSpan={3}>{A("AdditionalSupport", "상태 확인, 교직원 실행, 보호자 연계, 기록·평가 등")}</td></tr>
+                    {CRISIS_STAGES.map((st, i) => (
+                        <tr key={st} style={noSplit}>
+                            <th style={th}>{st}</th>
+                            <td style={td}>{A(`CrisisS${i + 1}`, "", 1)}</td>
+                            <td style={td} colSpan={2}>{A(`CrisisR${i + 1}`, "", 1)}</td>
+                        </tr>
+                    ))}
+                    {showEtc && <tr style={noSplit}><th style={th}>기타</th><td style={td} colSpan={3}>{A("CrisisPlan", "단계로 나누기 어려운 위기관리 내용", 1)}</td></tr>}
+                    <tr><th style={th} colSpan={2}>추가 지원 사항</th><td style={td} colSpan={4}>{A("AdditionalSupport", "상태 확인, 교직원 실행, 보호자 연계, 기록·평가 등")}</td></tr>
                 </tbody>
             </table>
             <div style={{ fontSize: "9.5pt", marginTop: 14, lineHeight: 1.7 }}>
