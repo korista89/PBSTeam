@@ -504,3 +504,33 @@ export function EBPForStudent({ studentCode, currentTier }: { studentCode: strin
     </div>
   );
 }
+
+// ⓪ 학생 현황: 위기행동관리 회의에서 남긴 학교행동중재지원팀 결정(담임도 자기 학생 것은 본다)
+export function TeamDecisions({ studentCode }: { studentCode: string }) {
+  const [list, setList] = useState<any[]>([]);
+  useEffect(() => {
+    let alive = true;
+    axios.get(`${API_BASE_URL}/api/v1/meeting-notes`, { params: { meeting_type: "crisis", student_code: studentCode } })
+      .then(r => { if (alive) setList(((r.data?.notes || []) as any[]).sort((a, b) => String(b.created_at || b.date).localeCompare(String(a.created_at || a.date)))); })
+      .catch(() => { if (alive) setList([]); });
+    return () => { alive = false; };
+  }, [studentCode]);
+  if (!list.length) return null;
+  const today = todayIso();
+  return (
+    <div className="card" style={{ padding: "14px 20px", borderLeft: "4px solid #7c3aed" }}>
+      <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>🤝 학교행동중재지원팀 결정</div>
+      {list.slice(0, 3).map((n, i) => {
+        const check = /다음 확인: (\d{4}-\d{2}-\d{2})/.exec(String(n.content || ""))?.[1];
+        return (
+          <div key={n.id || i} style={{ padding: "8px 0", borderBottom: i < Math.min(list.length, 3) - 1 ? "1px dashed #e9d5ff" : "none", fontSize: "0.84rem" }}>
+            <b style={{ color: "#6d28d9" }}>{kd(String(n.date))}</b>
+            {i === 0 && <span style={{ marginLeft: 6, fontSize: "0.7rem", fontWeight: 800, color: "#fff", background: "#7c3aed", borderRadius: 99, padding: "1px 8px" }}>최근</span>}
+            {check && check <= today && <span style={{ marginLeft: 6, fontSize: "0.72rem", fontWeight: 800, color: "#b45309" }}>⏰ 확인할 날이 됐습니다</span>}
+            <div style={{ whiteSpace: "pre-wrap", color: "#334155", marginTop: 2 }}>{n.content}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

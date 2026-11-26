@@ -2,7 +2,7 @@
 
 // ⓪ 학생 현황(예전 개별학생대시보드) — 위에서 아래로 "누구인가 → 지금 어떤가 → 언제·어디서·왜 → 최근 기록 → 지원 도구" 순서로 읽힌다.
 import PastYears from "./PastYears";
-import { ConsultationLog } from "./SupportTools";
+import { ConsultationLog, TeamDecisions } from "./SupportTools";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
@@ -335,6 +335,9 @@ export default function OverviewStep({ studentKey, goStep }: { studentKey: strin
             onRecord={() => router.push(`/behavior?student=${encodeURIComponent(code)}`)}
             onTarget={() => goStep("track")}
             onBip={() => goStep("bip")} />
+
+          {/* 1-1a. 학교행동중재지원팀 결정(위기행동관리에서 기록) */}
+          <TeamDecisions studentCode={code} />
 
           {/* 1-1b. 무발생(입력은 ④ 모니터링) */}
           <section style={{ ...card, padding: "12px 20px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

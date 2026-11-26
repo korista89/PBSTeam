@@ -226,7 +226,7 @@ export default function CrisisPage() {
                       </tr>
                       {admin && editing === r.code && (
                         <tr className="no-print"><td colSpan={14} style={{ background: "#faf5ff", padding: 12, borderBottom: "1px solid #e9d5ff" }}>
-                          <div style={{ fontWeight: 800, fontSize: "0.82rem", marginBottom: 6 }}>{maskName(r.name) || r.code} — 이번 회의 결정</div>
+                          <div style={{ fontWeight: 800, fontSize: "0.82rem", marginBottom: 6 }}>{maskName(r.name) || r.code} — 이번 회의 결정 <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#7c3aed" }}>저장하면 담임도 개별학생 행동중재 ⓪ 학생 현황에서 봅니다</span></div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
                             <textarea autoFocus value={draft.what} onChange={e => setDraft({ ...draft, what: e.target.value })} rows={2}
                               placeholder="결정 사항 (예: 등교 시간 환경 조정, BIP 예방 전략 수정)" style={{ flex: 1, minWidth: 260, padding: 8, borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.82rem", fontFamily: "inherit" }} />
