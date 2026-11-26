@@ -184,14 +184,14 @@ export default function InterventionPage() {
                                         }}>{s.label}</button>
                                     ))}
                                 </div>
-                                {step === "overview" && <OverviewStep key={code} studentKey={code} goStep={setStep} />}
+                                {step === "overview" && <OverviewStep key={`ov-${code}`} studentKey={code} goStep={setStep} />}
                                 {step === "data" && <><DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} /><div className="card" style={{ padding: 16 }}><StudentAIAnalysis key={code} studentCode={code} apiUrl={API_BASE_URL} /></div></>}
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}
                                 {step === "bip" && <BipStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} goTracker={() => setStep("track")} />}
                                 {step === "bip" && <EBPForStudent studentCode={code} currentTier={isT3(selected) ? "TIER_3" : "TIER_1"} />}
-                                {step === "track" && <CalmDays key={code} studentCode={code} yearStart={schoolYearStart(today())} />}
+                                {step === "track" && <CalmDays key={`calm-${code}`} studentCode={code} yearStart={schoolYearStart(today())} />}
                                 {step === "track" && <CrisisMonitor logs={logs} planStart={bip.PlanStart || ""} />}
-                                {step === "track" && <Tracker key={code} studentCode={code} behaviors={behaviors} refresh={fetchBehaviors} defaultStart={bip.PlanStart || ""} />}
+                                {step === "track" && <Tracker key={`trk-${code}`} studentCode={code} behaviors={behaviors} refresh={fetchBehaviors} defaultStart={bip.PlanStart || ""} />}
                                 {step === "decision" && <DecisionStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "refer" && <ReferralStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "refer" && <div className="card" style={{ padding: 16 }}><MedicationResponseReport key={code} studentCode={code} apiUrl={API_BASE_URL} /></div>}
