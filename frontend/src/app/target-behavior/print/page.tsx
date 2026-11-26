@@ -112,6 +112,8 @@ function paginate(root: HTMLElement, top0: number): number[] {
     const atoms: { top: number; bottom: number; forced: boolean }[] = [];
     let forced = false;
     const walk = (el: Element) => {
+        // <col>은 표 전체 높이로 재져서, 표가 한 쪽을 넘으면 제목 바로 뒤에서 쪽이 끊겼다(빈 1쪽)
+        if (el.tagName === "COLGROUP" || el.tagName === "COL") return;
         if (getComputedStyle(el).breakBefore === "page") forced = true;
         const r = el.getBoundingClientRect();
         const kids = Array.from(el.children);
