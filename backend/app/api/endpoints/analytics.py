@@ -370,6 +370,24 @@ def get_tier3_report(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=err_msg)
 
+@router.get("/crisis-briefing")
+def get_crisis_briefing(
+    start_date: str,
+    end_date: str,
+    current_user: Dict[str, Any] = Depends(require_authenticated_user)
+):
+    """위기행동관리: 기간 중 학교행동중재지원팀 대상(Tier3·Tier3+) 학생의 위기행동 브리핑."""
+    from datetime import date
+    from app.services import crisis_briefing
+    try:
+        start, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜는 YYYY-MM-DD 형식이어야 합니다.")
+    if start > end or (end - start).days > 366:
+        raise HTTPException(status_code=400, detail="기간을 1년 안으로 다시 골라 주세요.")
+    return crisis_briefing.load(start, end, narrow_scope(current_user))
+
+
 @router.post("/dashboard/refresh")
 def refresh_dashboard(current_admin: Dict[str, Any] = Depends(require_admin)):
     # 예전에는 월별 탭(3~12월)을 새로 만들었다. CICO가 표 3개로 바뀐 뒤(2026-11-01)에는 캐시만 비운다.

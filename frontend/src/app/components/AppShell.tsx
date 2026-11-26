@@ -100,7 +100,8 @@ export default function AppShell({
             items: [
                 { href: "/protocol", label: "프로토콜 안내", key: "protocol", icon: "📜" },
                 { href: "/behavior", label: "위기행동기록", key: "behavior", icon: "🚨" },
-                { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" }
+                { href: "/logs", label: "전체 로그", key: "logs", icon: "🗂️" },
+                { href: "/crisis", label: "위기행동관리", key: "crisis", icon: "🚦" }
             ]
         },
         {

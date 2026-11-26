@@ -66,7 +66,8 @@ def get_meeting_notes(
             st_code = str(n.get("student_code", "")).strip()
             if not st_code or student_in_scope(st_code, user_class):
                 scoped_notes.append(n)
-        notes = scoped_notes
+        # 위기행동관리 회의 메모는 여러 학생을 다루는 팀 기록이라 관리자만 본다
+        notes = [n for n in scoped_notes if str(n.get("meeting_type", "")).strip() != "crisis"]
 
     return {"notes": notes, "total": len(notes)}
 
