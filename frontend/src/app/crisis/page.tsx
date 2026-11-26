@@ -133,6 +133,7 @@ export default function CrisisPage() {
     <AuthCheck>
       <AppShell
         currentPage="crisis"
+        hideDateFilter
         title="🚦 위기행동관리"
         subtitle="학교행동중재지원팀 회의용 브리핑 — 대상 학생(Tier3·Tier3+)의 위기행동을 앞 기간과 비교합니다"
         headerActions={

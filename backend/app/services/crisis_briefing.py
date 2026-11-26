@@ -57,7 +57,7 @@ def _dist(c: Counter, n=8) -> List[Dict[str, Any]]:
 
 
 def _multi(v: str) -> List[str]:
-    return [p.strip() for p in str(v or "").split(",") if p.strip() and "특이사항 없음" not in p]
+    return [p.strip() for p in str(v or "").split(",") if p.strip() and "특이사항 없음" not in p and not p.strip().startswith("기타")]
 
 
 def _week(d: date) -> str:
