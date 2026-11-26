@@ -425,7 +425,7 @@ export default function CICOPage() {
                   ) : (
                     <>
                     <div className="card" style={{ padding: 12, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      <a href={`/student/${encodeURIComponent(gridStudent.학생코드)}`}>학생 대시보드 →</a>
+                      <a href={`/target-behavior?student=${encodeURIComponent(gridStudent.학생코드)}`}>학생 현황 →</a>
                       <a href={`/target-behavior?student=${encodeURIComponent(gridStudent.학생코드)}`}>개별 행동중재 검토 →</a>
                     </div>
                     <StudentCICOPanel

@@ -1,13 +1,12 @@
 "use client";
 
-// 개별학생 행동중재 — 학생 선택부터 자료 확인, FBA 보고서, 행동중재계획(BIP), 중재 자료 입력, 결과 보고서까지 한 화면에서 한다.
+// 개별학생 행동중재 — 학생 선택부터 학생 현황(⓪, 예전 개별학생대시보드), 자료 확인, FBA 보고서, 행동중재계획(BIP), 중재 자료 입력, 결과 보고서까지 한 화면에서 한다.
 // Tier3 학생이 목록 위에 오고, 담임은 자기 반 학생 누구나 골라 개별 중재를 시작할 수 있다.
 // 의사결정·의뢰서·인수인계 자료는 ProgressReport JSON에 함께 저장한다.
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import AppShell from "../components/AppShell";
-import StudentCicoSummary from "../components/StudentCicoSummary";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
@@ -15,8 +14,12 @@ import Tracker from "./Tracker";
 import { DecisionStep, HandoverStep, ReferralStep } from "./Docs";
 import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
 import { Bip, StudentHead, kDate, today } from "./shared";
+import OverviewStep from "./Overview";
+import { CalmDays, EBPForStudent, MedicationResponseReport, StudentAIAnalysis } from "./SupportTools";
+import { schoolYearStart } from "../lib/progress";
 
 const STEPS = [
+    { key: "overview", label: "⓪ 학생 현황" },
     { key: "data", label: "① 자료 분석" },
     { key: "fba", label: "② FBA 결과 보고서" },
     { key: "bip", label: "③ 행동중재계획" },
@@ -38,7 +41,7 @@ export default function InterventionPage() {
     const [onlyT3, setOnlyT3] = useState(false);
     const [requested, setRequested] = useState(() => (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("student") || "" : ""));
     const appliedRef = React.useRef(false);
-    const [step, setStep] = useState<StepKey>("data");
+    const [step, setStep] = useState<StepKey>("overview");
 
     useEffect(() => {
         const p = new URLSearchParams(window.location.search);
@@ -127,7 +130,7 @@ export default function InterventionPage() {
     return (
         <AuthCheck>
             <AppShell currentPage="target-behavior" title="🧩 개별학생 행동중재"
-                subtitle="자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서 → 인수인계를 한 화면에서">
+                subtitle="학생 현황 → 자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서 → 인수인계를 한 화면에서">
                 <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20, alignItems: "start" }}>
                     <div className="card" style={{ padding: 16 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -181,13 +184,17 @@ export default function InterventionPage() {
                                         }}>{s.label}</button>
                                     ))}
                                 </div>
-                                {step === "data" && <><StudentCicoSummary studentCode={code} /><DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} /></>}
+                                {step === "overview" && <OverviewStep key={code} studentKey={code} goStep={setStep} />}
+                                {step === "data" && <><DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} /><div className="card" style={{ padding: 16 }}><StudentAIAnalysis key={code} studentCode={code} apiUrl={API_BASE_URL} /></div></>}
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}
                                 {step === "bip" && <BipStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} goTracker={() => setStep("track")} />}
+                                {step === "bip" && <EBPForStudent studentCode={code} currentTier={isT3(selected) ? "TIER_3" : "TIER_1"} />}
+                                {step === "track" && <CalmDays key={code} studentCode={code} yearStart={schoolYearStart(today())} />}
                                 {step === "track" && <CrisisMonitor logs={logs} planStart={bip.PlanStart || ""} />}
                                 {step === "track" && <Tracker key={code} studentCode={code} behaviors={behaviors} refresh={fetchBehaviors} defaultStart={bip.PlanStart || ""} />}
                                 {step === "decision" && <DecisionStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "refer" && <ReferralStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
+                                {step === "refer" && <div className="card" style={{ padding: 16 }}><MedicationResponseReport key={code} studentCode={code} apiUrl={API_BASE_URL} /></div>}
                                 {step === "report" && <ProgressStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} logs={logs} />}
                                 {step === "handover" && <HandoverStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                             </div>

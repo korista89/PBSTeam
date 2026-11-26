@@ -122,7 +122,7 @@ function StudentFBAFrame({ student: s }: { student: Tier3Student }) {
           <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 600, color: s.decision_color, background: `${s.decision_color}12`, border: `1px solid ${s.decision_color}30` }}>{s.decision}</span>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => window.location.href = `/student/${encodeURIComponent(s.code)}`} style={{ padding: "5px 12px", background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}>개별 대시보드</button>
+          <button onClick={() => window.location.href = `/target-behavior?student=${encodeURIComponent(s.code)}`} style={{ padding: "5px 12px", background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 600 }}>학생 현황</button>
         </div>
       </div>
 

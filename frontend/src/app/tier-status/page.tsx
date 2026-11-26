@@ -310,7 +310,7 @@ export default function TierStatusPage() {
                           : s.메모 || "-"}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        <button onClick={() => router.push(`/student/${encodeURIComponent(s.학생코드)}`)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>📊</button>
+                        <button onClick={() => router.push(`/target-behavior?student=${encodeURIComponent(s.학생코드)}`)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>📊</button>
                       </td>
                       {admin && (
                         <td style={{ textAlign: "center" }}>

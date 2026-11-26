@@ -218,7 +218,7 @@ export default function BriefingPage() {
                 <div>
                   <div style={{ fontWeight: 800, fontSize: "0.85rem", marginBottom: 6 }}>많이 발생한 학생</div>
                   {p.top_students.map(s => (
-                    <a key={s.code} href={`/student/${s.code}`} style={{ display: "block", fontSize: "0.82rem", color: "#0f172a", marginBottom: 4 }}>
+                    <a key={s.code} href={`/target-behavior?student=${encodeURIComponent(s.code)}`} style={{ display: "block", fontSize: "0.82rem", color: "#0f172a", marginBottom: 4 }}>
                       <b>{s.label}</b> {s.count}건{s.crisis ? <span style={{ color: "#dc2626" }}> (조치 {s.crisis})</span> : null}
                     </a>
                   ))}
@@ -232,7 +232,7 @@ export default function BriefingPage() {
                 <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>⚠️ 눈여겨볼 학생 (증가, 최대 3명)</h3>
                 {data.increasing.length === 0 ? <div style={{ color: "#64748b" }}>없음</div> : data.increasing.map(s => (
                   <div key={s.code} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
-                    <a href={`/student/${s.code}`} style={{ fontWeight: 800, color: "#0f172a" }}>{s.label}</a> {!s.strong && <span title="기준(3건 이상·50% 이상 변화) 미달 — 지켜보는 학생" style={{ marginLeft: 4, background: "#e2e8f0", color: "#475569", borderRadius: 4, padding: "0 6px", fontSize: "0.72rem" }}>관찰</span>}
+                    <a href={`/target-behavior?student=${encodeURIComponent(s.code)}`} style={{ fontWeight: 800, color: "#0f172a" }}>{s.label}</a> {!s.strong && <span title="기준(3건 이상·50% 이상 변화) 미달 — 지켜보는 학생" style={{ marginLeft: 4, background: "#e2e8f0", color: "#475569", borderRadius: 4, padding: "0 6px", fontSize: "0.72rem" }}>관찰</span>}
                     <span style={{ color: "#64748b", fontSize: "0.82rem" }}> {s.class} · Tier{s.tier} · {s.before}→<b style={{ color: "#dc2626" }}>{s.recent}</b>건</span>
                     <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: "0.85rem" }}>{s.actions?.map(a => <li key={a}>{a}</li>)}</ul>
                   </div>
@@ -242,7 +242,7 @@ export default function BriefingPage() {
                 <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>👏 칭찬할 학생 (감소, 최대 3명)</h3>
                 {data.decreasing.length === 0 ? <div style={{ color: "#64748b" }}>없음</div> : data.decreasing.map(s => (
                   <div key={s.code} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
-                    <a href={`/student/${s.code}`} style={{ fontWeight: 800, color: "#0f172a" }}>{s.label}</a> {!s.strong && <span title="기준(3건 이상·50% 이상 변화) 미달 — 지켜보는 학생" style={{ marginLeft: 4, background: "#e2e8f0", color: "#475569", borderRadius: 4, padding: "0 6px", fontSize: "0.72rem" }}>관찰</span>}
+                    <a href={`/target-behavior?student=${encodeURIComponent(s.code)}`} style={{ fontWeight: 800, color: "#0f172a" }}>{s.label}</a> {!s.strong && <span title="기준(3건 이상·50% 이상 변화) 미달 — 지켜보는 학생" style={{ marginLeft: 4, background: "#e2e8f0", color: "#475569", borderRadius: 4, padding: "0 6px", fontSize: "0.72rem" }}>관찰</span>}
                     <span style={{ color: "#64748b", fontSize: "0.82rem" }}> {s.class} · {s.before}→<b style={{ color: "#16a34a" }}>{s.recent}</b>건</span>
                     <div style={{ fontSize: "0.85rem", marginTop: 2 }}>{s.message}</div>
                   </div>

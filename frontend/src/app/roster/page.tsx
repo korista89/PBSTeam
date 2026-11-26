@@ -75,7 +75,7 @@ export default function RosterPage() {
                         학생 수: <strong>{cls.student_count}</strong>명
                       </div>
                       <Link
-                        href={isAdmin() ? "/roster/edit" : "/student"}
+                        href={isAdmin() ? "/roster/edit" : "/target-behavior"}
                         className="btn btn-secondary"
                         style={{ marginTop: "6px", width: "100%", textAlign: "center", fontSize: "0.78rem" }}
                       >

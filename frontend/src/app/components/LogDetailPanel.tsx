@@ -67,7 +67,7 @@ export default function LogDetailPanel({ log, isCrisis, onSaved }: LogDetailPane
 
     const goToStudent = () => {
         const code = log["학생코드"] || log["코드번호"];
-        if (code) router.push(`/student/${encodeURIComponent(code)}`);
+        if (code) router.push(`/target-behavior?student=${encodeURIComponent(code)}`);
     };
 
     const startEdit = () => {

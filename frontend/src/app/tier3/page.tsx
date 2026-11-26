@@ -9,6 +9,7 @@ import { maskName } from "../utils";
 import { API_BASE_URL } from "@/app/lib/api";
 import { ChartCard, ChipRow, Empty, Kpi } from "../cico/CicoDashboard";
 import Tier3Annual from "./Tier3Annual";
+import Tier3Overview from "./Tier3Overview";
 import ViewToggle from "../components/ViewToggle";
 
 // Tier3 관리: Tier3·Tier3+ 월별 명단(단계 포함)과 대시보드. TierStatus는 '지금' 상태, 이 화면은 달마다의 기록.
@@ -128,7 +129,7 @@ export default function Tier3Page() {
       <AppShell
         currentPage="tier3"
         title="🧩 Tier3 관리"
-        subtitle="Tier3·Tier3+ 대상자를 달마다 기록하고 변화를 봅니다. 학생별 분석은 개별학생대시보드·개별학생 행동중재에서 합니다"
+        subtitle="Tier3·Tier3+ 대상자를 달마다 기록하고 변화를 봅니다. 학생별 분석은 개별학생 행동중재에서 합니다"
         headerActions={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {status && <span className={`badge ${status.startsWith("⚠") ? "badge-tier3" : "badge-tier1"}`} style={{ fontSize: "0.78rem" }}>{status}</span>}
@@ -143,6 +144,7 @@ export default function Tier3Page() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <ViewToggle value={view} onChange={setView} monthLabel={`${month}월 현황·명단`} />
             <Tier3Annual />
+            <Tier3Overview />
           </div>
         ) : loading || !data || !stats ? (
           <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>불러오는 중...</div>

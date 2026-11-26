@@ -101,10 +101,10 @@ export default function TodayPage() {
   };
 
   const goTo = (kind: string, code?: string | null) => {
-    if (kind === "student" && code) router.push(`/student/${encodeURIComponent(code)}`);
+    if (kind === "student" && code) router.push(`/target-behavior?student=${encodeURIComponent(code)}`);
     else if (kind === "cico") router.push(code ? `/cico-record?student=${encodeURIComponent(code)}` : "/cico-record");
     else if (kind === "target-behavior") router.push("/target-behavior");
-    else if (code) router.push(`/student/${encodeURIComponent(code)}`);
+    else if (code) router.push(`/target-behavior?student=${encodeURIComponent(code)}`);
   };
 
   const notCheckedIn = (cicoItems || []).filter(i => !i.checkedIn);
