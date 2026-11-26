@@ -219,8 +219,8 @@ export default function CrisisPage() {
                         <td style={td}><span style={{ fontWeight: 800, color: SIG[r.signal] }}>{r.signal}</span></td>
                         {admin && <td style={{ ...td, minWidth: 200, maxWidth: 280 }}>
                           {past[0] ? <div style={{ fontSize: "0.74rem", whiteSpace: "pre-wrap", color: "#334155" }}><b style={{ color: "#7c3aed" }}>{md(String(past[0].date))}</b> {past[0].content}</div>
-                            : <span style={{ fontSize: "0.74rem", color: "#cbd5e1" }}>결정 없음</span>}
-                          <button className="no-print" onClick={() => openDecision(r.code)} style={{ marginTop: 4, fontSize: "0.72rem", fontWeight: 700, border: "1px solid #c4b5fd", background: editing === r.code ? "#ede9fe" : "#fff", color: "#6d28d9", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>
+                            : <div style={{ fontSize: "0.74rem", color: "#cbd5e1" }}>결정 없음</div>}
+                          <button className="no-print" onClick={() => openDecision(r.code)} style={{ display: "block", marginTop: 4, fontSize: "0.72rem", fontWeight: 700, border: "1px solid #c4b5fd", background: editing === r.code ? "#ede9fe" : "#fff", color: "#6d28d9", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>
                             {editing === r.code ? "닫기" : "✏️ 결정 기록"}</button>
                         </td>}
                       </tr>
