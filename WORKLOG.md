@@ -101,4 +101,4 @@
 - 행동중재 ④에 무사고일 카드가 3개 쌓이던 문제: 형제 컴포넌트 key 중복(key={code}) → 단계별 key로 수정.
 - 안 쓰는 코드 정리(프론트 미사용 import·함수, 백엔드 update_student_tier·미사용 모델·빈 schemas.py), 게시판 불러오기 실패 문구 표시. API 경로·내부 링크는 모두 연결됨.
 - 시트: 없는 기록을 가리키는 결재 11줄 삭제, Log_Main 학생명 오타 1건(코드 2212) 수정, MeetingNotes I1 'UUID' 머리글 추가. 백업 ~/data/pbst_cleanup_20261126.json.
-- 정본 시트 정리: Log_Main 빈 껍데기 4줄·중간 빈 줄 170줄·Deleted 2줄, 그 결재 12줄, MeetingNotes 테스트 1줄 삭제. 백업 ~/data/pbst_cleanup2_20261126.json. 중복 108→109 병합 후 108 삭제(백업 ~/data/pbst_merge108_20261126.json). 471/472·576/577은 둘 다 유지.
+- 정본 시트 정리: Log_Main 빈 껍데기 4줄·중간 빈 줄 170줄·Deleted 2줄, 그 결재 12줄, MeetingNotes 테스트 1줄 삭제. 백업 ~/data/pbst_cleanup2_20261126.json. 중복 108→109 병합 후 108 삭제(백업 ~/data/pbst_merge108_20261126.json). 471→472·576→577도 병합 후 삭제(백업 ~/data/pbst_merge471_576_20261126.json).
