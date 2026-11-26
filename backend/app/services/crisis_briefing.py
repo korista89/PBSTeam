@@ -48,6 +48,11 @@ def action_kind(raw: str) -> str:
     return ""
 
 
+def is_report(r: Dict[str, Any]) -> bool:
+    """보고서를 작성한 기록인지(결재함 '보고서'와 같은 기준: 정규화한 물리적제지여부가 O로 시작)."""
+    return str(r.get("물리적제지여부") or "").strip().startswith("O")
+
+
 def _top(c: Counter, n=1) -> List[str]:
     return [k for k, _ in Counter({k: v for k, v in c.items() if k}).most_common(n)]
 
@@ -71,7 +76,8 @@ def _detail(d: date, r: Dict[str, Any]) -> Dict[str, Any]:
             "function": _short(r.get("기능")), "setting": ", ".join(_multi(r.get("배경사건"))),
             "antecedent": ", ".join(_multi(r.get("선행사건"))), "consequence": str(r.get("후속결과") or ""),
             "action": action_kind(r.get("제지유형_원문") or r.get("물리적제지여부")), "note": str(r.get("특기사항") or ""),
-            "teacher": str(r.get("입력교사명") or ""), "log_id": r.get("Log_ID", ""), "status": r.get("Status", "")}
+            "teacher": str(r.get("입력교사명") or ""), "log_id": r.get("Log_ID", ""), "status": r.get("Status", ""),
+            "report": is_report(r)}
 
 
 def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
@@ -160,7 +166,7 @@ def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
             serious.append({"date": d.isoformat(), "code": code, "name": roster.get(code, {}).get("name", r.get("학생명", "")),
                             "time": r.get("시간대", ""), "place": r.get("장소", ""), "type": _short(r.get("행동유형")),
                             "intensity": _int(r.get("강도")), "action": kind, "note": str(r.get("특기사항") or "")[:120],
-                            "log_id": r.get("Log_ID", ""), "status": r.get("Status", "")})
+                            "log_id": r.get("Log_ID", ""), "status": r.get("Status", ""), "report": is_report(r)})
 
     sch, psch = stats(school), stats(school_prev)
     sch_acts = Counter(action_kind(r.get("제지유형_원문") or r.get("물리적제지여부")) for _, r in school)

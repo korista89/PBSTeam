@@ -31,7 +31,13 @@ def test_build():
     assert out["weekly"][0]["school"] == 4 and out["weekly"][0]["count"] == 3
     assert [x["date"] for x in a["records"]] == ["2026-11-13", "2026-11-12", "2026-11-10"]
     assert out["by_type"] == [{"name": "신체적공격행동", "value": 5}]
+    assert [x["report"] for x in a["records"]] == [False, False, False]
     assert len(out["serious"]) == 1 and out["by_antecedent"] == [{"name": "과제 제시", "value": 5}]
+
+
+def test_is_report():
+    from app.services.crisis_briefing import is_report
+    assert is_report({"물리적제지여부": "O(제지)"}) and not is_report({"물리적제지여부": "X(보고서 작성 불필요)"})
 
 
 def test_action_kind():

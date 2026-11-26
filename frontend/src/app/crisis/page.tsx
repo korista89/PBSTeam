@@ -22,7 +22,7 @@ interface Student {
 }
 interface Rec {
   date: string; time: string; place: string; type: string; intensity: number; count: number; function: string; setting: string;
-  antecedent: string; consequence: string; action: string; note: string; teacher: string; log_id: string; status: string;
+  antecedent: string; consequence: string; action: string; note: string; teacher: string; log_id: string; status: string; report: boolean;
 }
 interface Briefing {
   period: { start: string; end: string; days: number }; prev_period: { start: string; end: string }; target_source: string;
@@ -30,7 +30,7 @@ interface Briefing {
   by_time: Dist; by_place: Dist; by_type: Dist; by_function: Dist; by_antecedent: Dist; by_setting: Dist;
   students: Student[];
   watch: { code: string; name: string; class: string; incidents: number; max_intensity: number; prev_incidents: number; top_type: string[] }[];
-  serious: { date: string; code: string; name: string; time: string; place: string; type: string; intensity: number; action: string; note: string; log_id: string; status: string }[];
+  serious: { date: string; code: string; name: string; time: string; place: string; type: string; intensity: number; action: string; note: string; log_id: string; status: string; report: boolean }[];
 }
 interface Note { id: string; date: string; content: string; author: string; student_code: string; period_start: string; period_end: string; created_at?: string; }
 type Draft = { what: string; who: string; check: string };
@@ -291,7 +291,7 @@ export default function CrisisPage() {
                                     <td style={{ ...td, fontSize: "0.75rem" }}>{ACT[x.action] || "-"}</td>
                                     <td style={{ ...td, fontSize: "0.74rem", color: "#334155", maxWidth: 360, whiteSpace: "pre-wrap" }}>{x.note || "-"}</td>
                                     <td style={{ ...td, fontSize: "0.72rem", color: "#94a3b8", whiteSpace: "nowrap" }}>{x.teacher}{x.status !== "Approved" ? <div style={{ color: "#b45309", fontWeight: 700 }}>결재 대기</div> : null}</td>
-                                    <td style={td}>{x.log_id && <Link className="no-print" href={`/report/crisis/${encodeURIComponent(x.log_id)}`} style={{ fontSize: "0.72rem", fontWeight: 700, whiteSpace: "nowrap" }}>보고서 →</Link>}</td>
+                                    <td style={td}>{x.report && x.log_id && <Link className="no-print" href={`/report/crisis/${encodeURIComponent(x.log_id)}`} style={{ fontSize: "0.72rem", fontWeight: 700, whiteSpace: "nowrap" }}>보고서 →</Link>}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -341,7 +341,7 @@ export default function CrisisPage() {
                   <span style={{ minWidth: 150, color: "#475569", fontSize: "0.8rem" }}>{x.time} · {x.place}</span>
                   <span style={{ fontSize: "0.8rem" }}>{x.type} · 강도 <b style={{ color: x.intensity >= 4 ? "#b91c1c" : undefined }}>{x.intensity}</b>{ACT[x.action] ? ` · ${ACT[x.action]}` : ""}</span>
                   <span style={{ flex: 1, minWidth: 200, fontSize: "0.78rem", color: "#64748b" }}>{x.note}</span>
-                  {x.log_id && <Link className="no-print" href={`/report/crisis/${encodeURIComponent(x.log_id)}`} style={{ fontSize: "0.75rem", fontWeight: 700 }}>보고서 →</Link>}
+                  {x.report && x.log_id && <Link className="no-print" href={`/report/crisis/${encodeURIComponent(x.log_id)}`} style={{ fontSize: "0.75rem", fontWeight: 700 }}>보고서 →</Link>}
                 </div>
               )) : <Empty text="이 기간에는 해당 사건이 없습니다." />}
             </div>
