@@ -26,7 +26,12 @@ def test_build():
     assert a["code"] == "S01" and a["signal"] == "증가" and a["weekly"] == [3, 0]
     assert out["students"][1]["signal"] == "무발생"
     assert [w["code"] for w in out["watch"]] == ["S03"]
-    assert len(out["serious"]) == 1 and out["by_antecedent"] == [{"name": "과제 제시", "value": 3}]
+    sc = out["school"]
+    assert (sc["incidents"], sc["students"], sc["prev_incidents"], sc["target_share"]) == (5, 2, 1, 60)
+    assert out["weekly"][0]["school"] == 4 and out["weekly"][0]["count"] == 3
+    assert [x["date"] for x in a["records"]] == ["2026-11-13", "2026-11-12", "2026-11-10"]
+    assert out["by_type"] == [{"name": "신체적공격행동", "value": 5}]
+    assert len(out["serious"]) == 1 and out["by_antecedent"] == [{"name": "과제 제시", "value": 5}]
 
 
 def test_action_kind():

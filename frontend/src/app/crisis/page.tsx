@@ -18,11 +18,15 @@ interface Student {
   code: string; name: string; class: string; level: string; incidents: number; occurrences: number; max_intensity: number;
   avg_intensity: number; high: number; prev_incidents: number; delta: number; signal: string; top_type: string[];
   top_function: string[]; top_time: string[]; top_place: string[]; restraint: number; support: number; injury: number;
-  pending: number; last_date: string; weekly: number[];
+  pending: number; last_date: string; weekly: number[]; records: Rec[];
+}
+interface Rec {
+  date: string; time: string; place: string; type: string; intensity: number; count: number; function: string; setting: string;
+  antecedent: string; consequence: string; action: string; note: string; teacher: string; log_id: string; status: string;
 }
 interface Briefing {
   period: { start: string; end: string; days: number }; prev_period: { start: string; end: string }; target_source: string;
-  summary: Record<string, number>; weekly: { week: string; count: number; high: number }[];
+  summary: Record<string, number>; school: Record<string, number>; weekly: { week: string; school: number; count: number; high: number; target_high: number }[];
   by_time: Dist; by_place: Dist; by_type: Dist; by_function: Dist; by_antecedent: Dist; by_setting: Dist;
   students: Student[];
   watch: { code: string; name: string; class: string; incidents: number; max_intensity: number; prev_incidents: number; top_type: string[] }[];
@@ -142,6 +146,8 @@ export default function CrisisPage() {
   };
 
   const s = data?.summary || {};
+  const sc = data?.school || {};
+  const [openRec, setOpenRec] = useState("");
   const input = { padding: "6px 8px", borderRadius: 8, border: "1.5px solid #cbd5e1", fontWeight: 700, fontSize: "0.82rem" };
   const th: React.CSSProperties = { padding: "8px 6px", textAlign: "left", fontSize: "0.74rem", color: "#475569", borderBottom: "2px solid #e2e8f0", whiteSpace: "nowrap" };
   const td: React.CSSProperties = { padding: "8px 6px", fontSize: "0.8rem", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
@@ -178,6 +184,44 @@ export default function CrisisPage() {
               <span style={{ marginLeft: 8, color: "#94a3b8" }}>대상 출처: {data.target_source === "Tier3_월별" ? "Tier3관리 월별 명단" : "TierStatus"}</span>
             </div>
 
+            {/* A. 학교 전체 추이 */}
+            <div style={{ fontWeight: 900, fontSize: "1.05rem", borderLeft: "5px solid #0ea5e9", paddingLeft: 10 }}>🏫 학교 전체 추이 <span style={{ fontWeight: 500, fontSize: "0.78rem", color: "#94a3b8" }}>전교생 위기행동 기록 기준</span></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+              <Kpi label="전교 위기행동 기록" value={sc.incidents ?? 0} unit="건" color="#0284c7" hint={`앞 기간 ${sc.prev_incidents ?? 0}건`} />
+              <Kpi label="발생 학생" value={sc.students ?? 0} unit="명" color="#0891b2" hint={`앞 기간 ${sc.prev_students ?? 0}명`} />
+              <Kpi label="발생 횟수 합" value={sc.occurrences ?? 0} unit="회" color="#ea580c" hint={`앞 기간 ${sc.prev_occurrences ?? 0}회`} />
+              <Kpi label="강도 4 이상" value={sc.high ?? 0} unit="건" color="#b91c1c" hint={`평균 강도 ${sc.avg_intensity ?? 0}`} />
+              <Kpi label="제지·교육지원·상해" value={(sc.restraint ?? 0) + (sc.support ?? 0) + (sc.injury ?? 0)} unit="건" color="#0f766e"
+                hint={`제지 ${sc.restraint ?? 0} · 교육지원 ${sc.support ?? 0} · 상해 ${sc.injury ?? 0}`} />
+              <Kpi label="대상 학생 비중" value={sc.target_share ?? 0} unit="%" color="#7c3aed" hint="전교 기록 중 Tier3·Tier3+ 학생 기록" />
+            </div>
+            {/* 3. 추이와 패턴 */}
+            <ChartCard title="📈 주별 위기행동 — 학교 전체와 대상 학생">
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={data.weekly.map(w => ({ ...w, label: md(w.week) + " 주" }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="label" fontSize={11} />
+                  <YAxis allowDecimals={false} fontSize={11} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="school" name="학교 전체" fill="#bae6fd" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" name="대상 학생" fill="#fca5a5" radius={[4, 4, 0, 0]} />
+                  <Line dataKey="high" name="강도 4 이상(전교)" stroke="#b91c1c" strokeWidth={2} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+              <DistChart title="⏰ 시간대" data={data.by_time} color="#f97316" />
+              <DistChart title="📍 장소" data={data.by_place} color="#0ea5e9" />
+              <DistChart title="🧷 행동 유형" data={data.by_type} color="#ef4444" />
+              <DistChart title="🎯 추정 기능" data={data.by_function} color="#8b5cf6" />
+              <DistChart title="⚡ 선행사건" data={data.by_antecedent} color="#14b8a6" />
+              <DistChart title="🌙 배경사건" data={data.by_setting} color="#64748b" />
+            </div>
+
+            {/* B. 학교행동중재지원팀 대상 학생 */}
+            <div style={{ fontWeight: 900, fontSize: "1.05rem", borderLeft: "5px solid #7c3aed", paddingLeft: 10, marginTop: 8 }}>👥 학교행동중재지원팀 대상 학생 <span style={{ fontWeight: 500, fontSize: "0.78rem", color: "#94a3b8" }}>Tier3·Tier3+ 학생별 위기행동 발생 정보</span></div>
+
             {/* 1. 한눈에 보기 */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
               <Kpi label="대상 학생" value={s.targets ?? 0} unit="명" color="#7c3aed" hint={`Tier3+ ${s.tier3plus ?? 0}명 · 발생 학생 ${s.with_incidents ?? 0}명`} />
@@ -193,7 +237,7 @@ export default function CrisisPage() {
 
             {/* 2. 학생별 현황 — 회의 안건 순서 */}
             <div className="card" style={{ padding: 14, overflowX: "auto" }}>
-              <div style={{ fontWeight: 800, marginBottom: 8 }}>👥 대상 학생별 현황 <span style={{ fontWeight: 500, fontSize: "0.75rem", color: "#94a3b8" }}>기록 많은 순 · 이름을 누르면 개별학생 행동중재로 갑니다</span></div>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>👥 대상 학생별 현황 <span style={{ fontWeight: 500, fontSize: "0.75rem", color: "#94a3b8" }}>기록 많은 순 · 이름을 누르면 이 기간에 입력된 기록이 펼쳐집니다 · ↗는 개별학생 행동중재</span></div>
               {data.students.length ? (
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr>
@@ -203,7 +247,11 @@ export default function CrisisPage() {
                     {data.students.map(r => { const past = decisions(r.code); return (
                       <React.Fragment key={r.code}>
                       <tr>
-                        <td style={td}><Link href={`/target-behavior?student=${encodeURIComponent(r.code)}`} style={{ fontWeight: 800, color: "#1e293b" }}>{maskName(r.name) || r.code}</Link>
+                        <td style={td}>
+                          <button onClick={() => setOpenRec(openRec === r.code ? "" : r.code)} title="이 기간 기록 보기"
+                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontWeight: 800, color: openRec === r.code ? "#dc2626" : "#1e293b", fontSize: "0.85rem", textDecoration: "underline dotted" }}>
+                            {openRec === r.code ? "▾" : "▸"} {maskName(r.name) || r.code}</button>
+                          <Link className="no-print" href={`/target-behavior?student=${encodeURIComponent(r.code)}`} title="개별학생 행동중재" style={{ marginLeft: 4, fontSize: "0.75rem", textDecoration: "none" }}>↗</Link>
                           <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{r.class}</div></td>
                         <td style={td}><span className={`badge ${r.level === "Tier3+" ? "badge-tier3" : "badge-tier2"}`}>{r.level}</span></td>
                         <td style={{ ...td, fontWeight: 900, fontSize: "1rem" }}>{r.incidents}<Delta now={r.incidents} prev={r.prev_incidents} /></td>
@@ -224,6 +272,33 @@ export default function CrisisPage() {
                             {editing === r.code ? "닫기" : "✏️ 결정 기록"}</button>
                         </td>}
                       </tr>
+                      {openRec === r.code && (
+                        <tr><td colSpan={admin ? 14 : 13} style={{ background: "#fff7ed", padding: "10px 12px", borderBottom: "1px solid #fed7aa" }}>
+                          <div style={{ fontWeight: 800, fontSize: "0.82rem", marginBottom: 6 }}>{maskName(r.name) || r.code} — {kd(data.period.start)} ~ {kd(data.period.end)} 기록 {r.records.length}건</div>
+                          {r.records.length ? (
+                            <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 8 }}>
+                              <thead><tr>{["날짜", "시간대·장소", "행동", "강도", "횟수", "기능", "배경·선행 → 후속", "조치", "특기사항", "입력", ""].map(h => <th key={h} style={{ ...th, fontSize: "0.7rem" }}>{h}</th>)}</tr></thead>
+                              <tbody>
+                                {r.records.map((x, i) => (
+                                  <tr key={x.log_id || i}>
+                                    <td style={{ ...td, fontWeight: 800, whiteSpace: "nowrap" }}>{md(x.date)}</td>
+                                    <td style={{ ...td, fontSize: "0.75rem" }}>{x.time}<div style={{ color: "#94a3b8" }}>{x.place}</div></td>
+                                    <td style={{ ...td, fontSize: "0.75rem" }}>{x.type}</td>
+                                    <td style={{ ...td, fontWeight: 800, color: x.intensity >= 4 ? "#b91c1c" : undefined }}>{x.intensity || "-"}</td>
+                                    <td style={td}>{x.count}</td>
+                                    <td style={{ ...td, fontSize: "0.75rem" }}>{x.function || "-"}</td>
+                                    <td style={{ ...td, fontSize: "0.72rem", color: "#475569", maxWidth: 220 }}>{[x.setting, x.antecedent].filter(Boolean).join(" / ") || "-"}{x.consequence ? <div>→ {x.consequence}</div> : null}</td>
+                                    <td style={{ ...td, fontSize: "0.75rem" }}>{ACT[x.action] || "-"}</td>
+                                    <td style={{ ...td, fontSize: "0.74rem", color: "#334155", maxWidth: 360, whiteSpace: "pre-wrap" }}>{x.note || "-"}</td>
+                                    <td style={{ ...td, fontSize: "0.72rem", color: "#94a3b8", whiteSpace: "nowrap" }}>{x.teacher}{x.status !== "Approved" ? <div style={{ color: "#b45309", fontWeight: 700 }}>결재 대기</div> : null}</td>
+                                    <td style={td}>{x.log_id && <Link className="no-print" href={`/report/crisis/${encodeURIComponent(x.log_id)}`} style={{ fontSize: "0.72rem", fontWeight: 700, whiteSpace: "nowrap" }}>보고서 →</Link>}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : <div style={{ fontSize: "0.8rem", color: "#16a34a", fontWeight: 700 }}>이 기간에 입력된 위기행동 기록이 없습니다.</div>}
+                        </td></tr>
+                      )}
                       {admin && editing === r.code && (
                         <tr className="no-print"><td colSpan={14} style={{ background: "#faf5ff", padding: 12, borderBottom: "1px solid #e9d5ff" }}>
                           <div style={{ fontWeight: 800, fontSize: "0.82rem", marginBottom: 6 }}>{maskName(r.name) || r.code} — 이번 회의 결정 <span style={{ fontWeight: 500, fontSize: "0.72rem", color: "#7c3aed" }}>저장하면 담임도 개별학생 행동중재 ⓪ 학생 현황에서 봅니다</span></div>
@@ -254,29 +329,6 @@ export default function CrisisPage() {
                   </tbody>
                 </table>
               ) : <Empty text="이 기간의 대상 학생이 없습니다. Tier3관리에서 월별 명단을 확인하세요." />}
-            </div>
-
-            {/* 3. 추이와 패턴 */}
-            <ChartCard title="📈 주별 위기행동 (대상 학생 전체)">
-              <ResponsiveContainer width="100%" height={220}>
-                <ComposedChart data={data.weekly.map(w => ({ ...w, label: md(w.week) + " 주" }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="label" fontSize={11} />
-                  <YAxis allowDecimals={false} fontSize={11} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" name="기록 건수" fill="#fca5a5" radius={[4, 4, 0, 0]} />
-                  <Line dataKey="high" name="강도 4 이상" stroke="#b91c1c" strokeWidth={2} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
-              <DistChart title="⏰ 시간대" data={data.by_time} color="#f97316" />
-              <DistChart title="📍 장소" data={data.by_place} color="#0ea5e9" />
-              <DistChart title="🧷 행동 유형" data={data.by_type} color="#ef4444" />
-              <DistChart title="🎯 추정 기능" data={data.by_function} color="#8b5cf6" />
-              <DistChart title="⚡ 선행사건" data={data.by_antecedent} color="#14b8a6" />
-              <DistChart title="🌙 배경사건" data={data.by_setting} color="#64748b" />
             </div>
 
             {/* 4. 주요 사건 */}

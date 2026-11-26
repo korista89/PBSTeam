@@ -64,6 +64,16 @@ def _week(d: date) -> str:
     return (d - timedelta(days=d.weekday())).isoformat()
 
 
+def _detail(d: date, r: Dict[str, Any]) -> Dict[str, Any]:
+    """학생 이름을 눌렀을 때 펼쳐 보는 기록 한 건."""
+    return {"date": d.isoformat(), "time": r.get("시간대", ""), "place": r.get("장소", ""),
+            "type": _short(r.get("행동유형")), "intensity": _int(r.get("강도")), "count": max(1, _int(r.get("발생횟수"), 1)),
+            "function": _short(r.get("기능")), "setting": ", ".join(_multi(r.get("배경사건"))),
+            "antecedent": ", ".join(_multi(r.get("선행사건"))), "consequence": str(r.get("후속결과") or ""),
+            "action": action_kind(r.get("제지유형_원문") or r.get("물리적제지여부")), "note": str(r.get("특기사항") or ""),
+            "teacher": str(r.get("입력교사명") or ""), "log_id": r.get("Log_ID", ""), "status": r.get("Status", "")}
+
+
 def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
           targets: Dict[str, str], start: date, end: date) -> Dict[str, Any]:
     """records: 정규화한 위기행동 기록, roster: 학생코드→{name, class}, targets: 학생코드→단계."""
@@ -72,10 +82,15 @@ def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
     name_to_code = {v.get("name"): c for c, v in roster.items() if v.get("name")}
 
     cur, prev = defaultdict(list), defaultdict(list)
+    school, school_prev = [], []   # 학교 전체(학생 연결이 안 된 기록도 센다)
     for r in records:
         d = _d(r.get("행동발생날짜"))
         if not d:
             continue
+        if start <= d <= end:
+            school.append((d, r))
+        elif pstart <= d <= pend:
+            school_prev.append((d, r))
         code = str(r.get("학생코드") or "").strip() or name_to_code.get(str(r.get("학생명") or "").strip(), "")
         if not code:
             continue
@@ -121,6 +136,7 @@ def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
             "pending": sum(1 for _, r in items if str(r.get("Status") or "").strip() not in ("Approved",)),
             "last_date": items[-1][0].isoformat() if items else "",
             "weekly": [wk.get(x, 0) for x in weeks],
+            "records": [_detail(d, r) for d, r in reversed(items)],
         })
     students.sort(key=lambda s: (-s["incidents"], -s["max_intensity"], s["code"]))
 
@@ -146,6 +162,14 @@ def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
                             "intensity": _int(r.get("강도")), "action": kind, "note": str(r.get("특기사항") or "")[:120],
                             "log_id": r.get("Log_ID", ""), "status": r.get("Status", "")})
 
+    sch, psch = stats(school), stats(school_prev)
+    sch_acts = Counter(action_kind(r.get("제지유형_원문") or r.get("물리적제지여부")) for _, r in school)
+    wk_school = Counter(_week(d) for d, _ in school)
+    wk_school_high = Counter(_week(d) for d, r in school if _int(r.get("강도")) >= WATCH_MIN_INTENSITY)
+    def _who(items):
+        return len({str(r.get("학생코드") or "").strip() or name_to_code.get(str(r.get("학생명") or "").strip())
+                    or str(r.get("학생명") or "").strip() for _, r in items} - {""})
+
     total, ptotal = stats(all_items), stats([x for c in targets for x in prev.get(c, [])])
     acts = Counter(action_kind(r.get("제지유형_원문") or r.get("물리적제지여부")) for _, r in all_items)
     wk_all = Counter(_week(d) for d, _ in all_items)
@@ -163,13 +187,21 @@ def build(records: List[Dict[str, Any]], roster: Dict[str, Dict[str, str]],
             "increased": sum(1 for s in students if s["signal"] == "증가"),
             "watch": len(watch),
         },
-        "weekly": [{"week": x, "count": wk_all.get(x, 0), "high": wk_high.get(x, 0)} for x in weeks],
-        "by_time": _dist(Counter(str(r.get("시간대") or "").strip() for _, r in all_items), 12),
-        "by_place": _dist(Counter(str(r.get("장소") or "").strip() for _, r in all_items)),
-        "by_type": _dist(Counter(_short(r.get("행동유형")) for _, r in all_items)),
-        "by_function": _dist(Counter(_short(r.get("기능")) for _, r in all_items)),
-        "by_antecedent": _dist(Counter(x for _, r in all_items for x in _multi(r.get("선행사건")))),
-        "by_setting": _dist(Counter(x for _, r in all_items for x in _multi(r.get("배경사건")))),
+        "school": {
+            **sch, "students": _who(school), "prev_incidents": psch["incidents"], "prev_occurrences": psch["occurrences"],
+            "prev_students": _who(school_prev), "restraint": sch_acts["제지"], "support": sch_acts["교육지원"], "injury": sch_acts["상해"],
+            "target_share": round(total["incidents"] * 100 / sch["incidents"]) if sch["incidents"] else 0,
+        },
+        # 주별: 학교 전체·대상 학생·강도 4 이상(학교 전체)
+        "weekly": [{"week": x, "school": wk_school.get(x, 0), "count": wk_all.get(x, 0), "high": wk_school_high.get(x, 0),
+                    "target_high": wk_high.get(x, 0)} for x in weeks],
+        # 패턴은 학교 전체 기준
+        "by_time": _dist(Counter(str(r.get("시간대") or "").strip() for _, r in school), 12),
+        "by_place": _dist(Counter(str(r.get("장소") or "").strip() for _, r in school)),
+        "by_type": _dist(Counter(_short(r.get("행동유형")) for _, r in school)),
+        "by_function": _dist(Counter(_short(r.get("기능")) for _, r in school)),
+        "by_antecedent": _dist(Counter(x for _, r in school for x in _multi(r.get("선행사건")))),
+        "by_setting": _dist(Counter(x for _, r in school for x in _multi(r.get("배경사건")))),
         "students": students,
         "watch": watch,
         "serious": serious[:30],
