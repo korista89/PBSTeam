@@ -90,9 +90,6 @@ class CICOAnalysisRequest(BaseModel):
     month: int = 3
     students_data: Optional[list] = None
 
-class Tier3AnalysisRequest(BaseModel):
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
 
 class StudentAnalysisRequest(BaseModel):
     student_code: Optional[str] = None
@@ -114,9 +111,6 @@ class MedicationReportRequest(BaseModel):
     after_start: str
     after_end: str
 
-class ComprehensiveAnalysisRequest(BaseModel):
-    start_date: str
-    end_date: str
 
 @router.post("/ai-section-analysis")
 def ai_section_analysis(

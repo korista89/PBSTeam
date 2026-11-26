@@ -15,13 +15,6 @@ class PostUpdate(BaseModel):
     title: str
     content: str
 
-class PostResponse(BaseModel):
-    id: str
-    title: str
-    content: str
-    author: str
-    created_at: str
-    views: int
 
 # Vercel 이 주소 끝 "/" 를 지우므로 "" 로 둔다("/" 면 서버가 다시 "/" 로 돌려보내 무한 리다이렉트)
 @router.get("", response_model=List[dict])

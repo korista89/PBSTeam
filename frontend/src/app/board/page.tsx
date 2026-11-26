@@ -122,6 +122,7 @@ export default function BoardPage() {
 
                     {/* List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {error && !loading && <p style={{ color: "#dc2626", fontWeight: 700 }}>{error}</p>}
                         {loading ? (
                             <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>Loading updates...</div>
                         ) : posts.length === 0 ? (

@@ -245,13 +245,6 @@ def require_authenticated_user(current_user: Dict[str, Any] = Depends(get_curren
     return current_user
 
 
-def require_school_view(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """관리자 또는 과정부장(여러 학급을 보는 계정). 결과는 user_scope로 다시 좁힌다."""
-    if not is_admin_user(current_user) and str(current_user.get("role", "")).lower() != "division_head":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: 관리자·과정부장만 볼 수 있습니다.")
-    return current_user
-
-
 def require_account_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """계정·비밀번호 관리: Role이 admin인 계정(학교관리자·행동중재지원팀장 등)만. 기능 담당자(pbst_staff)는 안 된다."""
     if not current_user.get("account_admin"):

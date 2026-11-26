@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 import { WeeklyTrendChart, ChangeBanner } from "../components/ProgressCharts";
@@ -44,18 +44,6 @@ const DECISION_OPTIONS = [
 ];
 
 const PIE_COLORS = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316'];
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', boxShadow: '0 4px 8px rgba(0,0,0,0.08)', fontSize: '12px' }}>
-        {label && <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>}
-        {payload.map((p: any, i: number) => <p key={i} style={{ margin: '2px 0', color: p.color }}>{p.name}: <b>{p.value}</b></p>)}
-      </div>
-    );
-  }
-  return null;
-};
 
 export default function Tier3Overview() {
   const { user, isAdmin } = useAuth();

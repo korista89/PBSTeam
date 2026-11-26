@@ -9,7 +9,7 @@ import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
 import {
-    Bip, BIP_ROWS, FBA_SECTIONS, PROGRESS_SECTIONS, BehaviorSummary, StudentHead,
+    Bip, FBA_SECTIONS, PROGRESS_SECTIONS, BehaviorSummary, StudentHead,
     parseJson, splitNumbered, today, kDate, Inp, Area, DateRange, BipSheet, SectionSheet, SummaryTable, sheetBox,
 } from "./shared";
 

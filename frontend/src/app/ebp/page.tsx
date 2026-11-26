@@ -5,7 +5,7 @@ import axios from "axios";
 import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { useRouter } from "next/navigation";
-import { EBPStrategy, EBPCategory, FunctionCode } from "../../types/domain";
+import { EBPStrategy, FunctionCode } from "../../types/domain";
 import { API_BASE_URL } from "@/app/lib/api";
 
 const CATEGORY_LABELS: Record<string, { label: string; icon: string; color: string }> = {

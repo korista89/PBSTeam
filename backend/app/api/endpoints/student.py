@@ -6,9 +6,6 @@ from app.api.deps import require_authenticated_user, check_student_scope
 
 router = APIRouter()
 
-class TierUpdateRequest(BaseModel):
-    student_code: str
-    tier: str
 
 @router.get("/{student_name}")
 def get_student_detail(

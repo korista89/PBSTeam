@@ -19,17 +19,6 @@ class MeetingNoteRequest(BaseModel):
 class UpdateMeetingNoteRequest(BaseModel):
     content: str
 
-class MeetingNoteResponse(BaseModel):
-    id: str
-    meeting_type: str
-    date: str
-    content: str
-    author: str
-    student_code: str
-    period_start: str
-    period_end: str
-    created_at: str
-
 
 @router.post("")
 def save_meeting_note(

@@ -22,7 +22,7 @@ from app.services import tier3_monthly as t3
 
 logger = logging.getLogger(__name__)
 
-MIRROR_COLS = {"Tier2(CICO)": "I", "Tier2(SST)": "J", "Tier3": "K", "Tier3+": "L"}  # update_student_tier와 같은 배치
+MIRROR_COLS = {"Tier2(CICO)": "I", "Tier2(SST)": "J", "Tier3": "K", "Tier3+": "L"}  # TierStatus 칸 배치
 CHANGED_COL = "M"
 
 

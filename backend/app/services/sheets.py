@@ -925,70 +925,6 @@ def fetch_student_status():
         return []
 
 
-def update_student_tier(code: str, tier_values: Union[dict, str], memo: str = ""):
-    """
-    Update a student's tier status with 5 separate O/X columns.
-    tier_values: dict with keys 'Tier1', 'Tier2(CICO)', 'Tier2(SST)', 'Tier3', 'Tier3+' or string
-    """
-    if isinstance(tier_values, str):
-        t_clean = tier_values.strip().replace(" ", "")
-        tier_values = {
-            'Tier1': 'O' if 'Tier1' in t_clean else 'X',
-            'Tier2(CICO)': 'O' if ('Tier2' in t_clean and 'SST' not in t_clean) else 'X',
-            'Tier2(SST)': 'O' if 'SST' in t_clean else 'X',
-            'Tier3': 'O' if (t_clean in ['Tier3', '3단계'] or ('Tier3' in t_clean and '+' not in t_clean)) else 'X',
-            'Tier3+': 'O' if 'Tier3+' in t_clean else 'X',
-        }
-
-    ws = get_student_status_worksheet()
-    if not ws:
-        return {"error": "Sheet not accessible"}
-
-    try:
-        records = safe_get_all_records(ws)
-        today = now_kst().replace(tzinfo=None).strftime("%Y-%m-%d")
-
-        # Column mapping (A=1, B=2, etc. H=8)
-        tier_columns = {
-            'Tier1': 'H',
-            'Tier2(CICO)': 'I',
-            'Tier2(SST)': 'J',
-            'Tier3': 'K',
-            'Tier3+': 'L',
-        }
-
-        for idx, r in enumerate(records):
-            if str(r.get('학생코드')) == str(code):
-                row_num = idx + 2  # +2 for header and 1-indexing
-                batch_updates = []
-
-                # Update each tier column
-                for tier_name, col_letter in tier_columns.items():
-                    if tier_name in tier_values:
-                        value = "O" if tier_values[tier_name] in ["O", True, "true", 1] else "X"
-                        batch_updates.append({"range": f"{col_letter}{row_num}", "values": [[value]]})
-
-                # Update 변경일 (column 13 -> M)
-                batch_updates.append({"range": f"M{row_num}", "values": [[today]]})
-
-                # Update 메모 (column 14 -> N)
-                if memo:
-                    batch_updates.append({"range": f"N{row_num}", "values": [[memo]]})
-
-                if batch_updates:
-                    ws.batch_update(batch_updates)
-                clear_cache("tierstatus") # Invalidate cache if implemented
-
-                return {"message": f"Tier updated for {code}", "code": code, "tiers": tier_values}
-
-        return {"error": f"Student code {code} not found"}
-    except SheetUnavailable:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating tier: {e}")
-        return {"error": str(e)}
-
-
 def update_student_tier_unified(code: str, tier_values: dict, enrolled: str = None, beable_code: str = None, memo: str = "", student_name: str = None):
     """
     Unified update: tier status + enrollment + beable code + name in a single batch.
@@ -1203,7 +1139,6 @@ def update_user_role(user_id: str, new_role: str, new_class: str = "", name: str
         else:
             logger.error("Error updating user")
         return {"error": str(e)}
-
 
 
 # =============================
@@ -1672,7 +1607,6 @@ def _calculate_cico_rate(student: dict) -> dict:
         "input_days": input_days,
         "total_days": total_days
     }
-
 
 
 def create_monthly_cico_sheet(year: int, month: int):
@@ -4385,7 +4319,6 @@ if __name__ == "__main__":
     assert stop_calls["n"] == 1, "stop_on 예외는 재시도 없이 즉시 다시 던져야 한다"
 
     logger.warning("_with_retry self-check OK")
-
 
 
 # =============================

@@ -2,10 +2,10 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "../components/AuthProvider";
 import { API_BASE_URL } from "@/app/lib/api";
-import { ChartCard, Kpi } from "../cico/CicoDashboard";
+import { Kpi } from "../cico/CicoDashboard";
 import {
   Field, SCHOOL_MONTHS, SummaryCompare, VERDICT_COLORS, VerdictBadge, chip, idx, inputStyle, nowMonth, smallBtn, statusOf, type Summary,
 } from "../components/ProgramKit";

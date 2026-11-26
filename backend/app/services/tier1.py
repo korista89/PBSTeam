@@ -379,10 +379,6 @@ def school_weeks(month: int) -> List[str]:
     return sorted(weeks)
 
 
-def _in(rows, field, values):
-    return [r for r in rows if r.get(field) in values]
-
-
 def teaching(month: int, class_names: List[str]) -> Dict[str, Any]:
     sy = str(school_year())
     weeks = school_weeks(month)

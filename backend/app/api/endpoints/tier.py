@@ -29,13 +29,6 @@ class UnifiedTierUpdateRequest(BaseModel):
 
     model_config = {"extra": "ignore"}
 
-class EnrollmentUpdateRequest(BaseModel):
-    code: Union[str, int]
-    enrolled: str  # O or X
-
-class BeAbleCodeUpdateRequest(BaseModel):
-    code: Union[str, int]
-    beable_code: str
 
 @router.get("/status")
 def get_all_status(current_user: Dict[str, Any] = Depends(require_authenticated_user)):

@@ -31,7 +31,7 @@ interface User {
 }
 
 export default function AdminPage() {
-    const { user, loading: authLoading, isAdmin, logout } = useAuth();
+    const { user, loading: authLoading, isAdmin } = useAuth();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedUser, setSelectedUser] = useState<string>("");

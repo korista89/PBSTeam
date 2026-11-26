@@ -68,18 +68,6 @@ function aggregateTimeSlots(items: any[]) {
     .sort((a, b) => (parseInt(a.name, 10) || 0) - (parseInt(b.name, 10) || 0));
 }
 
-function TruncatedYAxisTick({ x, y, payload }: any) {
-  const full = String(payload?.value ?? "");
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <title>{full}</title>
-      <text x={-4} y={0} dy={4} textAnchor="end" fontSize={10} fontWeight={700} fill="#334155">
-        {truncateLabel(full, 9)}
-      </text>
-    </g>
-  );
-}
-
 function TruncatedXAxisTick({ x, y, payload }: any) {
   const full = String(payload?.value ?? "");
   return (
