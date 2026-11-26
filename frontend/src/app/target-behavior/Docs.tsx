@@ -296,15 +296,6 @@ export async function fetchTierMonths(code: string): Promise<TierMonth[]> {
         });
     } catch { return []; }
 }
-const tierLine = (t: TierMonth[]) => {
-    const lab = (x: TierMonth) => `${x.level || "표 없음"}${x.detail ? `(${x.detail})` : ""}`;
-    const runs: { from: number; to: number; lab: string }[] = [];
-    t.forEach(x => {
-        const last = runs[runs.length - 1];
-        if (last && last.lab === lab(x)) last.to = x.month; else runs.push({ from: x.month, to: x.month, lab: lab(x) });
-    });
-    return runs.map(r => `${r.from === r.to ? r.from : `${r.from}~${r.to}`}월 ${r.lab}`).join(", ") || "자료 없음";
-};
 const tierText = (t: TierMonth[]) => t.length ? t.map(x => `${x.month}월 ${x.level || "표 없음"}${x.detail ? `(${x.detail})` : ""}`).join(", ") : "자료 없음";
 
 // ⑧ 탭과 Tier 현황 '인수인계 자료 일괄 생성'이 함께 쓴다.
@@ -375,7 +366,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
         const { unknown, ...rest } = dist;
         const note = `집계 ${kDate(start)} ~ ${kDate(today())}, 행동기록 1건을 1번으로 셈. ②~④는 많은 순 일부만 표시(미상 제외).`
             + (unknown != null ? ` ③ 기능 미기록 ${unknown}번.` : "");
-        return { monthly, ...rest, tiers, total: ds.length, note };
+        return { monthly, ...rest, tiers, total: ds.length, note: note + " ⑤는 월별 Tier 표 기준." };
     }, [logs, start, dist, tiers]);
     const len = (keys: string[]) => keys.reduce((n, f) => n + (cur[f] || "").length, 0);
     const total = len(HANDOVER_ROWS.map(r => r[1]));
@@ -404,8 +395,8 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const yearVal = cur.year || `${y}학년도 → ${y + 1}학년도`;
     const author = cur.author ?? bip.Teacher ?? "";
     const metaDef: [string, string, string][] = [["인계 학년도", "year", yearVal], ["작성일", "date", dateVal], ["인계 교사", "author", author], ["인수 교사", "receiver", cur.receiver || ""]];
-    // 입력 없이 자동으로 들어가는 줄: 표적행동(BIP), 올해 지원 단계(월별 Tier 표)
-    const auto: [string, string][] = [["표적행동(BIP)", bip.TargetBehavior || "행동중재계획에 없음"], ["올해 지원 단계", tierLine(tiers)]];
+    // 입력 없이 자동으로 들어가는 줄: 표적행동(BIP). 지원 단계는 차트 아래 달마다 띠로 보인다.
+    const auto: [string, string][] = [["표적행동(BIP)", bip.TargetBehavior || "행동중재계획에 없음"]];
     const printMeta: [string, string][] = [...metaDef.map(([k, f, v]): [string, string] => [k, f === "date" ? kDate(v) : v]), ...auto];
     const meta: [string, React.ReactNode][] = [...metaDef.map(([k, f, v]): [string, React.ReactNode] => [k, <Inp key={f} type={f === "date" ? "date" : "text"} value={v} onChange={x => set({ [f]: x })} />]), ...auto];
     const area = ([, f, ph]: Row) => <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={2} />;

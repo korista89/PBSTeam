@@ -209,7 +209,7 @@ export type HandoverChartData = { monthly: { label: string; count: number }[]; t
 // 월별 지원 단계: level은 '', Tier1, Tier2, Tier3, Tier3+ ('' = 그 달 표 없음), detail은 CICO·SST 등
 export type TierMonth = { month: number; level: string; detail: string };
 
-// 인수인계 차트 4개: 추세(나아지고 있나)·언제·왜(기능)·어떤 행동. 지원 단계는 머리 표에 한 줄로. CSS 막대라 인쇄에도 그대로 나온다.
+// 인수인계 차트 4개(추세·언제·왜·어떤 행동)와 달마다 지원 단계 띠. CSS 막대라 인쇄에도 그대로 나온다.
 const printExact: React.CSSProperties = { WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
 const chartBox: React.CSSProperties = { flex: 1, minWidth: 0, border: "1px solid #000", padding: "4px 8px" };
 const chartHead: React.CSSProperties = { fontWeight: 700, fontSize: "9pt", marginBottom: 2 };
@@ -228,6 +228,35 @@ function BarList({ title, rows, color, empty }: { title: string; rows: Ranked[];
                     <span style={{ width: 30, textAlign: "right" }}>{r.count}번</span>
                 </div>
             ))}
+        </div>
+    );
+}
+
+const TIER_COLOR: Record<string, [string, string]> = { Tier1: ["#e2e8f0", "#000"], Tier2: ["#fde68a", "#000"], Tier3: ["#fca5a5", "#000"], "Tier3+": ["#b91c1c", "#fff"] };
+// ⑦ 달마다 지원 단계: 달마다 칸 하나, 단계가 바뀐 달은 굵은 테두리와 아래 '바뀐 점' 줄로 알린다.
+function TierStrip({ tiers }: { tiers: TierMonth[] }) {
+    const changes = tiers.slice(1).map((t, i) => ({ t, prev: tiers[i] })).filter(({ t, prev }) => t.level && prev.level && t.level !== prev.level);
+    return (
+        <div style={chartBox}>
+            <div style={chartHead}>⑤ 달마다 지원 단계(Tier)는 어떻게 바뀌었나</div>
+            <div style={{ display: "flex", gap: 2 }}>
+                {tiers.map((t, i) => {
+                    const [bg, fg] = TIER_COLOR[t.level] || ["#fff", "#64748b"];
+                    const changed = i > 0 && t.level && tiers[i - 1].level && t.level !== tiers[i - 1].level;
+                    return (
+                        <div key={t.month} style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: "7.5pt", lineHeight: 1.25 }}>
+                            <div>{t.month}월</div>
+                            <div style={{ background: bg, color: fg, border: changed ? "2px solid #000" : "1px solid #94a3b8", padding: "2px 0", fontWeight: 700, ...printExact }}>
+                                {t.level || "표 없음"}
+                                {t.detail && <div style={{ fontWeight: 400, fontSize: "6.5pt" }}>{t.detail}</div>}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            <div style={{ fontSize: "8pt", marginTop: 2 }}>
+                {changes.length ? <>바뀐 점: {changes.map(({ t, prev }) => `${t.month}월 ${prev.level} → ${t.level}`).join(", ")}</> : "올해 단계 변화 없음"}
+            </div>
         </div>
     );
 }
@@ -255,6 +284,7 @@ export function HandoverCharts({ d }: { d: HandoverChartData }) {
                 <BarList title="③ 왜 했을까 (교사가 기록한 기능)" rows={d.functions || []} color="#16a34a" empty="기능 기록 없음" />
                 <BarList title="④ 어떤 행동이 많았나" rows={d.types || []} color="#9333ea" empty="행동 기록 없음" />
             </div>
+            {d.tiers && d.tiers.length > 0 && <TierStrip tiers={d.tiers} />}
             {d.note && <div style={{ fontSize: "7.5pt", color: "#333" }}>{d.note}</div>}
         </div>
     );
