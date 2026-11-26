@@ -371,16 +371,8 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const len = (keys: string[]) => keys.reduce((n, f) => n + (cur[f] || "").length, 0);
     const total = len(HANDOVER_ROWS.map(r => r[1]));
     const y = +start.slice(0, 4);
-    // AI 없이 지금까지 작성한 계획에서 옮겨 채운다(AI가 실패해도 쓸 수 있는 바탕)
-    const fill = () => {
-        const j = (...ks: string[]) => ks.map(k => (bip[k] || "").trim()).filter(Boolean).join("\n");
-        set(mergeInto(cur, {
-            behavior: [j("OperationalDefinition") || j("TargetBehavior"), dataSummary(logs, behaviors, bip.PlanStart || "")].filter(Boolean).join("\n"),
-            function: j("Hypothesis"), reinforcer: j("ReinforcerInfo"), health: j("MedicationStatus"),
-            prevent: j("PreventionStrategies"), teach: j("TeachingStrategies"), conseq: j("ReinforcementStrategies"),
-            stg2a: j("CrisisPlan"), stg3a: j("CrisisNotify"), stg4a: j("CrisisReturn"),
-        }, "empty"));
-    };
+    // AI 없이 자동으로 채울 수 있는 칸: 올해 변화(집계)만. 나머지는 BIP와 겹치지 않게 비워 둔다.
+    const fill = () => set(mergeInto(cur, { recent: dataSummary(logs, behaviors, bip.PlanStart || "") }, "empty"));
     const runAI = async () => {
         setAi({ loading: true, text: "" });
         try { setAi({ loading: false, text: await requestHandoverDraft(head.code, bip, logs, behaviors) }); }

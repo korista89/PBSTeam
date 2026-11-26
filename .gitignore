@@ -32,3 +32,6 @@ Thumbs.db
 .serena/project.local.yml
 .serena/cache/
 dev.sh
+
+# 학생 실명 원자료(행동중재계획서 원본) — 저장소에 올리지 않는다
+2026 BIP/
