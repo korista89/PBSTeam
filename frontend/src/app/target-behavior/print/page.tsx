@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AuthCheck } from "../../components/AuthProvider";
 import PrintGuard, { RealNameInput, requestPrint, withRealName } from "../../components/PrintGuard";
-import { BipSheet, HandoverCharts, HandoverPage2, SectionSheet, SummaryTable } from "../shared";
+import { BipSheet, HandoverCharts, SectionSheet, SummaryTable } from "../shared";
 
 export default function InterventionPrint() {
     const [raw, setP] = useState<any>(null);
@@ -64,8 +64,8 @@ export default function InterventionPrint() {
                     <span style={{ fontSize: "0.8rem", color: "#475569" }}>작성 화면의 지금 내용입니다. 저장은 작성 화면에서 따로 해야 합니다.</span>
                 </div>
                 {p && pages.length > 0 && (
-                    <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 8px", padding: "0 12px", fontWeight: 700, color: p.page2 && pages.length > 2 ? "#dc2626" : "#0f172a" }}>
-                        🖨️ 인쇄하면 A4 {pages.length}쪽{p.page2 && pages.length > 2 ? " — 2쪽을 넘습니다. 작성 화면에서 중복된 내용부터 줄여 주세요." : ""}
+                    <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 8px", padding: "0 12px", fontWeight: 700, color: p.limit && pages.length > p.limit ? "#dc2626" : "#0f172a" }}>
+                        🖨️ 인쇄하면 A4 {pages.length}쪽{p.limit && pages.length > p.limit ? ` — ${p.limit}쪽을 넘습니다. 작성 화면에서 칸마다 2줄 안으로 줄여 주세요.` : ""}
                     </div>
                 )}
                 {error && <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", color: "#dc2626", padding: 12 }}>⚠️ {error}</div>}
@@ -97,7 +97,7 @@ function body(p: any, split: boolean) {
     return <>
         {p.doc === "bip" && <BipSheet s={p.s} b={p.b || {}} behaviors={p.behaviors || []} />}
         {p.doc === "fba" && <SectionSheet heading="기능적 행동평가(FBA) 결과 보고서" s={p.s} meta={p.meta} sections={p.sections} />}
-        {p.doc === "sections" && <SectionSheet heading={p.heading} s={p.s} meta={p.meta} sections={p.sections} extra={p.charts ? <HandoverCharts d={p.charts} /> : undefined} after={p.page2 ? <HandoverPage2 d={p.page2} split={split} /> : undefined} dense={!!p.page2} />}
+        {p.doc === "sections" && <SectionSheet heading={p.heading} s={p.s} meta={p.meta} sections={p.sections} extra={p.charts ? <HandoverCharts d={p.charts} /> : undefined} after={p.footer ? <div style={{ fontSize: "8.5pt", marginTop: 3 }}>{p.footer}</div> : undefined} dense={!!p.charts} />}
         {p.doc === "progress" && (
             <SectionSheet heading="개별학생 행동중재 결과 보고서" s={p.s} meta={p.meta} sections={p.sections}
                 extra={<SummaryTable rows={p.rows || []} crisis={p.crisis || { pre: 0, post: 0, preWeeks: 0, postWeeks: 0 }} />} />

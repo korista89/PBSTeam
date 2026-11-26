@@ -29,18 +29,18 @@ def test_handover_sections_match_frontend_order():
     from pathlib import Path
     from app.services.ai_insight import DOCUMENT_SPECS
     secs = DOCUMENT_SPECS["handover"][1]
-    assert len(secs) == 19 and secs[14] == "행동 단계별 대응"
+    assert len(secs) == 10  # 1쪽·10칸(BIP와 겹치는 칸 없음)
     src = (Path(__file__).resolve().parents[1] / "frontend/src/app/target-behavior/Docs.tsx").read_text(encoding="utf-8")
-    body = src[src.index("export const HANDOVER_P1"):src.index("const STAGE_TITLE")]
-    pos = [body.find(f'["{t}"') for t in secs if t != "행동 단계별 대응"]
+    body = src[src.index("export const HANDOVER_ROWS"):src.index("const HANDOVER_PAIRS")]
+    pos = [body.find(f'["{t}"') for t in secs]
     assert -1 not in pos and pos == sorted(pos)
 
 
 def test_handover_long_draft_is_shrunk_once(monkeypatch):
-    """2쪽을 넘길 분량이면 한 번 더 줄인 결과를 쓰고, 꼬리말·통계 표기도 정리한다."""
+    """1쪽을 넘길 분량이면 한 번 더 줄인 결과를 쓰고, 꼬리말·통계 표기도 정리한다."""
     from app.services import ai_insight
-    long = "1. 한눈에 보는 학생\n- " + "가" * 1200 + "\n15. 행동 단계별 대응\n- 전조 | 확인 필요 | 쉬기\n\n---\n> ☁️ AI 모델: x"
-    short = "1. 한눈에 보는 학생\n- 짧음(42.1%, n=24/57)\n15. 행동 단계별 대응\n- 전조 | 확인 필요 | 쉬기"
+    long = "1. 한눈에 보는 학생\n- " + "가" * 1200 + "\n6. 꼭 해주세요\n- 전조 | 확인 필요 | 쉬기\n\n---\n> ☁️ AI 모델: x"
+    short = "1. 한눈에 보는 학생\n- 짧음(42.1%, n=24/57)\n6. 꼭 해주세요\n- 전조 | 확인 필요 | 쉬기"
     calls = []
     monkeypatch.setattr(ai_insight, "_call_llm", lambda s, p, n: (calls.append(p), long if len(calls) == 1 else short)[1])
     out = ai_insight.generate_document_draft("handover", {"code": "S01"}, {}, "", 50)

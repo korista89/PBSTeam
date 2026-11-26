@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
-import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, HandoverPage2, HandoverPage2Data, TierMonth } from "./shared";
+import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth } from "./shared";
 import { AIBox, ApplyMode, AutoArea, card, dOf, err, fetchBehaviorSummaries, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
@@ -202,64 +202,52 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
 }
 
 // ⑧ 다음 학년도 인수인계 자료 ─────────────────────────────
-// 새 담임이 3월 전에 이것만 읽고 학생을 이해하고(1쪽) 첫 등교일부터 지원을 실행하도록(2쪽) A4 2쪽으로 묶는다.
+// 새 담임이 3월 전에 이 1쪽만 읽고 첫날부터 학생을 맞을 수 있게 한다. 행동중재계획(BIP)에 있는 내용
+// (표적행동 정의·기능 가설·예방·교수·강화·위기대응)은 옮겨 적지 않고 BIP를 함께 넘긴다. 칸은 10개.
 // ProgressReport JSON의 handover 키에 저장한다.
 type Row = [string, string, string]; // 칸 이름, 저장 키, 안내 문구
-export const HANDOVER_P1: Row[] = [
-    ["한눈에 보는 학생", "summary", "강점·주요 특성·교육활동 참여 특성·가장 먼저 알아야 할 지원 요구"],
-    ["선호활동 및 강화제", "reinforcer", "좋아하는 활동·물건·감각 자극, 효과적인 사회적 강화, 강화제 유의점"],
-    ["의사소통 및 지도 방법", "comm", "주된 의사소통 수단, 이해하는 지시 수준, 효과적인 촉구, 도움·거절·휴식 표현"],
-    ["건강·감각·안전 특성", "health", "건강 유의사항, 감각 민감성, 신체 접촉·안전 특이사항"],
-    ["주요 표적행동", "behavior", "표적행동명, 관찰 가능한 정의, 발생 빈도, 강도·위험성"],
-    ["행동 발생 패턴", "pattern", "주로 일어나는 시간·장소·활동, 선행사건과 후속결과"],
-    ["행동 기능 및 근거", "function", "기능 가설, 관련 집계, 판단 근거, 분석의 한계"],
-    ["최근 행동 변화 및 현재 상태", "recent", "최근 빈도·강도 변화, 안정 유지 기간, 대체행동 습득 수준, 지금 필요한 지원"],
+export const HANDOVER_ROWS: Row[] = [
+    ["한눈에 보는 학생", "summary", "강점, 좋아하는 것, 관계를 맺기 좋은 방법 (2줄)"],
+    ["의사소통", "comm", "표현 수단(구어·AAC·몸짓), 알아듣는 지시 수준, 도움·거절·쉬기 표현 (2줄)"],
+    ["건강·감각·안전", "health", "건강·복약 유의점, 감각 민감성, 신체 접촉·이동 안전 (2줄)"],
+    ["올해 변화와 지금 상태", "recent", "최근 빈도·강도 변화, 안정 유지 기간, 대체행동 습득 정도 (2줄)"],
+    ["행동 전에 보이는 신호", "signs", "행동이 커지기 전에 실제로 보인 모습 (2줄)"],
+    ["꼭 해주세요", "must", "효과가 있었던 지원 최대 3가지"],
+    ["피해주세요", "avoid", "행동을 키웠던 대응 최대 3가지"],
+    ["올해 해 본 중재와 권고", "history", "효과 있었던 것·없었던 것, 3월 유지·변경 권고와 시작 Tier (2줄)"],
+    ["3월 첫 2주", "start", "개학 전 준비물, 첫날 관계 맺기, 먼저 관찰할 것 (2줄)"],
+    ["확인·협의할 것", "todo", "보호자 협의, 아직 모르는 정보, 행동중재지원팀 요청 (2줄)"],
 ];
-export const HANDOVER_SUPPORT: Row[] = [
-    ["꼭 해주세요", "must", "안정과 참여를 위해 가장 먼저 할 지원 최대 3가지"],
-    ["피해주세요", "avoid", "행동 고조·불편 증가와 관련된 대응 최대 3가지"],
-    ["예방적 지원 방법", "prevent", "행동중재계획의 예방 전략 요약(환경·과제·전환 예고·시각 지원·선택권)"],
-    ["대체행동 교수 방법", "teach", "행동중재계획의 교수 전략 요약(대체행동·상황·촉구·반응 방법)"],
-    ["강화 및 후속 반응", "conseq", "행동중재계획의 강화 전략 요약(대체행동 강화·표적행동 시 대응)"],
-    ["기존 중재 및 효과", "history", "적용한 중재, 학생 반응, 효과 확인 여부, 유지·변경 권고"],
-];
-// 단계, 행동 신호 안내, 교사 대응 안내 — 저장 키는 stg{번호}s(신호)·stg{번호}a(대응)
-export const HANDOVER_STAGES: [string, string, string][] = [
-    ["예방·안정", "평상시 모습과 안정 신호", "예방 지원, 대체행동 교수, 적절한 행동 강화"],
-    ["전조", "실제 관찰된 초기 행동 변화", "불편 원인 확인, 환경·과제 조정, 도움·휴식 지원"],
-    ["고조", "빈도·강도가 늘어나는 모습", "자극 줄이기, 안전거리 확보, 필요하면 지원 요청"],
-    ["위기", "학생·타인의 안전을 위협하는 행동", "안전 확보, 학교 위기대응 프로토콜 적용"],
-    ["회복", "행동 감소·안정 회복 신호", "안정 지원, 준비도 확인, 점진적 활동 복귀"],
-    ["사후지원", "참여·의사소통이 가능한 모습", "건강·안전 확인, 대체행동 연습, 기록·중재 검토"],
-];
-const STAGE_KEYS = HANDOVER_STAGES.flatMap((_, i) => [`stg${i}s`, `stg${i}a`]);
-export const HANDOVER_PLAN: Row[] = [
-    ["개학 전 준비사항", "prep", "시각자료·의사소통 자료·강화제·환경 구성·교직원 협의"],
-    ["첫 등교일", "day1", "관계 형성 방법, 우선 적용할 지원, 유의할 상황"],
-    ["첫 1~2주", "weeks", "유지할 중재, 우선 가르칠 대체행동, 관찰·기록 항목, 중재 검토 시점"],
-    ["추가 확인 및 협의 사항", "todo", "미확인 정보, 보호자 협의, 행동중재지원팀 요청 사항"],
-];
-const STAGE_TITLE = "행동 단계별 대응";
+// 한 줄에 두 칸을 나란히 두는 짝(1쪽 안에 들어가게)
+const HANDOVER_PAIRS: [string, string][] = [["must", "avoid"]];
 // AI 절 순서(백엔드 DOCUMENT_SPECS["handover"]와 같아야 한다)
-const AI_TITLES = [...HANDOVER_P1, ...HANDOVER_SUPPORT].map(r => r[0]).concat(STAGE_TITLE, HANDOVER_PLAN.map(r => r[0]));
-const ROWS = [...HANDOVER_P1, ...HANDOVER_SUPPORT, ...HANDOVER_PLAN];
+const AI_TITLES = HANDOVER_ROWS.map(r => r[0]);
 
-// 예전 9칸 양식으로 저장된 내용을 지금 칸으로 옮긴다(빈 칸에만, 옮긴 옛 칸은 비운다).
+// 예전 양식(30칸·9칸)으로 저장된 내용을 지금 칸으로 옮긴다(빈 칸에만).
 export function upgradeHandover(c: Record<string, string>): Record<string, string> {
     const n = { ...c };
-    const move = (from: string, to: string) => { const v = (n[from] || "").trim(); if (v && !(n[to] || "").trim()) { n[to] = v; n[from] = ""; } };
-    move("works", "history"); move("march", "weeks");
-    const crisis = (n.crisis || "").trim();
-    if (crisis && !STAGE_KEYS.some(k => (n[k] || "").trim())) {
-        // 옛 양식: 초록(전조)·노랑(행동 시작)·빨강(위험)
-        crisis.split("\n").map(l => l.trim()).filter(Boolean).forEach(l => {
-            const i = /초록/.test(l) ? 1 : /노랑/.test(l) ? 2 : 3;
-            const v = l.replace(/^-\s*/, "").replace(/^(초록|노랑|빨강)[^:：]*[:：]\s*/, "");
-            n[`stg${i}a`] = n[`stg${i}a`] ? `${n[`stg${i}a`]}\n${v}` : v;
-        });
-        n.crisis = "";
-    }
+    const fill = (to: string, ...from: string[]) => {
+        if ((n[to] || "").trim()) return;
+        const v = from.map(f => (n[f] || "").trim()).filter(Boolean).join("\n");
+        if (v) n[to] = v;
+    };
+    fill("history", "works");
+    fill("start", "march", "prep", "day1", "weeks");
+    fill("signs", "stg1s");
     return n;
+}
+
+// 칸 목록 → SectionSheet 줄. 짝이 있는 칸은 한 줄에 나란히.
+function handoverLines<T>(cell: (r: Row) => T): [string, T, string?, T?][] {
+    const out: [string, T, string?, T?][] = [];
+    const skip = new Set(HANDOVER_PAIRS.map(p => p[1]));
+    HANDOVER_ROWS.forEach(r => {
+        if (skip.has(r[1])) return;
+        const pair = HANDOVER_PAIRS.find(p => p[0] === r[1]);
+        const r2 = pair && HANDOVER_ROWS.find(x => x[1] === pair[1]);
+        out.push(r2 ? [r[0], cell(r), r2[0], cell(r2)] : [r[0], cell(r)]);
+    });
+    return out;
 }
 
 export const schoolYearStart = () => { const t = today(); const y = +t.slice(0, 4), m = +t.slice(5, 7); return `${m >= 3 ? y : y - 1}-03-01`; };
@@ -308,6 +296,15 @@ export async function fetchTierMonths(code: string): Promise<TierMonth[]> {
         });
     } catch { return []; }
 }
+const tierLine = (t: TierMonth[]) => {
+    const lab = (x: TierMonth) => `${x.level || "표 없음"}${x.detail ? `(${x.detail})` : ""}`;
+    const runs: { from: number; to: number; lab: string }[] = [];
+    t.forEach(x => {
+        const last = runs[runs.length - 1];
+        if (last && last.lab === lab(x)) last.to = x.month; else runs.push({ from: x.month, to: x.month, lab: lab(x) });
+    });
+    return runs.map(r => `${r.from === r.to ? r.from : `${r.from}~${r.to}`}월 ${r.lab}`).join(", ") || "자료 없음";
+};
 const tierText = (t: TierMonth[]) => t.length ? t.map(x => `${x.month}월 ${x.level || "표 없음"}${x.detail ? `(${x.detail})` : ""}`).join(", ") : "자료 없음";
 
 // ⑧ 탭과 Tier 현황 '인수인계 자료 일괄 생성'이 함께 쓴다.
@@ -333,23 +330,15 @@ export async function requestHandoverDraft(code: string, bip: Bip, logs: Log[], 
         { kind: "handover", context: ctx, start_date: schoolYearStart(), end_date: today() }, { timeout: 240000 });
     return r.data.analysis || "";
 }
-// AI 결과를 handover 칸으로 나눈다. '행동 단계별 대응'은 '- 단계 | 신호 | 대응' 줄을 단계별 칸으로. 못 나누면 null.
+// AI 결과를 handover 칸으로 나눈다. 못 나누면 null.
 export function parseHandover(text: string): Record<string, string> | null {
     const parsed = splitNumbered(text, AI_TITLES);
     const patch: Record<string, string> = {};
-    ROWS.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
-    const norm = (s: string) => s.replace(/[\s·*]/g, "");
-    (parsed[STAGE_TITLE] || "").split("\n").forEach(line => {
-        const cells = line.replace(/^\s*[-•]\s*/, "").split("|").map(c => c.trim());
-        if (cells.length < 3) return;
-        const i = HANDOVER_STAGES.findIndex(([st]) => norm(cells[0]).startsWith(norm(st)));
-        if (i < 0) return;
-        patch[`stg${i}s`] = cells[1]; patch[`stg${i}a`] = cells.slice(2).join(" | ");
-    });
+    HANDOVER_ROWS.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
     return Object.keys(patch).length ? patch : null;
 }
 
-const P1_LIMIT = 1000, P2_LIMIT = 1700; // 인쇄 실측(A4, 여백 12mm) 기준 한계에 맞춘 권장치
+const PAGE_LIMIT = 1000; // 차트 4개와 함께 A4 1쪽(여백 12mm)에 들어가는 본문 권장치
 
 export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
@@ -361,7 +350,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const start = schoolYearStart();
     const [tiers, setTiers] = useState<TierMonth[]>([]);
     useEffect(() => { let alive = true; setTiers([]); fetchTierMonths(head.code).then(t => { if (alive) setTiers(t); }); return () => { alive = false; }; }, [head.code]);
-    const [dist, setDist] = useState<Pick<HandoverChartData, "times" | "places" | "functions" | "types"> & { unknown?: number }>({ times: [] });
+    const [dist, setDist] = useState<Pick<HandoverChartData, "times" | "functions" | "types"> & { unknown?: number }>({ times: [] });
     useEffect(() => {
         let alive = true;
         setDist({ times: [] });
@@ -370,14 +359,13 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 if (!alive) return;
                 const m = r.data?.deterministic_metrics || {};
                 const top = (k: string, n: number) => (m[k] || []).filter((x: any) => x.item && x.item !== "미상").slice(0, n);
-                setDist({ times: top("time_slot_distribution", 5), places: top("location_hotspot_distribution", 4), functions: top("teacher_inferred_function_distribution", 4), types: top("behavior_type_distribution", 4), unknown: m.function_unknown_count });
+                setDist({ times: top("time_slot_distribution", 4), functions: top("teacher_inferred_function_distribution", 4), types: top("behavior_type_distribution", 4), unknown: m.function_unknown_count });
             }).catch(() => {});
         return () => { alive = false; };
     }, [head.code, start]);
     const charts: HandoverChartData = useMemo(() => {
         const inYear = logs.filter(l => { const d = dOf(l); return d && d >= start && d <= today(); });
         const ds = inYear.map(dOf);
-        const levels = [1, 2, 3, 4, 5].map(n => ({ item: `강도 ${n}`, count: inYear.filter(l => lvl(l) === n).length }));
         const monthly: { label: string; count: number }[] = [];
         for (let i = 0; i < 12; i++) {
             const d = new Date(Date.UTC(+start.slice(0, 4), 2 + i, 1)), key = d.toISOString().slice(0, 7);
@@ -385,12 +373,12 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
             monthly.push({ label: `${d.getUTCMonth() + 1}월`, count: ds.filter(x => x.startsWith(key)).length });
         }
         const { unknown, ...rest } = dist;
-        const note = `집계 ${kDate(start)} ~ ${kDate(today())}, 행동기록 1건을 1번으로 셈. ②~⑤는 많은 순 일부만 표시(미상 제외).`
-            + (unknown != null ? ` ④ 기능 미기록 ${unknown}번, 한 기록에 기능이 둘 이상일 수 있음.` : "");
-        return { monthly, ...rest, levels: levels.some(x => x.count) ? levels : [], tiers, total: ds.length, note: note + " ⑦은 월별 Tier 표 기준." };
+        const note = `집계 ${kDate(start)} ~ ${kDate(today())}, 행동기록 1건을 1번으로 셈. ②~④는 많은 순 일부만 표시(미상 제외).`
+            + (unknown != null ? ` ③ 기능 미기록 ${unknown}번.` : "");
+        return { monthly, ...rest, tiers, total: ds.length, note };
     }, [logs, start, dist, tiers]);
     const len = (keys: string[]) => keys.reduce((n, f) => n + (cur[f] || "").length, 0);
-    const p1 = len(HANDOVER_P1.map(r => r[1])), p2 = len([...HANDOVER_SUPPORT, ...HANDOVER_PLAN].map(r => r[1]).concat(STAGE_KEYS));
+    const total = len(HANDOVER_ROWS.map(r => r[1]));
     const y = +start.slice(0, 4);
     // AI 없이 지금까지 작성한 계획에서 옮겨 채운다(AI가 실패해도 쓸 수 있는 바탕)
     const fill = () => {
@@ -416,32 +404,26 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const yearVal = cur.year || `${y}학년도 → ${y + 1}학년도`;
     const author = cur.author ?? bip.Teacher ?? "";
     const metaDef: [string, string, string][] = [["인계 학년도", "year", yearVal], ["작성일", "date", dateVal], ["인계 교사", "author", author], ["인수 교사", "receiver", cur.receiver || ""]];
-    const printMeta: [string, string][] = metaDef.map(([k, f, v]) => [k, f === "date" ? kDate(v) : v]);
-    const meta: [string, React.ReactNode][] = metaDef.map(([k, f, v]) => [k, <Inp key={f} type={f === "date" ? "date" : "text"} value={v} onChange={x => set({ [f]: x })} />]);
-    const area = ([, f, ph]: Row, rows = 2) => <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={rows} />;
-    const sections: [string, React.ReactNode][] = HANDOVER_P1.map(r => [r[0], area(r)]);
-    const page2: HandoverPage2Data = {
-        support: HANDOVER_SUPPORT.map(r => [r[0], area(r)]),
-        stages: HANDOVER_STAGES.map(([st, ps, pa], i) => [st, area([st, `stg${i}s`, ps], 1), area([st, `stg${i}a`, pa], 1)]),
-        plan: HANDOVER_PLAN.map(r => [r[0], area(r)]),
-    };
-    const printPage2: HandoverPage2Data<string> = {
-        support: HANDOVER_SUPPORT.map(([t, f]) => [t, cur[f] || ""]),
-        stages: HANDOVER_STAGES.map(([st], i) => [st, cur[`stg${i}s`] || "", cur[`stg${i}a`] || ""]),
-        plan: HANDOVER_PLAN.map(([t, f]) => [t, cur[f] || ""]),
-    };
+    // 입력 없이 자동으로 들어가는 줄: 표적행동(BIP), 올해 지원 단계(월별 Tier 표)
+    const auto: [string, string][] = [["표적행동(BIP)", bip.TargetBehavior || "행동중재계획에 없음"], ["올해 지원 단계", tierLine(tiers)]];
+    const printMeta: [string, string][] = [...metaDef.map(([k, f, v]): [string, string] => [k, f === "date" ? kDate(v) : v]), ...auto];
+    const meta: [string, React.ReactNode][] = [...metaDef.map(([k, f, v]): [string, React.ReactNode] => [k, <Inp key={f} type={f === "date" ? "date" : "text"} value={v} onChange={x => set({ [f]: x })} />]), ...auto];
+    const area = ([, f, ph]: Row) => <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={2} />;
+    const sections = handoverLines<React.ReactNode>(area);
+    const printSections = handoverLines<string>(([, f]) => cur[f] || "");
+    const footer = "※ 표적행동 정의·기능 가설·예방·교수·강화 전략과 위기대응 절차는 행동중재계획(BIP)을 함께 인계한다.";
     const warn = (n: number, max: number, label: string) => <span style={{ color: n > max ? "#dc2626" : "#475569" }}>{label} {n.toLocaleString()}자 / 권장 {max.toLocaleString()}자 이하</span>;
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 인수인계 자료 초안 받기(올해 자료 전체)</button>
-                    <button className="btn btn-secondary" onClick={fill}>📋 행동중재계획에서 옮겨 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: HANDOVER_P1.map(([t, f]) => [t, cur[f] || ""]), charts, page2: printPage2 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={fill}>📋 올해 변화 자동 채우기</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: printSections, charts, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
-                    AI는 {kDate(start)}부터 오늘까지의 행동기록 집계와 ②FBA·③행동중재계획·⑤의사결정·⑥의뢰서·⑦결과 보고서를 함께 읽습니다. 먼저 ③·⑦을 저장해 두면 더 정확합니다. &lsquo;확인 필요&rsquo;는 직접 채워 주세요.
+                    A4 1쪽, 칸 10개입니다. 표적행동·기능·예방·교수·강화·위기대응은 행동중재계획(BIP)을 함께 넘기므로 여기 다시 적지 않습니다. AI 초안을 받은 뒤 &lsquo;확인 필요&rsquo;만 고치면 됩니다.
                 </div>
                 {cur.ai && (
                     <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "#fffbeb", border: "1px solid #fde68a", fontSize: "0.8rem", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -452,10 +434,10 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} canReplace />
             </div>
             <div style={{ fontSize: "0.8rem", fontWeight: 700, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                {warn(p1, P1_LIMIT, "1쪽 본문")}{warn(p2, P2_LIMIT, "2쪽 본문")}
-                {(p1 > P1_LIMIT || p2 > P2_LIMIT) && <span style={{ color: "#dc2626" }}>— 인쇄하면 2쪽을 넘을 수 있습니다. 중복부터 줄여 주세요.</span>}
+                {warn(total, PAGE_LIMIT, "본문")}
+                {total > PAGE_LIMIT && <span style={{ color: "#dc2626" }}>— 인쇄하면 1쪽을 넘을 수 있습니다. 칸마다 2줄 안으로 줄여 주세요.</span>}
             </div>
-            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} extra={<HandoverCharts d={charts} />} after={<HandoverPage2 d={page2} />} dense /></div>
+            <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} extra={<HandoverCharts d={charts} />} after={<div style={{ fontSize: "8.5pt", marginTop: 3 }}>{footer}</div>} dense /></div>
         </div>
     );
 }
