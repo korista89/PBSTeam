@@ -28,7 +28,8 @@ interface Briefing {
   watch: { code: string; name: string; class: string; incidents: number; max_intensity: number; prev_incidents: number; top_type: string[] }[];
   serious: { date: string; code: string; name: string; time: string; place: string; type: string; intensity: number; action: string; note: string; log_id: string; status: string }[];
 }
-interface Note { id: string; date: string; content: string; author: string; period_start: string; period_end: string; }
+interface Note { id: string; date: string; content: string; author: string; student_code: string; period_start: string; period_end: string; created_at?: string; }
+type Draft = { what: string; who: string; check: string };
 
 const kst = () => new Date(Date.now() + 9 * 3600_000);
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -94,6 +95,9 @@ export default function CrisisPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
+  const [editing, setEditing] = useState("");
+  const [draft, setDraft] = useState<Draft>({ what: "", who: "", check: "" });
+  const [decMsg, setDecMsg] = useState("");
   const [memo, setMemo] = useState("");
   const [memoMsg, setMemoMsg] = useState("");
 
@@ -110,7 +114,7 @@ export default function CrisisPage() {
     try {
       const r = await axios.get(`${API_BASE_URL}/api/v1/meeting-notes`, { params: { meeting_type: "crisis" } });
       const list = (r.data?.notes || []) as Note[];
-      setNotes([...list].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5));
+      setNotes([...list].sort((a, b) => String(b.created_at || b.date).localeCompare(String(a.created_at || a.date))));
     } catch { setNotes([]); }
   }, []);
   useEffect(() => { void load(start, end); if (admin) void loadNotes(); }, [admin]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -122,6 +126,19 @@ export default function CrisisPage() {
       await axios.post(`${API_BASE_URL}/api/v1/meeting-notes`, { meeting_type: "crisis", date: iso(kst()), content: memo.trim(), period_start: start, period_end: end });
       setMemo(""); setMemoMsg("회의 메모를 저장했습니다."); void loadNotes();
     } catch { setMemoMsg("저장하지 못했습니다. 잠시 후 다시 시도해 주세요."); }
+  };
+
+  // 학생별 결정은 학생코드를 붙여, 회의 전체 메모는 학생코드 없이 저장한다(같은 유형 crisis)
+  const general = notes.filter(n => !String(n.student_code || "").trim()).slice(0, 5);
+  const decisions = (code: string) => notes.filter(n => String(n.student_code || "").trim() === code);
+  const openDecision = (code: string) => { setEditing(editing === code ? "" : code); setDraft({ what: "", who: "", check: "" }); setDecMsg(""); };
+  const saveDecision = async (code: string) => {
+    if (!draft.what.trim()) return;
+    const content = [`결정: ${draft.what.trim()}`, draft.who.trim() && `담당: ${draft.who.trim()}`, draft.check && `다음 확인: ${draft.check}`].filter(Boolean).join("\n");
+    try {
+      await axios.post(`${API_BASE_URL}/api/v1/meeting-notes`, { meeting_type: "crisis", date: iso(kst()), content, student_code: code, period_start: start, period_end: end });
+      setEditing(""); setDecMsg(""); void loadNotes();
+    } catch { setDecMsg("저장하지 못했습니다. 잠시 후 다시 시도해 주세요."); }
   };
 
   const s = data?.summary || {};
@@ -180,11 +197,12 @@ export default function CrisisPage() {
               {data.students.length ? (
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr>
-                    {["학생", "단계", "기록", "앞 기간", "주별", "최고 강도", "주요 행동", "주요 기능", "주요 시간대·장소", "제지/교육지원/상해", "결재 대기", "최근 발생", "신호"].map(h => <th key={h} style={th}>{h}</th>)}
+                    {["학생", "단계", "기록", "앞 기간", "주별", "최고 강도", "주요 행동", "주요 기능", "주요 시간대·장소", "제지/교육지원/상해", "결재 대기", "최근 발생", "신호", ...(admin ? ["팀 결정"] : [])].map(h => <th key={h} style={th}>{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {data.students.map(r => (
-                      <tr key={r.code}>
+                    {data.students.map(r => { const past = decisions(r.code); return (
+                      <React.Fragment key={r.code}>
+                      <tr>
                         <td style={td}><Link href={`/target-behavior?student=${encodeURIComponent(r.code)}`} style={{ fontWeight: 800, color: "#1e293b" }}>{maskName(r.name) || r.code}</Link>
                           <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{r.class}</div></td>
                         <td style={td}><span className={`badge ${r.level === "Tier3+" ? "badge-tier3" : "badge-tier2"}`}>{r.level}</span></td>
@@ -199,8 +217,40 @@ export default function CrisisPage() {
                         <td style={{ ...td, color: r.pending ? "#b45309" : "#94a3b8", fontWeight: 700 }}>{r.pending}</td>
                         <td style={td}>{r.last_date ? md(r.last_date) : "-"}</td>
                         <td style={td}><span style={{ fontWeight: 800, color: SIG[r.signal] }}>{r.signal}</span></td>
+                        {admin && <td style={{ ...td, minWidth: 200, maxWidth: 280 }}>
+                          {past[0] ? <div style={{ fontSize: "0.74rem", whiteSpace: "pre-wrap", color: "#334155" }}><b style={{ color: "#7c3aed" }}>{md(String(past[0].date))}</b> {past[0].content}</div>
+                            : <span style={{ fontSize: "0.74rem", color: "#cbd5e1" }}>결정 없음</span>}
+                          <button className="no-print" onClick={() => openDecision(r.code)} style={{ marginTop: 4, fontSize: "0.72rem", fontWeight: 700, border: "1px solid #c4b5fd", background: editing === r.code ? "#ede9fe" : "#fff", color: "#6d28d9", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>
+                            {editing === r.code ? "닫기" : "✏️ 결정 기록"}</button>
+                        </td>}
                       </tr>
-                    ))}
+                      {admin && editing === r.code && (
+                        <tr className="no-print"><td colSpan={14} style={{ background: "#faf5ff", padding: 12, borderBottom: "1px solid #e9d5ff" }}>
+                          <div style={{ fontWeight: 800, fontSize: "0.82rem", marginBottom: 6 }}>{maskName(r.name) || r.code} — 이번 회의 결정</div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+                            <textarea autoFocus value={draft.what} onChange={e => setDraft({ ...draft, what: e.target.value })} rows={2}
+                              placeholder="결정 사항 (예: 등교 시간 환경 조정, BIP 예방 전략 수정)" style={{ flex: 1, minWidth: 260, padding: 8, borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.82rem", fontFamily: "inherit" }} />
+                            <input value={draft.who} onChange={e => setDraft({ ...draft, who: e.target.value })} placeholder="담당 (예: 담임·보조인력)"
+                              style={{ width: 170, padding: 8, borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.82rem" }} />
+                            <label style={{ fontSize: "0.75rem", color: "#475569", display: "flex", flexDirection: "column" }}>다음 확인일
+                              <input type="date" value={draft.check} min={iso(kst())} onChange={e => setDraft({ ...draft, check: e.target.value })} style={{ padding: 6, borderRadius: 8, border: "1px solid #cbd5e1" }} /></label>
+                            <button onClick={() => saveDecision(r.code)} disabled={!draft.what.trim()} className="btn btn-primary" style={{ fontSize: "0.8rem" }}>저장</button>
+                          </div>
+                          {decMsg && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{decMsg}</div>}
+                          {past.length > 0 && (
+                            <div style={{ marginTop: 10 }}>
+                              <div style={{ fontSize: "0.74rem", fontWeight: 800, color: "#6d28d9" }}>지난 결정</div>
+                              {past.slice(0, 5).map(n => (
+                                <div key={n.id} style={{ fontSize: "0.76rem", padding: "4px 0", borderBottom: "1px dashed #e9d5ff", whiteSpace: "pre-wrap" }}>
+                                  <b>{n.date}</b> <span style={{ color: "#94a3b8" }}>{n.author}</span>{"\n"}{n.content}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td></tr>
+                      )}
+                      </React.Fragment>
+                    ); })}
                   </tbody>
                 </table>
               ) : <Empty text="이 기간의 대상 학생이 없습니다. Tier3관리에서 월별 명단을 확인하세요." />}
@@ -261,18 +311,18 @@ export default function CrisisPage() {
 
             {/* 6. 회의 메모(팀 기록이라 관리자만) */}
             {admin && <div className="card no-print" style={{ padding: 14 }}>
-              <div style={{ fontWeight: 800, marginBottom: 8 }}>📝 회의 메모 <span style={{ fontWeight: 500, fontSize: "0.75rem", color: "#94a3b8" }}>결정 사항·담당자·다음 확인일을 적습니다. 조회 기간과 함께 저장됩니다</span></div>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>📝 회의 전체 메모 <span style={{ fontWeight: 500, fontSize: "0.75rem", color: "#94a3b8" }}>학교 전체 안건·공통 결정을 적습니다. 학생별 결정은 위 표의 ✏️ 결정 기록에서 남깁니다</span></div>
               <textarea value={memo} onChange={e => { setMemo(e.target.value); setMemoMsg(""); }} rows={4}
-                placeholder="예) 김O원: 등교 시간 환경 조정 — 담임·보조인력, 2주 뒤 재검토"
+                placeholder="예) 등교 시간 위기행동 증가 — 통학버스 하차 동선 점검, 다음 회의에서 확인"
                 style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #cbd5e1", fontSize: "0.85rem", fontFamily: "inherit" }} />
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
                 <button onClick={saveMemo} disabled={!memo.trim()} className="btn btn-primary" style={{ fontSize: "0.8rem" }}>메모 저장</button>
                 {memoMsg && <span style={{ fontSize: "0.8rem", color: "#475569" }}>{memoMsg}</span>}
               </div>
-              {notes.length > 0 && (
+              {general.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#475569" }}>지난 회의 메모</div>
-                  {notes.map(n => (
+                  {general.map(n => (
                     <div key={n.id} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: "0.8rem" }}>
                       <b>{n.date}</b> <span style={{ color: "#94a3b8" }}>{n.author}{n.period_start ? ` · 기간 ${n.period_start} ~ ${n.period_end}` : ""}</span>
                       <div style={{ whiteSpace: "pre-wrap", color: "#334155" }}>{n.content}</div>
