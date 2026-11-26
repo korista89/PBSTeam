@@ -102,4 +102,4 @@
 - 안 쓰는 코드 정리(프론트 미사용 import·함수, 백엔드 update_student_tier·미사용 모델·빈 schemas.py), 게시판 불러오기 실패 문구 표시. API 경로·내부 링크는 모두 연결됨.
 - 시트: 없는 기록을 가리키는 결재 11줄 삭제, Log_Main 학생명 오타 1건(코드 2212) 수정, MeetingNotes I1 'UUID' 머리글 추가. 백업 ~/data/pbst_cleanup_20261126.json.
 - 정본 시트 정리: Log_Main 빈 껍데기 4줄·중간 빈 줄 170줄·Deleted 2줄, 그 결재 12줄, MeetingNotes 테스트 1줄 삭제. 백업 ~/data/pbst_cleanup2_20261126.json. 중복 108→109 병합 후 108 삭제(백업 ~/data/pbst_merge108_20261126.json). 471→472·576→577도 병합 후 삭제(백업 ~/data/pbst_merge471_576_20261126.json).
-- 위기행동관리(/crisis) 추가: 기간 선택 → Tier3·Tier3+(Tier3_월별) 대상 위기행동 브리핑(앞 기간 비교·학생별 표·패턴·주요 사건·의뢰 검토 후보·회의 메모 crisis, 학생별 결정은 student_code 붙여 저장, ⓪ 학생 현황에 담임도 봄). API /analytics/crisis-briefing, 계산 services/crisis_briefing.py.
+- 위기행동관리(/crisis) 추가: 기간 선택 → Tier3·Tier3+(Tier3_월별) 대상 위기행동 브리핑(앞 기간 비교·학생별 표·패턴·주요 사건·의뢰 검토 후보·회의 메모 crisis, 학생별 결정은 student_code 붙여 저장, ⓪ 학생 현황에 담임도 봄). 학교 전체 추이 위·대상 학생 아래, 학생명 클릭 시 기간 내 기록 펼침.. API /analytics/crisis-briefing, 계산 services/crisis_briefing.py.

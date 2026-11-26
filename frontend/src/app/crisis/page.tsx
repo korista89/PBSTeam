@@ -79,7 +79,7 @@ function DistChart({ title, data, color }: { title: string; data: Dist; color: s
         <ResponsiveContainer width="100%" height={Math.max(120, data.length * 26)}>
           <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
             <XAxis type="number" allowDecimals={false} fontSize={11} />
-            <YAxis type="category" dataKey="name" width={130} fontSize={11} tickFormatter={(v: string) => v.length > 12 ? v.slice(0, 12) + "…" : v} />
+            <YAxis type="category" dataKey="name" width={130} interval={0} fontSize={11} tickFormatter={(v: string) => v.length > 12 ? v.slice(0, 12) + "…" : v} />
             <Tooltip />
             <Bar dataKey="value" name="건수" fill={color} radius={[0, 4, 4, 0]} />
           </BarChart>
