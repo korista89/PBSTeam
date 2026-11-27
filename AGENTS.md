@@ -84,6 +84,11 @@ npm run dev                            # next dev
 - ③ 행동중재계획은 학교 '행동중재계획서'(2026-2) 칸·순서를 따른다(`target-behavior/shared.tsx`의 `BipSheet`). 위기관리계획은 4단계(전조·고조·대응·알림·분리·회복) × 신호 `CrisisS1~4`·대응 `CrisisR1~4`, 나머지 새 칸은 `AuthoredDate`·`Antecedents`·`Consequences`·`AdditionalSupport`.
 - 표적행동 이름·중재 기간·기록 방법은 인쇄되지 않는 '사이트 관리 정보'다. 칸을 더하면 `BIPData`(bip.py)·`BIP_FORM_HEADERS`(sheets.py)·`BipSheet`를 함께 고친다.
 
+## 문서 내려받기(HWPX) (2026-11-27)
+
+- 개별학생 문서는 인쇄 미리보기(`target-behavior/print`)의 '한글(HWPX) 저장'이 화면 문서를 그대로 한글 표·문단으로 바꾼다(`lib/hwpx.ts`, 브라우저에서 생성 → 인쇄용 실명이 서버로 가지 않음). 스타일은 `public/hwpx-base/`(위기행동 보고서 템플릿에서 뽑음). 새 문서도 인쇄 미리보기를 쓰면 저장이 저절로 된다.
+- 학생정보 및 이해자료(⓪)는 입력 5칸·A4 1쪽, 인적사항(주민번호·주소·연락처·보호자 이름)은 받지 않는다.
+
 ## 학생 이름
 
 시트(Log_Main·TierStatus·월별 탭·PW_어휘데이터 등)에는 실명이 아니라 **별칭**(김O준, 이O, 겹치면 김O준-1011)만 저장한다.
