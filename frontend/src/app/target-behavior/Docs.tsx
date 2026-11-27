@@ -413,9 +413,9 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: printSections, charts, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
                 </div>
-                {tiers.length > 0 && !tiers.some(t => /Tier2|Tier3/.test(t.level)) && (
+                {tiers.length > 0 && !tiers.some(t => t.level.startsWith("Tier3") || /CICO/.test(t.detail)) && (
                     <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", fontSize: "0.8rem", color: "#166534", fontWeight: 700 }}>
-                        ✅ 올해 Tier2·Tier3 대상이 아니었던 학생입니다. 인수인계 자료는 제출하지 않아도 됩니다(필요할 때만 쓰세요).
+                        ✅ 인수인계 자료 제출 대상(올해 CICO·Tier3)이 아닌 학생입니다. 제출하지 않아도 됩니다(필요할 때만 쓰세요).
                     </div>
                 )}
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
