@@ -506,15 +506,8 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
     };
     const dateVal = cur.date || today();
     const author = cur.author ?? bip.Teacher ?? "";
-    const disability = bip.DisabilityType || cur.disability || "";
-    const gender = bip.Gender || cur.gender || "";
-    const metaEdit: [string, React.ReactNode][] = [
-        ["장애 유형", bip.DisabilityType ? disability : <Inp key="d" value={cur.disability || ""} onChange={v => set({ disability: v })} />],
-        ["성별", bip.Gender ? gender : <Sel key="g" value={cur.gender || ""} onChange={v => set({ gender: v })} options={["남", "여"]} />],
-        ["작성일", <Inp key="dt" type="date" value={dateVal} onChange={v => set({ date: v })} />],
-        ["작성자", <Inp key="a" value={author} onChange={v => set({ author: v })} />],
-    ];
-    const printMeta: [string, string][] = [["장애 유형", disability], ["성별", gender], ["작성일", kDate(dateVal)], ["작성자", author]];
+    const metaEdit: [string, React.ReactNode][] = [["작성일", <Inp key="dt" type="date" value={dateVal} onChange={v => set({ date: v })} />]];
+    const printMeta: [string, string][] = [["작성일", kDate(dateVal)]];
     const pbs = pbsSupportText(tier, bip);
     const flagBox = <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px", fontSize: "8.5pt", marginBottom: 4 }}>
         <b style={{ color: "#b91c1c" }}>꼭 알아 둘 점</b>
@@ -544,7 +537,7 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-secondary" onClick={fill}>📋 이미 있는 자료로 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: printSections, limit: 1 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: printSections, noClass: true, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), profile: { ...cur, learning: val("learning"), comm: "", date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
@@ -557,7 +550,7 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>
                 본문 {total.toLocaleString()}자 / 권장 {PROFILE_LIMIT.toLocaleString()}자 이하{total > PROFILE_LIMIT ? " — 1쪽을 넘을 수 있습니다." : ""}
             </div>
-            <div style={sheetBox}><SectionSheet heading="학생정보 및 이해자료" s={head} meta={metaEdit} sections={sections} /></div>
+            <div style={sheetBox}><SectionSheet heading="학생정보 및 이해자료" s={head} meta={metaEdit} sections={sections} noClass /></div>
         </div>
     );
 }

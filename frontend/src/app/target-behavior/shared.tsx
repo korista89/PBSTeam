@@ -174,18 +174,20 @@ export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; be
     );
 }
 
-export function SectionSheet({ heading, s, meta, sections, extra, after, dense }: {
+export function SectionSheet({ heading, s, meta, sections, extra, after, dense, noClass }: {
     heading: string; s: StudentHead; meta: [string, React.ReactNode][]; sections: [string, React.ReactNode, string?, React.ReactNode?][]; extra?: React.ReactNode; after?: React.ReactNode; dense?: boolean;
+    noClass?: boolean;  // 학년 칸을 빼고 meta 첫 칸을 학생명 옆에 둔다(학생정보 및 이해자료)
 }) {
     const th = dense ? thD : thBase, td = dense ? tdD : tdBase;
+    const [second, rest] = noClass && meta.length ? [meta[0], meta.slice(1)] : [["학년", s.className] as [string, React.ReactNode], meta];
     return (
         <>
             <h1 style={title}>{heading}</h1>
             <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <colgroup><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /><col style={{ width: "19%" }} /><col style={{ width: "31%" }} /></colgroup>
                 <tbody>
-                    <tr><th style={th}>학생명</th><td style={td}>{s.name}</td><th style={th}>학년</th><td style={td}>{s.className}</td></tr>
-                    {chunk(meta).map((pair, i) => (
+                    <tr><th style={th}>학생명</th><td style={td}>{s.name}</td><th style={th}>{second[0]}</th><td style={td}>{second[1]}</td></tr>
+                    {chunk(rest).map((pair, i) => (
                         <tr key={i}>{pair.map(([k, v]) => <React.Fragment key={k}><th style={th}>{k}</th><td style={td} colSpan={pair.length === 1 ? 3 : 1}>{v}</td></React.Fragment>)}</tr>
                     ))}
                     {extra && <tr><td style={{ ...td, padding: 8 }} colSpan={4}>{extra}</td></tr>}

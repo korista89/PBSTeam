@@ -107,7 +107,7 @@ function body(p: any, split: boolean) {
     return <>
         {p.doc === "bip" && <BipSheet s={p.s} b={p.b || {}} behaviors={p.behaviors || []} />}
         {p.doc === "fba" && <SectionSheet heading="기능적 행동평가(FBA) 결과 보고서" s={p.s} meta={p.meta} sections={p.sections} />}
-        {p.doc === "sections" && <SectionSheet heading={p.heading} s={p.s} meta={p.meta} sections={p.sections} extra={p.charts ? <HandoverCharts d={p.charts} /> : undefined} after={p.footer ? <div style={{ fontSize: "8.5pt", marginTop: 3 }}>{p.footer}</div> : undefined} dense={!!p.charts} />}
+        {p.doc === "sections" && <SectionSheet heading={p.heading} s={p.s} meta={p.meta} sections={p.sections} extra={p.charts ? <HandoverCharts d={p.charts} /> : undefined} after={p.footer ? <div style={{ fontSize: "8.5pt", marginTop: 3 }}>{p.footer}</div> : undefined} dense={!!p.charts} noClass={!!p.noClass} />}
         {p.doc === "progress" && (
             <SectionSheet heading="개별학생 행동중재 결과 보고서" s={p.s} meta={p.meta} sections={p.sections}
                 extra={<SummaryTable rows={p.rows || []} crisis={p.crisis || { pre: 0, post: 0, preWeeks: 0, postWeeks: 0 }} />} />
