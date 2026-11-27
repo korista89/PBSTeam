@@ -79,6 +79,11 @@ npm run dev                            # next dev
   실명은 브라우저에만(`lib/nameMap.ts`, PIN 암호화, 공용 PC면 sessionStorage) — 화면 표시는 `RealNameLayer`가 바꾼다. 마법사 쓰기는 2027 모드·계정 관리자·확인 문구가 모두 있어야 실행.
 - 공통 임시 비밀번호는 Users `PwExpires`(YYYY-MM-DD)가 지나면 로그인 화면에서 새 비밀번호를 정해야 들어온다(`scripts/set_common_passwords.py`).
 
+## 행동중재계획(BIP) 양식 (2026-11-27)
+
+- ③ 행동중재계획은 학교 '행동중재계획서'(2026-2) 칸·순서를 따른다(`target-behavior/shared.tsx`의 `BipSheet`). 위기관리계획은 4단계(전조·고조·대응·알림·분리·회복) × 신호 `CrisisS1~4`·대응 `CrisisR1~4`, 나머지 새 칸은 `AuthoredDate`·`Antecedents`·`Consequences`·`AdditionalSupport`.
+- 표적행동 이름·중재 기간·기록 방법은 인쇄되지 않는 '사이트 관리 정보'다. 칸을 더하면 `BIPData`(bip.py)·`BIP_FORM_HEADERS`(sheets.py)·`BipSheet`를 함께 고친다.
+
 ## 학생 이름
 
 시트(Log_Main·TierStatus·월별 탭·PW_어휘데이터 등)에는 실명이 아니라 **별칭**(김O준, 이O, 겹치면 김O준-1011)만 저장한다.
