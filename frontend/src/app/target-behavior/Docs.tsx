@@ -488,7 +488,7 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
     const set = (patch: Record<string, string>) => store.set(patch);
     const hand = parseJson<any>(bip.ProgressReport, {}).handover || {};
     // 예전 '의사소통' 칸(comm)은 학습면에 합쳐 보여 주고, 고치면 학습면으로 옮긴다.
-    const val = (f: string) => f === "learning" ? [cur.learning, cur.comm].map(x => (x || "").trim()).filter(Boolean).join("\n") : cur[f] || "";
+    const val = (f: string) => prose(f === "learning" ? [cur.learning, cur.comm].map(x => (x || "").trim()).filter(Boolean).join("\n") : cur[f] || "");
     const setVal = (f: string, v: string) => set(f === "learning" ? { learning: v, comm: "" } : { [f]: v });
     const flags = (cur.flags || "").split(", ").filter(Boolean);
     const setFlags = (f: string[]) => set({ flags: PROFILE_FLAGS.filter(x => f.includes(x)).join(", ") });
@@ -563,13 +563,20 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
     );
 }
 
-// 예시 문장 고르기: 체크하면 칸 끝에 '- 문장' 줄로 넣고, 끄면 그 줄을 뺀다. 고쳐 쓴 줄은 체크가 풀린다.
+// 학생정보는 '- 문장' 목록이 아니라 문장을 이어 쓴 문단으로 쓴다: '-'로 시작하는 줄은 표시를 떼고 앞 줄에 이어 붙인다.
+export const prose = (v: string) => v.replace(/\r/g, "").split("\n").reduce<string[]>((out, l) => {
+    const m = l.match(/^\s*[-•·]\s*(.*)$/);
+    if (m && out.length && out[out.length - 1].trim()) out[out.length - 1] = `${out[out.length - 1].trimEnd()} ${m[1]}`;
+    else out.push(m ? m[1] : l);
+    return out;
+}, []).join("\n");
+
+// 예시 문장 고르기: 체크하면 칸 끝에 문장을 이어 쓰고, 끄면 그 문장을 뺀다. 고쳐 쓴 문장은 체크가 풀린다.
 function SentencePicker({ value, onChange, groups }: { value: string; onChange: (v: string) => void; groups: BankGroup[] }) {
-    const lines = value.split("\n");
-    const has = (t: string) => lines.some(l => l.replace(/^\s*-\s*/, "").trim() === t);
+    const has = (t: string) => value.includes(t);
     const toggle = (t: string) => onChange(has(t)
-        ? lines.filter(l => l.replace(/^\s*-\s*/, "").trim() !== t).join("\n")
-        : [value.trimEnd(), `- ${t}`].filter(Boolean).join("\n"));
+        ? value.replace(t, "").replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").trim()
+        : [value.trimEnd(), t].filter(Boolean).join(" "));
     const n = groups.reduce((k, g) => k + g.items.filter(has).length, 0);
     return (
         <details className="no-print" style={{ marginTop: 4, fontSize: "8.5pt" }}>
