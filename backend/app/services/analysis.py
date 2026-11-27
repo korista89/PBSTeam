@@ -603,10 +603,15 @@ def get_student_analytics(student_name: str, start_date: str = None, end_date: s
             resolved_name = student_df['학생명'].iloc[0]
             resolved_code = student_df['학생코드'].iloc[0] if '학생코드' in student_df.columns else "-"
     
+    # 이름·학급은 기록이 아니라 명단에서 가져온다(기록 이름이 틀리면 다른 학생 이름이 뜬다. 기록이 없으면 코드가 이름으로 보였다)
+    roster_row = next((s for s in (fetch_student_status() or []) if str(s.get('학생코드', '')).strip() == str(student_name).strip()), None)
+    if roster_row:
+        resolved_name = roster_row.get('학생이름') or resolved_name
     empty_result = {
         "profile": {
-            "name": student_name, "student_code": student_name,
-            "class": "-", "tier": "Tier 1", "total_incidents": 0, "avg_intensity": 0
+            "name": resolved_name if roster_row else student_name, "student_code": student_name,
+            "class": (roster_row or {}).get('학급', '-'),
+            "tier": ", ".join(t.replace("Tier2", "Tier 2").replace("Tier3", "Tier 3") for t in ("Tier2(CICO)", "Tier2(SST)", "Tier3", "Tier3+") if str((roster_row or {}).get(t, '')).upper() == 'O') or "Tier 1", "total_incidents": 0, "avg_intensity": 0
         },
         "abc_data": [], "functions": [], "cico_trend": [], "weekly_trend": [],
         "behavior_types": [], "location_stats": [], "time_stats": [],
