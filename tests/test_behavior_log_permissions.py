@@ -172,3 +172,17 @@ def test_inbox_lists_both_kinds_and_pending_only():
         # 담임은 자기 학급(초1-1) 기록만 본다
         mine = B.get_approval_inbox(kind="all", days=30, pending_only=False, current_user=T1)["logs"]
         assert [r["Log_ID"] for r in mine] == ["r"] and mine[0]["학급"] == "초1-1"
+
+
+def test_submit_rejects_code_name_mismatch():
+    """코드와 이름이 명단에서 다른 학생이면 저장하지 않는다(반 첫 학생 코드로 잘못 붙던 사고)."""
+    ws = WS([])
+    roster = [{"학생코드": "3311", "학생이름": "용O이"}, {"학생코드": "3316", "학생이름": "김O민"}]
+    with mock.patch("app.services.sheets.get_main_worksheet", return_value=ws), \
+         mock.patch("app.services.sheets.fetch_student_status", return_value=roster), \
+         mock.patch.object(B, "check_student_scope"), mock.patch.object(B, "clear_cache"):
+        with pytest.raises(HTTPException) as e:
+            B.submit_behavior_log({"학생코드": "3311", "학생명": "김O민"}, ADMIN)
+        assert e.value.status_code == 400 and not ws.appended
+        assert B.submit_behavior_log({"학생코드": "3316", "학생명": "김O민"}, ADMIN)["success"]
+        assert len(ws.appended) == 1

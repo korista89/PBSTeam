@@ -59,6 +59,14 @@ def submit_behavior_log(
         if payload.get("학생명"):
             from app.core.privacy import mask_name
             payload["학생명"] = mask_name(payload["학생명"])
+        # 코드와 이름이 명단에서 서로 다른 학생이면 받지 않는다(2026-11 중3-1·3-2 기록이 반 첫 학생 코드로 저장된 사고)
+        code = str(payload.get("학생코드") or "").strip()
+        if code and payload.get("학생명"):
+            from app.services.sheets import fetch_student_status
+            from app.services.log_normalize import _key
+            roster_name = next((r.get("학생이름", "") for r in fetch_student_status() if str(r.get("학생코드", "")).strip() == code), None)
+            if roster_name is not None and _key(roster_name) != _key(payload["학생명"]):
+                raise HTTPException(status_code=400, detail=f"학생코드 {code}는 명단에서 '{roster_name}' 학생입니다. 화면을 새로 고친 뒤 학생을 다시 골라 주세요.")
         # 입력자는 화면 값이 아니라 로그인 계정으로 기록한다(본인 기록 수정·삭제 권한의 기준)
         payload["입력교사명"] = _author_label(current_user)
         action = str(payload.get(ACTION_HEADER, "")).strip()
