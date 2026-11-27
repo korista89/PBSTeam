@@ -7,6 +7,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
 import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth } from "./shared";
+import { PROFILE_BANK, BankGroup } from "./profileBank";
 import { AIBox, ApplyMode, AutoArea, card, dOf, err, fetchBehaviorSummaries, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
@@ -469,7 +470,10 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
         ["작성자", <Inp key="a" value={author} onChange={v => set({ author: v })} />],
     ];
     const printMeta: [string, string][] = [["장애 유형", disability], ["성별", gender], ["지원 단계", tier || "Tier1"], ["작성일", kDate(dateVal)], ["작성자", author]];
-    const sections: [string, React.ReactNode][] = PROFILE_ROWS.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={3} />]);
+    const sections: [string, React.ReactNode][] = PROFILE_ROWS.map(([t, f, ph]) => [t, <div key={f}>
+        <Area value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={3} />
+        <SentencePicker value={cur[f] || ""} onChange={v => set({ [f]: v })} groups={PROFILE_BANK[f] || []} />
+    </div>]);
     const footer = "※ 주민등록번호·주소·연락처 등 인적사항과 통학 차량 정보는 학교 업무관리시스템 자료를 따른다.";
     const total = PROFILE_ROWS.reduce((n, [, f]) => n + (cur[f] || "").length, 0);
     return (
@@ -481,7 +485,7 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), profile: { ...cur, date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
-                    학생 교육의 기초자료입니다. 칸 5개를 칸마다 2~4줄로 적으면 A4 1쪽이 됩니다. 장애 유형·성별·지원 단계는 다른 탭 자료에서 자동으로 들어옵니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
+                    학생 교육의 기초자료입니다. 칸마다 아래 <b>예시 문장</b>에서 맞는 것을 체크하면 칸에 들어가고, 칸에서 학생에 맞게 고치면 됩니다(○○은 채울 자리). 칸마다 2~4줄이면 A4 1쪽이 됩니다. 장애 유형·성별·지원 단계는 다른 탭 자료에서 자동으로 들어옵니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
                 </div>
             </div>
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>
@@ -489,5 +493,33 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
             </div>
             <div style={sheetBox}><SectionSheet heading="학생정보 및 이해자료" s={head} meta={metaEdit} sections={sections} after={<div style={{ fontSize: "8.5pt", marginTop: 3 }}>{footer}</div>} /></div>
         </div>
+    );
+}
+
+// 예시 문장 고르기: 체크하면 칸 끝에 '- 문장' 줄로 넣고, 끄면 그 줄을 뺀다. 고쳐 쓴 줄은 체크가 풀린다.
+function SentencePicker({ value, onChange, groups }: { value: string; onChange: (v: string) => void; groups: BankGroup[] }) {
+    const lines = value.split("\n");
+    const has = (t: string) => lines.some(l => l.replace(/^\s*-\s*/, "").trim() === t);
+    const toggle = (t: string) => onChange(has(t)
+        ? lines.filter(l => l.replace(/^\s*-\s*/, "").trim() !== t).join("\n")
+        : [value.trimEnd(), `- ${t}`].filter(Boolean).join("\n"));
+    const n = groups.reduce((k, g) => k + g.items.filter(has).length, 0);
+    return (
+        <details className="no-print" open={!value.trim()} style={{ marginTop: 4, fontSize: "8.5pt" }}>
+            <summary style={{ cursor: "pointer", color: "#4338ca", fontWeight: 700 }}>＋ 예시 문장 고르기{n ? ` (${n}개 넣음)` : ""}</summary>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "4px 14px", padding: "6px 2px" }}>
+                {groups.map(g => (
+                    <div key={g.group}>
+                        <div style={{ fontWeight: 700, color: "#475569", margin: "4px 0 2px" }}>{g.group}</div>
+                        {g.items.map(t => (
+                            <label key={t} style={{ display: "flex", gap: 4, alignItems: "flex-start", cursor: "pointer", lineHeight: 1.45, padding: "1px 0" }}>
+                                <input type="checkbox" checked={has(t)} onChange={() => toggle(t)} style={{ marginTop: 2 }} />
+                                <span style={{ color: has(t) ? "#1e293b" : "#475569" }}>{t}</span>
+                            </label>
+                        ))}
+                    </div>
+                ))}
+            </div>
+        </details>
     );
 }
