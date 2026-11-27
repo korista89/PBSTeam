@@ -15,7 +15,7 @@
 | `backend/app/` | FastAPI 애플리케이션. `main.py`, `api/`, `services/`, `core/`, `domain/`, `adapters/`, `data/` |
 | `frontend/src/` | Next.js 14.2.0 + TypeScript 클라이언트 |
 | `tests/` | `test_ai_fba_contract.py`, `test_sheet_sync.py` |
-| `scripts/` | 운영 스크립트(`anonymize_sheet.py`, `daily_briefing_telegram.py`). 일회성 스크립트는 `scripts/_archive/` |
+| `scripts/` | 운영 스크립트(`anonymize_sheet.py`). 일회성 스크립트는 `scripts/_archive/` |
 | `docs/` | 설계 문서 |
 | 루트 `01.~12. *.txt` | PBSTeam 2.0 재설계 기획 문서. 코드가 아니라 사양서다 |
 
@@ -101,7 +101,7 @@ npm run dev                            # next dev
 규칙은 `backend/app/core/privacy.py` 와 프런트 `utils.ts`의 `maskName`이 같아야 한다.
 이름을 시트에 쓰는 새 코드는 `mask_name`/`alias_for`를 거친다. 일괄 변환·점검은 `scripts/anonymize_sheet.py`(기본은 점검만, `--apply`, `--verify`).
 실명↔별칭 대응표는 저장소 밖 `~/data/pbst_alias_map.json`에만 둔다.
-예약 작업(WSL systemd --user): `pbst-anonymize.timer`(새 실명 가림, `--incremental`), `pbst-briefing.timer`(평일 07:30 브리핑 텔레그램). 로그는 `~/data/pbst_*.log`.
+예약 작업(WSL systemd --user): `pbst-anonymize.timer`(새 실명 가림, `--incremental`). 텔레그램 브리핑은 없앴다(2026-11-27, 학생 정보 국외 전송 줄이기 — 브리핑은 사이트 /briefing). 로그는 `~/data/pbst_*.log`.
 
 ## 백엔드 의존성
 

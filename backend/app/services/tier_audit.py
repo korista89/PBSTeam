@@ -2,7 +2,7 @@
 
 CICO관리·CICO기록·리포트·대시보드·Tier3관리·SST관리·Tier현황이 달마다 같은 학생을 가리키는지,
 이번 달 TierStatus 거울 차이, 중복·명단 밖 학생·재학 X·별칭 아닌 이름·Tier1 누락을 본다.
-쓰는 곳: scripts/audit_tier_monthly.py(직접 실행), scripts/daily_briefing_telegram.py(브리핑 한 줄).
+쓰는 곳: scripts/audit_tier_monthly.py(직접 실행).
 """
 from collections import Counter
 from typing import List

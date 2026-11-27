@@ -71,7 +71,6 @@ export default function PrivacyPage() {
                                 ["Google LLC(미국)", "Google Sheets — 운영 자료 저장", "학생 별칭·학생코드, 행동 기록, CICO·Tier 기록, 학생정보 및 이해자료", "Google 데이터센터(국외 포함, 위치 지정 없음)"],
                                 ["Vercel Inc.(미국)", "웹사이트·서버 운영", "화면 요청과 응답(저장하지 않음)", "서버 실행: 서울 리전"],
                                 ["Google LLC(미국)", "Gemini API — AI 초안(위 국외 이전 참고)", "별칭 치환된 기록, 교사 입력 문장", "국외"],
-                                ["Telegram(국외)", "관리자 일일 브리핑 메시지 전달", "학생 별칭·학생코드가 든 요약 10줄", "국외"],
                             ].map(r => <tr key={r[1]}>{r.map((c, i) => <td key={i} style={{ border: '1px solid #e2e8f0', padding: '6px 8px', verticalAlign: 'top' }}>{c}</td>)}</tr>)}
                         </tbody>
                     </table>
