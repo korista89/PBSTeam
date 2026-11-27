@@ -7,7 +7,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
 import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth } from "./shared";
-import { PROFILE_BANK, BankGroup } from "./profileBank";
+import { PROFILE_BANK, PROFILE_FLAGS, BankGroup } from "./profileBank";
 import { AIBox, ApplyMode, AutoArea, card, dOf, err, fetchBehaviorSummaries, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
@@ -434,12 +434,12 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
 // 주민등록번호·주소·연락처·보호자 이름은 받지 않는다(학교 업무관리시스템 자료를 따른다).
 export const PROFILE_ROWS: Row[] = [
     ["학습", "learning", "읽기·쓰기·셈 수준, 잘하는 과목·활동, 잘 배우는 방법(그림 자료·시범·짧은 과제 등)"],
-    ["의사소통", "comm", "표현 방법(말·AAC·그림카드·몸짓), 알아듣는 지시 수준, 도움·거절·쉬기 표현"],
-    ["생활·사회성", "life", "식사·용변·옷 입기, 이동·등하교 방법, 친구·교사와의 관계, 하루 일과 습관"],
-    ["건강·안전", "health", "약 복용·뇌전증·알레르기·보장구, 감각 민감성, 응급 시 대처"],
-    ["지도 시 유의사항", "guide", "좋아하는 것·강점, 효과적인 지도 방법, 피해야 할 상황(행동중재계획이 있으면 '행동중재계획 참고')"],
+    ["의사소통", "comm", "표현 방법(말·AAC·그림카드·몸짓), 알아듣는 지시 수준, 예/아니요·아픔·도움·쉬기 표현"],
+    ["생활·사회성", "life", "식사(음식 형태)·용변·옷 입기, 이동·등하교 인계, 친구·교사와의 관계, 일과·수면"],
+    ["건강·안전", "health", "약 복용·뇌전증·알레르기·의료적 지원·보장구, 감각 민감성, 응급 시 대처 순서"],
+    ["지도 시 유의사항", "guide", "좋아하는 것·강점, 효과적인 지도 방법, 피해야 할 상황, 힘들 때 신호·진정 방법, 지원 인력·가정 소통"],
 ];
-const PROFILE_LIMIT = 1600; // 머리 표와 함께 A4 1쪽에 들어가는 본문 권장치
+const PROFILE_LIMIT = 1500; // 머리 표·꼭 알아 둘 점 줄과 함께 A4 1쪽에 들어가는 본문 권장치
 
 export function ProfileStep({ head, bip, setBip, save, tier }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; tier: string;
@@ -449,14 +449,18 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
     const set = (patch: Record<string, string>) => store.set(patch);
     const hand = parseJson<any>(bip.ProgressReport, {}).handover || {};
     // 이미 있는 자료(인수인계·행동중재계획)로 빈 칸만 채운다
+    const flags = (cur.flags || "").split(", ").filter(Boolean);
+    const setFlags = (f: string[]) => set({ flags: PROFILE_FLAGS.filter(x => f.includes(x)).join(", ") });
     const fill = () => {
         const j = (...v: string[]) => v.map(x => (x || "").trim()).filter(Boolean).join("\n");
-        set(mergeInto(cur, {
+        const auto = [bip.MedicationStatus?.trim() && "학교에서 투약", bip.TargetBehavior?.trim() && "행동중재계획 있음"].filter(Boolean) as string[];
+        const flagsNext = PROFILE_FLAGS.filter(x => flags.includes(x) || auto.includes(x)).join(", ");
+        set({ ...mergeInto(cur, {
             comm: j(hand.comm),
             health: j(hand.health, bip.MedicationStatus ? `복약: ${bip.MedicationStatus}` : ""),
             life: j(hand.summary),
             guide: j(hand.must && `꼭 해주세요: ${hand.must}`, hand.avoid && `피해주세요: ${hand.avoid}`, bip.ReinforcerInfo && `좋아하는 것: ${bip.ReinforcerInfo}`, bip.TargetBehavior && "행동 지원은 행동중재계획 참고"),
-        }, "empty"));
+        }, "empty"), flags: flagsNext });
     };
     const dateVal = cur.date || today();
     const author = cur.author ?? bip.Teacher ?? "";
@@ -470,10 +474,19 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
         ["작성자", <Inp key="a" value={author} onChange={v => set({ author: v })} />],
     ];
     const printMeta: [string, string][] = [["장애 유형", disability], ["성별", gender], ["지원 단계", tier || "Tier1"], ["작성일", kDate(dateVal)], ["작성자", author]];
-    const sections: [string, React.ReactNode][] = PROFILE_ROWS.map(([t, f, ph]) => [t, <div key={f}>
+    const flagRow: [string, React.ReactNode] = ["꼭 알아 둘 점", <div key="flags" style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px", fontSize: "8.5pt" }}>
+        {PROFILE_FLAGS.map(x => {
+            const on = flags.includes(x);
+            return <label key={x} style={{ display: "inline-flex", gap: 3, alignItems: "center", cursor: "pointer", padding: "1px 6px", borderRadius: 10, border: `1px solid ${on ? "#dc2626" : "#cbd5e1"}`, background: on ? "#fef2f2" : "#fff", color: on ? "#b91c1c" : "#475569", fontWeight: on ? 700 : 400 }}>
+                <input type="checkbox" checked={on} onChange={() => setFlags(on ? flags.filter(f => f !== x) : [...flags, x])} style={{ margin: 0 }} />{x}
+            </label>;
+        })}
+    </div>];
+    const flagText = flags.length ? flags.map(x => `■ ${x}`).join("  ") : "해당 없음";
+    const sections: [string, React.ReactNode][] = [flagRow, ...PROFILE_ROWS.map(([t, f, ph]): [string, React.ReactNode] => [t, <div key={f}>
         <Area value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={3} />
         <SentencePicker value={cur[f] || ""} onChange={v => set({ [f]: v })} groups={PROFILE_BANK[f] || []} />
-    </div>]);
+    </div>])];
     const footer = "※ 주민등록번호·주소·연락처 등 인적사항과 통학 차량 정보는 학교 업무관리시스템 자료를 따른다.";
     const total = PROFILE_ROWS.reduce((n, [, f]) => n + (cur[f] || "").length, 0);
     return (
@@ -481,11 +494,11 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-secondary" onClick={fill}>📋 이미 있는 자료로 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: PROFILE_ROWS.map(([t, f]) => [t, cur[f] || ""]), footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: [["꼭 알아 둘 점", flagText], ...PROFILE_ROWS.map(([t, f]): [string, string] => [t, cur[f] || ""])], footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), profile: { ...cur, date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
-                    학생 교육의 기초자료입니다. 칸마다 아래 <b>예시 문장</b>에서 맞는 것을 체크하면 칸에 들어가고, 칸에서 학생에 맞게 고치면 됩니다(○○은 채울 자리). 칸마다 2~4줄이면 A4 1쪽이 됩니다. 장애 유형·성별·지원 단계는 다른 탭 자료에서 자동으로 들어옵니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
+                    학생 교육의 기초자료입니다. 맨 위 <b>꼭 알아 둘 점</b>은 대체 교사·실무사가 첫날 바로 봐야 할 안전·지원 항목이니 해당하는 것을 모두 체크하세요(체크한 것만 인쇄). 칸마다 아래 <b>예시 문장</b>에서 맞는 것을 체크하면 칸에 들어가고, 칸에서 학생에 맞게 고치면 됩니다(○○은 채울 자리). 칸마다 2~4줄이면 A4 1쪽이 됩니다. 장애 유형·성별·지원 단계는 다른 탭 자료에서 자동으로 들어옵니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
                 </div>
             </div>
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>
