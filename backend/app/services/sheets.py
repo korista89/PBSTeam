@@ -3537,7 +3537,7 @@ def get_bip(student_code: str):
     """Get BIP for a student with caching."""
     clean_code = str(student_code).strip()
     cache_key = f"bip:{clean_code}"
-    cached = get_cached(cache_key, ttl=300)
+    cached = get_cached(cache_key, ttl=30)  # 서버 인스턴스마다 따로 캐시한다. 길면 다른 교사가 저장한 내용이 늦게 보인다.
     if cached is not None:
         return cached
 
@@ -3557,10 +3557,10 @@ def get_bip(student_code: str):
         logger.error(f"Error getting BIP: {e}")
         return None
 
-def _archive_bip_row(ws, headers: list, row_index: int) -> None:
+def _archive_bip_row(ws, headers: list, row_index: int) -> dict:
     old = dict(zip(headers, ws.row_values(row_index)))
     if not any(str(v).strip() for k, v in old.items() if k != "StudentCode"):
-        return
+        return old
     sheet = ws.spreadsheet
     try:
         hist = sheet.worksheet(BIP_HISTORY_SHEET)
@@ -3570,6 +3570,27 @@ def _archive_bip_row(ws, headers: list, row_index: int) -> None:
     import json
     saved_at = now_kst().strftime("%Y-%m-%d %H:%M")
     hist.append_row([saved_at, old.get("StudentCode", ""), old.get("UpdatedAt", ""), json.dumps(old, ensure_ascii=False)])
+    return old
+
+
+def _keep_documents(new: dict, old: dict) -> dict:
+    """오래된 화면에서 저장해도 시트에만 있는 문서를 지우지 않는다.
+    ProgressReport의 문서(학생정보·인수인계·의사결정 등)와 FBA 보고서가 들어온 값에 없거나 비었으면 시트 값을 남긴다."""
+    import json
+    def load(v):
+        try:
+            j = json.loads(v) if str(v or "").strip().startswith("{") else {}
+            return j if isinstance(j, dict) else {}
+        except Exception:
+            return {}
+    filled = lambda x: bool(x) and (not isinstance(x, dict) or any(str(v).strip() for v in x.values()))
+    o, n = load(old.get("ProgressReport")), load(new.get("ProgressReport"))
+    kept = {k: v for k, v in o.items() if filled(v) and not filled(n.get(k))}
+    if kept:
+        new = {**new, "ProgressReport": json.dumps({**n, **kept}, ensure_ascii=False)}
+    if filled(load(old.get("FBAReport"))) and not filled(load(new.get("FBAReport"))):
+        new = {**new, "FBAReport": old.get("FBAReport")}
+    return new
 
 
 def save_bip(bip_data: dict):
@@ -3587,13 +3608,12 @@ def save_bip(bip_data: dict):
     try:
         cell = ws.find(clean_code, in_column=1)
         headers = ws.row_values(1)
-        row = []
-        for h in headers:
-            row.append(bip_data.get(h, ""))
+        if cell:
+            # 덮어쓰기 전 이전 내용을 BIP_이력 탭에 남긴다(되돌리기용). 시트에만 있는 문서는 지우지 않는다.
+            bip_data = _keep_documents(bip_data, _archive_bip_row(ws, headers, cell.row))
+        row = [bip_data.get(h, "") for h in headers]
 
         if cell:
-            # 덮어쓰기 전 이전 내용을 BIP_이력 탭에 남긴다(되돌리기용).
-            _archive_bip_row(ws, headers, cell.row)
             # 그 자리에서 덮어쓴다. 예전의 '지우고 다시 넣기'는 마지막 줄일 때 넣기가 실패해 줄이 통째로 사라졌다(2026-11-27).
             ws.update(range_name=f"A{cell.row}:{gspread.utils.rowcol_to_a1(cell.row, len(headers))}", values=[row], value_input_option="RAW")
         else:
