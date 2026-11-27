@@ -518,7 +518,7 @@ function SentencePicker({ value, onChange, groups }: { value: string; onChange: 
         : [value.trimEnd(), `- ${t}`].filter(Boolean).join("\n"));
     const n = groups.reduce((k, g) => k + g.items.filter(has).length, 0);
     return (
-        <details className="no-print" open={!value.trim()} style={{ marginTop: 4, fontSize: "8.5pt" }}>
+        <details className="no-print" style={{ marginTop: 4, fontSize: "8.5pt" }}>
             <summary style={{ cursor: "pointer", color: "#4338ca", fontWeight: 700 }}>＋ 예시 문장 고르기{n ? ` (${n}개 넣음)` : ""}</summary>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "4px 14px", padding: "6px 2px" }}>
                 {groups.map(g => (
