@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { AuthCheck } from "../components/AuthProvider";
-import AppShell from "../components/AppShell";
+import AppShell, { CONSENT_ACCOUNT } from "../components/AppShell";
+import { useAuth } from "../components/AuthProvider";
 
 // 동의서: 어떤 지원에 동의서가 꼭 필요한지 한눈에 보고, 필요한 3종만 빈 양식으로 인쇄한다.
 // 빈 양식(개인정보 없음)을 보호자에게 나눠 주는 용도라 '대외비' 워터마크를 넣는 PrintGuard 대신 window.print()를 쓴다.
@@ -179,6 +180,12 @@ function ExternalForm({ y }: { y: number }) {
 export default function ConsentPage() {
     const [form, setForm] = useState<FormKey>("site");
     const [y, setY] = useState(schoolYear());
+    const { user } = useAuth();
+    if (user && user.id !== CONSENT_ACCOUNT) return (
+        <AuthCheck><AppShell currentPage="consent" title="✍️ 동의서">
+            <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>행동중재전문교사 계정에서만 볼 수 있습니다.</div>
+        </AppShell></AuthCheck>
+    );
     return (
         <AuthCheck>
             <AppShell currentPage="consent" title="✍️ 동의서" subtitle="꼭 필요한 동의서만 골라 빈 양식으로 인쇄합니다"

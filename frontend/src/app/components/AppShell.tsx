@@ -27,6 +27,8 @@ interface NavGroup {
     items: NavItem[];
 }
 
+export const CONSENT_ACCOUNT = "행동중재전문교사";
+
 export default function AppShell({
     currentPage,
     title,
@@ -93,7 +95,8 @@ export default function AppShell({
                 { href: "/briefing", label: admin ? "관리자 브리핑" : `${unit} 브리핑`, key: "briefing", icon: "🗞️" },
                 { href: "/today", label: "오늘 할 일", key: "today", icon: "🧭" },
                 { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" },
-                { href: "/consent", label: "동의서", key: "consent", icon: "✍️" }
+                // 동의서는 행동중재전문교사 계정에만 보인다(2026-11-27, 양식 검토 중)
+                ...(user?.id === CONSENT_ACCOUNT ? [{ href: "/consent", label: "동의서", key: "consent", icon: "✍️" }] : [])
             ]
         },
         {
