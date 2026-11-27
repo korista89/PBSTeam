@@ -6,6 +6,7 @@ import AppShell, { CONSENT_ACCOUNT } from "../components/AppShell";
 import { useAuth } from "../components/AuthProvider";
 
 // 동의서: 어떤 지원에 동의서가 꼭 필요한지 한눈에 보고, 필요한 3종만 빈 양식으로 인쇄한다.
+// 양식은 A4 한 장(① 약 271mm, 2026-11-27 측정). 칸을 더하면 높이를 다시 잰다.
 // 빈 양식(개인정보 없음)을 보호자에게 나눠 주는 용도라 '대외비' 워터마크를 넣는 PrintGuard 대신 window.print()를 쓴다.
 // 법 조항은 화면 안내용이다. 시행 전 개인정보 보호책임자·교육청 확인을 받는다.
 
@@ -31,14 +32,14 @@ const schoolYear = () => { const d = new Date(); return d.getMonth() + 1 >= 3 ? 
 
 // ── 양식 공통 조각 ──────────────────────────────────────────
 const S = {
-    sheet: { background: "#fff", color: "#000", fontFamily: "'Malgun Gothic', sans-serif", fontSize: "10pt", lineHeight: 1.55, padding: "14mm 15mm", maxWidth: "210mm", margin: "0 auto", boxShadow: "0 1px 6px rgba(0,0,0,0.08)" } as React.CSSProperties,
-    title: { textAlign: "center", fontSize: "17pt", fontWeight: 800, margin: "0 0 4px" } as React.CSSProperties,
-    sub: { textAlign: "center", fontSize: "10pt", margin: "0 0 12px" } as React.CSSProperties,
-    h: { fontSize: "11pt", fontWeight: 800, margin: "12px 0 4px" } as React.CSSProperties,
+    sheet: { background: "#fff", color: "#000", fontFamily: "'Malgun Gothic', sans-serif", fontSize: "10pt", lineHeight: 1.5, padding: "10mm 13mm", maxWidth: "210mm", margin: "0 auto", boxShadow: "0 1px 6px rgba(0,0,0,0.08)" } as React.CSSProperties,
+    title: { textAlign: "center", fontSize: "15pt", fontWeight: 800, margin: "0 0 2px" } as React.CSSProperties,
+    sub: { textAlign: "center", fontSize: "10pt", margin: "0 0 8px" } as React.CSSProperties,
+    h: { fontSize: "11pt", fontWeight: 800, margin: "8px 0 2px" } as React.CSSProperties,
     table: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", margin: "4px 0" } as React.CSSProperties,
-    th: { border: "1px solid #000", background: "#eef2f7", padding: "4px 6px", fontWeight: 700, textAlign: "center", verticalAlign: "middle" } as React.CSSProperties,
-    td: { border: "1px solid #000", padding: "4px 6px", verticalAlign: "top" } as React.CSSProperties,
-    note: { fontSize: "9pt", margin: "4px 0" } as React.CSSProperties,
+    th: { border: "1px solid #000", background: "#eef2f7", padding: "3px 5px", fontWeight: 700, textAlign: "center", verticalAlign: "middle" } as React.CSSProperties,
+    td: { border: "1px solid #000", padding: "3px 5px", verticalAlign: "top" } as React.CSSProperties,
+    note: { fontSize: "9pt", margin: "2px 0" } as React.CSSProperties,
 };
 const CK = "□ 동의함   □ 동의하지 않음";
 
@@ -67,7 +68,7 @@ function Rows({ head, rows, widths }: { head: string[]; rows: string[][]; widths
 function Sign({ y, who = "보호자(법정대리인)" }: { y: number; who?: string }) {
     return (
         <>
-            <p style={{ margin: "10px 0 4px" }}>위 내용을 읽고 이해하였으며, 표시한 바와 같이 동의합니다.</p>
+            <p style={{ margin: "6px 0 2px" }}>위 내용을 읽고 이해하였으며, 표시한 바와 같이 동의합니다.</p>
             <table style={S.table}>
                 <colgroup><col style={{ width: "18%" }} /><col style={{ width: "32%" }} /><col style={{ width: "18%" }} /><col style={{ width: "32%" }} /></colgroup>
                 <tbody>
@@ -75,7 +76,7 @@ function Sign({ y, who = "보호자(법정대리인)" }: { y: number; who?: stri
                     <tr><th style={S.th}>{who}</th><td style={{ ...S.td, height: 34 }} colSpan={3}><span style={{ float: "right" }}>(서명 또는 인)</span></td></tr>
                 </tbody>
             </table>
-            <p style={{ textAlign: "right", fontWeight: 800, fontSize: "12pt", margin: "12px 0 0" }}>경은학교장 귀하</p>
+            <p style={{ textAlign: "right", fontWeight: 800, fontSize: "12pt", margin: "8px 0 0" }}>경은학교장 귀하</p>
         </>
     );
 }
