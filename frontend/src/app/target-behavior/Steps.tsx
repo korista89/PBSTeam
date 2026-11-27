@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { WeeklyTrendChart, ChangeBanner } from "../components/ProgressCharts";
-import { isVacationWeek } from "../lib/progress";
+import { isVacationWeek, schoolYearStart } from "../lib/progress";
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
@@ -159,7 +159,43 @@ export function DataStep({ studentCode, logs, planStart }: { studentCode: string
                 <Bars title="발생 장소" items={dm.location_hotspot_distribution || []} />
                 <Bars title="발생 시간대" items={dm.time_slot_distribution || []} />
             </div>
+            <YearLogs logs={logs} />
         </div>
+    );
+}
+
+// 올해(3월~) 이 학생 행동 기록 원자료: 눌러서 펼친다(최근 순). 화면에 이미 불러온 기록만 쓰므로 시트를 더 읽지 않는다.
+function YearLogs({ logs }: { logs: Log[] }) {
+    const start = schoolYearStart(today());
+    const rows = useMemo(() => logs.filter(l => dOf(l) >= start).sort((a, b) => (dOf(b) + String(b["시간대"] || "")).localeCompare(dOf(a) + String(a["시간대"] || ""))), [logs, start]);
+    const v = (l: Log, k: string) => String(l[k] ?? "").trim();
+    const th: React.CSSProperties = { padding: "6px 8px", background: "#f1f5f9", fontWeight: 700, textAlign: "left", whiteSpace: "nowrap", borderBottom: "1px solid #e2e8f0" };
+    const td: React.CSSProperties = { padding: "6px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "top" };
+    return (
+        <details style={card}>
+            <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: "0.88rem" }}>📋 올해 행동 기록 보기 <span style={{ fontWeight: 500, color: "#64748b" }}>({kDate(start)}부터 {rows.length}건, 최근 순)</span></summary>
+            {rows.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 10 }}>올해 입력된 행동 기록이 없습니다.</div> : (
+                <div style={{ overflowX: "auto", marginTop: 10 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
+                        <thead><tr>{["날짜", "시간대·장소", "행동", "강도", "횟수", "기능", "배경·선행 → 후속", "조치", "특기사항", "입력"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>{rows.map((l, i) => (
+                            <tr key={v(l, "Log_ID") || i}>
+                                <td style={{ ...td, whiteSpace: "nowrap" }}>{kDate(dOf(l))}</td>
+                                <td style={td}>{[v(l, "시간대"), v(l, "장소")].filter(Boolean).join(" · ")}</td>
+                                <td style={td}>{v(l, "행동유형")}</td>
+                                <td style={{ ...td, textAlign: "center" }}>{v(l, "강도").charAt(0)}</td>
+                                <td style={{ ...td, textAlign: "center" }}>{v(l, "발생횟수")}</td>
+                                <td style={td}>{v(l, "기능")}</td>
+                                <td style={td}>{[[v(l, "배경사건"), v(l, "선행사건")].filter(Boolean).join(" / "), v(l, "후속결과")].filter(Boolean).join(" → ")}</td>
+                                <td style={td}>{[v(l, "결과"), v(l, "물리적제지여부") && v(l, "물리적제지여부") !== "X" ? `제지: ${v(l, "제지유형_원문") || v(l, "물리적제지여부")}` : ""].filter(Boolean).join(" · ")}</td>
+                                <td style={{ ...td, minWidth: 220, whiteSpace: "pre-wrap" }}>{v(l, "특기사항")}</td>
+                                <td style={{ ...td, whiteSpace: "nowrap", color: "#64748b" }}>{v(l, "입력교사명")}</td>
+                            </tr>
+                        ))}</tbody>
+                    </table>
+                </div>
+            )}
+        </details>
     );
 }
 
