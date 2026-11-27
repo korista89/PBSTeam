@@ -3585,7 +3585,7 @@ def save_bip(bip_data: dict):
     clean_code = str(student_code).strip()
 
     try:
-        cell = ws.find(student_code, in_column=1)
+        cell = ws.find(clean_code, in_column=1)
         headers = ws.row_values(1)
         row = []
         for h in headers:
