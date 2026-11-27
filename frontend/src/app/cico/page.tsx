@@ -41,7 +41,7 @@ export default function CicoManagePage() {
   const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [pick, setPick] = useState("");
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"month" | "year">("month");
+  const [view, setView] = useState<"month" | "year">("year");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
 

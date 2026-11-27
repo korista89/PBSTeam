@@ -1,7 +1,7 @@
 "use client";
 
-// 관리 탭 공통: '이 달'(명단·현황)과 '연간 성과'(업무담당자용) 전환
-export default function ViewToggle({ value, onChange, monthLabel, yearLabel = "📊 연간 성과" }: {
+// 관리 탭 공통: '대시보드'(연간 성과, 먼저 보임)와 '이 달'(명단·현황) 전환
+export default function ViewToggle({ value, onChange, monthLabel, yearLabel = "📊 대시보드" }: {
   value: "month" | "year"; onChange: (v: "month" | "year") => void; monthLabel: string; yearLabel?: string;
 }) {
   const btn = (v: "month" | "year", label: string) => (
@@ -12,8 +12,8 @@ export default function ViewToggle({ value, onChange, monthLabel, yearLabel = "�
   );
   return (
     <div style={{ display: "inline-flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 10, alignSelf: "flex-start" }}>
-      {btn("month", `🗓️ ${monthLabel}`)}
       {btn("year", yearLabel)}
+      {btn("month", `🗓️ ${monthLabel}`)}
     </div>
   );
 }

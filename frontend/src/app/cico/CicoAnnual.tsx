@@ -31,7 +31,7 @@ export default function CicoAnnual() {
     axios.get(`${API_BASE_URL}/api/v1/cico/annual`, { timeout: 120000 }).then(r => setData(r.data))
       .catch(e => setErr(e?.response?.data?.detail || e.message));
   }, []);
-  if (err) return <div className="card" style={{ padding: 30, color: "#ef4444" }}>⚠ 연간 성과를 불러오지 못했습니다: {err}</div>;
+  if (err) return <div className="card" style={{ padding: 30, color: "#ef4444" }}>⚠ 대시보드를 불러오지 못했습니다: {err}</div>;
   if (!data) return <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>학년도 CICO 자료를 모으는 중... (달마다 계산해 조금 걸립니다)</div>;
 
   const s = data.summary;

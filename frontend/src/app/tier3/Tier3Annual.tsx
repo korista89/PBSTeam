@@ -28,7 +28,7 @@ export default function Tier3Annual() {
     axios.get(`${API_BASE_URL}/api/v1/tier3-monthly/annual`, { timeout: 120000 }).then(r => setData(r.data))
       .catch(e => setErr(e?.response?.data?.detail || e.message));
   }, []);
-  if (err) return <div className="card" style={{ padding: 30, color: "#ef4444" }}>⚠ 연간 성과를 불러오지 못했습니다: {err}</div>;
+  if (err) return <div className="card" style={{ padding: 30, color: "#ef4444" }}>⚠ 대시보드를 불러오지 못했습니다: {err}</div>;
   if (!data) return <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>학년도 Tier3 자료를 모으는 중...</div>;
 
   const s = data.summary;
