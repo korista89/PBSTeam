@@ -3594,9 +3594,8 @@ def save_bip(bip_data: dict):
         if cell:
             # 덮어쓰기 전 이전 내용을 BIP_이력 탭에 남긴다(되돌리기용).
             _archive_bip_row(ws, headers, cell.row)
-            # Delete and re-insert to update
-            ws.delete_rows(cell.row)
-            ws.insert_row(row, index=cell.row)
+            # 그 자리에서 덮어쓴다. 예전의 '지우고 다시 넣기'는 마지막 줄일 때 넣기가 실패해 줄이 통째로 사라졌다(2026-11-27).
+            ws.update(range_name=f"A{cell.row}:{gspread.utils.rowcol_to_a1(cell.row, len(headers))}", values=[row], value_input_option="RAW")
         else:
             # Append
             ws.append_row(row)
