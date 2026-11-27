@@ -112,7 +112,7 @@ export function CrisisMonitor({ logs, planStart }: { logs: Log[]; planStart: str
     return (
         <div style={card}>
             <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>🚨 위기행동 모니터링 <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.78rem" }}>(기본·자동 — 행동기록 탭에 입력한 위기행동이 그대로 쌓입니다)</span></div>
-            <div style={{ fontSize: "0.8rem", color: "#475569", margin: "4px 0 8px" }}>누적 {logs.length}건 · 최근 8주 {recent}건{planStart ? ` · 중재 시작 ${kDate(planStart)}` : ""}. 이 자료만으로도 ⑤ 의사결정과 ⑦ 결과 보고서를 쓸 수 있습니다. 대체행동·과제 수행 같은 <b>추가 지표는 필요할 때만</b> 아래에서 더하세요.</div>
+            <div style={{ fontSize: "0.8rem", color: "#475569", margin: "4px 0 8px" }}>누적 {logs.length}건 · 최근 8주 {recent}건{planStart ? ` · 중재 시작 ${kDate(planStart)}` : ""}. 이 자료만으로도 ⑥ 의사결정과 ⑧ 결과 보고서를 쓸 수 있습니다. 대체행동·과제 수행 같은 <b>추가 지표는 필요할 때만</b> 아래에서 더하세요.</div>
             {weekly.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>아직 위기행동 기록이 없습니다.</div> : (
                 <>
                     <ChangeBanner weekly={weekly} />
@@ -379,7 +379,7 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "progress", s: head, meta: printMeta, sections: PROGRESS_SECTIONS.map(t => [t, secs[t] || ""]), rows, crisis })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...pr, start, end, date: pr.date || today() }) })}>💾 저장</button>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>표의 중재 전·후 수치는 ④ 자료에서 자동으로 계산됩니다.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>표의 중재 전·후 수치는 ⑤ 모니터링 자료에서 자동으로 계산됩니다.</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
             <div style={sheetBox}><SectionSheet heading="개별학생 행동중재 결과 보고서" s={head} meta={meta} sections={sections} extra={<SummaryTable rows={rows} crisis={crisis} />} /></div>

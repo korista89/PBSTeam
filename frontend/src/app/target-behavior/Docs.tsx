@@ -91,7 +91,7 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "데이터 기반 의사결정 기록", s: head, meta: printMeta, sections: printSections })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), decision: { ...cur, date: cur.date || today(), author: cur.author ?? bip.Teacher ?? "" } }) })}>💾 저장</button>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>④ 모니터링 차트와 함께 보고 판단하세요. 2주 이상 개선이 없으면 전략 수정, 4주 연속 목표 달성이면 하향·종료를 검토합니다.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>⑤ 모니터링 차트와 함께 보고 판단하세요. 2주 이상 개선이 없으면 전략 수정, 4주 연속 목표 달성이면 하향·종료를 검토합니다.</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
             <div style={sheetBox}><SectionSheet heading="데이터 기반 의사결정 기록" s={head} meta={meta} sections={sections} /></div>
@@ -424,6 +424,70 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                 {total > PAGE_LIMIT && <span style={{ color: "#dc2626" }}>— 인쇄하면 1쪽을 넘을 수 있습니다. 칸마다 2줄 안으로 줄여 주세요.</span>}
             </div>
             <div style={sheetBox}><SectionSheet heading="다음 학년도 행동지원 인수인계 자료" s={head} meta={meta} sections={sections} extra={<HandoverCharts d={charts} />} after={<div style={{ fontSize: "8.5pt", marginTop: 3 }}>{footer}</div>} dense /></div>
+        </div>
+    );
+}
+
+// ⓪ 학생정보 및 이해자료 ─────────────────────────────────
+// 학교 '학생정보 및 이해자료'(학습면·생활면·건강면)를 교육 기초자료로 다시 묶은 1쪽 양식. 입력 칸은 5개.
+// 주민등록번호·주소·연락처·보호자 이름은 받지 않는다(학교 업무관리시스템 자료를 따른다).
+export const PROFILE_ROWS: Row[] = [
+    ["학습", "learning", "읽기·쓰기·셈 수준, 잘하는 과목·활동, 잘 배우는 방법(그림 자료·시범·짧은 과제 등)"],
+    ["의사소통", "comm", "표현 방법(말·AAC·그림카드·몸짓), 알아듣는 지시 수준, 도움·거절·쉬기 표현"],
+    ["생활·사회성", "life", "식사·용변·옷 입기, 이동·등하교 방법, 친구·교사와의 관계, 하루 일과 습관"],
+    ["건강·안전", "health", "약 복용·뇌전증·알레르기·보장구, 감각 민감성, 응급 시 대처"],
+    ["지도 시 유의사항", "guide", "좋아하는 것·강점, 효과적인 지도 방법, 피해야 할 상황(행동중재계획이 있으면 '행동중재계획 참고')"],
+];
+const PROFILE_LIMIT = 1600; // 머리 표와 함께 A4 1쪽에 들어가는 본문 권장치
+
+export function ProfileStep({ head, bip, setBip, save, tier }: {
+    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; tier: string;
+}) {
+    const store = useStore(bip, setBip, "profile");
+    const cur = store.cur;
+    const set = (patch: Record<string, string>) => store.set(patch);
+    const hand = parseJson<any>(bip.ProgressReport, {}).handover || {};
+    // 이미 있는 자료(인수인계·행동중재계획)로 빈 칸만 채운다
+    const fill = () => {
+        const j = (...v: string[]) => v.map(x => (x || "").trim()).filter(Boolean).join("\n");
+        set(mergeInto(cur, {
+            comm: j(hand.comm),
+            health: j(hand.health, bip.MedicationStatus ? `복약: ${bip.MedicationStatus}` : ""),
+            life: j(hand.summary),
+            guide: j(hand.must && `꼭 해주세요: ${hand.must}`, hand.avoid && `피해주세요: ${hand.avoid}`, bip.ReinforcerInfo && `좋아하는 것: ${bip.ReinforcerInfo}`, bip.TargetBehavior && "행동 지원은 행동중재계획 참고"),
+        }, "empty"));
+    };
+    const dateVal = cur.date || today();
+    const author = cur.author ?? bip.Teacher ?? "";
+    const disability = bip.DisabilityType || cur.disability || "";
+    const gender = bip.Gender || cur.gender || "";
+    const metaEdit: [string, React.ReactNode][] = [
+        ["장애 유형", bip.DisabilityType ? disability : <Inp key="d" value={cur.disability || ""} onChange={v => set({ disability: v })} />],
+        ["성별", bip.Gender ? gender : <Sel key="g" value={cur.gender || ""} onChange={v => set({ gender: v })} options={["남", "여"]} />],
+        ["지원 단계", tier || "Tier1"],
+        ["작성일", <Inp key="dt" type="date" value={dateVal} onChange={v => set({ date: v })} />],
+        ["작성자", <Inp key="a" value={author} onChange={v => set({ author: v })} />],
+    ];
+    const printMeta: [string, string][] = [["장애 유형", disability], ["성별", gender], ["지원 단계", tier || "Tier1"], ["작성일", kDate(dateVal)], ["작성자", author]];
+    const sections: [string, React.ReactNode][] = PROFILE_ROWS.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={3} />]);
+    const footer = "※ 주민등록번호·주소·연락처 등 인적사항과 통학 차량 정보는 학교 업무관리시스템 자료를 따른다.";
+    const total = PROFILE_ROWS.reduce((n, [, f]) => n + (cur[f] || "").length, 0);
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={card}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn btn-secondary" onClick={fill}>📋 이미 있는 자료로 채우기</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: PROFILE_ROWS.map(([t, f]) => [t, cur[f] || ""]), footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), profile: { ...cur, date: dateVal, author } }) })}>💾 저장</button>
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
+                    학생 교육의 기초자료입니다. 칸 5개를 칸마다 2~4줄로 적으면 A4 1쪽이 됩니다. 장애 유형·성별·지원 단계는 다른 탭 자료에서 자동으로 들어옵니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
+                </div>
+            </div>
+            <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>
+                본문 {total.toLocaleString()}자 / 권장 {PROFILE_LIMIT.toLocaleString()}자 이하{total > PROFILE_LIMIT ? " — 1쪽을 넘을 수 있습니다." : ""}
+            </div>
+            <div style={sheetBox}><SectionSheet heading="학생정보 및 이해자료" s={head} meta={metaEdit} sections={sections} after={<div style={{ fontSize: "8.5pt", marginTop: 3 }}>{footer}</div>} /></div>
         </div>
     );
 }

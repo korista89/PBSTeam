@@ -64,7 +64,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
     return (
         <div className="card" style={{ padding: 16 }}>
             <button onClick={() => setOpen(o => !o)} style={{ all: "unset", cursor: "pointer", fontWeight: 800 }}>
-                🤖 인수인계 자료 일괄 생성 {open ? "▲" : "▼"} <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.8rem" }}>(Tier3 {targets.length}명 · 개별학생 행동중재 ⑧ 탭에 저장)</span>
+                🤖 인수인계 자료 일괄 생성 {open ? "▲" : "▼"} <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.8rem" }}>(Tier3 {targets.length}명 · 개별학생 행동중재 ⑨ 탭에 저장)</span>
             </button>
             {open && (
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -77,7 +77,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
                         {Object.keys(status).length > 0 && <span style={{ fontSize: "0.82rem", fontWeight: 700 }}>완료 {done} / {targets.length}</span>}
                     </div>
                     <div style={{ fontSize: "0.76rem", color: "#64748b" }}>
-                        빈 칸에만 채우고 기존 내용은 건드리지 않습니다. 기록이 적은 학생은 건너뜁니다. 만든 뒤 담임이 ⑧ 탭에서 고치고 인쇄해 새 담임에게 전달하세요.
+                        빈 칸에만 채우고 기존 내용은 건드리지 않습니다. 기록이 적은 학생은 건너뜁니다. 만든 뒤 담임이 ⑨ 탭에서 고치고 인쇄해 새 담임에게 전달하세요.
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6 }}>
                         {targets.map(s => {

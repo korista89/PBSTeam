@@ -11,7 +11,7 @@ import { AuthCheck, useAuth } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 import Tracker from "./Tracker";
-import { DecisionStep, HandoverStep, ReferralStep } from "./Docs";
+import { DecisionStep, HandoverStep, ProfileStep, ReferralStep } from "./Docs";
 import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
 import { Bip, StudentHead, kDate, today } from "./shared";
 import OverviewStep from "./Overview";
@@ -19,18 +19,21 @@ import { CalmDays, EBPForStudent, MedicationResponseReport, StudentAIAnalysis } 
 import { schoolYearStart } from "../lib/progress";
 
 const STEPS = [
-    { key: "overview", label: "⓪ 학생 현황" },
-    { key: "data", label: "① 자료 분석" },
-    { key: "fba", label: "② FBA 결과 보고서" },
-    { key: "bip", label: "③ 행동중재계획" },
-    { key: "track", label: "④ 모니터링(자료 입력·차트)" },
-    { key: "decision", label: "⑤ 데이터 기반 의사결정" },
-    { key: "refer", label: "⑥ 의료협력의뢰서·추가지원신청서" },
-    { key: "report", label: "⑦ 중재 결과 보고서" },
-    { key: "handover", label: "⑧ 다음 학년도 인수인계 자료" },
+    { key: "profile", label: "⓪ 학생정보 및 이해자료" },
+    { key: "overview", label: "① 학생 현황" },
+    { key: "data", label: "② 자료 분석" },
+    { key: "fba", label: "③ FBA 결과 보고서" },
+    { key: "bip", label: "④ 행동중재계획" },
+    { key: "track", label: "⑤ 모니터링(자료 입력·차트)" },
+    { key: "decision", label: "⑥ 데이터 기반 의사결정" },
+    { key: "refer", label: "⑦ 의료협력의뢰서·추가지원신청서" },
+    { key: "report", label: "⑧ 중재 결과 보고서" },
+    { key: "handover", label: "⑨ 다음 학년도 인수인계 자료" },
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
+// 지금 지원 단계(TierStatus 거울) 한 줄: 예) Tier3 · Tier2(CICO)
+const tierOf = (s: any) => ["Tier3+", "Tier3", "Tier2(CICO)", "Tier2(SST)"].filter(k => String(s?.[k] || "").toUpperCase() === "O").join(" · ");
 const isT3 = (s: any) => String(s?.Tier3 || "").toUpperCase() === "O" || String(s?.["Tier3+"] || "").toUpperCase() === "O";
 
 export default function InterventionPage() {
@@ -130,7 +133,7 @@ export default function InterventionPage() {
     return (
         <AuthCheck>
             <AppShell currentPage="target-behavior" title="🧩 개별학생 행동중재"
-                subtitle="학생 현황 → 자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서 → 인수인계를 한 화면에서">
+                subtitle="학생정보 → 학생 현황 → 자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서 → 인수인계를 한 화면에서">
                 <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20, alignItems: "start" }}>
                     <div className="card" style={{ padding: 16 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -170,7 +173,7 @@ export default function InterventionPage() {
                                     <div>
                                         <div style={{ fontWeight: 900, fontSize: "1.05rem" }}>{head.name} <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "#64748b" }}>{head.className} · {code}</span></div>
                                         <div style={{ fontSize: "0.78rem", color: "#475569", marginTop: 2 }}>
-                                            {bip.PlanStart ? <>중재 기간 {kDate(bip.PlanStart)} ~ {bip.PlanEnd ? kDate(bip.PlanEnd) : "진행 중"}</> : "행동중재계획 없음 — ③에서 작성하세요"}
+                                            {bip.PlanStart ? <>중재 기간 {kDate(bip.PlanStart)} ~ {bip.PlanEnd ? kDate(bip.PlanEnd) : "진행 중"}</> : "행동중재계획 없음 — ④에서 작성하세요"}
                                             {bip.TargetBehavior && <> · 표적행동: {bip.TargetBehavior}</>}
                                         </div>
                                     </div>
@@ -184,6 +187,7 @@ export default function InterventionPage() {
                                         }}>{s.label}</button>
                                     ))}
                                 </div>
+                                {step === "profile" && <ProfileStep key={`pf-${code}`} head={head} bip={bip} setBip={editBip} save={save} tier={tierOf(selected)} />}
                                 {step === "overview" && <OverviewStep key={`ov-${code}`} studentKey={code} goStep={setStep} />}
                                 {step === "data" && <><DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} /><div className="card" style={{ padding: 16 }}><StudentAIAnalysis key={code} studentCode={code} apiUrl={API_BASE_URL} /></div></>}
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}

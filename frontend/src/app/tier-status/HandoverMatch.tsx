@@ -40,7 +40,7 @@ export default function HandoverMatch({ students }: { students: any[] }) {
                 <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: "0.82rem", color: "#475569", lineHeight: 1.6 }}>
                         전임자가 만든 <b>경은PBS 인수인계 자료(.json)</b>를 고르세요. 파일은 이 브라우저에서만 읽고 서버로 보내지 않습니다.
-                        학생마다 아래 목록에서 그 학생으로 보이는 ID를 고르면 <b>개별학생 행동중재 ⓪ 학생 현황에서 과거 학년도와 비교</b>할 수 있습니다. 행동 유형·건수로 짐작되는 값이므로 담임 확인 후 연결하세요.
+                        학생마다 아래 목록에서 그 학생으로 보이는 ID를 고르면 <b>개별학생 행동중재 ① 학생 현황에서 과거 학년도와 비교</b>할 수 있습니다. 행동 유형·건수로 짐작되는 값이므로 담임 확인 후 연결하세요.
                     </div>
                     <input type="file" accept=".json,application/json" onChange={e => pickFile(e.target.files?.[0])} style={{ margin: "10px 0" }} />
                     {msg && <div style={{ color: "#dc2626", fontSize: "0.82rem" }}>{msg}</div>}

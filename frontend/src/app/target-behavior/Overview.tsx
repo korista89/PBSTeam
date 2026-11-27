@@ -342,7 +342,7 @@ export default function OverviewStep({ studentKey, goStep }: { studentKey: strin
           {/* 1-1b. 무발생(입력은 ④ 모니터링) */}
           <section style={{ ...card, padding: "12px 20px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.9rem", color: C.sub }}>✅ 올해 확인한 위기행동 없었던 날 <b style={{ color: C.green }}>{calmDays.filter(d => d >= stats.yearStart).length}일</b></span>
-            <button onClick={() => goStep("track")} className="btn btn-secondary" style={{ fontSize: "0.8rem", padding: "4px 10px" }}>④ 모니터링에서 기록하기 →</button>
+            <button onClick={() => goStep("track")} className="btn btn-secondary" style={{ fontSize: "0.8rem", padding: "4px 10px" }}>⑤ 모니터링에서 기록하기 →</button>
           </section>
 
           {/* 1-2. 표적행동 모니터링 방식 */}
