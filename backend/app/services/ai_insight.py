@@ -1704,7 +1704,7 @@ DOCUMENT_SPECS = {
 def generate_document_draft(kind: str, student_info: dict, evidence_summary: dict, context: str = "", sample_size: int = 0) -> str:
     """의료협력의뢰서·추가지원신청서·중재 결과 보고서 초안 — 누적 행동기록 요약과 교사 입력만으로 쓴다."""
     gate = fba_data_gate(sample_size)
-    if not gate["eligible"]:
+    if not gate["eligible"] and kind != "handover":  # 인수인계는 기능 추정이 아니므로 Tier2(행동 기록 적음) 학생도 쓴다
         return gate["notice"]
     title, secs, extra = DOCUMENT_SPECS[kind]
     if kind == "handover":  # '3구간: 2교시'의 3을 교시로 잘못 읽지 않도록 구간 번호를 뗀다
