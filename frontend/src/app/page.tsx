@@ -13,8 +13,6 @@ import { AuthCheck, useAuth } from "./components/AuthProvider";
 import { useDateRange } from "./hooks/useDateRange";
 import AppShell from "./components/AppShell";
 import WeeklyAnalysisChart from "./components/WeeklyAnalysisChart";
-import SectionAIButton from "./components/SectionAIButton";
-import ReadableAIResult from "./components/ReadableAIResult";
 import { maskName, formatWeek, todayStr } from "./utils";
 import { useSheetLiveSync } from "./hooks/useSheetLiveSync";
 import { API_BASE_URL } from "@/app/lib/api";
@@ -198,17 +196,6 @@ function TierUpgradeList({
         <span style={{ width: '4px', height: '18px', background: accent, borderRadius: '2px', display: 'inline-block' }} />
         {label} <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8' }}>({t2List.length}명)</span>
       </div>
-      {t2List.length > 0 && (
-        <SectionAIButton
-          sectionName="tier_upgrade_candidates"
-          title={label}
-          dataContext={{ target_tier: targetTier, candidates: t2List.slice(0, 20) }}
-          startDate={startDate}
-          endDate={endDate}
-          buttonLabel="🤖 선정 근거 요약"
-          modalLabel={`${label} 선정 근거 및 행동데이터 요약`}
-        />
-      )}
     </div>
   );
 
@@ -373,7 +360,6 @@ export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [interpretation, setInterpretation] = useState<{ title: string; loading: boolean; text: string } | null>(null);
   const { user, isAdmin, isDivisionHead, scopeLabel } = useAuth();
   const { startDate, endDate } = useDateRange();
   // 과정부장: 과정 전체('') 또는 과정 안 학급 하나를 골라 본다
@@ -583,40 +569,19 @@ export default function Home() {
                 </PieChart>
               </ChartBox>
 
-              <div className="grid-span-2">
+              <div className="grid-span-2" style={{ gridColumn: '1 / -1' }}>
                 <WeeklyAnalysisChart
                   data={weeklyTrendChartData}
                   series={weeklyTrendSeries}
                   title="주별 위기행동 발생 추이"
                   color="#6366f1"
                   yLabel="건수"
-                  action={<SectionAIButton sectionName="weekly_trend" title="주별 위기행동 추이" dataContext={{ chart_data: weeklyTrends, yearly_compare: weeklyTrendsCompare }} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
                 />
-              </div>
-
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(226, 232, 240, 0.8)', borderRadius: '24px',
-                padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
-                display: 'flex', flexDirection: 'column', height: '100%'
-              }}>
-                <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '4px', height: '18px', background: '#ef4444', borderRadius: '2px' }} />
-                  🔎 {interpretation ? `${interpretation.title} 차트 해석` : '차트 해석 보기'}
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', fontSize: '0.8rem', lineHeight: 1.7, color: '#334155' }}>
-                  {!interpretation && (
-                    <span style={{ color: '#94a3b8' }}>차트별 &quot;📊 차트 해석&quot; 버튼을 누르면 여기에 결과가 뜹니다. 차트를 보면서 함께 읽을 수 있습니다.</span>
-                  )}
-                  {interpretation?.loading && <span style={{ color: '#ef4444' }}>🧠 분석 중입니다...</span>}
-                  {interpretation && !interpretation.loading && <ReadableAIResult text={interpretation.text} compact />}
-                </div>
               </div>
 
               <ChartBox
                 title="⏰ 시간대별 분석"
                 description="어느 시간대(교시)에 행동이 가장 많이 발생하는지 보여줍니다."
-                action={<SectionAIButton sectionName="time" title="시간대" dataContext={big5.times || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <BarChart data={aggregateTimeSlots(big5.times || [])} margin={{ top: 20 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<TimeSlotXAxisTick />} interval={0} />
@@ -631,7 +596,6 @@ export default function Home() {
               <ChartBox
                 title="📍 장소별 분석"
                 description="어느 장소에서 행동이 가장 많이 발생하는지 보여줍니다."
-                action={<SectionAIButton sectionName="location" title="장소별" dataContext={big5.locations || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <BarChart data={[...(big5.locations || [])].sort((a,b)=>b.value-a.value).slice(0, 6)} margin={{ top: 20 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<TruncatedXAxisTick />} interval={0} />
@@ -646,7 +610,6 @@ export default function Home() {
               <ChartBox
                 title="🎭 행동 유형별 프로필"
                 description="공격/자해/방해 등 행동 유형별 발생 비중을 보여줍니다."
-                action={<SectionAIButton sectionName="type" title="행동유형별" dataContext={big5.behaviors || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <PieChart>
                   <Pie data={big5.behaviors || []} cx="50%" cy="50%" outerRadius={105} innerRadius={0} dataKey="value" stroke="#fff" strokeWidth={3} label={(e: any) => e.value}>
@@ -660,7 +623,6 @@ export default function Home() {
               <ChartBox
                 title="❓ 행동의 기능 분석"
                 description="행동이 관심추구/회피/감각 등 어떤 기능(이유) 때문에 나타나는지 보여줍니다."
-                action={<SectionAIButton sectionName="function" title="추정기능" dataContext={(data as any).functions || []} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               >
                 <PieChart>
                   <Pie data={(data as any).functions || []} cx="50%" cy="50%" outerRadius={95} innerRadius={60} dataKey="value" label={(e: any) => e.value} labelLine={false}>
@@ -680,9 +642,8 @@ export default function Home() {
                 title="주별 제지 및 개별지원 실시 추이"
                 color="#ef4444"
                 yLabel="건수"
-                action={<SectionAIButton sectionName="weekly_restraint_trend" title="주별 제지·개별지원 추이" dataContext={weeklyRestraintTrends} startDate={startDate} endDate={endDate} onResult={setInterpretation} />}
               />
-              <CicoAchievementTrendChart startDate={startDate} endDate={endDate} onResult={setInterpretation} />
+              <CicoAchievementTrendChart startDate={startDate} endDate={endDate} />
             </div>
 
             {/* Tier 상향 검토 대상자 명단 (2열 1행) */}
@@ -717,12 +678,10 @@ export default function Home() {
 // ====== 월별 CICO 목표 달성 학생 비율 추이 (대시보드 전용 별도 조회) ======
 function CicoAchievementTrendChart({
   startDate,
-  endDate,
-  onResult
+  endDate
 }: {
   startDate: string;
   endDate: string;
-  onResult: (state: { title: string; loading: boolean; text: string }) => void;
 }) {
   const [trend, setTrend] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -765,7 +724,6 @@ function CicoAchievementTrendChart({
       title="월별 CICO 목표 달성 학생 비율 추이"
       color="#10b981"
       yLabel="달성 비율(%)"
-      action={<SectionAIButton sectionName="cico_achievement_trend" title="월별 CICO 목표 달성 비율" dataContext={trend} startDate={startDate} endDate={endDate} onResult={onResult} />}
     />
   );
 }

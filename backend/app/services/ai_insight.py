@@ -1091,62 +1091,6 @@ def _build_student_summary_payload(
 # ------------------------------------------------------------------------------
 # ③ 🤖 CICO AI 분석 (/cico) - Optimized with Structured Summary
 # ------------------------------------------------------------------------------
-def generate_bcba_cico_analysis(
-    students_data: list,
-    behavior_logs: list = None,
-    tier_info: list = None,
-    selected_month: int = None
-) -> str:
-    """
-    CICO 분석: Python 정량 집계 Structured Summary 기반 의사결정 컨설팅.
-    (원시 O/X 배열 dump를 제거하고 정확한 통계치와 결정론적 룰 결과 전달)
-    """
-    summary_payload = _build_cico_summary_payload(
-        students_data=students_data,
-        behavior_logs=behavior_logs,
-        tier_info=tier_info,
-        selected_month=selected_month
-    )
-    from app.services.ai_privacy import chart_payload
-    cico_summary_json = json.dumps(chart_payload(summary_payload), ensure_ascii=False, separators=(',', ':'))
-    month_text = f"{selected_month}월 " if selected_month else ""
-
-    prompt = f"""[분석 대상: {month_text}CICO 정량 집계 및 Tier 의사결정 요약]
-{cico_summary_json}
-
-[지시사항]
-공통 시스템 프롬프트를 준수하여 CICO 성과 분석 및 Tier 조정 보고서를 작성하라.
-제공된 집계 수치(달성률, 최근 추세, 연속 성공일, 룰 판정, monthly_rates)를 인용하라.
-
-0. **쉬운 말로 쓰기**: 이 보고서는 바쁜 담임교사가 훑어보고 바로 행동할 수 있어야 한다.
-   "DPR", "정합성", "포화" 같은 전문용어는 쓰지 말고 일상어로 풀어 쓴다
-   (예: "DPR 달성률" → "하루 목표 달성률", "정합성 확인" → "CICO 목표와 실제 문제행동이
-   같은 것을 가리키는지 확인"). Tier1/2/3은 그대로 쓰되 괄호로 "(담임 관찰 단계/집중 지원
-   단계/전문가 개입 단계)"처럼 짧게 덧붙인다. 문장은 짧게, 한자어보다 쉬운 우리말을 우선한다.
-1. **중재 충실도 점검**: 달성률 저하 시 매일 체크인/아웃 및 즉각 피드백 실시 여부 우선 확인.
-2. **이번 달 추세 판정**: 단순 평균 대신 최근 5일 및 주 단위 추세(상승/유지/하락) 판정.
-3. **월별 추이 해설**: metrics.monthly_rates에 담긴 달별 달성률을 "3월 30% → 6월 55% →
-   9월 100%"처럼 순서대로 짚어가며, 언제부터 좋아졌는지/나빠졌는지, 방학·학기 전환 등
-   특정 시점에 꺾인 지점이 있는지, 지금 추세가 계속되면 다음 달엔 어떨지 한두 문장으로 짚는다.
-   데이터가 1~2개월뿐이면 "아직 추이를 판단하기엔 기록이 부족하다"고 명시한다.
-4. **Tier 이동 의사결정 매트릭스**:
-   - 목표(기본 {CICO_DEFAULT_GOAL}%) 이상 2개월 연속 + CICO만 받는 학생: Tier 1 하향(졸업) 검토 (하향 후 4주 모니터링 명시).
-   - SST·Tier 3 병행 학생은 목표를 달성해도 CICO 유지.
-   - 목표 달성 1개월: 현행 유지 및 강화제 선호도 재평가.
-   - 수행률 {CICO_MID_RATE}% 이상~목표 미만: CICO 수정 검토(충실도 점검, 피드백 주기 단축).
-   - 수행률 {CICO_MID_RATE}% 미만 또는 위기행동 강도 5: Tier 3 상향 및 정식 FBA·BIP 의뢰 검토.
-5. **위기행동 기록 교차 확인**: 하루 목표 달성률이 높은데도 위기행동 기록이 많다면, CICO
-   목표행동과 실제 문제행동이 서로 다른 것을 가리키고 있지 않은지 짚는다.
-6. **강화제(보상) 점검**: 3~4주 차에 달성률이 떨어진 학생은 보상(강화제)을 바꿔볼 것을 제안한다.
-
-[출력 형식]
-`핵심 판단`, `월별 추이`, `학생별 우선순위`, `Tier 결정`, `이번 주 실행`, `데이터 한계` 6개
-소제목만 사용한다. `월별 추이`는 학생당 2줄 이내, `학생별 우선순위`는 학생당 3줄 이내,
-실행 항목은 3개 이하로 쓴다."""
-
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2600)
-
-
 # ------------------------------------------------------------------------------
 # ④ 🤖 SST 행동중재협의회 AI 회의록 자동 생성 (/meetings)
 # ------------------------------------------------------------------------------
@@ -1156,52 +1100,6 @@ def generate_bcba_cico_analysis(
 # ------------------------------------------------------------------------------
 # ⑥ 🤖 개별 학생 AI 종합 분석 (학생 프로필) - Optimized with Structured Summary
 # ------------------------------------------------------------------------------
-def generate_bcba_student_analysis(
-    student_info: dict,
-    student_logs: list,
-    cico_data: list = None,
-    all_notes: list = None
-) -> str:
-    """
-    개별 학생 종합 분석: 구조화 필드와 특기사항 서술을 교차한 잠정 FBA 분석.
-    (원시 30건 로그 dump를 제거하고 통계 분포와 엄선된 대표 사건 전달)
-    """
-    gate = fba_data_gate(len(student_logs or []))
-    if not gate["eligible"]:
-        return gate["notice"]
-
-    summary_payload = _build_student_summary_payload(
-        student_info=student_info,
-        student_logs=student_logs,
-        cico_data=cico_data,
-        all_notes=all_notes
-    )
-    student_summary_json = json.dumps(summary_payload, ensure_ascii=False, separators=(',', ':'))
-
-    prompt = f"""[학생 위기행동 정량 집계 및 대표 관찰 증거 요약]
-{student_summary_json}
-
-[지시사항]
-특수교사·담임교사·IEP팀이 바로 이해하고 실행할 수 있는 개별 FBA 참고 리포트를 작성하라.
-별도 ABC 문항이 아니라 특기사항(기타)에 서술된 자료가 주된 맥락 자료다. 구조화 필드(추정기능·행동유형·강도·횟수·시간대·장소·안전사건)와 특기사항을 교차하라. 특기사항에서 A/B/C 단서를 구분할 수는 있으나, 기록되지 않은 선행사건이나 후속결과를 사실처럼 만들지 마라.
-
-[출력 형식 — 아래 6개 소제목만 사용]
-### 1. 핵심 판단
-- 잠정 기능가설 1~2개와 신뢰수준을 3줄 이내로 쓴다.
-### 2. 근거
-- 실제 n, 주요 행동·기능·시간·장소·강도·특기사항 근거를 5개 이하 불릿으로 쓴다.
-### 3. 특기사항에서 확인된 A-B-C 단서
-- A/B/C를 각각 쓰되 없으면 반드시 "별도 기록 없음"이라고 쓴다.
-### 4. 기능에 맞는 교실 지원
-- 예방·대체행동 교수·강화를 각각 2개 이하로 쓴다. 학생의 의사소통 방식이 미상이면 선택 가능한 반응형태를 제시하고 확인 필요로 표시한다.
-### 5. 이번 주 확인할 데이터
-- 담당자·관찰상황·측정항목을 3개 이하로 쓴다.
-### 6. 데이터 한계
-- 잠정 가설이며 직접 ABC 관찰로 확인해야 할 부분을 2문장 이내로 쓴다."""
-
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2600)
-
-
 # ------------------------------------------------------------------------------
 # ⑥-2 🤖 약물 변경 전후 교실 행동 비교 — 정신건강의학과 진료 참고용 담임교사 관찰 의견서
 # ------------------------------------------------------------------------------
@@ -1348,39 +1246,6 @@ def generate_medication_response_report(
 # ------------------------------------------------------------------------------
 # ⑦ 🤖 AI 기능적 가설 생성 (BIP Step 4)
 # ------------------------------------------------------------------------------
-def generate_bip_hypothesis(
-    student_info: dict,
-    target_behavior: str,
-    antecedent_data: str,
-    function_data: str,
-    notes_summary: str = "",
-    sample_size: int = 5
-) -> str:
-    """
-    BIP Step 4 가설 생성: 구조화 필드와 특기사항 기반 잠정 가설 + n<3 가드.
-    """
-    gate = fba_data_gate(sample_size)
-    if not gate["eligible"]:
-        return gate["notice"]
-
-    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
-[표적행동] {target_behavior}
-[시간대·장소 등 맥락 데이터] {antecedent_data}
-[교사 추정기능 및 특기사항(기타) 서술] {function_data} / {notes_summary}
-
-[지시사항]
-별도 ABC 문항이 없는 운영 자료다. 특기사항에서 확인되는 A/B/C 단서와 구조화 필드의 반복 패턴을 결합하여 잠정 기능가설을 작성하라.
-
-[작성 규칙]
-1. 첫 줄에 `잠정 기능가설:`을 쓰고 2문장 이내로 요약하라.
-2. 표적행동은 관찰·측정 가능하게 기술하라.
-3. 기능이 복수이면 가설 1, 가설 2로 나누되 각 가설은 근거 2개 이하로 쓴다.
-4. 없는 선행사건·후속결과를 채우지 말고 `별도 기록 없음`으로 표시하라.
-5. 마지막에 `확인 관찰:`로 반증 가능한 직접관찰 방법 1개를 제시하라."""
-
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1000)
-
-
 # ------------------------------------------------------------------------------
 # 경기Be-Able 공식 EBP 39 카탈로그 인용 블록 — AI가 전략명을 자유롭게 지어내지 않고
 # 실제 39개 항목의 공식 번호·코드·이름 중에서 골라 인용하도록 프롬프트에 얹는다.
@@ -1410,38 +1275,6 @@ def _ebp_catalog_reference_block() -> str:
 # ------------------------------------------------------------------------------
 # ⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)
 # ------------------------------------------------------------------------------
-def generate_bip_strategies(
-    student_info: dict,
-    target_behavior: str,
-    hypothesis_data: str,
-    function_data: str
-) -> str:
-    """
-    BIP Step 6 전략 제안: 3단계 구조 + 기능 1:1 매칭 + 대체행동 3요건 표 + 교내 자원(AAC/마트/안정실) 연계
-    """
-    prompt = f"""[학생 정보] {json.dumps(_redact_dict_name(student_info), ensure_ascii=False)}
-[표적행동 및 가설] {target_behavior} / {hypothesis_data}
-[추정 기능] {function_data}
-
-[경기Be-Able 공식 EBP 39 목록 — 번호/영역/코드/이름]
-{_ebp_catalog_reference_block()}
-
-[지시사항]
-1단계 예방(선행사건/배경사건 조절), 2단계 교수(대체행동 훈련), 3단계 강화(차별강화)의 3단계 중재 전략을 제안하라.
-1. **위 39개 목록에서만 전략을 고른다.** 목록에 없는 전략명을 새로 만들지 말고, 각 전략을 언급할 때 `코드(공식번호/39) 이름` 형식(예: `FCT(21/39) 기능적의사소통훈련`)으로 표기한다.
-2. **기능 1:1 매칭 검증**: 각 전략이 가설의 기능에 정확히 부합하는지 확인하라.
-3. **대체행동 기능적 등가성 3요건 확인 표**:
-   - 동일 기능 수행 여부 / 표적행동 대비 적은 노력 / 더 빠르고 확실한 강화 여부를 표로 점검.
-4. **경은학교 기존 자원 연계**: 경은그림말 AAC, 경은마트 토큰경제, 심리안정실, 시각적 일과표 적극 활용.
-5. **소거 폭발(Extinction Burst) 주의**: 자해/공격행동에 대한 단독 소거 금지 및 안전 조건 명시.
-6. **우선순위 부여**: 전략별 [실행 난이도: 상/중/하] 및 [효과 발현 예상 시점] 표기.
-
-[출력 형식]
-`1. 예방`, `2. 교수`, `3. 강화`, `확인 방법` 네 소제목만 사용한다. 각 단계는 실행문 3개 이하, 한 항목은 2문장 이하로 쓴다."""
-
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1600)
-
-
 # ------------------------------------------------------------------------------
 # ⑨ 🤖 AI BIP 전체 계획서 제안 (BIP Step 12)
 # ------------------------------------------------------------------------------

@@ -15,7 +15,7 @@ import { DecisionStep, HandoverStep, ProfileStep, ReferralStep } from "./Docs";
 import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
 import { Bip, StudentHead, isEnrolled, kDate, parseJson, today, tierOf } from "./shared";
 import OverviewStep from "./Overview";
-import { CalmDays, EBPForStudent, MedicationResponseReport, StudentAIAnalysis } from "./SupportTools";
+import { CalmDays, EBPForStudent, MedicationResponseReport } from "./SupportTools";
 import { schoolYearStart } from "../lib/progress";
 
 const STEPS = [
@@ -190,7 +190,7 @@ export default function InterventionPage() {
                                 </div>
                                 {step === "profile" && <ProfileStep key={`pf-${code}`} head={head} bip={bip} setBip={editBip} save={save} tier={tierOf(selected)} />}
                                 {step === "overview" && <OverviewStep key={`ov-${code}`} studentKey={code} goStep={setStep} />}
-                                {step === "data" && <><DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} /><div className="card" style={{ padding: 16 }}><StudentAIAnalysis key={code} studentCode={code} apiUrl={API_BASE_URL} /></div></>}
+                                {step === "data" && <DataStep studentCode={code} logs={logs} planStart={bip.PlanStart || ""} />}
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}
                                 {step === "bip" && <BipStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} goTracker={() => setStep("track")} />}
                                 {step === "bip" && <EBPForStudent studentCode={code} currentTier={isT3(selected) ? "TIER_3" : "TIER_1"} />}

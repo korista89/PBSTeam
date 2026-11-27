@@ -4,7 +4,6 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { AuthCheck } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
-import ReadableAIResult from "../components/ReadableAIResult";
 import { maskName, cicoYear } from "../utils";
 
 import { requestSheetLiveRefresh, useSheetLiveSync } from "../hooks/useSheetLiveSync";
@@ -180,7 +179,6 @@ export default function CICOPage() {
   const [selected, setSelected] = useState<{ row: number; code: string } | null>(null);
   const [pendingUpdates, setPendingUpdates] = useState<{ row: number; col: number; value: string; period?: string }[]>([]);
   const [saveStatus, setSaveStatus] = useState("");
-  const [aiState, setAiState] = useState<{ loading: boolean; text: string }>({ loading: false, text: "" });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const apiUrl = API_BASE_URL;
@@ -190,7 +188,6 @@ export default function CICOPage() {
     if (!silent) setLoading(true);
     setError("");
     setIs404(false);
-    setAiState({ loading: false, text: "" });
     try {
       // One request (monthly + business days + report) so a poll costs one auth check
       // and hits one backend instance's cache instead of three.
@@ -325,22 +322,7 @@ export default function CICOPage() {
     }
   };
 
-  const requestAIAnalysis = async (student: ReportStudent) => {
-    setAiState({ loading: true, text: "" });
-    try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-cico-analysis`, {
-        month,
-        students_data: [{
-          code: student.code, class: student.class, target_behavior: student.target_behavior, behavior_type: student.behavior_type,
-          scale: student.scale, goal_criteria: student.goal_criteria, rate: student.rate, rate_num: student.rate_num, achieved: student.achieved, decision: student.decision,
-          daily_data: student.daily_data, trend: student.trend,
-        }]
-      }, { timeout: 240000 });
-      setAiState({ loading: false, text: res.data.analysis || "분석 결과가 없습니다." });
-    } catch (e: any) {
-      setAiState({ loading: false, text: "⚠️ AI 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")" });
-    }
-  };
+
 
   const gridStudent = gridData?.students.find(s => s.row === selected?.row) || null;
   const reportStudent = reportData?.students.find(s => s.row === selected?.row) || null;
@@ -396,7 +378,7 @@ export default function CICOPage() {
                     return (
                       <button
                         key={rs.row ?? rs.code}
-                        onClick={() => { if (rs.row) { setSelected({ row: rs.row, code: rs.code }); setAiState({ loading: false, text: "" }); } }}
+                        onClick={() => { if (rs.row) { setSelected({ row: rs.row, code: rs.code }); } }}
                         style={{
                           textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: "pointer",
                           border: active ? "2px solid #3b82f6" : "1px solid #e2e8f0",
@@ -435,8 +417,6 @@ export default function CICOPage() {
                       dayColumns={gridData.day_columns}
                       onCellChange={handleCellChange}
                       onSettingsChange={handleSettingsChange}
-                      aiState={aiState}
-                      onRequestAI={() => reportStudent && requestAIAnalysis(reportStudent)}
                     />
                     </>
                   )}
@@ -454,7 +434,6 @@ export default function CICOPage() {
                 { t: "🎯 목표 설정", b: "목표행동·유형·척도·달성기준은 선택된 학생 패널에서 언제든 수정할 수 있습니다. 예시 목록에서 고르거나 직접 입력하세요." },
                 { t: "📊 차트 해석", b: "전월/이번달 일별 추이, 월별 수행률(목표선 포함), 달성 게이지를 통해 학생의 변화를 확인하세요." },
                 { t: "🔔 의사결정 제안", b: "Tier1 하향: 목표달성 2개월 연속 / CICO수정: 수행률 50~목표% / Tier3 상향: 수행률 50% 미만 / SST·T3 병행 학생은 달성해도 CICO 유지." },
-                { t: "🤖 AI 분석", b: "선택된 학생의 이번 달 데이터를 바탕으로 BCBA 관점의 해석과 다음 조치를 제안받을 수 있습니다." },
               ].map((item, i) => (
                 <div key={i} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", border: "1px solid #bfdbfe" }}>
                   <div style={{ fontWeight: 800, color: "#1d4ed8", marginBottom: 4 }}>{item.t}</div>
@@ -470,14 +449,12 @@ export default function CICOPage() {
 }
 
 // ====== 선택된 학생 상세 패널: 설정 + 일별입력 + 차트 + AI ======
-function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange, onSettingsChange, aiState, onRequestAI }: {
+function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange, onSettingsChange }: {
   gridStudent: GridStudent;
   reportStudent: ReportStudent | null;
   dayColumns: DayColumn[];
   onCellChange: (student: GridStudent, dayLabel: string, value: string, period?: string) => void;
   onSettingsChange: (student: GridStudent, updates: { [field: string]: string }) => void;
-  aiState: { loading: boolean; text: string };
-  onRequestAI: () => void;
 }) {
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editingBehavior, setEditingBehavior] = useState(false);
@@ -750,20 +727,6 @@ function StudentCICOPanel({ gridStudent, reportStudent, dayColumns, onCellChange
         </div>
       </div>
 
-      {/* AI 분석 */}
-      <div className="card" style={{ padding: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: "0.9rem", color: "#6d28d9" }}>🤖 이 학생 CICO AI 분석</div>
-          <button onClick={onRequestAI} disabled={aiState.loading || !reportStudent} style={{ padding: "8px 18px", background: aiState.loading ? "#a78bfa" : "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "2px solid #2563eb", borderRadius: 10, cursor: aiState.loading ? "wait" : "pointer", fontWeight: 700, fontSize: "0.82rem" }}>
-            {aiState.loading ? "⏳ 분석 중..." : "🤖 AI 분석 받기"}
-          </button>
-        </div>
-        {aiState.text && (
-          <div style={{ marginTop: 12, fontSize: "0.85rem", lineHeight: 1.7, color: "#334155", background: "#faf9ff", padding: 14, borderRadius: 8, border: "1px solid #ede9fe" }}>
-            <ReadableAIResult text={aiState.text} />
-          </div>
-        )}
-      </div>
     </>
   );
 }

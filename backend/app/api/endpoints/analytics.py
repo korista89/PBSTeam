@@ -15,8 +15,6 @@ from app.services.normalize import (
 )
 from app.services.ai_insight import (
     generate_bcba_section_analysis,
-    generate_bcba_cico_analysis,
-    generate_bcba_student_analysis,
     generate_medication_response_report
 )
 from app.services.fba_evidence import fba_data_gate
@@ -86,17 +84,6 @@ class SectionAnalysisRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
-class CICOAnalysisRequest(BaseModel):
-    month: int = 3
-    students_data: Optional[list] = None
-
-
-class StudentAnalysisRequest(BaseModel):
-    student_code: Optional[str] = None
-    student_name: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-
 class MedicationEntry(BaseModel):
     name: str
     dose: str = ""
@@ -145,52 +132,6 @@ def ai_section_analysis(
     return {"analysis": result}
 
 
-@router.post("/ai-cico-analysis")
-def ai_cico_analysis(
-    req: CICOAnalysisRequest,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """③ 🤖 CICO AI 성과 분석 및 Tier 조정 의사결정 (교사 학급 스코프 격리)"""
-    from app.services.sheets import get_cico_report_data
-    user_class = user_scope(current_user)
-
-    if req.students_data:
-        students = req.students_data
-    else:
-        data = get_cico_report_data(req.month)
-        if "error" in data:
-            return {"analysis": f"데이터 로드 실패: {data['error']}"}
-        students = data.get("students", [])
-
-    if user_class is not None:
-        students = [
-            s for s in students
-            if student_in_scope(str(s.get("code") or s.get("student_code") or s.get("학생코드") or "").strip(), user_class)
-        ]
-
-    normalized_logs = _get_normalized_records()
-    if user_class is not None:
-        normalized_logs = [
-            l for l in normalized_logs
-            if student_in_scope(str(l.get("student_code", "")).strip(), user_class)
-        ]
-
-    status_records = fetch_student_status()
-    if user_class is not None:
-        status_records = [
-            s for s in status_records
-            if student_in_scope(str(s.get("학생코드") or s.get("Code") or s.get("학번") or "").strip(), user_class)
-        ]
-
-    result = generate_bcba_cico_analysis(
-        students_data=students,
-        behavior_logs=normalized_logs[:100],
-        tier_info=status_records,
-        selected_month=req.month
-    )
-    return {"analysis": result}
-
-
 def _meeting_scope(current_user: Dict[str, Any]):
     return user_scope(current_user)
 
@@ -232,71 +173,6 @@ def meeting_draft(req: MeetingDraftRequest, current_user: Dict[str, Any] = Depen
     attendees = M.CLASS_ATTENDEES if cls else M.SCHOOL_ATTENDEES
     audience = (f"{cls} 과정(과정부장·담임)" if cls in DIVISIONS else f"{cls} 학급(담임·부담임·교과·지원인력)") if cls else "학교행동중재지원팀(전교)"
     return {"draft": M.generate_draft(req.title, attendees, agenda, facts, audience), "facts": facts}
-
-
-@router.post("/ai-student-analysis")
-def ai_student_analysis(
-    req: StudentAnalysisRequest,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """⑥ 🤖 구조화 필드+특기사항 기반 개별 학생 잠정 FBA 분석 (학생 Scope 검증)"""
-    beable_mapping = get_beable_code_mapping()
-    target_code = str(req.student_code or "").strip()
-
-    if not target_code and req.student_name:
-        for bc, info in beable_mapping.items():
-            if str(info.get('student_name', '')).strip() == str(req.student_name).strip():
-                target_code = str(info.get('student_code', bc)).strip()
-                break
-    if not target_code and req.student_name:
-        target_code = req.student_name
-
-    if target_code:
-        check_student_scope(target_code, current_user)
-        from app.services.zero_pii import ensure_analyzable
-        ensure_analyzable(target_code)
-
-    beable_code = ""
-    for bc, info in beable_mapping.items():
-        if str(info.get('student_code', '')).strip() == target_code:
-            beable_code = bc
-            break
-
-    codes_to_match = {target_code}
-    if beable_code:
-        codes_to_match.add(str(beable_code).strip())
-    if req.student_name:
-        codes_to_match.add(str(req.student_name).strip())
-
-    normalized_logs = _get_normalized_records(req.start_date, req.end_date)
-    student_logs = [
-        l for l in normalized_logs
-        if l.get("student_code") in codes_to_match or l.get("student_name") in codes_to_match
-    ]
-
-    status_records = fetch_student_status()
-    student_info = {}
-    for s in status_records:
-        if str(s.get("학생코드", "")).strip() == target_code or str(s.get("학생명", "")).strip() == target_code:
-            student_info = {
-                "code": target_code,
-                "name": s.get("학생명", req.student_name or target_code),
-                "class": s.get("학급", ""),
-                "tier": tier_label(s),
-            }
-            break
-    if not student_info:
-        student_info = {"code": target_code, "name": req.student_name or target_code, "class": "", "tier": 1}
-
-    all_notes = [{"date": l.get("date"), "content": l.get("notes")} for l in student_logs if l.get("notes")]
-
-    gate = fba_data_gate(len(student_logs))
-    result = generate_bcba_student_analysis(
-        student_info=student_info,
-        student_logs=student_logs,
-        all_notes=all_notes
-    )
-    return {"analysis": result, **gate}
 
 
 @router.post("/ai-medication-response-report")

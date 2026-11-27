@@ -5,8 +5,6 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, Literal
 from app.services.normalize import normalize_behavior_log
 from app.services.ai_insight import (
-    generate_bip_hypothesis,
-    generate_bip_strategies,
     generate_full_bip,
     generate_data_based_decision_recommendation,
     generate_fba_report,
@@ -171,118 +169,6 @@ def get_student_fba_evidence(
 # ============================================================
 # AI BIP Endpoints
 # ============================================================
-
-@router.post("/students/{student_code}/ai-hypothesis")
-def ai_bip_hypothesis(
-    student_code: str,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """⑦ 🤖 AI 기능적 가설 생성 (BIP Step 4)"""
-    check_student_scope(student_code, current_user)
-    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
-    from app.services.sheets import fetch_all_records, fetch_student_status
-    
-    beable_code = _resolve_beable_code(student_code)
-    records = fetch_all_records()
-    raw_logs = _filter_student_logs(records, student_code, beable_code)
-    
-    status_records = fetch_student_status()
-    student_info = {"code": student_code, "class": "", "tier": 1}
-    for s in status_records:
-        if str(s.get("학생코드", "")).strip() == student_code:
-            student_info = {
-                "code": student_code,
-                "name": s.get("학생명", student_code),
-                "class": s.get("학급", ""),
-                "tier": tier_label(s),
-            }
-            break
-            
-    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
-
-    gate = fba_data_gate(len(norm_logs))
-    if not gate["eligible"]:
-        return {"hypothesis": gate["notice"], **gate}
-    
-    target_behaviors = list(dict.fromkeys([l["behavior_type"] for l in norm_logs]))
-    tb_str = ", ".join(target_behaviors) if target_behaviors else "수업 방해 및 과제 불응"
-    
-    contexts = list(dict.fromkeys([
-        f"{l['location']} ({','.join(l['time_slot_labels']) or '시간대 미상'})"
-        for l in norm_logs
-    ]))
-    ant_str = "; ".join(contexts[:8]) if contexts else "시간대·장소 기록 미상"
-    
-    functions = list(dict.fromkeys([','.join(l['function_labels']) for l in norm_logs if l['function_labels']]))
-    func_str = ", ".join(functions) if functions else "교사 추정기능 미입력"
-    
-    notes_list = [l["notes"] for l in norm_logs if l.get("notes")]
-    notes_summary = " / ".join(note[:250] for note in notes_list[:5])
-    
-    result = generate_bip_hypothesis(
-        student_info=student_info,
-        target_behavior=tb_str,
-        antecedent_data=ant_str,
-        function_data=func_str,
-        notes_summary=notes_summary,
-        sample_size=len(norm_logs)
-    )
-    return {"hypothesis": result, **gate}
-
-
-class AIStrategiesRequest(BaseModel):
-    target_behavior: str = ""
-    hypothesis: str = ""
-    goals: str = ""
-
-@router.post("/students/{student_code}/ai-strategies")
-def ai_bip_strategies(
-    student_code: str,
-    req: AIStrategiesRequest,
-    current_user: Dict[str, Any] = Depends(require_authenticated_user)
-):
-    """⑧ 🤖 AI 3단계 중재 전략 제안 (BIP Step 6)"""
-    check_student_scope(student_code, current_user)
-    ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
-    from app.services.sheets import fetch_all_records, fetch_student_status
-    import json
-    
-    status_records = fetch_student_status()
-    student_info = {"code": student_code}
-    for s in status_records:
-        if str(s.get("학생코드", "")).strip() == student_code:
-            student_info = {
-                "code": student_code,
-                "name": s.get("학생명", student_code),
-                "class": s.get("학급", ""),
-                "tier": tier_label(s)
-            }
-            break
-
-    beable_code = _resolve_beable_code(student_code)
-    raw_logs = _filter_student_logs(fetch_all_records(), student_code, beable_code)
-    norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
-    gate = fba_data_gate(len(norm_logs))
-    if not gate["eligible"]:
-        return {"strategies": gate["notice"], **gate}
-    evidence = build_fba_evidence_summary(student_info, norm_logs)
-
-    result = generate_bip_strategies(
-        student_info=student_info,
-        target_behavior=req.target_behavior or "표적행동",
-        hypothesis_data=req.hypothesis or "가설 데이터",
-        function_data=json.dumps(
-            {
-                "teacher_input": req.goals or "추정 기능 미입력",
-                "evidence": evidence["deterministic_metrics"],
-                "narrative_coverage": evidence["narrative_and_abc_coverage"],
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ),
-    )
-    return {"strategies": result, **gate}
-
 
 class AIFBAReportRequest(BaseModel):
     start_date: Optional[str] = None

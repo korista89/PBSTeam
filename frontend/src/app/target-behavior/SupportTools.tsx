@@ -139,42 +139,6 @@ export function ConsultationLog({ studentCode }: { studentCode: string }) {
   );
 }
 
-export function StudentAIAnalysis({ studentCode, apiUrl }: { studentCode: string, apiUrl: string }) {
-  const [analysis, setAnalysis] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  const requestAnalysis = async () => {
-    setLoading(true); setVisible(true);
-    try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-student-analysis`, { student_code: studentCode }, { timeout: 240000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch (e: any) { setAnalysis("⚠️ AI 전문가 분석 요청 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")"); } finally { setLoading(false); }
-  };
-
-  return (
-    <div>
-       {!visible ? (
-         <button onClick={requestAnalysis} style={{ width: '100%', padding: '14px', background: '#2563eb', color: '#fff', borderRadius: '10px', border: 'none', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>
-           🤖 AI 종합 분석 리포트 생성
-         </button>
-       ) : (
-         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                <h4 style={{ margin: 0, color: '#1d4ed8', fontWeight: 800, fontSize: '0.95rem' }}>🤖 AI 전문가 정밀 분석</h4>
-                <button onClick={()=>setVisible(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
-            </div>
-            {loading ? (
-                <div style={{ color: '#2563eb', fontWeight: 700, textAlign: 'center', padding: '20px' }}>패턴 분석 및 데이터 요약 중... 🧠</div>
-            ) : (
-                <div style={{ fontSize: '0.95rem', lineHeight: '1.8', color: '#1e293b', maxHeight: '520px', overflowY: 'auto' }} className="custom-scrollbar"><ReadableAIResult text={analysis} /></div>
-            )}
-         </div>
-       )}
-    </div>
-  );
-}
-
 interface MedicationEntry { name: string; dose: string; }
 
 function MedicationEntryList({ title, entries, onChange }: {
