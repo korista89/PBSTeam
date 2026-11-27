@@ -4,6 +4,7 @@
 // 차수·안건·기간을 고르면 서버가 수치를 계산하고 안건별 초안을 만든다. 고쳐서 저장·인쇄·워드로 내보낸다.
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+import { buildHwpx, saveBlob } from "../lib/hwpx";
 import { AuthCheck, useAuth } from "../components/AuthProvider";
 import AppShell from "../components/AppShell";
 import { API_BASE_URL } from "@/app/lib/api";
@@ -130,6 +131,7 @@ export default function MeetingPage() {
                                 <button className="btn btn-primary" onClick={() => void save()} disabled={!!busy}>{busy === "save" ? "저장 중..." : "💾 저장"}</button>
                                 <button className="btn btn-secondary" onClick={print}>🖨️ 인쇄</button>
                                 <button className="btn btn-secondary" onClick={word}>📄 워드</button>
+                                <button className="btn btn-secondary" onClick={async () => saveBlob(await buildHwpx(title, [{ t: "p", text: draft }]), `${title}_${today()}`)}>📄 한글(HWPX)</button>
                             </div>
                             <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={Math.min(40, draft.split("\n").length + 2)} style={{ ...inp, width: "100%", lineHeight: 1.7 }} />
                         </div>

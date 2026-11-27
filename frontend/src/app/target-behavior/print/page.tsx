@@ -6,6 +6,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AuthCheck } from "../../components/AuthProvider";
 import PrintGuard, { RealNameInput, requestPrint, withRealName } from "../../components/PrintGuard";
 import { BipSheet, HandoverCharts, SectionSheet, SummaryTable } from "../shared";
+import axios from "axios";
+import { API_BASE_URL } from "@/app/lib/api";
+import { downloadHwpxFromDom } from "@/app/lib/hwpx";
 
 export default function InterventionPrint() {
     const [raw, setP] = useState<any>(null);
@@ -59,6 +62,13 @@ export default function InterventionPrint() {
             <div className="print-bg" style={{ background: "#e5e7eb", minHeight: "100vh", padding: "16px 0" }}>
                 <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "0 12px" }}>
                     <button onClick={() => window.close()} className="btn btn-secondary">✕ 닫기</button>
+                    <button className="btn btn-secondary" disabled={!p || !src} onClick={async () => {
+                        if (!src) return;
+                        // 인쇄와 같이 접속기록에 남긴다. 파일은 이 브라우저에서 만들어 실명이 서버로 가지 않는다.
+                        axios.post(`${API_BASE_URL}/api/v1/auth/export-log`, { doc: raw?.heading || raw?.doc || "행동중재 문서", student_code: raw?.s?.code || "", reason: "한글(HWPX) 저장" }).catch(() => { });
+                        const name = `${raw?.heading || { bip: "행동중재계획서", fba: "FBA 결과 보고서", progress: "행동중재 결과 보고서" }[raw?.doc as string] || "문서"}_${real || raw?.s?.name || ""}`;
+                        await downloadHwpxFromDom(src, name);
+                    }}>📄 한글(HWPX) 저장</button>
                     <button onClick={requestPrint} className="btn btn-primary" disabled={!p}>🖨️ 인쇄 / PDF 저장</button>
                     <RealNameInput alias={raw?.s?.name || ""} value={real} onChange={setReal} />
                     <span style={{ fontSize: "0.8rem", color: "#475569" }}>작성 화면의 지금 내용입니다. 저장은 작성 화면에서 따로 해야 합니다.</span>
