@@ -92,7 +92,8 @@ export default function AppShell({
                 { href: "/", label: `${unit}대시보드`, key: "dashboard", icon: "📊" },
                 { href: "/briefing", label: admin ? "관리자 브리핑" : `${unit} 브리핑`, key: "briefing", icon: "🗞️" },
                 { href: "/today", label: "오늘 할 일", key: "today", icon: "🧭" },
-                { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" }
+                { href: "/admin/approvals", label: "결재함", key: "approvals", icon: "✅" },
+                { href: "/consent", label: "동의서", key: "consent", icon: "✍️" }
             ]
         },
         {

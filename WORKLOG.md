@@ -129,3 +129,6 @@
 - 학생정보 및 이해자료 머리 표: 학생명·작성일만(학년·장애유형·성별·작성자 칸 삭제, SectionSheet noClass). 하단 인적사항·통학 차량 안내 문구 삭제.
 - Tier3·CICO 관리: '연간 성과' → '📊 대시보드'로 이름 바꾸고 이 달 현황·명단 앞에, 처음 열면 대시보드. SST는 이미 성과가 맨 위(탭 없음).
 - 학생정보 원자료(BIP ProgressReport.profile) '- ' 줄 일괄 문단 변환: 26명 77칸(백업 ~/data/pbst_bip_before_prose_20261127.json).
+- 국외 AI를 Google Gemini 하나로 줄임(Groq 예비 경로·gemini-1.5 제거). 처리방침에 국외 이전 필수 항목(받는 자·국가·시기·방법·거부 효과)과 처리 위탁 표(Google Sheets·Vercel·Gemini·Telegram) 추가.
+- 운영 메뉴에 ✍️ 동의서(/consent): 동의서 필요 여부 표 + 빈 양식 3종(① 사이트 활용 ② Tier3 개별 행동지원 ③ 외부전문가 연계 정보 제공). 위기행동 프로토콜·Tier1·CICO는 동의서 없음(안내·당일 알림). 빈 양식이라 PrintGuard 대신 window.print.
+  다음: 텔레그램 브리핑 처리(숫자만/끄기/유지) 결정 대기. 브리핑 Tier 정합성 18건(5115 자퇴 등) 확인.

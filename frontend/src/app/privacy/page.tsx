@@ -43,10 +43,13 @@ export default function PrivacyPage() {
 
                     <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px 22px', border: '1px solid #e2e8f0' }}>
                         <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <li><b>전송 대상</b>: Google Gemini(유료 API, 학습 미사용 정책 적용), Groq(Zero Data Retention 적용)</li>
+                            <li><b>받는 자·국가</b>: Google LLC(미국) — Google Gemini API(유료 API, 입력 자료를 AI 학습에 쓰지 않는 조건). 국외 AI는 이 한 곳만 씁니다.</li>
                             <li><b>전송 항목</b>: 학생코드(별칭), 행동 유형·강도·발생 장소/시간대, 추정 기능, 물리적 제지 여부 등 구조화된 행동 기록과, 문서 AI 초안 기능에 교사가 입력한 문장(FBA·BIP·의료협력의뢰서·추가지원신청서·결과 보고서 초안에 쓰이는 약물·건강 관련 서술 포함)</li>
+                            <li><b>목적</b>: 행동 기록 분석, 행동중재계획·보고서·인수인계 초안 작성 지원(교사가 확인한 뒤에만 문서에 반영)</li>
+                            <li><b>시기·방법</b>: 교사가 AI 초안 버튼을 누를 때마다 암호화된 통신(HTTPS)으로 전송</li>
                             <li><b>실명 처리</b>: 학생 실명은 시스템이 자동으로 학생코드로 치환한 뒤 전송하며, AI 서비스에는 실명이 전달되지 않습니다.</li>
-                            <li><b>보유기간</b>: 각 서비스 자체 정책에 따름(Groq은 Zero Data Retention으로 보관을 최소화)</li>
+                            <li><b>보유기간</b>: Google의 유료 API 약관에 따름(남용 감시 목적의 일시 보관 외에는 보관·학습하지 않는 조건)</li>
+                            <li><b>거부 방법과 효과</b>: 동의서의 ‘국외 AI 분석’ 항목에 동의하지 않으면 그 학생에게는 AI 초안 기능을 쓰지 않습니다. 다른 기능 이용에는 영향이 없습니다.</li>
                         </ul>
                     </div>
 
@@ -56,6 +59,22 @@ export default function PrivacyPage() {
                             교사가 직접 입력하는 자유서술은 전송 전에 별칭 형태(김O준)에 맞는 실명 표기, 전화번호, 주민등록번호 형태를 자동으로 가립니다. 다만 2글자 이름과 별칭 형태에 맞지 않는 표기는 걸러지지 않을 수 있으니, 메모에는 실명 대신 별칭이나 학생코드를 쓰세요. 약물·건강 정보는 보호자가 국외 AI 분석에 동의한 학생에 한해 입력하세요.
                         </p>
                     </div>
+                </section>
+
+                <section style={{ marginTop: 24, fontSize: '0.88rem', color: '#334155', lineHeight: 1.7 }}>
+                    <h2 style={{ fontSize: '1.02rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>개인정보 처리 위탁과 국외 보관</h2>
+                    <p style={{ margin: '0 0 8px' }}>학교는 사이트 운영을 위해 아래 업체에 처리를 맡깁니다. 학생 이름은 시트에 별칭(김O준)으로만 저장합니다.</p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead><tr>{["수탁자(국가)", "맡기는 일", "처리 항목", "보관 위치"].map(h => <th key={h} style={{ border: '1px solid #e2e8f0', background: '#f8fafc', padding: '6px 8px', textAlign: 'left' }}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {[
+                                ["Google LLC(미국)", "Google Sheets — 운영 자료 저장", "학생 별칭·학생코드, 행동 기록, CICO·Tier 기록, 학생정보 및 이해자료", "Google 데이터센터(국외 포함, 위치 지정 없음)"],
+                                ["Vercel Inc.(미국)", "웹사이트·서버 운영", "화면 요청과 응답(저장하지 않음)", "서버 실행: 서울 리전"],
+                                ["Google LLC(미국)", "Gemini API — AI 초안(위 국외 이전 참고)", "별칭 치환된 기록, 교사 입력 문장", "국외"],
+                                ["Telegram(국외)", "관리자 일일 브리핑 메시지 전달", "학생 별칭·학생코드가 든 요약 10줄", "국외"],
+                            ].map(r => <tr key={r[1]}>{r.map((c, i) => <td key={i} style={{ border: '1px solid #e2e8f0', padding: '6px 8px', verticalAlign: 'top' }}>{c}</td>)}</tr>)}
+                        </tbody>
+                    </table>
                 </section>
 
                 <section style={{ marginTop: 24, fontSize: '0.88rem', color: '#334155', lineHeight: 1.7 }}>

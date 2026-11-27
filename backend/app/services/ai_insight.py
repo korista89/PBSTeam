@@ -41,7 +41,7 @@ def _bounded_request_timeout(deadline: float, cap_seconds: float) -> Optional[tu
     return (connect_timeout, read_timeout)
 
 # ==============================================================================
-# PII 마스킹 — LLM(Gemini/Groq/로컬) 프롬프트 경계에서 학생 실명을 코드로 치환
+# PII 마스킹 — LLM(Gemini/로컬) 프롬프트 경계에서 학생 실명을 코드로 치환
 # ==============================================================================
 # 화면(교사용 UI)에는 실명이 남아도 되지만, 이 경계를 넘어 외부 LLM API로 나가는
 # 페이로드에는 학생 실명이 포함되면 안 된다 — Gemini 무료(AI Studio) 티어와 자체
@@ -383,10 +383,9 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
         or os.getenv("GEMINI_API_KEY_0817", "").strip()
         or os.getenv("GOOGLE_AI_API_KEY", "").strip()
     )
-    groq_key = os.getenv("GROQ_API_KEY", "").strip()
-
-    if not (gemini_key or groq_key):
-        return "⚠️ AI 응답 생성에 실패했습니다. Vercel 환경변수 GEMINI_API_KEY 또는 GROQ_API_KEY를 설정해주세요."
+    # 국외 AI는 Google Gemini(유료 API) 한 곳만 쓴다(2026-11-27 Groq 예비 경로 제거 — 국외 이전 대상 최소화).
+    if not gemini_key:
+        return "⚠️ AI 응답 생성에 실패했습니다. Vercel 환경변수 GEMINI_API_KEY를 설정해주세요."
 
     last_error = ""
     best_response = ""
@@ -396,7 +395,6 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
     if gemini_key:
         gemini_models = [
             "gemini-2.5-flash",
-            "gemini-1.5-flash",
             "gemini-2.5-flash-lite",
         ]
         for g_model in gemini_models:
@@ -473,52 +471,6 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                     logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
                     last_error = f"{g_model} 예외: {str(e)[:100]}"
                     continue
-
-    # 2. Groq Fallback (Gemini 실패 또는 잘림 시)
-    if groq_key:
-        GROQ_MAX_CHARS = 18000
-        groq_system = system_prompt[:3000] if len(system_prompt) > 3000 else system_prompt
-        groq_user = user_prompt[:GROQ_MAX_CHARS] if len(user_prompt) > GROQ_MAX_CHARS else user_prompt
-
-        for g_model in ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
-            if _remaining_seconds(deadline) < 2:
-                break
-            try:
-                request_timeout = _bounded_request_timeout(deadline, 45)
-                if request_timeout is None:
-                    break
-                resp = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                    json={
-                        "model": g_model,
-                        "messages": [
-                            {"role": "system", "content": groq_system},
-                            {"role": "user", "content": groq_user}
-                        ],
-                        "max_tokens": min(max_tokens, 4096),
-                        "temperature": 0.6
-                    },
-                    timeout=request_timeout
-                )
-                if resp.status_code == 200:
-                    content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-                    if content:
-                        cleaned = _clean_llm_output(content)
-                        groq_tag = f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Groq)"
-                        if len(cleaned) > len(best_response):
-                            return cleaned + groq_tag
-                elif resp.status_code == 429:
-                    if not best_response:
-                        return "⏳ AI 분석 요청이 너무 많아 잠시 대기 중입니다. 1분 후 다시 [Refresh]를 눌러주세요. (Groq 무료 한도 초과)"
-                    break
-                last_error = f"Groq {g_model} HTTP {resp.status_code}"
-            except SheetUnavailable:
-                raise
-            except Exception as e:
-                logger.warning("처리 중 오류(무시하고 계속)", exc_info=True)
-                last_error = f"Groq {g_model}: {str(e)}"
-                continue
 
     # 최장 응답 반환
     if best_response:
