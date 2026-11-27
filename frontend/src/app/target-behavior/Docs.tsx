@@ -538,14 +538,13 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
         ["경은PBS 지원 단계", pbs],
         ...PROFILE_ROWS.map(([t, f]): [string, string] => [t, f === "guide" ? [flagLine, val(f)].filter(Boolean).join("\n") : val(f)]),
     ];
-    const footer = "※ 주민등록번호·주소·연락처 등 인적사항과 통학 차량 정보는 학교 업무관리시스템 자료를 따른다.";
     const total = PROFILE_ROWS.reduce((n, [, f]) => n + val(f).length, 0);
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-secondary" onClick={fill}>📋 이미 있는 자료로 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: printSections, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "학생정보 및 이해자료", s: head, meta: printMeta, sections: printSections, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), profile: { ...cur, learning: val("learning"), comm: "", date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
@@ -558,7 +557,7 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>
                 본문 {total.toLocaleString()}자 / 권장 {PROFILE_LIMIT.toLocaleString()}자 이하{total > PROFILE_LIMIT ? " — 1쪽을 넘을 수 있습니다." : ""}
             </div>
-            <div style={sheetBox}><SectionSheet heading="학생정보 및 이해자료" s={head} meta={metaEdit} sections={sections} after={<div style={{ fontSize: "8.5pt", marginTop: 3 }}>{footer}</div>} /></div>
+            <div style={sheetBox}><SectionSheet heading="학생정보 및 이해자료" s={head} meta={metaEdit} sections={sections} /></div>
         </div>
     );
 }
