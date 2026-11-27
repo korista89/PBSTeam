@@ -114,3 +114,4 @@
 - 2026 학생정보 및 이해자료 180명을 ⓪ 기본값으로 반영(BIP 시트 ProgressReport.profile, 기존 19줄+새 161줄, 백업 ~/data/pbst_bip_before_profile_import_2026-11-27.json). 7명은 명단 불일치로 제외. Tier1 관리에 학생정보 탭. AI 6종에 학생정보 근거 연결(bip.py json 미임포트도 수정). BIP 불러오기 실패 시 저장 차단. 학생 머리에 꼭 알아 둘 점 표시.
 - 명단 정리: 동명이인(A·B) 5명 학생정보 추가 반영(총 185명). 학생 고르는 목록(개별학생·Tier1 학생정보)에서 재학여부 X 14줄(빈 자리 9·전공과 5) 숨김. 가져오기 전 BIP 백업은 ~/data/pbst_bip_before_profile_import_2026-11-27_original_reconstructed.json(덮어쓴 원본을 source 표시로 복원).
 - 학생정보 원자료 정리: 올해 Tier2·3 재학생 39명만 보존, 나머지 141명·비재학생 5명 삭제(줄 145 삭제, 백업 ~/data/pbst_bip_before_profile_purge_*). AI에서 학생정보 제거. 인수인계 일괄 생성 대상 = 올해 Tier2·3(year_targets, 42명), 인수인계 AI는 위기행동 3건 기준 없이 CICO·SST 근거 사용.
+  다음: 인수인계 초안 38명 생성 — 관리자 로그인 후 Tier 현황 '인수인계 자료 일괄 생성' 실행(로컬 모델은 CPU라 너무 느려 운영 AI 사용). 원본 없는 재학생 9명(1012·1013·2223·2411·2413·2422·2626·5134·5136).
