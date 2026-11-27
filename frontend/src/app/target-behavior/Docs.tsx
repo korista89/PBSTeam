@@ -538,6 +538,9 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
                     <b>제출 의무가 없는 작성 도우미</b>입니다. 학교 양식을 쓸 때 예시 문장을 골라 초안을 만들고, 미리보기에서 한글(HWPX)로 저장해 쓰면 됩니다. 이 내용은 AI 분석에 쓰이지 않습니다. <b>경은PBS 지원 단계</b>는 이번 달 Tier 현황과 행동중재계획에서 자동으로 들어갑니다. 학습면·생활면·건강면·기타 유의사항은 <b>예시 문장 고르기</b>를 눌러 맞는 문장을 체크하면 칸에 들어가고, 칸에서 학생에 맞게 고치면 됩니다(○○은 채울 자리). 기타 유의사항 위 <b>꼭 알아 둘 점</b>은 대체 교사·실무사가 첫날 봐야 할 항목이니 해당하는 것을 모두 체크하세요. 칸마다 2~4줄이면 A4 1쪽이 됩니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
                 </div>
             </div>
+            {cur.source && <div style={{ fontSize: "0.78rem", color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "6px 10px" }}>
+                📄 기본값은 <b>{cur.source}</b>에서 가져왔습니다. 지금 상황에 맞게 고쳐 쓰세요.
+            </div>}
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>
                 본문 {total.toLocaleString()}자 / 권장 {PROFILE_LIMIT.toLocaleString()}자 이하{total > PROFILE_LIMIT ? " — 1쪽을 넘을 수 있습니다." : ""}
             </div>
