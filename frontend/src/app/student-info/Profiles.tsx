@@ -1,6 +1,6 @@
 "use client";
 
-// Tier1 관리 › 학생정보 및 이해자료: 전교생(담임은 자기 반)의 ⓪ 학생정보를 여기서도 보고 고친다.
+// Tier1 › 학생정보 및 이해자료(사이드바 메뉴): 전교생(담임은 자기 반)의 ⓪ 학생정보를 여기서도 보고 고친다.
 // 화면·저장은 개별학생 행동중재 ⓪ 탭(ProfileStep)과 같은 것을 쓴다(BIP 행의 ProgressReport.profile).
 import React, { useEffect, useState } from "react";
 import axios from "axios";
@@ -12,7 +12,7 @@ import { Bip, isEnrolled, today, tierOf } from "../target-behavior/shared";
 
 const nameOf = (s: any) => maskName(s?.학생이름 || s?.이름 || s?.학생명 || "");
 
-export default function Tier1Profiles() {
+export default function Profiles() {
     const { user } = useAuth();
     const [students, setStudents] = useState<any[]>([]);
     const [cls, setCls] = useState("");

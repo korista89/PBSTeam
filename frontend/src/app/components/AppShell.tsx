@@ -108,6 +108,7 @@ export default function AppShell({
             groupTitle: "Tier1",
             items: [
                 { href: "/tier1", label: "Tier1관리", key: "tier1", icon: "🌱" },
+                { href: "/student-info", label: "학생정보 및 이해자료", key: "student-info", icon: "📇" },
                 { href: "/class-rules", label: "학급규칙/토큰", key: "class-rules", icon: "🪙" },
                 { href: "/picture-word", label: "경은그림말", key: "picture-word", icon: "🎨" },
                 { href: "/board", label: "자료 공유 게시판", key: "board", icon: "💬" }
