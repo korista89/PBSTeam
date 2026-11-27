@@ -56,8 +56,17 @@ export default function HandoverBatch({ students }: { students: any[] }) {
         for (const s of targets) {
             if (stopRef.current) break;
             mark(s.학생코드, { state: "진행 중" });
-            try { await runOne(s.학생코드); }
-            catch (e: any) { mark(s.학생코드, { state: "실패", note: e?.response?.data?.detail || e?.message || "요청 실패" }); }
+            // 구글 시트 한도(429)·지연(503)은 잠시 쉬었다가 두 번 더 해 본다. 저장은 빈 칸에만 하므로 다시 해도 안전하다.
+            for (let k = 0; k < 3; k++) {
+                try { await runOne(s.학생코드); break; }
+                catch (e: any) {
+                    const msg = String(e?.response?.data?.detail || e?.message || "요청 실패");
+                    const temp = [429, 502, 503, 504].includes(e?.response?.status) || /지연|Quota|timeout/i.test(msg);
+                    if (!temp || k === 2) { mark(s.학생코드, { state: "실패", note: msg }); break; }
+                    mark(s.학생코드, { state: "진행 중", note: `시트가 바빠 ${30 * (k + 1)}초 뒤 다시 시도` });
+                    await new Promise(r => setTimeout(r, 30000 * (k + 1)));
+                }
+            }
         }
         setRunning(false);
     };

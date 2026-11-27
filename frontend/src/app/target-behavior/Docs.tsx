@@ -326,10 +326,22 @@ export async function requestHandoverDraft(code: string, bip: Bip, logs: Log[], 
     return r.data.analysis || "";
 }
 // AI 결과를 handover 칸으로 나눈다. 못 나누면 null.
+// 근거 없는 채움('데이터 없음(확인 필요)' 등)은 문장·괄호 단위로 빼고, 남는 게 없으면 칸을 비워 둔다. 부정확한 내용보다 빈 칸이 낫다.
+// 실행 계획 칸(3월 첫 2주 start, 확인·협의할 것 todo)은 '확인'이 할 일이므로 그대로 둔다.
+const FILLER = /확인\s*필요|데이터\s*없|자료\s*없|자료에\s*없|정보\s*없|정보는\s*없|기록은\s*없|미상|미입력|알\s*수\s*없/;
+const FILLER_PAREN = /\s*\([^)]*(확인\s*필요|없음|미상|미입력)[^)]*\)/g;
+export function dropFiller(v: string) {
+    return v.split("\n").map(l => {
+        const m = l.match(/^[\s\-•·*]*/)![0];
+        const body = l.slice(m.length).replace(FILLER_PAREN, "");
+        const kept = body.split(/(?<=\.)\s+/).filter(x => x.trim() && !FILLER.test(x)).join(" ").trim();
+        return kept && /[가-힣A-Za-z0-9]/.test(kept) ? "- " + kept : "";
+    }).filter(Boolean).join("\n");
+}
 export function parseHandover(text: string): Record<string, string> | null {
     const parsed = splitNumbered(text, AI_TITLES);
     const patch: Record<string, string> = {};
-    HANDOVER_ROWS.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
+    HANDOVER_ROWS.forEach(([t, f]) => { const v = parsed[t] && (f === "todo" || f === "start" ? parsed[t] : dropFiller(parsed[t])); if (v) patch[f] = v; });
     return Object.keys(patch).length ? patch : null;
 }
 

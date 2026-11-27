@@ -384,8 +384,11 @@ def _handover_extra_context(student_code: str) -> str:
     from app.services.sheets import fetch_meeting_notes, fetch_student_status
     lines = []
     for s in fetch_student_status() or []:
-        if str(s.get("학생코드", "")).strip() == student_code and str(s.get("그림말인증", "")).strip():
-            lines.append(f"[의사소통 참고] 그림말누리제 인증: {s.get('그림말인증')}")
+        if str(s.get("학생코드", "")).strip() == student_code:
+            n = str(s.get("그림말인증", "")).strip()
+            # 0(인증 없음)을 넘기면 AI가 '인증이 있다'로 잘못 쓴다. 1단계 이상일 때만 넣는다.
+            if n and n not in ("0", "0.0") and n[0].isdigit():
+                lines.append(f"[의사소통 참고] 그림말누리제 인증 {n}단계(전체 13단계)")
     try:
         notes = fetch_meeting_notes("tier3", student_code)[:8]
     except Exception:
