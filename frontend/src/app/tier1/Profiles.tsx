@@ -8,7 +8,7 @@ import { API_BASE_URL } from "@/app/lib/api";
 import { useAuth } from "../components/AuthProvider";
 import { maskName } from "../utils";
 import { ProfileStep } from "../target-behavior/Docs";
-import { Bip, today, tierOf } from "../target-behavior/shared";
+import { Bip, isEnrolled, today, tierOf } from "../target-behavior/shared";
 
 const nameOf = (s: any) => maskName(s?.학생이름 || s?.이름 || s?.학생명 || "");
 
@@ -24,7 +24,7 @@ export default function Tier1Profiles() {
     useEffect(() => {
         axios.get(`${API_BASE_URL}/api/v1/tier/status`).then(r => {
             const d: any[] = Array.isArray(r.data?.students) ? r.data.students : Array.isArray(r.data) ? r.data : [];
-            const u = d.filter((v, i, a) => a.findIndex(t => t.학생코드 === v.학생코드) === i);
+            const u = d.filter((v, i, a) => isEnrolled(v) && a.findIndex(t => t.학생코드 === v.학생코드) === i);
             setStudents(u);
             setCls(c => c || String(u[0]?.학급 || ""));
         }).catch(e => setErr(`학생 목록을 불러오지 못했습니다 — ${e?.response?.data?.detail || e.message}`));

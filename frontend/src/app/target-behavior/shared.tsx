@@ -7,6 +7,8 @@ import React from "react";
 export type Bip = Record<string, string>;
 
 // 지금 지원 단계(TierStatus 거울) 한 줄: 예) Tier3 · Tier2(CICO)
+// 학생을 고르는 목록에는 재학생만(재학여부 X = 졸업·전출·빈 자리)
+export const isEnrolled = (s: any) => String(s?.재학여부 || "").trim().toUpperCase() !== "X";
 export const tierOf = (s: any) => ["Tier3+", "Tier3", "Tier2(CICO)", "Tier2(SST)"].filter(k => String(s?.[k] || "").toUpperCase() === "O").join(" · ");
 
 // 학교 '행동중재계획서' 양식(2026-2) 칸 순서. 인쇄본과 작성 화면이 이 순서를 같이 쓴다.

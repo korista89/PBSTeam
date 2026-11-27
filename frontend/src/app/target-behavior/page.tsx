@@ -13,7 +13,7 @@ import { maskName } from "../utils";
 import Tracker from "./Tracker";
 import { DecisionStep, HandoverStep, ProfileStep, ReferralStep } from "./Docs";
 import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
-import { Bip, StudentHead, kDate, parseJson, today, tierOf } from "./shared";
+import { Bip, StudentHead, isEnrolled, kDate, parseJson, today, tierOf } from "./shared";
 import OverviewStep from "./Overview";
 import { CalmDays, EBPForStudent, MedicationResponseReport, StudentAIAnalysis } from "./SupportTools";
 import { schoolYearStart } from "../lib/progress";
@@ -56,7 +56,7 @@ export default function InterventionPage() {
             const res = await axios.get(`${API_BASE_URL}/api/v1/tier/status`);
             let data = res.data.students || res.data || [];
             if (!Array.isArray(data)) data = [];
-            const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.학생코드 === v.학생코드) === i)
+            const unique = data.filter((v: any, i: number, a: any[]) => isEnrolled(v) && a.findIndex((t: any) => t.학생코드 === v.학생코드) === i)
                 .sort((a: any, b: any) => Number(isT3(b)) - Number(isT3(a)));
             setStudents(unique);
             setSelected((cur: any) => {
