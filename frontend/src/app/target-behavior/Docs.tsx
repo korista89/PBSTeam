@@ -341,7 +341,9 @@ export function dropFiller(v: string) {
 export function parseHandover(text: string): Record<string, string> | null {
     const parsed = splitNumbered(text, AI_TITLES);
     const patch: Record<string, string> = {};
-    HANDOVER_ROWS.forEach(([t, f]) => { const v = parsed[t] && (f === "todo" || f === "start" ? parsed[t] : dropFiller(parsed[t])); if (v) patch[f] = v; });
+    // 양식 분량(칸마다 2줄, 꼭 해주세요·피해주세요 최대 3가지)을 넘는 줄은 뺀다 → A4 1쪽 안에서 거의 그대로 제출
+    const cap = (f: string, v: string) => v.split("\n").filter(l => l.trim()).slice(0, f === "must" || f === "avoid" ? 3 : 2).join("\n");
+    HANDOVER_ROWS.forEach(([t, f]) => { const v = parsed[t] && cap(f, f === "todo" || f === "start" ? parsed[t] : dropFiller(parsed[t])); if (v) patch[f] = v; });
     return Object.keys(patch).length ? patch : null;
 }
 
