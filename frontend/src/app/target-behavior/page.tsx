@@ -13,7 +13,7 @@ import { maskName } from "../utils";
 import Tracker from "./Tracker";
 import { DecisionStep, HandoverStep, ProfileStep, ReferralStep } from "./Docs";
 import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
-import { Bip, StudentHead, kDate, today } from "./shared";
+import { Bip, StudentHead, kDate, parseJson, today, tierOf } from "./shared";
 import OverviewStep from "./Overview";
 import { CalmDays, EBPForStudent, MedicationResponseReport, StudentAIAnalysis } from "./SupportTools";
 import { schoolYearStart } from "../lib/progress";
@@ -32,8 +32,6 @@ const STEPS = [
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
-// 지금 지원 단계(TierStatus 거울) 한 줄: 예) Tier3 · Tier2(CICO)
-const tierOf = (s: any) => ["Tier3+", "Tier3", "Tier2(CICO)", "Tier2(SST)"].filter(k => String(s?.[k] || "").toUpperCase() === "O").join(" · ");
 const isT3 = (s: any) => String(s?.Tier3 || "").toUpperCase() === "O" || String(s?.["Tier3+"] || "").toUpperCase() === "O";
 
 export default function InterventionPage() {
@@ -88,14 +86,15 @@ export default function InterventionPage() {
             const s: Bip = {};
             Object.entries(r.data || {}).forEach(([k, v]) => { s[k] = v == null ? "" : String(v); });
             setBip({ ...s, StudentCode: code });
-        }).catch(() => { if (alive) setBip({ StudentCode: code }); });
+        }).catch(e => { if (alive) setBip({ _loadError: String(e?.response?.status || e?.message || "오류") }); });  // 실패를 빈 BIP로 여기면 저장 때 기존 계획을 지운다
         return () => { alive = false; };
     }, [code]);
     const editBip = (b: Bip) => { setBip(b); setDirty(true); };
+    const profileFlags = (parseJson<any>(bip.ProgressReport, {}).profile || {}).flags || "";
     const save = async (b: Bip) => {
         setSaving(true);
         try {
-            if (b.StudentCode && b.StudentCode !== code) { alert("학생이 바뀌는 중입니다. 잠시 뒤 다시 저장해 주세요."); return; }
+            if (b.StudentCode !== code) { alert(bip._loadError ? "행동중재계획을 불러오지 못해 저장할 수 없습니다. 새로고침한 뒤 다시 해 주세요." : "학생 자료를 불러오는 중입니다. 잠시 뒤 다시 저장해 주세요."); return; }
             const body = { ...b, StudentCode: code, UpdatedAt: today(), Author: user?.name || user?.id || "Teacher" };
             await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/bip`, body);
             setBip(body); setDirty(false);
@@ -176,7 +175,9 @@ export default function InterventionPage() {
                                             {bip.PlanStart ? <>중재 기간 {kDate(bip.PlanStart)} ~ {bip.PlanEnd ? kDate(bip.PlanEnd) : "진행 중"}</> : "행동중재계획 없음 — ④에서 작성하세요"}
                                             {bip.TargetBehavior && <> · 표적행동: {bip.TargetBehavior}</>}
                                         </div>
+                                        {profileFlags && <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#b91c1c", marginTop: 2 }}>⚠ 꼭 알아 둘 점: {profileFlags}</div>}
                                     </div>
+                                    {bip._loadError && <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "#b91c1c" }}>⚠ 행동중재계획을 불러오지 못했습니다({bip._loadError}). 저장하지 말고 새로고침해 주세요.</span>}
                                     {dirty && <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "#b45309" }}>{saving ? "저장 중…" : "● 저장하지 않은 변경이 있습니다"}</span>}
                                 </div>
                                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

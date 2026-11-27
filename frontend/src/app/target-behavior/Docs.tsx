@@ -375,8 +375,12 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const len = (keys: string[]) => keys.reduce((n, f) => n + (cur[f] || "").length, 0);
     const total = len(HANDOVER_ROWS.map(r => r[1]));
     const y = +start.slice(0, 4);
-    // AI 없이 자동으로 채울 수 있는 칸: 올해 변화(집계)만. 나머지는 BIP와 겹치지 않게 비워 둔다.
-    const fill = () => set(mergeInto(cur, { recent: dataSummary(logs, behaviors, bip.PlanStart || "") }, "empty"));
+    // AI 없이 자동으로 채울 수 있는 칸: 올해 변화(집계), 건강·안전(⓪ 학생정보의 꼭 알아 둘 점·건강면 앞 2줄). 나머지는 BIP와 겹치지 않게 비워 둔다.
+    const fill = () => {
+        const pf = parseJson<any>(bip.ProgressReport, {}).profile || {};
+        const health = [pf.flags && `꼭 알아 둘 점: ${pf.flags}`, ...String(pf.health || "").split("\n").filter(l => l.trim() && !l.includes("특이사항 없음")).slice(0, 2)].filter(Boolean).join("\n");
+        set(mergeInto(cur, { recent: dataSummary(logs, behaviors, bip.PlanStart || ""), health }, "empty"));
+    };
     const runAI = async () => {
         setAi({ loading: true, text: "" });
         try { setAi({ loading: false, text: await requestHandoverDraft(head.code, bip, logs, behaviors) }); }
@@ -405,7 +409,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 인수인계 자료 초안 받기(올해 자료 전체)</button>
-                    <button className="btn btn-secondary" onClick={fill}>📋 올해 변화 자동 채우기</button>
+                    <button className="btn btn-secondary" onClick={fill}>📋 올해 변화·건강 자동 채우기</button>
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: printSections, charts, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
                 </div>

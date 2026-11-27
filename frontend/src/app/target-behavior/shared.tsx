@@ -6,6 +6,9 @@ import React from "react";
 
 export type Bip = Record<string, string>;
 
+// 지금 지원 단계(TierStatus 거울) 한 줄: 예) Tier3 · Tier2(CICO)
+export const tierOf = (s: any) => ["Tier3+", "Tier3", "Tier2(CICO)", "Tier2(SST)"].filter(k => String(s?.[k] || "").toUpperCase() === "O").join(" · ");
+
 // 학교 '행동중재계획서' 양식(2026-2) 칸 순서. 인쇄본과 작성 화면이 이 순서를 같이 쓴다.
 export const BIP_ROWS: { key: string; label: string; hint?: string }[] = [
     { key: "SupportTeam", label: "행동중재지원팀", hint: "예: 교감, 담임교사, 부담임교사, 교내행동중재전문가, 보호자" },

@@ -11,6 +11,7 @@ import Tier1Teaching from "./Teaching";
 import Tier1Tokens from "./Tokens";
 import Tier1Fidelity from "./Fidelity";
 import Tier1Programs from "./Programs";
+import Tier1Profiles from "./Profiles";
 import { ACCENT, type Plan } from "./shared";
 
 // Tier1 관리: 학교행동중재 운영계획 Ⅰ.(1단계 지원) 보편적 행동지원 운영을 그대로 따른다.
@@ -21,6 +22,7 @@ const TABS = [
   { key: "tokens", label: "🪙 강화체계·토큰", desc: "단계별 토큰 경제·경은마트, 매월 1000원 토큰 집계 (다-4·5, 라항)" },
   { key: "fidelity", label: "✅ 실행충실도", desc: "학기별 학급 체크리스트, 80% 미만 학급 지원 (마항)" },
   { key: "programs", label: "📦 세부 프로그램", desc: "기간·범위·표적 행동을 정한 보편적 지원 프로그램과 성과" },
+  { key: "profile", label: "📇 학생정보 및 이해자료", desc: "학급별 학생의 학습면·생활면·건강면·유의사항(개별학생 행동중재 ⓪ 탭과 같은 자료)" },
 ] as const;
 type TabKey = typeof TABS[number]["key"];
 
@@ -55,7 +57,8 @@ export default function Tier1Page() {
 
           {tab === "dash" && <Tier1Dashboard />}
           {tab === "programs" && <Tier1Programs onStatus={setStatus} />}
-          {tab !== "dash" && tab !== "programs" && !plan && <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>불러오는 중...</div>}
+          {tab === "profile" && <Tier1Profiles />}
+          {tab !== "dash" && tab !== "programs" && tab !== "profile" && !plan && <div className="card" style={{ padding: 40, textAlign: "center", color: "#94a3b8" }}>불러오는 중...</div>}
           {plan && tab === "matrix" && <Tier1Matrix plan={plan} />}
           {plan && tab === "teach" && <Tier1Teaching plan={plan} onStatus={setStatus} />}
           {plan && tab === "tokens" && <Tier1Tokens plan={plan} onStatus={setStatus} />}

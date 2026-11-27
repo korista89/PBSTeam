@@ -1,3 +1,4 @@
+import json
 from app.services.sheets import tier_label
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -273,6 +274,7 @@ def ai_bip_strategies(
         function_data=json.dumps(
             {
                 "teacher_input": req.goals or "추정 기능 미입력",
+                "student_profile": _profile_context(student_code, 800),
                 "evidence": evidence["deterministic_metrics"],
                 "narrative_coverage": evidence["narrative_and_abc_coverage"],
             },
@@ -310,7 +312,7 @@ def ai_fba_report(
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    return {"analysis": generate_fba_report(student_info, evidence, req.teacher_context, len(norm_logs)), **gate}
+    return {"analysis": generate_fba_report(student_info, evidence, "\n".join(x for x in (_profile_context(student_code), req.teacher_context) if x), len(norm_logs)), **gate}
 
 
 class AIDocumentDraftRequest(BaseModel):
@@ -342,10 +344,26 @@ def ai_document_draft(
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    context = req.context
+    context = "\n".join(x for x in (_profile_context(student_code), req.context) if x)
     if req.kind == "handover":
         context = _handover_extra_context(student_code) + "\n" + context
     return {"analysis": generate_document_draft(req.kind, student_info, evidence, context, len(norm_logs)), **gate}
+
+
+def _profile_context(student_code: str, limit: int = 1200) -> str:
+    """⓪ 학생정보 및 이해자료(학습면·생활면·건강면·기타 유의사항)를 AI 근거 한 덩어리로. 없으면 빈 글."""
+    from app.services.sheets import get_bip
+    try:
+        pr = json.loads((get_bip(student_code) or {}).get("ProgressReport") or "{}")
+    except Exception:
+        return ""
+    p = (pr.get("profile") if isinstance(pr, dict) else None) or {}
+    parts = [(t, "\n".join(x for x in ((p.get("learning") or "").strip(), (p.get("comm") or "").strip()) if x) if f == "learning" else (p.get(f) or "").strip())
+             for t, f in (("학습면", "learning"), ("생활면", "life"), ("건강면", "health"), ("기타 유의사항", "guide"))]
+    body = "\n".join(f"[{t}]\n{v}" for t, v in parts if v)
+    if p.get("flags"):
+        body = f"[꼭 알아 둘 점] {p['flags']}\n" + body
+    return f"## 학생정보 및 이해자료(담임 작성 기초자료)\n{body[:limit]}" if body else ""
 
 
 def _handover_extra_context(student_code: str) -> str:
@@ -425,12 +443,12 @@ def ai_bip_full(
         target_behavior=target_behavior,
         hypothesis_data=hypothesis_data,
         strategies_data="예방-교수-강화 전략은 잠정 기능가설과 1:1로 연결",
-        school_crisis_protocol="경은학교 위기관리 4단계 프로토콜 (전조-고조-위기-회복 및 최소제한원칙 준수)",
+        school_crisis_protocol="경은학교 위기관리계획 4단계(전조 → 고조 → 대응·알림 → 분리·회복), 최소제한원칙 준수",
         behavior_logs=norm_logs,
         mode=req.mode,
         medication_status=req.medication_status,
         reinforcer_info=req.reinforcer_info,
-        other_considerations=req.other_considerations,
+        other_considerations="\n".join(x for x in (req.other_considerations, _profile_context(student_code)) if x),
         evidence_summary=evidence_summary,
     )
 
@@ -473,7 +491,9 @@ def _decision_context(student_code: str, req: AIDecisionRecommendationRequest):
     }, ensure_ascii=False, separators=(",", ":"))
 
     bip = get_bip(student_code) or {}
-    current_bip = "\n".join(f"- {k}: {v}" for k, v in bip.items() if k not in ("StudentCode", "UpdatedAt", "Author") and v)
+    skip = {"StudentCode", "UpdatedAt", "Author", "ProgressReport", "Source"}
+    current_bip = "\n".join(f"- {k}: {v}" for k, v in bip.items() if k not in skip and v)
+    current_bip = "\n".join(x for x in (current_bip, _profile_context(student_code, 800)) if x)
     ebp = "\n".join(f"- {k}: {bip.get(k)}" for k in ("PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP") if bip.get(k))
     # 이 학생 사례 협의 기록(개별학생 행동중재 ⑤ 탭에 누적 저장되는 meeting_type)
     notes = fetch_meeting_notes("tier3", student_code)
