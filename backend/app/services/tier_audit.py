@@ -15,6 +15,20 @@ from app.services.sheets import (fetch_student_status, get_cico_report_data, get
                                  list_cico_targets)
 
 
+def left_month(memo: str):
+    """재학 X 학생이 학교를 떠난 달: 메모의 'M/D'(예: '11/27 자퇴'). 없으면 None(이번 달부터 점검).
+    떠난 달까지는 그 달 대상이 맞으므로 문제로 세지 않는다."""
+    import re
+    m = re.search(r"(\d{1,2})\s*/\s*\d{1,2}", str(memo or ""))
+    if m and 1 <= int(m.group(1)) <= 12:
+        return int(m.group(1))
+    return None
+
+
+def _after_left(m: int, lm, cur: int) -> bool:
+    return sst.month_index(m) > sst.month_index(lm) if lm else sst.month_index(m) >= sst.month_index(cur)
+
+
 def run_audit(verbose: bool = False) -> List[str]:
     """문제 목록(빈 목록이면 정상). verbose면 월별 숫자도 출력."""
     sy, cur = school_year(), tm.current_month()
@@ -73,7 +87,8 @@ def run_audit(verbose: bool = False) -> List[str]:
         # 4) 명단에 없거나 재학 아닌 학생
         for area, codes in (("CICO", st["cico"]), ("SST", set(st["sst"])), ("Tier3", set(st["t3"]))):
             unknown = sorted(c for c in codes if c not in roster)
-            left = sorted(c for c in codes if c in roster and str(roster[c].get("재학여부", "O")).strip() == "X")
+            left = sorted(c for c in codes if c in roster and str(roster[c].get("재학여부", "O")).strip() == "X"
+                          and _after_left(m, left_month(roster[c].get("메모", "")), cur))
             if unknown: bad(f"{m}월 {area}", f"Tier현황에 없는 학생코드 {unknown}")
             if left: bad(f"{m}월 {area}", f"재학 X 학생이 대상 {left}")
 
