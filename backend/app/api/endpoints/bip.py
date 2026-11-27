@@ -274,7 +274,6 @@ def ai_bip_strategies(
         function_data=json.dumps(
             {
                 "teacher_input": req.goals or "추정 기능 미입력",
-                "student_profile": _profile_context(student_code, 800),
                 "evidence": evidence["deterministic_metrics"],
                 "narrative_coverage": evidence["narrative_and_abc_coverage"],
             },
@@ -312,7 +311,7 @@ def ai_fba_report(
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    return {"analysis": generate_fba_report(student_info, evidence, "\n".join(x for x in (_profile_context(student_code), req.teacher_context) if x), len(norm_logs)), **gate}
+    return {"analysis": generate_fba_report(student_info, evidence, req.teacher_context, len(norm_logs)), **gate}
 
 
 class AIDocumentDraftRequest(BaseModel):
@@ -341,29 +340,43 @@ def ai_document_draft(
     student_info = _build_student_info(student_code, fetch_student_status())
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
     gate = fba_data_gate(len(norm_logs))
-    if not gate["eligible"]:
+    if not gate["eligible"] and req.kind != "handover":  # 인수인계는 기능 추정이 아니라서 Tier2(기록 적음) 학생도 쓴다
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    context = "\n".join(x for x in (_profile_context(student_code), req.context) if x)
+    context = req.context
     if req.kind == "handover":
         context = _handover_extra_context(student_code) + "\n" + context
     return {"analysis": generate_document_draft(req.kind, student_info, evidence, context, len(norm_logs)), **gate}
 
 
-def _profile_context(student_code: str, limit: int = 1200) -> str:
-    """⓪ 학생정보 및 이해자료(학습면·생활면·건강면·기타 유의사항)를 AI 근거 한 덩어리로. 없으면 빈 글."""
-    from app.services.sheets import get_bip
+
+def _tier2_year_lines(student_code: str) -> list:
+    """올해 CICO 목표·월별 수행률과 SST 참여(인수인계 근거). 학생정보 및 이해자료는 넣지 않는다."""
+    from app.services import tier_monthly as tm
+    from app.services.sheets import get_cico_report_data
+    lines = []
     try:
-        pr = json.loads((get_bip(student_code) or {}).get("ProgressReport") or "{}")
+        year = tm.student_year(student_code)
     except Exception:
-        return ""
-    p = (pr.get("profile") if isinstance(pr, dict) else None) or {}
-    parts = [(t, "\n".join(x for x in ((p.get("learning") or "").strip(), (p.get("comm") or "").strip()) if x) if f == "learning" else (p.get(f) or "").strip())
-             for t, f in (("학습면", "learning"), ("생활면", "life"), ("건강면", "health"), ("기타 유의사항", "guide"))]
-    body = "\n".join(f"[{t}]\n{v}" for t, v in parts if v)
-    if p.get("flags"):
-        body = f"[꼭 알아 둘 점] {p['flags']}\n" + body
-    return f"## 학생정보 및 이해자료(담임 작성 기초자료)\n{body[:limit]}" if body else ""
+        return lines
+    sst = sorted({p for m in year for p in (m.get("sst") or [])})
+    if sst:
+        lines.append(f"[SST 참여] {', '.join(sst)} (참여 {sum(1 for m in year if m.get('sst'))}개월)")
+    goals: dict = {}
+    for m in (m["month"] for m in year if m.get("cico")):
+        try:
+            rows = (get_cico_report_data(m) or {}).get("students", [])
+        except Exception:
+            continue
+        for r in rows:
+            if str(r.get("code")) == student_code:
+                g = goals.setdefault(r.get("target_behavior", ""), {"type": r.get("behavior_type", ""), "criteria": r.get("goal_criteria", ""), "rates": []})
+                g["rates"].append(f"{m}월 {r.get('rate', '-')}{'(달성)' if r.get('achieved') == 'O' else ''}")
+                g["decision"] = r.get("decision", "")
+    if goals:
+        lines.append(f"[CICO 기록 — {sum(1 for m in year if m.get('cico'))}개월]")
+        lines += [f"- {k} ({v['type']}, 목표 {v['criteria']}): {', '.join(v['rates'])} / 최근 판정: {v.get('decision', '')}" for k, v in goals.items()]
+    return lines
 
 
 def _handover_extra_context(student_code: str) -> str:
@@ -377,6 +390,7 @@ def _handover_extra_context(student_code: str) -> str:
         notes = fetch_meeting_notes("tier3", student_code)[:8]
     except Exception:
         notes = []
+    lines += _tier2_year_lines(student_code)
     if notes:
         lines.append("[사례 협의 기록(최근 순)]")
         lines += [f"- {n.get('date', '')}: {str(n.get('content', ''))[:300]}" for n in notes]
@@ -448,7 +462,7 @@ def ai_bip_full(
         mode=req.mode,
         medication_status=req.medication_status,
         reinforcer_info=req.reinforcer_info,
-        other_considerations="\n".join(x for x in (req.other_considerations, _profile_context(student_code)) if x),
+        other_considerations=req.other_considerations,
         evidence_summary=evidence_summary,
     )
 
@@ -493,7 +507,6 @@ def _decision_context(student_code: str, req: AIDecisionRecommendationRequest):
     bip = get_bip(student_code) or {}
     skip = {"StudentCode", "UpdatedAt", "Author", "ProgressReport", "Source"}
     current_bip = "\n".join(f"- {k}: {v}" for k, v in bip.items() if k not in skip and v)
-    current_bip = "\n".join(x for x in (current_bip, _profile_context(student_code, 800)) if x)
     ebp = "\n".join(f"- {k}: {bip.get(k)}" for k in ("PreventionEBP", "TeachingEBP", "ConsequenceEBP", "CrisisEBP") if bip.get(k))
     # 이 학생 사례 협의 기록(개별학생 행동중재 ⑤ 탭에 누적 저장되는 meeting_type)
     notes = fetch_meeting_notes("tier3", student_code)

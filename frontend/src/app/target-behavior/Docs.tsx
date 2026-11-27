@@ -413,6 +413,11 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: printSections, charts, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
                 </div>
+                {tiers.length > 0 && !tiers.some(t => /Tier2|Tier3/.test(t.level)) && (
+                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", fontSize: "0.8rem", color: "#166534", fontWeight: 700 }}>
+                        ✅ 올해 Tier2·Tier3 대상이 아니었던 학생입니다. 인수인계 자료는 제출하지 않아도 됩니다(필요할 때만 쓰세요).
+                    </div>
+                )}
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
                     A4 1쪽, 칸 10개입니다. 표적행동·기능·예방·교수·강화·위기대응은 행동중재계획(BIP)을 함께 넘기므로 여기 다시 적지 않습니다. AI 초안을 받은 뒤 &lsquo;확인 필요&rsquo;만 고치면 됩니다.
                 </div>
@@ -530,7 +535,7 @@ export function ProfileStep({ head, bip, setBip, save, tier }: {
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), profile: { ...cur, learning: val("learning"), comm: "", date: dateVal, author } }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
-                    학생 교육의 기초자료입니다. <b>경은PBS 지원 단계</b>는 이번 달 Tier 현황과 행동중재계획에서 자동으로 들어갑니다. 학습면·생활면·건강면·기타 유의사항은 <b>예시 문장 고르기</b>를 눌러 맞는 문장을 체크하면 칸에 들어가고, 칸에서 학생에 맞게 고치면 됩니다(○○은 채울 자리). 기타 유의사항 위 <b>꼭 알아 둘 점</b>은 대체 교사·실무사가 첫날 봐야 할 항목이니 해당하는 것을 모두 체크하세요. 칸마다 2~4줄이면 A4 1쪽이 됩니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
+                    <b>제출 의무가 없는 작성 도우미</b>입니다. 학교 양식을 쓸 때 예시 문장을 골라 초안을 만들고, 미리보기에서 한글(HWPX)로 저장해 쓰면 됩니다. 이 내용은 AI 분석에 쓰이지 않습니다. <b>경은PBS 지원 단계</b>는 이번 달 Tier 현황과 행동중재계획에서 자동으로 들어갑니다. 학습면·생활면·건강면·기타 유의사항은 <b>예시 문장 고르기</b>를 눌러 맞는 문장을 체크하면 칸에 들어가고, 칸에서 학생에 맞게 고치면 됩니다(○○은 채울 자리). 기타 유의사항 위 <b>꼭 알아 둘 점</b>은 대체 교사·실무사가 첫날 봐야 할 항목이니 해당하는 것을 모두 체크하세요. 칸마다 2~4줄이면 A4 1쪽이 됩니다. 인적사항(주민번호·주소·연락처)은 적지 않습니다.
                 </div>
             </div>
             <div style={{ fontSize: "0.8rem", fontWeight: 700, color: total > PROFILE_LIMIT ? "#dc2626" : "#475569" }}>

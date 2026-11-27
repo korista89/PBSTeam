@@ -1,8 +1,8 @@
 "use client";
 
-// 인수인계 자료 일괄 생성(관리자): Tier3 학생마다 ⑧ 탭의 AI 초안을 차례로 받아 빈 칸에만 넣고 저장한다.
+// 인수인계 자료 일괄 생성(관리자): 올해 한 번이라도 Tier2·Tier3였던 학생마다 ⑧ 탭의 AI 초안을 차례로 받아 빈 칸에만 넣고 저장한다.
 // 저장 전 내용은 BIP_이력 탭에 남는다. 초안이므로 담임 검토가 필요하다는 표시(handover.ai)를 함께 남긴다.
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "@/app/lib/api";
 import { maskName } from "../utils";
@@ -20,7 +20,10 @@ export default function HandoverBatch({ students }: { students: any[] }) {
     const [running, setRunning] = useState(false);
     const [status, setStatus] = useState<Record<string, Status>>({});
     const stopRef = useRef(false);
-    const targets = students.filter(s => s.학생코드 && String(s.재학여부 || "").toUpperCase() !== "X" && (s.t3 || s.now?.t3));
+    // 제출 대상: 올해(3월~이번 달) 한 번이라도 Tier2(CICO·SST)·Tier3였던 재학생
+    const [yearT, setYearT] = useState<Record<string, string[]>>({});
+    useEffect(() => { axios.get(`${API_BASE_URL}/api/v1/tier-monthly/year-targets`).then(r => setYearT(r.data?.targets || {})).catch(() => {}); }, []);
+    const targets = students.filter(s => s.학생코드 && String(s.재학여부 || "").toUpperCase() !== "X" && yearT[String(s.학생코드)]);
     const mark = (code: string, st: Status) => setStatus(m => ({ ...m, [code]: st }));
 
     const runOne = async (code: string) => {
@@ -47,7 +50,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
     };
 
     const run = async () => {
-        if (!confirm(`Tier3 학생 ${targets.length}명의 인수인계 자료 AI 초안을 차례로 만들어 저장합니다.\n빈 칸에만 넣고, 이전 내용은 BIP_이력 탭에 남습니다.\n한 명에 1~2분 걸립니다. 진행할까요?`)) return;
+        if (!confirm(`올해 Tier2·Tier3 학생 ${targets.length}명의 인수인계 자료 AI 초안을 차례로 만들어 저장합니다.\n빈 칸에만 넣고, 이전 내용은 BIP_이력 탭에 남습니다.\n한 명에 1~2분 걸립니다. 진행할까요?`)) return;
         stopRef.current = false; setRunning(true);
         setStatus(Object.fromEntries(targets.map(s => [s.학생코드, { state: "대기" } as Status])));
         for (const s of targets) {
@@ -64,7 +67,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
     return (
         <div className="card" style={{ padding: 16 }}>
             <button onClick={() => setOpen(o => !o)} style={{ all: "unset", cursor: "pointer", fontWeight: 800 }}>
-                🤖 인수인계 자료 일괄 생성 {open ? "▲" : "▼"} <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.8rem" }}>(Tier3 {targets.length}명 · 개별학생 행동중재 ⑨ 탭에 저장)</span>
+                🤖 인수인계 자료 일괄 생성 {open ? "▲" : "▼"} <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.8rem" }}>(올해 Tier2·Tier3 {targets.length}명 · 개별학생 행동중재 ⑨ 탭에 저장)</span>
             </button>
             {open && (
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -77,7 +80,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
                         {Object.keys(status).length > 0 && <span style={{ fontSize: "0.82rem", fontWeight: 700 }}>완료 {done} / {targets.length}</span>}
                     </div>
                     <div style={{ fontSize: "0.76rem", color: "#64748b" }}>
-                        빈 칸에만 채우고 기존 내용은 건드리지 않습니다. 기록이 적은 학생은 건너뜁니다. 만든 뒤 담임이 ⑨ 탭에서 고치고 인쇄해 새 담임에게 전달하세요.
+                        빈 칸에만 채우고 기존 내용은 건드리지 않습니다. 근거는 행동 기록·CICO·SST·행동중재계획·협의 기록이며 학생정보 및 이해자료는 AI에 보내지 않습니다. 담임은 ⑨ 탭에서 확인·수정해 제출합니다.
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6 }}>
                         {targets.map(s => {
@@ -85,7 +88,7 @@ export default function HandoverBatch({ students }: { students: any[] }) {
                             return (
                                 <a key={s.학생코드} href={`/target-behavior?student=${encodeURIComponent(s.학생코드)}&step=handover`} target="_blank" rel="noreferrer"
                                     style={{ border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "7px 10px", textDecoration: "none", color: "inherit", fontSize: "0.8rem" }}>
-                                    <b>{maskName(s.학생이름)}</b> <span style={{ color: "#64748b" }}>{s.학급}</span>
+                                    <b>{maskName(s.학생이름)}</b> <span style={{ color: "#64748b" }}>{s.학급} · {(yearT[String(s.학생코드)] || []).join("·")}</span>
                                     {st && <div style={{ color: color[st.state], fontWeight: 700, fontSize: "0.74rem" }}>{st.state}{st.note ? ` · ${st.note}` : ""}</div>}
                                 </a>
                             );

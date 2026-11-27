@@ -144,6 +144,22 @@ def student_year(code: str) -> List[Dict[str, Any]]:
     return out
 
 
+
+def year_targets() -> Dict[str, List[str]]:
+    """학년도 3월~이번 달에 한 번이라도 Tier2(CICO·SST)·Tier3·Tier3+였던 학생 → 거친 단계들.
+    다음 학년도 인수인계 자료 제출 대상과 학생정보 원자료 보존 범위가 이것을 따른다."""
+    order = sst_svc.SCHOOL_MONTHS
+    out: Dict[str, set] = {}
+    for m in order[: order.index(current_month()) + 1]:
+        st = month_state(m)
+        for c in st["cico"]:
+            out.setdefault(str(c), set()).add("CICO")
+        for c in st["sst"]:
+            out.setdefault(str(c), set()).add("SST")
+        for c, lv in st["t3"].items():
+            out.setdefault(str(c), set()).add(lv or "Tier3")
+    return {c: sorted(v) for c, v in out.items()}
+
 def overview(month: int) -> Dict[str, Any]:
     from app.services.sheets import fetch_student_status
     state = month_state(month)

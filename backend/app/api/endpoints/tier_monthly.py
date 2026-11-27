@@ -42,6 +42,16 @@ def get_overview(month: int, current_user: Dict[str, Any] = Depends(require_auth
     return data
 
 
+
+@router.get("/year-targets")
+def get_year_targets(current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """올해 한 번이라도 Tier2·Tier3였던 학생(인수인계 제출 대상). 교사는 자기 학급만."""
+    data = tm.year_targets()
+    if str(current_user.get("role", "")).lower() not in ["admin", "superadmin"]:
+        user_class = user_scope(current_user)
+        data = {c: v for c, v in data.items() if student_in_scope(c, user_class)}
+    return {"targets": data}
+
 @router.get("/student/{code}")
 def get_student_year(code: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """한 학생의 올해 월별 Tier(3월~이번 달)."""
