@@ -44,7 +44,7 @@ export default function PrivacyPage() {
                     <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px 22px', border: '1px solid #e2e8f0' }}>
                         <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             <li><b>받는 자·국가</b>: Google LLC(미국) — Google Gemini API(유료 API, 입력 자료를 AI 학습에 쓰지 않는 조건). 국외 AI는 이 한 곳만 씁니다.</li>
-                            <li><b>전송 항목</b>: 학생코드(별칭), 행동 유형·강도·발생 장소/시간대, 추정 기능, 물리적 제지 여부 등 구조화된 행동 기록과, 문서 AI 초안 기능에 교사가 입력한 문장(FBA·BIP·의료협력의뢰서·추가지원신청서·결과 보고서 초안에 쓰이는 약물·건강 관련 서술 포함)</li>
+                            <li><b>전송 항목</b>: 학생코드(별칭), 행동 유형·강도·발생 장소/시간대, 추정 기능, 물리적 제지 여부 등 구조화된 행동 기록과, 문서 AI 초안 기능에 교사가 입력한 문장(FBA·BIP·의료협력 모니터링 자료·추가지원신청서·결과 보고서 초안에 쓰이는 약물·건강 관련 서술 포함)</li>
                             <li><b>목적</b>: 행동 기록 분석, 행동중재계획·보고서·인수인계 초안 작성 지원(교사가 확인한 뒤에만 문서에 반영)</li>
                             <li><b>시기·방법</b>: 교사가 AI 초안 버튼을 누를 때마다 암호화된 통신(HTTPS)으로 전송</li>
                             <li><b>실명 처리</b>: 학생 실명은 시스템이 자동으로 학생코드로 치환한 뒤 전송하며, AI 서비스에는 실명이 전달되지 않습니다.</li>

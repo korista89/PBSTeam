@@ -1,6 +1,6 @@
 import json
 from app.services.sheets import tier_label
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Body, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, Literal
 from app.services.normalize import normalize_behavior_log
@@ -134,6 +134,31 @@ def save_student_bip(
     return result
 
 
+@router.get("/students/{student_code}/plans")
+def get_closed_plans(student_code: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """종결한 행동중재계획 목록(계획1·계획2…) — 계획 칸·의사결정·결과 보고서."""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import list_closed_plans
+    return {"plans": list_closed_plans(student_code)}
+
+
+@router.post("/students/{student_code}/plans")
+def close_plan(student_code: str, plan: Dict[str, Any] = Body(...), current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """지금 행동중재계획을 종결해 보관한다. 같은 계획 번호를 두 번 보관하지 않는다."""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import archive_closed_plan, list_closed_plans
+    no = str(plan.get("planNo") or "")
+    if not no:
+        raise HTTPException(status_code=400, detail="계획 번호가 없습니다.")
+    if any(str(p.get("planNo")) == no for p in list_closed_plans(student_code)):
+        return {"message": "already"}
+    plan = {**plan, "closedBy": current_user.get("name") or current_user.get("id") or ""}
+    result = archive_closed_plan(student_code, plan)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+
 @router.get("/students/{student_code}/fba-evidence")
 def get_student_fba_evidence(
     student_code: str,
@@ -213,7 +238,7 @@ def ai_document_draft(
     req: AIDocumentDraftRequest,
     current_user: Dict[str, Any] = Depends(require_authenticated_user)
 ):
-    """의료협력의뢰서·추가지원신청서·중재 결과 보고서·다음 학년도 인수인계 자료 초안 — 누적 행동기록 근거 요약 + 화면의 계획·수치."""
+    """의료협력 모니터링 자료·추가지원신청서·중재 결과 보고서·다음 학년도 인수인계 자료 초안 — 누적 행동기록 근거 요약 + 화면의 계획·수치."""
     check_student_scope(student_code, current_user)
     ensure_analyzable(student_code)  # 2027 모드: 보호자 미동의·철회 학생은 개별 분석 제외
     from app.services.sheets import fetch_all_records, fetch_student_status, normalize_date_string

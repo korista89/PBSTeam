@@ -3573,6 +3573,10 @@ def _archive_bip_row(ws, headers: list, row_index: int) -> dict:
     return old
 
 
+# 행동중재계획마다 따로 쓰는 ProgressReport 칸. 새 계획(planNo가 바뀜)으로 저장할 때는 이전 계획 것을 되살리지 않는다.
+PLAN_SCOPED_KEYS = {"decision", "sections", "start", "end", "date", "author", "planStatus", "planKind"}
+
+
 def _keep_documents(new: dict, old: dict) -> dict:
     """오래된 화면에서 저장해도 시트에만 있는 문서를 지우지 않는다.
     ProgressReport의 문서(학생정보·인수인계·의사결정 등)와 FBA 보고서가 들어온 값에 없거나 비었으면 시트 값을 남긴다."""
@@ -3585,12 +3589,67 @@ def _keep_documents(new: dict, old: dict) -> dict:
             return {}
     filled = lambda x: bool(x) and (not isinstance(x, dict) or any(str(v).strip() for v in x.values()))
     o, n = load(old.get("ProgressReport")), load(new.get("ProgressReport"))
-    kept = {k: v for k, v in o.items() if filled(v) and not filled(n.get(k))}
+    new_plan = str(n.get("planNo") or 1) != str(o.get("planNo") or 1)
+    kept = {k: v for k, v in o.items() if filled(v) and not filled(n.get(k)) and not (new_plan and k in PLAN_SCOPED_KEYS)}
     if kept:
         new = {**new, "ProgressReport": json.dumps({**n, **kept}, ensure_ascii=False)}
     if filled(load(old.get("FBAReport"))) and not filled(load(new.get("FBAReport"))):
         new = {**new, "FBAReport": old.get("FBAReport")}
     return new
+
+
+PLAN_ARCHIVE_SHEET = "BIP_종결계획"
+PLAN_ARCHIVE_HEADERS = ["ClosedAt", "StudentCode", "PlanNo", "PlanName", "PlanStart", "PlanEnd", "Decision", "Plan(JSON)"]
+
+
+def archive_closed_plan(student_code: str, plan: dict) -> dict:
+    """종결한 행동중재계획(계획 칸·의사결정·결과 보고서)을 숨김 탭에 덧붙인다. 고치거나 지우지 않는다."""
+    import json
+    client = get_sheets_client()
+    if not client:
+        return {"error": "Sheet access failed"}
+    sheet = open_main_sheet(client)
+    try:
+        ws = sheet.worksheet(PLAN_ARCHIVE_SHEET)
+    except gspread.WorksheetNotFound:
+        ws = sheet.add_worksheet(title=PLAN_ARCHIVE_SHEET, rows=200, cols=len(PLAN_ARCHIVE_HEADERS))
+        ws.append_row(PLAN_ARCHIVE_HEADERS)
+        try:
+            ws.hide()
+        except Exception:
+            logger.warning("BIP_종결계획 숨기기 실패(무시)", exc_info=True)
+    row = [now_kst().strftime("%Y-%m-%d %H:%M"), str(student_code).strip(), str(plan.get("planNo") or ""), plan.get("PlanName", ""),
+           plan.get("PlanStart", ""), plan.get("PlanEnd", ""), plan.get("outcome", ""), json.dumps(plan, ensure_ascii=False)]
+    ws.append_row(row, value_input_option="RAW")
+    invalidate_cache(f"plans:{str(student_code).strip()}")
+    return {"message": "saved"}
+
+
+def list_closed_plans(student_code: str) -> list:
+    import json
+    clean = str(student_code).strip()
+    cached = get_cached(f"plans:{clean}", ttl=30)
+    if cached is not None:
+        return cached
+    client = get_sheets_client()
+    if not client:
+        return []
+    try:
+        ws = open_main_sheet(client).worksheet(PLAN_ARCHIVE_SHEET)
+    except gspread.WorksheetNotFound:
+        return []
+    out = []
+    for r in safe_get_all_records(ws):
+        if str(r.get("StudentCode")).strip() != clean:
+            continue
+        try:
+            plan = json.loads(r.get("Plan(JSON)") or "{}")
+        except Exception:
+            plan = {}
+        out.append({**plan, "closedAt": r.get("ClosedAt", "")})
+    out.sort(key=lambda p: int(str(p.get("planNo") or 0) or 0))
+    set_cached(f"plans:{clean}", out)
+    return out
 
 
 def save_bip(bip_data: dict):

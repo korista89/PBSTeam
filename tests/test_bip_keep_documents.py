@@ -18,3 +18,16 @@ def test_stale_save_keeps_sheet_documents():
 def test_nothing_to_keep_returns_same():
     new = {"ProgressReport": json.dumps({"profile": {"learning": "a"}})}
     assert _keep_documents(new, {"ProgressReport": ""}) == new
+
+
+def test_new_plan_does_not_revive_previous_plan_documents():
+    old = {"ProgressReport": json.dumps({"planNo": 1, "decision": {"choice": "수정"}, "sections": {"종합 의견": "x"}, "handover": {"summary": "y"}})}
+    new = {"ProgressReport": json.dumps({"planNo": 2})}
+    got = json.loads(_keep_documents(new, old)["ProgressReport"])
+    assert got == {"planNo": 2, "handover": {"summary": "y"}}
+
+
+def test_fit_one_page_keeps_short_text(monkeypatch):
+    from app.services import ai_insight
+    monkeypatch.setattr(ai_insight, "_call_llm", lambda *a, **k: (_ for _ in ()).throw(AssertionError("줄이기 호출 안 함")))
+    assert ai_insight.fit_one_page("짧은 글", "제목", 100) == "짧은 글"

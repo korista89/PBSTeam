@@ -324,11 +324,9 @@ def _call_local_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4096
                     if not content and msg_obj.get("reasoning_content"):
                         content = msg_obj.get("reasoning_content", "").strip()
                         
-                    actual_model = data.get("model", model_to_use)
                     cleaned = _clean_llm_output(content)
                     if cleaned and len(cleaned) > 100:
-                        location_tag = "Cloudflare Tunnel" if "trycloudflare" in endpoint else "Local"
-                        return cleaned + f"\n\n---\n> 🖥️ **로컬 AI 모델**: {actual_model} ({location_tag})"
+                        return cleaned  # 모델명 꼬리말은 붙이지 않는다(2026-11-28)
         except SheetUnavailable:
             raise
         except Exception:
@@ -389,7 +387,6 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
     last_error = ""
     best_response = ""
-    best_model_tag = ""
 
     # 1. Gemini API - v1beta ONLY
     if gemini_key:
@@ -447,18 +444,16 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
                             if not text:
                                 continue
                             
-                            diag = f"| 종료: {finish_reason} | 입력: {in_tokens}토큰, 출력: {out_tokens}토큰"
-                            model_tag = f"\n\n---\n> ☁️ **AI 모델**: {g_model} (Google Gemini) {diag}"
+                            logger.info("Gemini %s 종료=%s 입력=%s 출력=%s", g_model, finish_reason, in_tokens, out_tokens)
                             cleaned = _clean_llm_output(text)
                             
                             # 정상 완료 (STOP) 이거나 충분한 분량 (1200자 이상)이면 즉시 반환
                             if finish_reason == "STOP" or len(cleaned) >= 1200:
-                                return cleaned + model_tag
+                                return cleaned
                             
                             # 너무 짧게 잘린 경우 저장 후 다음 시도
                             if len(cleaned) > len(best_response):
                                 best_response = cleaned
-                                best_model_tag = model_tag
                                 
                     elif resp.status_code == 429:
                         last_error = f"{g_model} 429 한도 초과"
@@ -474,7 +469,7 @@ def _call_gemini(system_prompt: str, user_prompt: str, max_tokens: int = 4096) -
 
     # 최장 응답 반환
     if best_response:
-        return best_response + best_model_tag
+        return best_response
 
     return f"⚠️ 모든 AI 모델 호출에 실패했습니다. (마지막 오류: {last_error})"
 
@@ -1397,8 +1392,9 @@ def generate_iep_team_minutes_draft(
  4. 가정 연계와 구성원별 역할
  각 안건: 가. 현황 / 나. 협의할 점(질문 1~2개) / 다. 결정(안) [협의 필요] / 라. 담당·기한
 Ⅲ. 다음 점검일(안)
-자료에 없는 사실·수치는 만들지 말고 '확인 필요'로 쓴다. 지난 협의에서 정한 사항이 지켜졌는지 확인 항목을 넣는다."""
-    return (_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500) or "").replace("**", "")
+자료에 없는 사실·수치는 만들지 말고 '확인 필요'로 쓴다. 지난 협의에서 정한 사항이 지켜졌는지 확인 항목을 넣는다.
+분량은 A4 1쪽이다(본문 합계 {PAGE_BUDGET['minutes']}자 이내)."""
+    return fit_one_page((_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500) or "").replace("**", ""), "개별화교육지원팀 협의록", PAGE_BUDGET["minutes"], "Ⅱ")
 
 
 def generate_data_based_decision_recommendation(
@@ -1433,17 +1429,17 @@ def generate_data_based_decision_recommendation(
 1. 현재 BIP와 실제 데이터 추이가 일치하는지(효과 있음) 불일치하는지(효과 없음/악화) 먼저 판단하라.
 2. EBP 실행충실도 체크포인트 내용을 근거로, 효과 부진이 '전략 자체의 한계'인지 '실행충실도 부족'인지 구분하라.
 3. 팀 협의 기록에 언급된 우려나 합의사항이 데이터와 상충하는 지점이 있다면 짚어라.
-4. 다음 중 하나로 명확히 제안하라: (a) 현재 BIP/EBP 유지, (b) 특정 EBP 교체/추가, (c) 실행충실도 개선 조치, (d) Tier 조정(하향/상향) 검토.
+4. 계획 결정을 다음 중 하나로 명확히 제안하라: 종결(목표 달성), 일반화(다른 장소·사람으로 넓히는 계획), 유지(기간 연장), 수정(계획 바꿈). 필요하면 추가 조치(추가 지원 신청, 의료협력)를 덧붙인다.
 5. 다음 개별화교육지원팀 회의에서 바로 결정할 수 있도록 실행 가능한 조치 3개 이하로 압축하라.
 
 [출력 형식]
-소제목 없이 다음 4개 항목만 순서대로, 각 항목 2~3문장으로 작성하라:
+소제목 없이 다음 4개 항목만 순서대로, 각 항목 1~2문장으로 작성하라(합계 {PAGE_BUDGET['decision']}자 이내, 결정 기록 1쪽에 들어가게):
 1) 데이터-BIP 일치도 판단
 2) 원인 분석 (전략 한계 vs 실행충실도)
 3) 팀 협의와의 정합성
 4) 제안 (다음 조치)"""
 
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800)
+    return fit_one_page(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800), "데이터 기반 의사결정 의견", PAGE_BUDGET["decision"])
 
 
 # ------------------------------------------------------------------------------
@@ -1460,12 +1456,17 @@ FBA_REPORT_SECTIONS = [
 
 
 DOCUMENT_SPECS = {
-    "medical": ("의료협력 의뢰서", ["의뢰 사유", "행동 요약", "지금까지의 중재와 반응", "복용 약물·건강 상태", "의료진께 요청하는 사항"],
-                "의사가 읽는 문서다. 약물·진단은 교사 입력에 있는 것만 쓰고, 없으면 '확인 필요'로 쓴다. 5절은 의료진이 판단할 질문 2~3개를 번호 없이 줄로 쓴다."),
+    "medical": ("의료협력을 위한 행동중재지원 모니터링 자료",
+                ["복용 약물과 변경 내용", "학교 행동 관찰 수치", "시간대·요일 패턴과 컨디션", "학교에서 하고 있는 행동지원", "의료진께 여쭙는 점"],
+                "보호자가 진료 때 의사에게 전하는 1쪽 자료다. 의사가 약물 조정 등 치료 계획을 세울 때 참고할 학교 관찰 사실만 쓴다. "
+                "1절은 교사 입력의 약물·용량·변경일만 옮기고 없으면 '-'로 쓴다. 2절은 [시스템 집계]의 주당 평균 건수·강도·변경 전후 비교 값만 옮긴다(직접 계산 금지). "
+                "3절은 많이 일어난 시간대·요일과 교사가 적은 졸림·식사·수면·통증 관찰을 쓰고, 약 먹는 시간과 연결해 볼 점이 있으면 '참고'로만 쓴다. "
+                "4절은 학교 중재 핵심 1~2줄과 실행충실도. 5절은 의사가 판단할 질문 2~3개. "
+                "진단명 추정, 약물 증량·감량·교체·중단 제안, 약 효과 단정을 하지 않는다. 건수 변화는 상관일 뿐 원인으로 쓰지 않는다."),
     "support": ("추가 지원 신청서", ["신청 사유", "행동 요약", "지금까지의 중재와 결과", "필요한 지원 내용", "기대 효과와 평가 방법"],
                 "관리자·교육청이 읽는 문서다. 4절은 인력·공간·전문가 자문·교구 중 근거가 있는 것만 구체적으로(누가·언제·얼마나) 쓰고, 5절에는 지원을 줄이거나 끝낼 수치 기준을 쓴다."),
     "progress": ("개별학생 행동중재 결과 보고서", ["중재 실행 현황", "종합 의견", "향후 계획"],
-                 "1절은 교사가 준 중재 전·후 수치를 그대로 옮기고 해석을 덧붙이지 않는다. 2절은 효과·실행충실도·한계를 쓴다. 3절은 유지·수정·종료·의뢰 중 근거 있는 방향 1개와 다음 점검 시점을 쓴다."),
+                 "1절은 교사가 준 중재 전·후 수치를 그대로 옮기고 해석을 덧붙이지 않는다. 2절은 효과·실행충실도·한계를 쓴다. 3절은 의사결정 결과(종결·일반화·유지·수정)를 따르고 다음 계획에서 바꿀 점·점검 시점을 쓴다. 보고 대상은 교사가 준 행동중재계획 하나(계획 이름·기간)다."),
     "handover": ("다음 학년도 행동지원 인수인계 자료",
                  ["한눈에 보는 학생", "의사소통", "건강·감각·안전", "올해 변화와 지금 상태", "행동 전에 보이는 신호",
                   "꼭 해주세요", "피해주세요", "올해 해 본 중재와 권고", "3월 첫 2주", "확인·협의할 것"],
@@ -1487,7 +1488,7 @@ DOCUMENT_SPECS = {
 
 
 def generate_document_draft(kind: str, student_info: dict, evidence_summary: dict, context: str = "", sample_size: int = 0) -> str:
-    """의료협력의뢰서·추가지원신청서·중재 결과 보고서 초안 — 누적 행동기록 요약과 교사 입력만으로 쓴다."""
+    """의료협력 모니터링 자료·추가지원신청서·중재 결과 보고서 초안 — 누적 행동기록 요약과 교사 입력만으로 쓴다."""
     gate = fba_data_gate(sample_size)
     if not gate["eligible"] and kind != "handover":  # 인수인계는 기능 추정이 아니므로 Tier2(행동 기록 적음) 학생도 쓴다
         return gate["notice"]
@@ -1500,7 +1501,8 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 [교사가 입력한 계획·수치·맥락] {context[:14000 if kind == 'handover' else 9000] or '없음'}
 
 [지시사항]
-위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 {'1~3' if kind == 'handover' else '2~5'}줄로 쓴다.
+위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 {'1~3' if kind == 'handover' else '1~3'}줄로 쓴다.
+분량은 A4 1쪽이다{'' if kind == 'handover' else f'(절 제목을 뺀 본문 합계 {PAGE_BUDGET[kind]}자 이내)'}.
 {sections}
 
 [작성 규칙]
@@ -1510,9 +1512,9 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
     text = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000 if kind == "handover" else 2000)
     if kind != "handover":
-        return text
-    # 인수인계 자료는 새 담임에게 그대로 전달하므로 모델 표시 꼬리말을 떼고 통계 표기를 쉬운 말로 바꾼다
-    clean = lambda t: plain_numbers(re.sub(r"\n+-{3,}\s*\n>[^\n]*(?:AI 모델)[^\n]*\s*$", "", t).rstrip())
+        return fit_one_page(text, title, PAGE_BUDGET[kind], secs[0])
+    # 인수인계 자료는 새 담임에게 그대로 전달하므로 통계 표기를 쉬운 말로 바꾼다
+    clean = lambda t: plain_numbers(t.rstrip())
     text = clean(text)
     # 모델이 글자 수 지시를 잘 안 지키므로, A4 1쪽(차트 4개 포함, 본문 약 1,000자)을 넘길 분량이면 한 번 더 줄이게 한다
     for _ in range(2):  # 줄이기는 최대 두 번
@@ -1529,6 +1531,33 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
         short = clean(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, shrink, 6000))
         q1, q2 = handover_lengths(short)
         if not (q1 + q2 and q1 + q2 < p1 + p2 and "한눈에 보는 학생" in short):
+            break
+        text = short
+    return text
+
+
+# AI로 쓰는 문서는 기본 A4 1쪽(2026-11-28). 양식 칸·표를 빼고 남는 본문 글자 수(공백 포함) 권장치.
+PAGE_BUDGET = {"fba": 1400, "progress": 900, "support": 1300, "medical": 800, "decision": 600, "minutes": 1400}
+
+
+def body_length(text: str) -> int:
+    return sum(len(l.strip()) for l in (text or "").splitlines() if l.strip())
+
+
+def fit_one_page(text: str, title: str, limit: int, must: str = "") -> str:
+    """모델이 글자 수 지시를 잘 안 지키므로, 1쪽 권장치를 넘으면 최대 두 번 줄이게 한다. 실패·오류 응답은 그대로 둔다."""
+    for _ in range(2):
+        n = body_length(text)
+        if n <= limit or text.startswith("⚠️"):
+            break
+        shrink = f"""아래 '{title}' 초안을 A4 1쪽에 들어가게 줄여라. 절 번호·제목·순서는 그대로 둔다.
+지금 본문은 {n}자다. 목표는 {int(limit * 0.9)}자 이하다.
+중복된 내용과 꾸밈말부터 지우고, 수치·안전 정보와 '확인 필요' 표시는 남긴다. 새로운 사실·수치를 더하지 않는다. 문체는 그대로 둔다.
+
+[초안]
+{text}"""
+        short = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, shrink, 4000) or ""
+        if short.startswith("⚠️") or not (0 < body_length(short) < n) or (must and must not in short):
             break
         text = short
     return text
@@ -1569,7 +1598,8 @@ def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_cont
 [교사가 입력한 기존 계획·맥락] {teacher_context[:3000] or '없음'}
 
 [지시사항]
-위 자료만으로 기능적 행동평가(FBA) 결과 보고서 초안을 작성하라. 아래 6개 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 3~6줄로 쓴다.
+위 자료만으로 기능적 행동평가(FBA) 결과 보고서 초안을 작성하라. 아래 6개 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 2~3줄로 쓴다.
+분량은 A4 1쪽이다(절 제목을 뺀 본문 합계 {PAGE_BUDGET['fba']}자 이내).
 {sections}
 
 [작성 규칙]
@@ -1579,4 +1609,4 @@ def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_cont
 4. 자료에 없는 선행사건·후속결과·진단명은 만들지 말고 '별도 기록 없음'으로 쓴다.
 5. 6절에는 경기 Be-Able EBP 이름으로 예방·교수·강화 방향을 1줄씩 제시하고, 확인 관찰 방법 1개를 쓴다.
 6. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
-    return _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500)
+    return fit_one_page(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500), "FBA 결과 보고서", PAGE_BUDGET["fba"], FBA_REPORT_SECTIONS[0])

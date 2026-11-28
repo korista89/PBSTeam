@@ -554,9 +554,15 @@ def add_no_incident(
 ):
     """'이 기간에는 위기행동이 없었다'를 평일 단위로 기록한다. 위기행동이 기록된 날은 건너뛴다."""
     check_student_scope(student_code, current_user)
-    start = str(payload.get("start_date") or "").strip()
-    end = str(payload.get("end_date") or start).strip()
-    days = expand_school_days(start, end, today_kst())
+    picked = payload.get("dates")  # 달력에서 고른 날짜들(2026-11-28). 없으면 예전처럼 기간
+    if isinstance(picked, list) and picked:
+        if len(picked) > 62:
+            raise HTTPException(status_code=400, detail="한 번에 62일까지만 반영할 수 있습니다.")
+        days = sorted({d for x in picked for d in expand_school_days(str(x).strip(), str(x).strip(), today_kst())})
+    else:
+        start = str(payload.get("start_date") or "").strip()
+        end = str(payload.get("end_date") or start).strip()
+        days = expand_school_days(start, end, today_kst())
     if not days:
         raise HTTPException(status_code=400, detail="평일이 포함된 기간을 선택해 주세요.")
     from app.services.sheets import add_no_incident_dates

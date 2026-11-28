@@ -12,25 +12,28 @@ import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { maskName } from "../utils";
 import Tracker from "./Tracker";
 import { DecisionStep, HandoverStep, ProfileStep, ReferralStep } from "./Docs";
-import { CrisisMonitor, DataStep, FbaStep, BipStep, ProgressStep, useStudentLogs } from "./Steps";
-import { Bip, StudentHead, isEnrolled, kDate, parseJson, today, tierOf } from "./shared";
+import { CrisisMonitor, DataStep, FbaStep, BipStep, PlanFidelity, ProgressStep, dOf, useStudentLogs } from "./Steps";
+import { Bip, StudentHead, isEnrolled, kDate, parseJson, planInfo, today, tierOf } from "./shared";
 import OverviewStep from "./Overview";
-import { CalmDays, EBPForStudent, MedicationResponseReport } from "./SupportTools";
+import { CalmDays, EBPForStudent } from "./SupportTools";
 import { schoolYearStart } from "../lib/progress";
 
+// 메뉴는 일의 순서대로 네 묶음: 이해 → 평가 → 중재 순환(④~⑦, 계획1·계획2…) → 연계.
 const STEPS = [
-    { key: "profile", label: "⓪ 학생정보 및 이해자료" },
-    { key: "overview", label: "① 학생 현황" },
-    { key: "data", label: "② 자료 분석" },
-    { key: "fba", label: "③ FBA 결과 보고서" },
-    { key: "bip", label: "④ 행동중재계획" },
-    { key: "track", label: "⑤ 모니터링(자료 입력·차트)" },
-    { key: "decision", label: "⑥ 데이터 기반 의사결정" },
-    { key: "refer", label: "⑦ 의료협력의뢰서·추가지원신청서" },
-    { key: "report", label: "⑧ 중재 결과 보고서" },
-    { key: "handover", label: "⑨ 다음 학년도 인수인계 자료" },
+    { key: "profile", label: "⓪ 학생정보 및 이해자료", group: "이해" },
+    { key: "overview", label: "① 학생 현황", group: "이해" },
+    { key: "data", label: "② FBA 자료 분석", group: "평가" },
+    { key: "fba", label: "③ FBA 결과 보고서", group: "평가" },
+    { key: "bip", label: "④ 행동중재계획", group: "중재" },
+    { key: "track", label: "⑤ 모니터링", group: "중재" },
+    { key: "decision", label: "⑥ 데이터 기반 의사결정", group: "중재" },
+    { key: "report", label: "⑦ 중재 결과 보고서", group: "중재" },
+    { key: "support", label: "⑧ 추가지원신청서", group: "연계" },
+    { key: "medical", label: "⑨ 의료협력 모니터링 자료", group: "연계" },
+    { key: "handover", label: "⑩ 인수인계 자료", group: "연계" },
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
+const GROUPS = ["이해", "평가", "중재", "연계"];
 
 const isT3 = (s: any) => String(s?.Tier3 || "").toUpperCase() === "O" || String(s?.["Tier3+"] || "").toUpperCase() === "O";
 
@@ -48,7 +51,8 @@ export default function InterventionPage() {
         const p = new URLSearchParams(window.location.search);
         if (p.get("student")) setRequested(p.get("student") || "");
         const st = p.get("step");
-        if (st && STEPS.some(s => s.key === st)) setStep(st as StepKey);
+        const want = st === "refer" ? "support" : st;  // 예전 링크
+        if (want && STEPS.some(s => s.key === want)) setStep(want as StepKey);
     }, []);
 
     const fetchStudents = useCallback(async () => {
@@ -132,7 +136,7 @@ export default function InterventionPage() {
     return (
         <AuthCheck>
             <AppShell currentPage="target-behavior" title="🧩 개별학생 행동중재"
-                subtitle="학생정보 → 학생 현황 → 자료 분석 → FBA → 행동중재계획 → 모니터링 → 의사결정 → 의뢰·신청서 → 결과 보고서 → 인수인계를 한 화면에서">
+                subtitle="이해(학생정보·현황) → 평가(FBA) → 중재(계획 → 모니터링 → 의사결정 → 결과 보고서, 계획1·계획2…) → 연계(추가지원·의료협력·인수인계)">
                 <div className="behavior-outer-grid" style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20, alignItems: "start" }}>
                     <div className="card" style={{ padding: 16 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -172,7 +176,7 @@ export default function InterventionPage() {
                                     <div>
                                         <div style={{ fontWeight: 900, fontSize: "1.05rem" }}>{head.name} <span style={{ fontWeight: 600, fontSize: "0.82rem", color: "#64748b" }}>{head.className} · {code}</span></div>
                                         <div style={{ fontSize: "0.78rem", color: "#475569", marginTop: 2 }}>
-                                            {bip.PlanStart ? <>중재 기간 {kDate(bip.PlanStart)} ~ {bip.PlanEnd ? kDate(bip.PlanEnd) : "진행 중"}</> : "행동중재계획 없음 — ④에서 작성하세요"}
+                                            {bip.PlanStart ? <>{planInfo(bip).label}{planInfo(bip).closed ? " (종결)" : ""} · {kDate(bip.PlanStart)} ~ {bip.PlanEnd ? kDate(bip.PlanEnd) : "진행 중"}</> : "행동중재계획 없음 — ④에서 작성하세요"}
                                             {bip.TargetBehavior && <> · 표적행동: {bip.TargetBehavior}</>}
                                         </div>
                                         {profileFlags && <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#b91c1c", marginTop: 2 }}>⚠ 꼭 알아 둘 점: {profileFlags}</div>}
@@ -180,12 +184,17 @@ export default function InterventionPage() {
                                     {bip._loadError && <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "#b91c1c" }}>⚠ 행동중재계획을 불러오지 못했습니다({bip._loadError}). 저장하지 말고 새로고침해 주세요.</span>}
                                     {dirty && <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "#b45309" }}>{saving ? "저장 중…" : "● 저장하지 않은 변경이 있습니다"}</span>}
                                 </div>
-                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                    {STEPS.map(s => (
-                                        <button key={s.key} onClick={() => setStep(s.key)} style={{
-                                            padding: "9px 14px", borderRadius: 999, fontWeight: 800, fontSize: "0.85rem", cursor: "pointer",
-                                            border: step === s.key ? "2px solid #4f46e5" : "1px solid #cbd5e1", background: step === s.key ? "#4f46e5" : "#fff", color: step === s.key ? "#fff" : "#0f172a",
-                                        }}>{s.label}</button>
+                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
+                                    {GROUPS.map(g => (
+                                        <div key={g} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", padding: "6px 8px", borderRadius: 12, background: "#f1f5f9" }}>
+                                            <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#64748b" }}>{g}</span>
+                                            {STEPS.filter(s => s.group === g).map(s => (
+                                                <button key={s.key} onClick={() => setStep(s.key)} style={{
+                                                    padding: "8px 13px", borderRadius: 999, fontWeight: 800, fontSize: "0.84rem", cursor: "pointer",
+                                                    border: step === s.key ? "2px solid #4f46e5" : "1px solid #cbd5e1", background: step === s.key ? "#4f46e5" : "#fff", color: step === s.key ? "#fff" : "#0f172a",
+                                                }}>{s.label}</button>
+                                            ))}
+                                        </div>
                                     ))}
                                 </div>
                                 {step === "profile" && <ProfileStep key={`pf-${code}`} head={head} bip={bip} setBip={editBip} save={save} tier={tierOf(selected)} />}
@@ -194,13 +203,13 @@ export default function InterventionPage() {
                                 {step === "fba" && <FbaStep head={head} bip={bip} setBip={editBip} save={save} />}
                                 {step === "bip" && <BipStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} goTracker={() => setStep("track")} />}
                                 {step === "bip" && <EBPForStudent studentCode={code} currentTier={isT3(selected) ? "TIER_3" : "TIER_1"} />}
-                                {step === "track" && <CalmDays key={`calm-${code}`} studentCode={code} yearStart={schoolYearStart(today())} />}
+                                {step === "track" && <CalmDays key={`calm-${code}`} studentCode={code} yearStart={schoolYearStart(today())} incidentDays={logs.map(dOf).filter(Boolean)} />}
+                                {step === "track" && <PlanFidelity bip={bip} save={save} />}
                                 {step === "track" && <CrisisMonitor logs={logs} planStart={bip.PlanStart || ""} />}
                                 {step === "track" && <Tracker key={`trk-${code}`} studentCode={code} behaviors={behaviors} refresh={fetchBehaviors} defaultStart={bip.PlanStart || ""} />}
-                                {step === "decision" && <DecisionStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
-                                {step === "refer" && <ReferralStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
-                                {step === "refer" && <div className="card" style={{ padding: 16 }}><MedicationResponseReport key={code} studentCode={code} apiUrl={API_BASE_URL} /></div>}
-                                {step === "report" && <ProgressStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} logs={logs} />}
+                                {step === "decision" && <DecisionStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} goStep={k => setStep(k as StepKey)} />}
+                                {step === "report" && <ProgressStep head={head} bip={bip} setBip={editBip} save={save} behaviors={behaviors} logs={logs} goStep={k => setStep(k as StepKey)} />}
+                                {(step === "support" || step === "medical") && <ReferralStep key={step} kind={step} head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                                 {step === "handover" && <HandoverStep head={head} bip={bip} setBip={editBip} save={save} logs={logs} behaviors={behaviors} />}
                             </div>
                         )}

@@ -1,12 +1,12 @@
 "use client";
 
-// ⑤ 데이터 기반 의사결정, ⑥ 의료협력의뢰서·추가지원신청서, ⑧ 다음 학년도 인수인계 자료.
+// ⑥ 데이터 기반 의사결정, ⑧ 추가지원신청서, ⑨ 의료협력 모니터링 자료, ⑩ 다음 학년도 인수인계 자료.
 // 따로 시트 칸을 만들지 않고 BIP 행의 ProgressReport JSON 안(decision·medical·support·handover)에 함께 저장한다.
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
-import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth } from "./shared";
+import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, DateRange, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth, planInfo, outcomeOf, planFidelity } from "./shared";
 import { PROFILE_BANK, PROFILE_FLAGS, BankGroup } from "./profileBank";
 import { AIBox, ApplyMode, AutoArea, card, dOf, err, fetchBehaviorSummaries, mergeInto, openPrint } from "./Steps";
 
@@ -20,6 +20,7 @@ function useStore(bip: Bip, setBip: (b: Bip) => void, key: string) {
 }
 
 const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const EXTEND_WEEKS = 4;  // 의사결정 '유지' 때 기본 연장 기간
 
 // 위기행동 기록·표적행동 요약을 글로 만든다(의사결정·의뢰서 공통 근거).
 function dataSummary(logs: Log[], behaviors: any[], planStart: string) {
@@ -32,23 +33,36 @@ function dataSummary(logs: Log[], behaviors: any[], planStart: string) {
     return lines.join("\n");
 }
 
-// ⑤ 데이터 기반 의사결정 ─────────────────────────────────
-const CHOICES = [
-    "현재 중재 유지(자료 더 모음)", "중재 전략 수정", "의료협력 의뢰 검토", "추가 지원 신청 검토",
-    "Tier2로 하향 검토", "Tier3+ 상향 검토", "중재 종료(목표 달성)",
-];
+// ⑥ 데이터 기반 의사결정 ─────────────────────────────────
+// 계획 결정 하나 + 추가 조치(여러 개). Tier 하향·상향은 Tier3관리에서 정한다(2026-11-28).
+const CHOICES = ["종결(목표 달성)", "일반화(다른 장소·사람으로 넓힘)", "유지(기간 연장)", "수정(계획 바꿈)"];
+const EXTRAS: [string, string][] = [["추가 지원 신청", "support"], ["의료협력", "medical"]];
 
-export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
-    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
+export function DecisionStep({ head, bip, setBip, save, logs, behaviors, goStep }: {
+    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[]; goStep: (k: string) => void;
 }) {
     const { cur, set } = useStore(bip, setBip, "decision");
     const [ai, setAi] = useState({ loading: false, text: "" });
-    const summary = useMemo(() => dataSummary(logs, behaviors, bip.PlanStart || ""), [logs, behaviors, bip.PlanStart]);
+    const info = planInfo(bip);
+    const planEnd = bip.PlanEnd && bip.PlanEnd < today() ? bip.PlanEnd : today();  // 이 계획 기간 자료로 판단한다
+    const fid = planFidelity(bip, bip.PlanStart, planEnd);
+    const summary = useMemo(() => [dataSummary(logs, behaviors, bip.PlanStart || ""), fid.text && `- ${fid.text}`].filter(Boolean).join("\n"), [logs, behaviors, bip.PlanStart, fid.text]);
+    const outcome = outcomeOf(cur.choice);
+    const extras = (cur.extra || "").split(",").filter(Boolean);
+    const toggleExtra = (x: string) => set({ extra: (extras.includes(x) ? extras.filter(e => e !== x) : [...extras, x]).join(",") });
+    const [extendTo, setExtendTo] = useState("");
+    const ext = extendTo || addDays(bip.PlanEnd || today(), EXTEND_WEEKS * 7);
+    const decisionDoc = () => ({ ...cur, date: cur.date || today(), author: cur.author ?? bip.Teacher ?? "" });
+    const saveDecision = (b: Bip = bip, patch: Record<string, string> = {}) => save({ ...b, ProgressReport: JSON.stringify({ ...parseJson<any>(b.ProgressReport, {}), decision: { ...decisionDoc(), ...patch } }) });
+    const extend = async () => {
+        if (!confirm(`${info.label} 기간을 ${kDate(ext)}까지 늘리고 결정을 저장합니다. 진행할까요?`)) return;
+        await saveDecision({ ...bip, PlanEnd: ext }, { extendedTo: ext, actions: cur.actions || `중재 기간 ${kDate(ext)}까지 연장` });
+    };
     const runAI = async () => {
         setAi({ loading: true, text: "" });
         try {
             const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-decision-recommendation`,
-                { start_date: bip.PlanStart || undefined, end_date: today() }, { timeout: 240000 });
+                { start_date: bip.PlanStart || undefined, end_date: planEnd }, { timeout: 240000 });
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
@@ -60,7 +74,7 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
         setMinutes({ loading: true, text: "" });
         try {
             const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-team-minutes-draft`,
-                { start_date: bip.PlanStart || undefined, end_date: today(), summary, choice: cur.choice || "" }, { timeout: 240000 });
+                { start_date: bip.PlanStart || undefined, end_date: planEnd, summary, choice: [cur.choice, ...extras].filter(Boolean).join(", ") }, { timeout: 240000 });
             setMinutes({ loading: false, text: r.data.draft || "" });
         } catch (e) { setMinutes({ loading: false, text: "⚠️ " + err(e) }); }
     };
@@ -72,15 +86,20 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
         } catch (e) { alert("저장 실패: " + err(e)); }
     };
     const printMeta: [string, string][] = [["결정일", kDate(cur.date || today())], ["다음 점검일", kDate(cur.nextReview || "")], ["작성자", cur.author ?? bip.Teacher ?? ""]];
-    const printSections: [string, string][] = [["자료 요약", summary], ["결정", cur.choice || ""], ["판단 근거", cur.rationale || ""], ["후속 조치", cur.actions || ""]];
+    const printSections: [string, string][] = [["대상 계획", `${info.label} ${bip.PlanName || ""} (${kDate(bip.PlanStart)} ~ ${kDate(bip.PlanEnd)})`], ["자료 요약", summary], ["결정", [cur.choice, extras.length ? `추가 조치: ${extras.join(", ")}` : ""].filter(Boolean).join("\n")], ["판단 근거", cur.rationale || ""], ["후속 조치", cur.actions || ""]];
     const meta: [string, React.ReactNode][] = [
         ["결정일", <Inp key="d" type="date" value={cur.date || today()} onChange={v => set({ date: v })} />],
         ["다음 점검일", <Inp key="n" type="date" value={cur.nextReview || ""} onChange={v => set({ nextReview: v })} />],
         ["작성자", <Inp key="a" value={cur.author ?? bip.Teacher ?? ""} onChange={v => set({ author: v })} />],
     ];
     const sections: [string, React.ReactNode][] = [
+        ["대상 계획", <span key="p">{info.label} {bip.PlanName || ""} ({kDate(bip.PlanStart)} ~ {kDate(bip.PlanEnd)})</span>],
         ["자료 요약\n(자동)", <div key="s" style={{ whiteSpace: "pre-wrap" }}>{summary}</div>],
-        ["결정", <Sel key="c" value={cur.choice || ""} onChange={v => set({ choice: v })} options={CHOICES} />],
+        ["결정", <div key="c">
+            <Sel value={cur.choice || ""} onChange={v => set({ choice: v })} options={cur.choice && !CHOICES.includes(cur.choice) ? [...CHOICES, cur.choice] : CHOICES} />
+            <div className="no-print" style={{ display: "flex", gap: 12, marginTop: 4, fontSize: "9pt" }}>추가 조치:
+                {EXTRAS.map(([x]) => <label key={x} style={{ cursor: "pointer" }}><input type="checkbox" checked={extras.includes(x)} onChange={() => toggleExtra(x)} /> {x}</label>)}</div>
+        </div>],
         ["판단 근거", <Area key="r" value={cur.rationale || ""} onChange={v => set({ rationale: v })} placeholder="자료의 어느 수치를 보고 결정했는지" rows={4} />],
         ["후속 조치", <Area key="x" value={cur.actions || ""} onChange={v => set({ actions: v })} placeholder="누가·언제·무엇을" rows={3} />],
     ];
@@ -89,12 +108,36 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 의사결정 의견 초안 받기(판단 근거)</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "데이터 기반 의사결정 기록", s: head, meta: printMeta, sections: printSections })}>🖨️ 미리보기·인쇄</button>
-                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), decision: { ...cur, date: cur.date || today(), author: cur.author ?? bip.Teacher ?? "" } }) })}>💾 저장</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "데이터 기반 의사결정 기록", s: head, meta: printMeta, sections: printSections, limit: 1 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-primary" onClick={() => saveDecision()}>💾 저장</button>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>⑤ 모니터링 차트와 함께 보고 판단하세요. 2주 이상 개선이 없으면 전략 수정, 4주 연속 목표 달성이면 하향·종료를 검토합니다.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>{info.label} 기간({kDate(bip.PlanStart)} ~ {kDate(planEnd)}) 자료로 판단합니다. ⑤ 모니터링 차트와 함께 보세요. 2주 이상 개선이 없으면 수정, 4주 연속 목표 달성이면 종결·일반화를 검토합니다.</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
+            {(outcome || extras.length > 0) && !info.closed && (
+                <div style={{ ...card, border: "1px solid #c7d2fe", background: "#eef2ff", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <b style={{ fontSize: "0.88rem" }}>➡️ 다음 단계</b>
+                    {outcome === "유지" && (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: "0.84rem" }}>
+                            {info.label} 기간을 <Inp type="date" value={ext} onChange={setExtendTo} width={150} />까지 늘립니다(기본 {EXTEND_WEEKS}주).
+                            <button className="btn btn-primary" onClick={extend}>✅ 기간 연장하고 저장</button>
+                        </div>
+                    )}
+                    {(outcome === "종결" || outcome === "수정" || outcome === "일반화") && (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: "0.84rem" }}>
+                            {outcome === "종결" ? `${info.label}을 종결합니다.` : `${info.label}을 종결하고 행동중재계획${info.no + 1}${outcome === "일반화" ? "(일반화)" : ""}을 만듭니다.`} 먼저 결과 보고서를 쓰고, 보고서 화면 아래에서 마무리합니다.
+                            <button className="btn btn-primary" onClick={async () => { await saveDecision(); goStep("report"); }}>💾 저장하고 ⑦ 결과 보고서로</button>
+                        </div>
+                    )}
+                    {EXTRAS.filter(([x]) => extras.includes(x)).map(([x, k]) => (
+                        <div key={k} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: "0.84rem" }}>
+                            {x}: 계획은 그대로 두고 문서를 씁니다.
+                            <button className="btn btn-secondary" onClick={async () => { await saveDecision(); goStep(k); }}>💾 저장하고 {k === "support" ? "⑧ 추가지원신청서" : "⑨ 의료협력 모니터링 자료"}로</button>
+                        </div>
+                    ))}
+                </div>
+            )}
+            {info.closed && <div style={{ ...card, fontSize: "0.84rem" }}>{info.label}은 종결되었습니다. 새 계획이 필요하면 ④ 행동중재계획에서 만드세요.</div>}
             <div style={sheetBox}><SectionSheet heading="데이터 기반 의사결정 기록" s={head} meta={meta} sections={sections} /></div>
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -106,7 +149,7 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
                         <AutoArea value={minutes.text} onChange={v => setMinutes({ loading: false, text: v })} rows={12} />
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <button className="btn btn-primary" onClick={saveMinutes}>💾 사례 협의 기록에 저장</button>
-                            <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "개별화교육지원팀 협의록", s: head, meta: [["협의일", kDate(today())]], sections: [["협의 내용", minutes.text]] })}>🖨️ 미리보기·인쇄</button>
+                            <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "개별화교육지원팀 협의록", s: head, meta: [["협의일", kDate(today())]], sections: [["협의 내용", minutes.text]], limit: 1 })}>🖨️ 미리보기·인쇄</button>
                         </div>
                     </div>
                 )}
@@ -116,54 +159,104 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors }: {
     );
 }
 
-// ⑥ 의료협력의뢰서 · 추가지원신청서 ───────────────────────
-const DOCS = {
+// ⑧ 추가지원신청서 · ⑨ 의료협력 모니터링 자료 ─────────────
+type DocKind = "medical" | "support";
+const DOCS: Record<DocKind, { label: string; heading: string; meta: [string, string][]; sections: [string, string, string][] }> = {
+    // 보호자가 진료 때 의사에게 전하는 1쪽: 약물 조정 등 치료 계획에 쓸 학교 관찰 수치(2026-11-28)
     medical: {
-        label: "의료협력의뢰서", heading: "의료협력 의뢰서", key: "medical",
-        meta: [["의뢰 기관·의사", "org"], ["의뢰일", "date"], ["작성자", "author"], ["보호자 동의", "consent"]] as [string, string][],
+        label: "의료협력 모니터링 자료", heading: "의료협력을 위한 행동중재지원 모니터링 자료",
+        meta: [["관찰 기간", "period"], ["약물 변경일", "change"], ["작성일", "date"], ["작성 교사", "author"]],
         sections: [
-            ["의뢰 사유", "reason", "예: 중재 8주 후에도 자해 행동이 줄지 않아 약물·건강 요인 점검이 필요함"],
-            ["행동 요약", "behavior", ""],
-            ["지금까지의 중재와 반응", "interventions", "시행한 예방·교수·강화 전략과 효과, 실행충실도"],
-            ["복용 약물·건강 상태", "health", "복용 약물, 수면·식사·통증·발작 등 관찰 내용"],
-            ["의료진께 요청하는 사항", "request", "예: 약물 조정 필요성 검토, 통증·수면 문제 확인, 학교에서 주의할 점 안내"],
-        ] as [string, string, string][],
+            ["복용 약물과 변경 내용", "meds", "약 이름·용량·먹는 시간, 바뀐 날짜와 내용(보호자 확인)"],
+            ["학교 행동 관찰 수치", "numbers", "초안을 받으면 관찰 기간 수치로 먼저 채웁니다"],
+            ["시간대·요일 패턴과 컨디션", "pattern", "많이 일어난 시간대·요일, 졸림·식사·수면·통증 관찰"],
+            ["학교에서 하고 있는 행동지원", "support", "예방·교수·강화 핵심과 실행충실도"],
+            ["의료진께 여쭙는 점", "ask", "예: 오후 시간대 행동 증가와 복용 시간의 관련성 검토 요청"],
+        ],
     },
     support: {
-        label: "추가지원신청서", heading: "추가 지원 신청서", key: "support",
-        meta: [["신청 대상", "to"], ["신청일", "date"], ["작성자", "author"], ["지원 기간", "period"]] as [string, string][],
+        label: "추가지원신청서", heading: "추가 지원 신청서",
+        meta: [["신청 대상", "to"], ["신청일", "date"], ["작성자", "author"], ["지원 기간", "period"]],
         sections: [
             ["신청 사유", "reason", "예: 학급 인력만으로는 위기 상황 안전 확보가 어려움"],
-            ["행동 요약", "behavior", ""],
+            ["행동 요약", "behavior", "초안을 받으면 행동 기록 수치로 먼저 채웁니다"],
             ["지금까지의 중재와 결과", "interventions", "시행한 중재와 효과, 한계"],
             ["필요한 지원 내용", "need", "예: 지원 인력 배치, 안정실 이용, 외부 전문가 자문, 교구·예산"],
             ["기대 효과와 평가 방법", "effect", "어떤 수치가 어떻게 달라지면 지원을 줄이거나 끝낼지"],
-        ] as [string, string, string][],
+        ],
     },
 };
+// 예전 '의료협력의뢰서' 칸을 새 칸으로 옮겨 읽는다(저장해야 바뀐다)
+const upgradeMedical = (c: Record<string, string>) => c.meds || c.numbers || c.ask || !(c.health || c.behavior || c.request || c.reason || c.interventions) ? c
+    : { ...c, meds: c.health || "", numbers: c.behavior || "", support: c.interventions || "", ask: [c.reason, c.request].filter(Boolean).join("\n") };
 
-export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
-    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
+// 의료협력 자료: 관찰 기간 수치와 차트(AI 없이 계산)
+const WD = ["월", "화", "수", "목", "금"];
+const r1 = (n: number) => Math.round(n * 10) / 10;
+function medStats(logs: Log[], from: string, to: string) {
+    const ls = logs.filter(l => { const d = dOf(l); return d && d >= from && d <= to; });
+    const weeks = Math.max(1, (new Date(to).getTime() - new Date(from).getTime()) / 864e5 / 7 + 1 / 7);
+    const ints = ls.map(l => parseInt(String(l["강도"] || "").charAt(0))).filter(n => n >= 1 && n <= 5);
+    return { ls, n: ls.length, weeks: r1(weeks), perWeek: r1(ls.length / weeks), inten: ints.length ? r1(ints.reduce((a, b) => a + b, 0) / ints.length) : null,
+        restraint: ls.filter(l => { const v = String(l["물리적제지여부"] || "").trim(); return v && v !== "X"; }).length };
+}
+function medNumbers(logs: Log[], from: string, to: string, change: string, fidText: string) {
+    const a = medStats(logs, from, to);
+    const lines = [`- 관찰 ${kDate(from)} ~ ${kDate(to)}(${a.weeks}주): 위기행동 ${a.n}건, 주당 평균 ${a.perWeek}건, 평균 강도 ${a.inten ?? "기록 없음"}${a.inten ? "/5" : ""}, 물리적 제지 ${a.restraint}건`];
+    if (change) {
+        const b = medStats(logs, addDays(change, -28), addDays(change, -1)), c = medStats(logs, change, addDays(change, 27) < to ? addDays(change, 27) : to);
+        lines.push(`- 약물 변경일(${kDate(change)}) 전 4주: 주당 ${b.perWeek}건·강도 ${b.inten ?? "-"} → 변경 뒤 ${c.weeks}주: 주당 ${c.perWeek}건·강도 ${c.inten ?? "-"}`);
+    }
+    if (fidText) lines.push(`- ${fidText}`);
+    return lines.join("\n");
+}
+function medCharts(logs: Log[], from: string, to: string, change: string): HandoverChartData {
+    const { ls } = medStats(logs, from, to);
+    const mon = (d: string) => addDays(d, -((new Date(d + "T00:00:00Z").getUTCDay() + 6) % 7));
+    const monthly: { label: string; count: number }[] = [];
+    for (let w = mon(from); w <= to; w = addDays(w, 7)) monthly.push({ label: `${+w.slice(5, 7)}/${+w.slice(8)}`, count: ls.filter(l => mon(dOf(l)) === w).length });
+    const rank = (key: (l: Log) => string, n: number) => {
+        const m = new Map<string, number>();
+        ls.forEach(l => { const k = key(l); if (k && k !== "미상") m.set(k, (m.get(k) || 0) + 1); });
+        return [...m.entries()].sort((x, y) => y[1] - x[1]).slice(0, n).map(([item, count]) => ({ item, count }));
+    };
+    const wd = WD.map((w, i) => ({ item: w, count: ls.filter(l => (new Date(dOf(l) + "T00:00:00Z").getUTCDay() + 6) % 7 === i).length }));
+    return {
+        monthly, times: rank(l => String(l["시간대"] || "").trim(), 4), functions: wd, types: rank(l => String(l["행동유형"] || "").trim(), 4), total: ls.length,
+        titles: [`① 주마다 위기행동 몇 번 (전체 ${ls.length}번)`, "② 언제 많이 일어났나(시간대)", "③ 무슨 요일에 많았나", "④ 어떤 행동이 많았나"],
+        note: `집계 ${kDate(from)} ~ ${kDate(to)}, 행동기록 1건을 1번으로 셈.${change ? ` 약물 변경일 ${kDate(change)}(①에서 그 주 앞뒤 비교).` : ""}`,
+    };
+}
+
+export function ReferralStep({ kind, head, bip, setBip, save, logs, behaviors }: {
+    kind: DocKind; head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; logs: Log[]; behaviors: any[];
 }) {
-    const [kind, setKind] = useState<"medical" | "support">("medical");
     const [ai, setAi] = useState({ loading: false, text: "" });
     const d = DOCS[kind];
-    const { cur, set } = useStore(bip, setBip, d.key);
+    const store = useStore(bip, setBip, kind);
+    const cur = kind === "medical" ? upgradeMedical(store.cur) : store.cur;
+    const set = (patch: Record<string, string>) => store.set({ ...cur, ...patch });
     const titles = d.sections.map(x => x[0]);
-    const fill = () => {
-        const patch: Record<string, string> = { behavior: dataSummary(logs, behaviors, bip.PlanStart || "") };
-        if (kind === "medical" && bip.MedicationStatus) patch.health = bip.MedicationStatus;
-        set(mergeInto(cur, patch, "empty"));
-    };
+    const from = cur.from || addDays(today(), -55), to = cur.to || today();
+    const fid = planFidelity(bip, kind === "medical" ? from : bip.PlanStart, kind === "medical" ? to : undefined);
+    const charts = useMemo(() => kind === "medical" ? medCharts(logs, from, to, cur.change || "") : undefined, [kind, logs, from, to, cur.change]);
+    // 자료로 바로 쓸 수 있는 칸(AI 없이). 초안을 받을 때 비어 있는 칸만 먼저 채운다.
+    const auto = (): Record<string, string> => kind === "medical"
+        ? { meds: bip.MedicationStatus || "", numbers: medNumbers(logs, from, to, cur.change || "", fid.text) }
+        : { behavior: [dataSummary(logs, behaviors, bip.PlanStart || ""), fid.text && `- ${fid.text}`].filter(Boolean).join("\n") };
     const runAI = async () => {
+        const filled = mergeInto(cur, auto(), "empty");
+        set(filled);
         setAi({ loading: true, text: "" });
         const decision = parseJson<any>(bip.ProgressReport, {}).decision || {};
-        const ctx = [dataSummary(logs, behaviors, bip.PlanStart || ""),
+        const ctx = [kind === "medical" ? `[시스템 집계 — 수치는 이 값만 쓴다]\n${medNumbers(logs, from, to, cur.change || "", fid.text)}` : dataSummary(logs, behaviors, bip.PlanStart || ""),
+            kind === "medical" && charts ? `시간대 많은 순: ${charts.times.map(t => `${t.item} ${t.count}번`).join(", ") || "기록 없음"} / 요일: ${(charts.functions || []).map(t => `${t.item} ${t.count}번`).join(", ")}` : "",
+            kind === "medical" ? `[교사 입력] 약물: ${filled.meds || "없음"} / 컨디션 관찰: ${cur.pattern || "없음"}` : "",
             ...["Antecedents", "Consequences", "Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "MedicationStatus", "AdditionalSupport", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : ""),
             decision.choice ? `의사결정: ${decision.choice} — ${decision.rationale || ""}` : ""].filter(Boolean).join("\n");
         try {
             const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
-                { kind, context: ctx, start_date: bip.PlanStart || undefined, end_date: today() }, { timeout: 240000 });
+                { kind, context: ctx, start_date: kind === "medical" ? from : bip.PlanStart || undefined, end_date: kind === "medical" ? to : today() }, { timeout: 240000 });
             setAi({ loading: false, text: r.data.analysis || "" });
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
@@ -171,33 +264,34 @@ export function ReferralStep({ head, bip, setBip, save, logs, behaviors }: {
         const parsed = splitNumbered(ai.text, titles);
         if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
         const patch: Record<string, string> = {};
-        d.sections.forEach(([t, f]) => { if (parsed[t]) patch[f] = parsed[t]; });
+        d.sections.forEach(([t, f]) => { if (parsed[t] && parsed[t].trim() !== "-") patch[f] = parsed[t]; });
         set(mergeInto(cur, patch, mode));
     };
     const dateVal = cur.date || today();
-    const printMeta: [string, string][] = d.meta.map(([k, f]) => [k, f === "date" ? kDate(dateVal) : cur[f] ?? (f === "author" ? bip.Teacher || "" : "")]);
+    const author = cur.author ?? bip.Teacher ?? "";
+    const metaText = (f: string) => f === "date" ? kDate(dateVal) : f === "author" ? author : f === "change" ? kDate(cur.change) : f === "period" && kind === "medical" ? `${kDate(from)} ~ ${kDate(to)}` : cur[f] || "";
+    const printMeta: [string, string][] = d.meta.map(([k, f]) => [k, metaText(f)]);
     const printSections: [string, string][] = d.sections.map(([k, f]) => [k, cur[f] || ""]);
     const meta: [string, React.ReactNode][] = d.meta.map(([k, f]) => [k,
-        <Inp key={f} type={f === "date" ? "date" : "text"} value={f === "date" ? dateVal : cur[f] ?? (f === "author" ? bip.Teacher || "" : "")} onChange={v => set({ [f]: v })} />]);
-    const sections: [string, React.ReactNode][] = d.sections.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={4} />]);
+        f === "period" && kind === "medical" ? <DateRange key={f} a={from} b={to} onA={v => set({ from: v })} onB={v => set({ to: v })} />
+            : <Inp key={f} type={f === "date" || f === "change" ? "date" : "text"} value={f === "date" ? dateVal : f === "author" ? author : cur[f] || ""} onChange={v => set({ [f]: v })} />]);
+    const sections: [string, React.ReactNode][] = d.sections.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={kind === "medical" ? 2 : 3} />]);
+    const footer = kind === "medical" ? "※ 학교 교실 관찰 자료이며 진단·처방을 대신하지 않는다. 수치 변화는 약물과의 관련 가능성을 살피는 참고 자료이며 원인을 뜻하지 않는다." : undefined;
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-                {(Object.keys(DOCS) as ("medical" | "support")[]).map(k => (
-                    <button key={k} onClick={() => { setKind(k); setAi({ loading: false, text: "" }); }} style={{ padding: "7px 14px", borderRadius: 8, fontWeight: 800, fontSize: "0.83rem", cursor: "pointer", border: kind === k ? "2px solid #7c3aed" : "1px solid #cbd5e1", background: kind === k ? "#f5f3ff" : "#fff" }}>{DOCS[k].label}</button>
-                ))}
-            </div>
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 {d.label} 초안 받기</button>
-                    <button className="btn btn-secondary" onClick={fill}>📊 자료로 &lsquo;행동 요약&rsquo;만 채우기</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: d.heading, s: head, meta: printMeta, sections: printSections })}>🖨️ 미리보기·인쇄</button>
-                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), [d.key]: { ...cur, date: dateVal, author: cur.author ?? bip.Teacher ?? "" } }) })}>💾 저장</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: d.heading, s: head, meta: printMeta, sections: printSections, charts, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), [kind]: { ...cur, date: dateVal, author, ...(kind === "medical" ? { from, to } : {}) } }) })}>💾 저장</button>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>학생 실명·진단 정보는 보호자 동의 범위 안에서만 적고, 외부로 보내기 전에 담당 부장·관리자 확인을 받으세요. AI 초안의 &lsquo;확인 필요&rsquo; 표시는 직접 채워 주세요.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>
+                    {kind === "medical" ? "보호자가 진료 때 의사에게 전하는 A4 1쪽 자료입니다. 관찰 기간과 약물 변경일을 정하면 수치·차트가 바뀝니다. 초안을 받으면 약물·수치 칸이 비어 있을 때 먼저 채웁니다." : "초안을 받으면 '행동 요약'이 비어 있을 때 행동 기록 수치로 먼저 채웁니다."}
+                    {" "}외부로 보내기 전에 담당 부장·관리자 확인을 받으세요.
+                </div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
-            <div style={sheetBox}><SectionSheet heading={d.heading} s={head} meta={meta} sections={sections} /></div>
+            <div style={sheetBox}><SectionSheet heading={d.heading} s={head} meta={meta} sections={sections} extra={charts ? <HandoverCharts d={charts} /> : undefined} after={footer ? <div style={{ fontSize: "8.5pt", marginTop: 3 }}>{footer}</div> : undefined} dense={!!charts} /></div>
         </div>
     );
 }
@@ -389,13 +483,13 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const len = (keys: string[]) => keys.reduce((n, f) => n + (cur[f] || "").length, 0);
     const total = len(HANDOVER_ROWS.map(r => r[1]));
     const y = +start.slice(0, 4);
-    // AI 없이 자동으로 채울 수 있는 칸: 올해 변화(집계), 건강·안전(⓪ 학생정보의 꼭 알아 둘 점·건강면 앞 2줄). 나머지는 BIP와 겹치지 않게 비워 둔다.
-    const fill = () => {
-        const pf = parseJson<any>(bip.ProgressReport, {}).profile || {};
-        const health = [pf.flags && `꼭 알아 둘 점: ${pf.flags}`, ...String(pf.health || "").split("\n").filter(l => l.trim() && !l.includes("특이사항 없음")).slice(0, 2)].filter(Boolean).join("\n");
-        set(mergeInto(cur, { recent: dataSummary(logs, behaviors, bip.PlanStart || ""), health }, "empty"));
-    };
+    // 건강·감각·안전은 ⓪ 학생정보(꼭 알아 둘 점 + 건강면 앞 2문장)에서 옮긴다. 학생정보는 AI에 보내지 않으므로
+    // '초안 받기'를 누를 때 화면 안에서 빈 칸에만 먼저 넣는다(AI가 실패해도 남는다).
     const runAI = async () => {
+        const pf = parseJson<any>(bip.ProgressReport, {}).profile || {};
+        const sentences = String(pf.health || "").replace(/\s+/g, " ").split(/(?<=[.다함음])\s+/).filter(x => x.trim() && !x.includes("특이사항 없음")).slice(0, 2).join(" ");
+        const health = [pf.flags && `꼭 알아 둘 점: ${pf.flags}`, sentences].filter(Boolean).join("\n");
+        if (health) set(mergeInto(cur, { health }, "empty"));
         setAi({ loading: true, text: "" });
         try { setAi({ loading: false, text: await requestHandoverDraft(head.code, bip, logs, behaviors) }); }
         catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
@@ -423,7 +517,6 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 인수인계 자료 초안 받기(올해 자료 전체)</button>
-                    <button className="btn btn-secondary" onClick={fill}>📋 올해 변화·건강 자동 채우기</button>
                     <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "다음 학년도 행동지원 인수인계 자료", s: head, meta: printMeta, sections: printSections, charts, footer, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...parseJson<any>(bip.ProgressReport, {}), handover: { ...cur, year: yearVal, date: dateVal, author } }) })}>💾 저장</button>
                 </div>

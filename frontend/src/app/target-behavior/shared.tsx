@@ -69,6 +69,29 @@ export const kDate = (iso?: string) => {
     return y && m && d ? `${+y}. ${+m}. ${+d}.` : iso;
 };
 
+export const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
+// ── 행동중재계획 번호(계획1·계획2…) ─────────────────────
+// 시트 BIP 행은 '지금 계획' 하나다. 종결한 계획은 숨김 탭 BIP_종결계획에 보관하고, 번호·종류·상태는 ProgressReport에 둔다.
+// planNo·planKind('일반화')·planStatus('종결'). 의사결정·결과 보고서(decision·sections·start·end·date·author)는 계획마다 새로 쓴다.
+export const PLAN_KEYS = ["decision", "sections", "start", "end", "date", "author", "planStatus", "planKind"];
+export const planInfo = (b: Bip) => {
+    const pr = parseJson<any>(b.ProgressReport, {});
+    const no = Number(pr.planNo) || 1;
+    return { no, kind: String(pr.planKind || ""), closed: pr.planStatus === "종결", label: `행동중재계획${no}${pr.planKind === "일반화" ? "(일반화)" : ""}` };
+};
+// 의사결정의 계획 결정. 예전 선택지('현재 중재 유지(자료 더 모음)' 등)도 읽는다.
+export type Outcome = "종결" | "일반화" | "유지" | "수정" | "";
+export const outcomeOf = (choice?: string): Outcome =>
+    !choice ? "" : /일반화/.test(choice) ? "일반화" : /종결|종료/.test(choice) ? "종결" : /수정/.test(choice) ? "수정" : /유지/.test(choice) ? "유지" : "";
+// 계획 실행충실도: ⑤ 모니터링 달력에 날마다 O/X(ProgressReport.fidelity.days)
+export function planFidelity(b: Bip, from?: string, to?: string) {
+    const days: Record<string, string> = parseJson<any>(b.ProgressReport, {}).fidelity?.days || {};
+    const hit = Object.entries(days).filter(([d, v]) => (v === "O" || v === "X") && (!from || d >= from) && (!to || d <= to));
+    const o = hit.filter(([, v]) => v === "O").length;
+    return { o, n: hit.length, pct: hit.length ? Math.round(o / hit.length * 100) : null, text: hit.length ? `행동중재계획 실행충실도(날마다 O/X): ${hit.length}일 중 ${o}일 실행(${Math.round(o / hit.length * 100)}%)` : "" };
+}
+
 // ── 인쇄 표 ─────────────────────────────────────────────
 const thBase: React.CSSProperties = { border: "1px solid #000", background: "#f2f2f2", fontWeight: 700, padding: "5px 6px", textAlign: "center", verticalAlign: "middle", fontSize: "9.5pt", whiteSpace: "pre-line" };
 const tdBase: React.CSSProperties = { border: "1px solid #000", padding: "5px 7px", verticalAlign: "top", fontSize: "9.5pt", whiteSpace: "pre-wrap", wordBreak: "break-word" };
@@ -254,7 +277,7 @@ export function SummaryTable({ rows, crisis }: { rows: BehaviorSummary[]; crisis
 
 // 인수인계 자료용 차트 2개(월별 행동 건수·많이 일어난 시간). 인쇄에도 그대로 나오도록 라이브러리 없이 그린다.
 type Ranked = { item: string; count: number };
-export type HandoverChartData = { monthly: { label: string; count: number }[]; times: Ranked[]; functions?: Ranked[]; types?: Ranked[]; tiers?: TierMonth[]; total: number; note?: string };
+export type HandoverChartData = { monthly: { label: string; count: number }[]; times: Ranked[]; functions?: Ranked[]; types?: Ranked[]; tiers?: TierMonth[]; total: number; note?: string; titles?: [string, string, string, string] };
 // 월별 지원 단계: level은 '', Tier1, Tier2, Tier3, Tier3+ ('' = 그 달 표 없음), detail은 CICO·SST 등
 export type TierMonth = { month: number; level: string; detail: string };
 
@@ -312,11 +335,12 @@ function TierStrip({ tiers }: { tiers: TierMonth[] }) {
 
 export function HandoverCharts({ d }: { d: HandoverChartData }) {
     const mMax = Math.max(1, ...d.monthly.map(m => m.count));
+    const [t1, t2, t3, t4] = d.titles || [`① 달마다 행동이 몇 번 있었나 (전체 ${d.total}번)`, "② 언제 많이 일어났나", "③ 왜 했을까 (교사가 기록한 기능)", "④ 어떤 행동이 많았나"];
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", gap: 8 }}>
                 <div style={chartBox}>
-                    <div style={chartHead}>① 달마다 행동이 몇 번 있었나 (전체 {d.total}번)</div>
+                    <div style={chartHead}>{t1}</div>
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 58 }}>
                         {d.monthly.map(m => (
                             <div key={m.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
@@ -327,11 +351,11 @@ export function HandoverCharts({ d }: { d: HandoverChartData }) {
                         ))}
                     </div>
                 </div>
-                <BarList title="② 언제 많이 일어났나" rows={d.times} color="#f59e0b" empty="시간 기록 없음" />
+                <BarList title={t2} rows={d.times} color="#f59e0b" empty="시간 기록 없음" />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-                <BarList title="③ 왜 했을까 (교사가 기록한 기능)" rows={d.functions || []} color="#16a34a" empty="기능 기록 없음" />
-                <BarList title="④ 어떤 행동이 많았나" rows={d.types || []} color="#9333ea" empty="행동 기록 없음" />
+                <BarList title={t3} rows={d.functions || []} color="#16a34a" empty="기록 없음" />
+                <BarList title={t4} rows={d.types || []} color="#9333ea" empty="행동 기록 없음" />
             </div>
             {d.tiers && d.tiers.length > 0 && <TierStrip tiers={d.tiers} />}
             {d.note && <div style={{ fontSize: "7.5pt", color: "#333" }}>{d.note}</div>}

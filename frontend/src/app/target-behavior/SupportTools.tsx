@@ -1,10 +1,10 @@
 "use client";
 
 // 개별학생 행동중재의 보조 도구 — 예전 개별학생대시보드에서 옮겨 왔다.
-// 상담·관찰 기록(⓪), AI 종합 분석(①), EBP 추천(③), 위기행동 없었던 날(④), 약물 반응 의견서(⑥)
-import React, { useCallback, useEffect, useState } from "react";
+// 상담·관찰 기록, EBP 추천(④), 위기행동 없었던 날(⑤)
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import DayCalendar from "./DayCalendar";
 import axios from "axios";
-import ReadableAIResult from "../components/ReadableAIResult";
 import { useAuth } from "../components/AuthProvider";
 import { useSheetLiveSync } from "../hooks/useSheetLiveSync";
 import { todayStr } from "../utils";
@@ -139,128 +139,6 @@ export function ConsultationLog({ studentCode }: { studentCode: string }) {
   );
 }
 
-interface MedicationEntry { name: string; dose: string; }
-
-function MedicationEntryList({ title, entries, onChange }: {
-  title: string; entries: MedicationEntry[]; onChange: (entries: MedicationEntry[]) => void;
-}) {
-  const inputStyle = { flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', boxSizing: 'border-box' as const };
-  const labelStyle = { fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', display: 'block' };
-
-  const updateEntry = (i: number, field: 'name' | 'dose', value: string) => {
-    onChange(entries.map((e, idx) => idx === i ? { ...e, [field]: value } : e));
-  };
-  const removeEntry = (i: number) => onChange(entries.filter((_, idx) => idx !== i));
-  const addEntry = () => onChange([...entries, { name: '', dose: '' }]);
-
-  return (
-    <div>
-      <label style={labelStyle}>{title}</label>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {entries.map((entry, i) => (
-          <div key={i} style={{ display: 'flex', gap: '6px' }}>
-            <input value={entry.name} onChange={e => updateEntry(i, 'name', e.target.value)} placeholder="예: 메틸페니데이트" style={inputStyle} />
-            <input value={entry.dose} onChange={e => updateEntry(i, 'dose', e.target.value)} placeholder="용량 (예: 10mg)" style={{ ...inputStyle, flex: '0 0 120px' }} />
-            <button onClick={() => removeEntry(i)} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px', width: '32px', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
-          </div>
-        ))}
-      </div>
-      {entries.length === 0 && <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>약물을 추가하지 않으면 &quot;미복용&quot;으로 기록됩니다.</p>}
-      <button onClick={addEntry} style={{ marginTop: '6px', background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}>+ 약물 추가</button>
-    </div>
-  );
-}
-
-export function MedicationResponseReport({ studentCode, apiUrl }: { studentCode: string, apiUrl: string }) {
-  const [beforeMeds, setBeforeMeds] = useState<MedicationEntry[]>([{ name: "", dose: "" }]);
-  const [afterMeds, setAfterMeds] = useState<MedicationEntry[]>([{ name: "", dose: "" }]);
-  const [beforeStart, setBeforeStart] = useState("");
-  const [beforeEnd, setBeforeEnd] = useState("");
-  const [afterStart, setAfterStart] = useState("");
-  const [afterEnd, setAfterEnd] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [analysis, setAnalysis] = useState("");
-  const [copyLabel, setCopyLabel] = useState("복사하기");
-
-  const canSubmit = !!(beforeStart && beforeEnd && afterStart && afterEnd);
-
-  const requestReport = async () => {
-    if (!canSubmit) return;
-    setLoading(true);
-    try {
-      const res = await axios.post(`${apiUrl}/api/v1/analytics/ai-medication-response-report`, {
-        student_code: studentCode,
-        before_medications: beforeMeds.filter(m => m.name.trim()),
-        after_medications: afterMeds.filter(m => m.name.trim()),
-        before_start: beforeStart, before_end: beforeEnd,
-        after_start: afterStart, after_end: afterEnd,
-      }, { timeout: 240000 });
-      setAnalysis(res.data.analysis || "분석 결과가 없습니다.");
-    } catch (e: any) {
-      setAnalysis("⚠️ 의견서 생성 실패. (" + (e?.response?.data?.detail || e?.message || "타임아웃") + ")");
-    } finally { setLoading(false); }
-  };
-
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(analysis);
-      setCopyLabel("복사됨 ✓");
-      setTimeout(() => setCopyLabel("복사하기"), 1500);
-    } catch { /* clipboard unavailable — no-op */ }
-  };
-
-  const dateInputStyle = { width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', boxSizing: 'border-box' as const };
-  const labelStyle = { fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', display: 'block' };
-
-  return (
-    <div>
-      <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>💊 약물 반응 모니터링 의견서</h3>
-      <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5 }}>
-        약물 복용 변경 전·후 기간을 설정하면 교실에서 관찰된 행동 변화를 정리한 담임교사 의견서를 만듭니다.
-        약물 시작 전(미복용)·병용 약물 등 여러 건을 함께 입력할 수 있습니다.
-        정신건강의학과 진료 시 참고 자료로 제출할 수 있습니다. <strong>진단이나 처방을 대신하지는 않습니다.</strong>
-      </p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '16px' }}>
-        <MedicationEntryList title="변경 전 복용 약물" entries={beforeMeds} onChange={setBeforeMeds} />
-        <MedicationEntryList title="변경 후 복용 약물" entries={afterMeds} onChange={setAfterMeds} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-        <div>
-          <label style={labelStyle}>약물 변경 전 기간</label>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <input type="date" value={beforeStart} onChange={e => setBeforeStart(e.target.value)} style={dateInputStyle} />
-            <input type="date" value={beforeEnd} onChange={e => setBeforeEnd(e.target.value)} style={dateInputStyle} />
-          </div>
-        </div>
-        <div>
-          <label style={labelStyle}>약물 변경 후 기간</label>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <input type="date" value={afterStart} onChange={e => setAfterStart(e.target.value)} style={dateInputStyle} />
-            <input type="date" value={afterEnd} onChange={e => setAfterEnd(e.target.value)} style={dateInputStyle} />
-          </div>
-        </div>
-      </div>
-
-      <button onClick={requestReport} disabled={!canSubmit || loading} className="btn btn-primary" style={{ width: '100%', opacity: (!canSubmit || loading) ? 0.5 : 1 }}>
-        {loading ? "관찰 의견서 작성 중... 🧠" : "📋 담임교사 관찰 의견서 생성"}
-      </button>
-
-      {analysis && !loading && (
-        <div style={{ marginTop: '18px' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-            <button onClick={copyToClipboard} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '4px 10px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer' }}>{copyLabel}</button>
-          </div>
-          <div style={{ fontSize: '0.95rem', lineHeight: '1.8', color: '#1e293b', maxHeight: '520px', overflowY: 'auto' }} className="custom-scrollbar">
-            <ReadableAIResult text={analysis} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function EBPRecommendationSection({ studentCode, functionCode, settingEvents, currentTier, apiUrl }: {
   studentCode: string; functionCode: string; settingEvents: string[]; currentTier: string; apiUrl: string;
 }) {
@@ -384,14 +262,12 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
   );
 }
 
-// 위기행동 기록은 일이 생겼을 때만 남으므로, '없었던 날'을 교사가 직접 확인해 둔다.
 const kd = (iso: string) => { const [, m, d] = iso.split("-"); return `${+m}. ${+d}.`; };
 const todayIso = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-export function CalmDays({ studentCode, yearStart }: { studentCode: string; yearStart: string }) {
+// ⑤ 위기행동이 없었던 날: 달력에서 날짜를 골라 ✓한 뒤 '반영'. 위기행동이 기록된 날은 고를 수 없다.
+export function CalmDays({ studentCode, yearStart, incidentDays }: { studentCode: string; yearStart: string; incidentDays: string[] }) {
   const [days, setDays] = useState<string[]>([]);
-  const [from, setFrom] = useState(todayIso());
-  const [to, setTo] = useState(todayIso());
   const [msg, setMsg] = useState("");
   const enc = encodeURIComponent(studentCode);
   const load = useCallback(async () => {
@@ -401,45 +277,29 @@ export function CalmDays({ studentCode, yearStart }: { studentCode: string; year
     } catch { setDays([]); }
   }, [enc]);
   useEffect(() => { setMsg(""); void load(); }, [load]);
-  const save = async (a: string, b: string) => {
+  const marks = useMemo(() => Object.fromEntries(days.map(d => [d, "✓"])), [days]);
+  const blocked = useMemo(() => Object.fromEntries(incidentDays.map(d => [d, "위기행동이 기록된 날"])), [incidentDays]);
+  const apply = async (next: Record<string, string>, changed: string[]) => {
+    const add = changed.filter(d => next[d]), del = changed.filter(d => !next[d]);
     try {
-      const r = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}`, { start_date: a, end_date: b });
-      const n = (r.data?.added || []).length, skip = (r.data?.skipped_has_incident || []).length, dup = (r.data?.already || []).length;
-      setMsg(`${n}일을 ‘위기행동 없음’으로 기록했습니다.${dup ? ` (이미 기록된 ${dup}일 제외)` : ""}${skip ? ` 위기행동이 기록된 ${skip}일은 제외했습니다.` : ""}`);
-      await load();
+      let n = 0, skip = 0;
+      if (add.length) {
+        const r = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}`, { dates: add });
+        n = (r.data?.added || []).length; skip = (r.data?.skipped_has_incident || []).length;
+      }
+      for (const d of del) await axios.delete(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}/${d}`);
+      setMsg(`${n}일 기록${del.length ? `, ${del.length}일 취소` : ""}했습니다.${skip ? ` 위기행동이 기록된 ${skip}일은 뺐습니다.` : ""}`);
     } catch (e: any) {
-      setMsg(e?.response?.data?.detail || "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setMsg(e?.response?.data?.detail || "반영하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
+    await load();
   };
-  const remove = async (d: string) => {
-    try { await axios.delete(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}/${d}`); await load(); } catch { setMsg("삭제하지 못했습니다."); }
-  };
-  const line = "#e8edf3";
   return (
     <div className="card" style={{ padding: 16 }}>
-      <div style={{ fontWeight: 800, fontSize: "1rem" }}>✅ 위기행동이 없었던 날 기록</div>
-      <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "#94a3b8" }}>행동이 없었던 것도 소중한 기록입니다. 기록이 없는 날이 ‘없었음’인지 ‘기록 안 함’인지 구분하는 근거가 됩니다. (평일만 기록됩니다)</p>
-      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={() => save(todayIso(), todayIso())} className="btn btn-primary" style={{ fontSize: "0.85rem" }}>🌤️ 오늘은 위기행동이 없었어요</button>
-        <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>또는 기간 선택</span>
-        <input type="date" value={from} max={todayIso()} onChange={e => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} style={{ padding: 6, borderRadius: 8, border: `1px solid ${line}` }} />
-        <span>~</span>
-        <input type="date" value={to} min={from} max={todayIso()} onChange={e => setTo(e.target.value)} style={{ padding: 6, borderRadius: 8, border: `1px solid ${line}` }} />
-        <button onClick={() => save(from, to)} className="btn btn-secondary" style={{ fontSize: "0.82rem" }}>이 기간 기록</button>
-      </div>
+      <div style={{ fontWeight: 800, fontSize: "1rem" }}>✅ 위기행동이 없었던 날 <span style={{ fontWeight: 500, fontSize: "0.8rem", color: "#64748b" }}>올해 {days.filter(d => d >= yearStart).length}일</span></div>
+      <p style={{ margin: "4px 0 10px", fontSize: "0.8rem", color: "#94a3b8" }}>기록이 없는 날이 &lsquo;없었음&rsquo;인지 &lsquo;기록 안 함&rsquo;인지 구분하는 근거가 됩니다. 날짜를 눌러 ✓한 뒤 &lsquo;반영&rsquo;을 누르세요.</p>
+      <DayCalendar marks={marks} cycle={["", "✓"]} blocked={blocked} onApply={apply} legend={<>⚠는 위기행동이 기록된 날입니다.</>} />
       {msg && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: "#475569" }}>{msg}</p>}
-      <div style={{ marginTop: 10, fontSize: "0.82rem", color: "#475569" }}>
-        올해 확인한 무발생 <b style={{ color: "#16a34a" }}>{days.filter(d => d >= yearStart).length}일</b>
-        {days.length > 0 && (
-          <span style={{ marginLeft: 10, display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
-            {[...days].reverse().slice(0, 6).map(d => (
-              <span key={d} style={{ background: "#f0fdf4", color: "#16a34a", borderRadius: 99, padding: "2px 10px", fontSize: "0.74rem", fontWeight: 700 }}>
-                {kd(d)} <button onClick={() => remove(d)} title="이 날짜 기록 취소" style={{ border: "none", background: "none", cursor: "pointer", color: "#94a3b8", padding: 0 }}>✕</button>
-              </span>
-            ))}
-          </span>
-        )}
-      </div>
     </div>
   );
 }

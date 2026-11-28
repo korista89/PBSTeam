@@ -1,6 +1,6 @@
 "use client";
 
-// 개별학생 행동중재 단계 화면: ② 자료 차트 ③ FBA 결과 보고서 ④ 행동중재계획 ⑥ 중재 결과 보고서
+// 개별학생 행동중재 단계 화면: ② FBA 자료 분석 ③ FBA 결과 보고서 ④ 행동중재계획 ⑤ 모니터링 ⑦ 중재 결과 보고서
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { WeeklyTrendChart, ChangeBanner } from "../components/ProgressCharts";
@@ -9,9 +9,10 @@ import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
 import {
-    Bip, FBA_SECTIONS, PROGRESS_SECTIONS, BehaviorSummary, StudentHead,
-    parseJson, splitNumbered, today, kDate, Inp, Area, DateRange, BipSheet, SectionSheet, SummaryTable, sheetBox,
+    Bip, FBA_SECTIONS, PROGRESS_SECTIONS, BehaviorSummary, StudentHead, PLAN_KEYS,
+    parseJson, splitNumbered, today, kDate, Inp, Area, DateRange, BipSheet, SectionSheet, SummaryTable, sheetBox, planInfo, outcomeOf, planFidelity,
 } from "./shared";
+import DayCalendar from "./DayCalendar";
 
 export const card: React.CSSProperties = { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 18 };
 export const lab: React.CSSProperties = { fontSize: "0.78rem", fontWeight: 700, color: "#475569", display: "block", marginBottom: 4 };
@@ -22,6 +23,61 @@ type Log = Record<string, any>;
 export const dOf = (l: Log) => String(l["행동발생날짜"] || "").slice(0, 10);
 const mondayOf = (iso: string) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
 const addDays = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const PLAN_WEEKS = 8;  // 새 행동중재계획 기본 기간
+
+// ── 행동중재계획 번호 관리 ─────────────────────────────
+// 종결한 계획 목록(숨김 탭 BIP_종결계획)
+export function useClosedPlans(code: string, key = 0) {
+    const [plans, setPlans] = useState<any[]>([]);
+    useEffect(() => {
+        let alive = true;
+        setPlans([]);
+        if (code) axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/plans`).then(r => { if (alive) setPlans(r.data?.plans || []); }).catch(() => {});
+        return () => { alive = false; };
+    }, [code, key]);
+    return plans;
+}
+// 지금 계획을 종결 보관한다(계획 칸·의사결정·결과 보고서·요약표).
+export async function archivePlan(code: string, bip: Bip, extra: Record<string, any> = {}) {
+    const pr = parseJson<any>(bip.ProgressReport, {});
+    const { ProgressReport, FBAReport, StudentCode, _loadError, ...fields } = bip;
+    void ProgressReport; void FBAReport; void StudentCode; void _loadError;
+    const info = planInfo(bip);
+    await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(code)}/plans`, {
+        planNo: info.no, planKind: info.kind, label: info.label, outcome: outcomeOf(pr.decision?.choice), PlanName: bip.PlanName || "", PlanStart: bip.PlanStart || "", PlanEnd: bip.PlanEnd || "",
+        bip: fields, decision: pr.decision || {}, report: { start: pr.start, end: pr.end, date: pr.date, author: pr.author, sections: pr.sections || {} },
+        fidelity: planFidelity(bip, bip.PlanStart, bip.PlanEnd).text, ...extra,
+    });
+}
+// 다음 계획: 지금 계획 칸을 그대로 옮겨 시작점으로 쓰고, 의사결정·결과 보고서는 비운다.
+export function nextPlan(bip: Bip, kind: "" | "일반화"): Bip {
+    const pr = parseJson<any>(bip.ProgressReport, {});
+    const keep = Object.fromEntries(Object.entries(pr).filter(([k]) => !PLAN_KEYS.includes(k)));
+    const start = today();
+    return {
+        ...bip, Source: "", AuthoredDate: start, PlanStart: start, PlanEnd: addDays(start, PLAN_WEEKS * 7 - 1),
+        PlanName: kind === "일반화" && !/일반화/.test(bip.PlanName || "") ? `${bip.PlanName || ""} 일반화`.trim() : bip.PlanName || "",
+        ProgressReport: JSON.stringify({ ...keep, planNo: planInfo(bip).no + 1, planKind: kind }),
+    };
+}
+
+// ⑤ 행동중재계획 실행충실도: 날마다 O(계획대로 함)·X(못 함). ProgressReport.fidelity.days에 저장한다.
+export function PlanFidelity({ bip, save }: { bip: Bip; save: (b: Bip) => Promise<void> }) {
+    const pr = parseJson<any>(bip.ProgressReport, {});
+    const marks: Record<string, string> = useMemo(() => pr.fidelity?.days || {}, [bip.ProgressReport]);  // eslint-disable-line react-hooks/exhaustive-deps
+    const info = planInfo(bip), f = planFidelity(bip, bip.PlanStart, bip.PlanEnd);
+    const apply = async (next: Record<string, string>) => save({ ...bip, ProgressReport: JSON.stringify({ ...pr, fidelity: { days: next } }) });
+    return (
+        <div style={card}>
+            <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>📝 행동중재계획 실행충실도 <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.78rem" }}>{info.label}{bip.PlanStart ? ` · ${kDate(bip.PlanStart)} ~ ${kDate(bip.PlanEnd)}` : ""}</span></div>
+            <div style={{ fontSize: "0.8rem", color: "#475569", margin: "4px 0 10px" }}>
+                그날 계획(예방·교수·강화·위기대응)을 계획대로 했으면 <b style={{ color: "#1d4ed8" }}>O</b>, 못 했으면 <b style={{ color: "#b91c1c" }}>X</b>.
+                {f.n ? <> 이 계획 기간 <b>{f.n}일 중 {f.o}일 실행({f.pct}%)</b>{f.pct !== null && f.pct < 80 ? " — 80% 미만이면 효과 판단 전에 실행부터 점검합니다." : ""}</> : " 아직 기록이 없습니다."}
+            </div>
+            <DayCalendar marks={marks} cycle={["", "O", "X"]} range={[bip.PlanStart || "", bip.PlanEnd || ""]} onApply={apply} legend={<>파란 테두리는 지금 계획 기간입니다. 반영하면 화면의 다른 바뀐 내용도 함께 저장됩니다.</>} />
+        </div>
+    );
+}
 
 export function useStudentLogs(studentCode: string) {
     const [logs, setLogs] = useState<Log[]>([]);
@@ -112,7 +168,7 @@ export function CrisisMonitor({ logs, planStart }: { logs: Log[]; planStart: str
     return (
         <div style={card}>
             <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>🚨 위기행동 모니터링 <span style={{ fontWeight: 500, color: "#64748b", fontSize: "0.78rem" }}>(기본·자동 — 행동기록 탭에 입력한 위기행동이 그대로 쌓입니다)</span></div>
-            <div style={{ fontSize: "0.8rem", color: "#475569", margin: "4px 0 8px" }}>누적 {logs.length}건 · 최근 8주 {recent}건{planStart ? ` · 중재 시작 ${kDate(planStart)}` : ""}. 이 자료만으로도 ⑥ 의사결정과 ⑧ 결과 보고서를 쓸 수 있습니다. 대체행동·과제 수행 같은 <b>추가 지표는 필요할 때만</b> 아래에서 더하세요.</div>
+            <div style={{ fontSize: "0.8rem", color: "#475569", margin: "4px 0 8px" }}>누적 {logs.length}건 · 최근 8주 {recent}건{planStart ? ` · 중재 시작 ${kDate(planStart)}` : ""}. 이 자료만으로도 ⑥ 의사결정과 ⑦ 결과 보고서를 쓸 수 있습니다. 대체행동·과제 수행 같은 <b>추가 지표는 필요할 때만</b> 아래에서 더하세요.</div>
             {weekly.length === 0 ? <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>아직 위기행동 기록이 없습니다.</div> : (
                 <>
                     <ChangeBanner weekly={weekly} />
@@ -123,7 +179,7 @@ export function CrisisMonitor({ logs, planStart }: { logs: Log[]; planStart: str
     );
 }
 
-// ① 자료 분석 ───────────────────────────────────────────
+// ② FBA 자료 분석 ───────────────────────────────────────
 export function DataStep({ studentCode, logs, planStart }: { studentCode: string; logs: Log[]; planStart: string }) {
     const [ev, setEv] = useState<any>(null);
     useEffect(() => {
@@ -227,7 +283,7 @@ export function FbaStep({ head, bip, setBip, save }: { head: StudentHead; bip: B
         if (!h) { alert("'기능 가설' 칸이 비어 있습니다."); return; }
         const cur = (bip.Hypothesis || "").trim();
         setBip({ ...bip, Hypothesis: cur ? `${cur}\n\n[FBA 결과] ${h}` : h });
-        alert("행동중재계획의 '기능평가 결과' 칸에 넣었습니다. 4단계에서 확인 후 저장하세요.");
+        alert("행동중재계획의 '기능평가 결과' 칸에 넣었습니다. ④ 행동중재계획에서 확인 후 저장하세요.");
     };
     const printMeta: [string, string][] = [["평가 기간", fba.start ? `${kDate(fba.start)} ~ ${kDate(fba.end)}` : ""], ["작성일", kDate(fba.date)], ["작성자", fba.author || ""]];
     const meta: [string, React.ReactNode][] = [
@@ -243,7 +299,7 @@ export function FbaStep({ head, bip, setBip, save }: { head: StudentHead; bip: B
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 지금까지 자료로 FBA 초안 받기</button>
                     <button className="btn btn-secondary" onClick={toBip}>➡️ 기능 가설을 BIP에 반영</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "fba", s: head, meta: printMeta, sections: FBA_SECTIONS.map(t => [t, secs[t] || ""]) })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "fba", s: head, meta: printMeta, sections: FBA_SECTIONS.map(t => [t, secs[t] || ""]), limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, FBAReport: JSON.stringify({ ...fba, date: fba.date || today() }) })}>💾 저장</button>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>아래 양식 칸에 바로 입력하면 인쇄본과 같은 모양으로 나옵니다. 평가 기간을 비우면 모든 행동기록을 씁니다(3건 미만이면 초안 없음).</div>
@@ -265,6 +321,9 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; behaviors: any[]; goTracker: () => void;
 }) {
     const [ai, setAi] = useState({ loading: false, text: "" });
+    const info = planInfo(bip);
+    const plans = useClosedPlans(head.code, info.no + (info.closed ? 0.5 : 0));
+    const newPlan = () => confirm(`${info.label}의 내용을 옮겨 행동중재계획${info.no + 1}을 만듭니다(기간 오늘부터 ${PLAN_WEEKS}주). 만들까요?`) && save(nextPlan(bip, ""));
     const [catalog, setCatalog] = useState<any[]>([]);
     useEffect(() => { axios.get(`${API_BASE_URL}/api/v1/ebp/catalog`).then(r => setCatalog(r.data.strategies || [])).catch(() => {}); }, []);
     const set = (k: string, v: string) => setBip({ ...bip, [k]: v });
@@ -320,12 +379,34 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
                 {bip.Source && <div style={{ fontSize: "0.75rem", color: "#b45309", marginTop: 6 }}>ℹ️ {bip.Source}</div>}
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
+            <div style={{ ...card, background: info.closed ? "#f8fafc" : "#eef2ff", border: "1px solid #c7d2fe" }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: "0.85rem" }}>
+                    <span>📌 지금 계획: <b>{info.label}</b>{info.closed && <b style={{ color: "#b91c1c" }}> — 종결됨</b>}</span>
+                    <span>· 기간 {bip.PlanStart ? `${kDate(bip.PlanStart)} ~ ${kDate(bip.PlanEnd) || "미정"}` : "미정"}</span>
+                    {!info.closed && <button className="btn btn-secondary" style={{ padding: "3px 10px", fontSize: "0.76rem" }} onClick={() => setBip({ ...bip, PlanStart: bip.PlanStart || today(), PlanEnd: addDays(bip.PlanStart || today(), PLAN_WEEKS * 7 - 1) })}>시작일부터 {PLAN_WEEKS}주로</button>}
+                    {info.closed && <button className="btn btn-primary" style={{ padding: "3px 10px", fontSize: "0.76rem" }} onClick={newPlan}>➕ 행동중재계획{info.no + 1} 만들기</button>}
+                </div>
+                <div style={{ fontSize: "0.74rem", color: "#64748b", marginTop: 4 }}>⑥ 의사결정에서 유지는 기간 연장, 수정·일반화는 ⑦ 결과 보고서 뒤 다음 계획 만들기로 이어집니다.</div>
+                {plans.length > 0 && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                        {plans.map(p => (
+                            <div key={p.planNo} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: "0.8rem", background: "#fff", borderRadius: 8, padding: "5px 10px" }}>
+                                <b>{p.label || `행동중재계획${p.planNo}`}</b>
+                                <span>{kDate(p.PlanStart)} ~ {kDate(p.PlanEnd)}</span>
+                                <span style={{ color: "#64748b" }}>결정: {p.outcome || "-"} · 종결 {String(p.closedAt || "").slice(0, 10)}</span>
+                                <button className="btn btn-secondary" style={{ padding: "2px 8px", fontSize: "0.72rem" }} onClick={() => openPrint({ doc: "bip", s: head, b: p.bip || {}, behaviors })}>🖨️ 계획</button>
+                                {Object.values(p.report?.sections || {}).some(Boolean) && <button className="btn btn-secondary" style={{ padding: "2px 8px", fontSize: "0.72rem" }} onClick={() => openPrint({ doc: "progress", s: head, meta: [["중재계획명", `${p.label || ""} ${p.PlanName || ""}`.trim()], ["보고 기간", `${kDate(p.report?.start)} ~ ${kDate(p.report?.end)}`], ["작성일", kDate(p.report?.date)], ["작성자", p.report?.author || ""]], sections: PROGRESS_SECTIONS.map(t => [t, p.report?.sections?.[t] || ""]), rows: p.rows || [], crisis: p.crisis || { pre: 0, post: 0 }, limit: 1 })}>🖨️ 결과 보고서</button>}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
             <div style={sheetBox}><BipSheet s={head} b={bip} behaviors={behaviors} edit={{ set, extra }} /></div>
         </div>
     );
 }
 
-// ⑥ 중재 현황·결과 보고서 ────────────────────────────────
+// ⑦ 중재 결과 보고서 ────────────────────────────────
 // 표적행동별 중재 전·중 평균과 실행충실도(⑦ 결과 보고서·⑧ 인수인계가 함께 쓴다)
 export async function fetchBehaviorSummaries(code: string, behaviors: any[], start: string, end: string): Promise<BehaviorSummary[]> {
     const list = behaviors.filter(b => b.Status !== "삭제");
@@ -347,12 +428,15 @@ export async function fetchBehaviorSummaries(code: string, behaviors: any[], sta
     });
 }
 
-export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
-    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; behaviors: any[]; logs: Log[];
+export function ProgressStep({ head, bip, setBip, save, behaviors, logs, goStep }: {
+    head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; behaviors: any[]; logs: Log[]; goStep: (k: string) => void;
 }) {
     const pr = parseJson<any>(bip.ProgressReport, {});
+    const info = planInfo(bip);
+    const outcome = outcomeOf(pr.decision?.choice);
+    // 보고 기간 기본값 = 이 계획 기간(끝 날짜가 아직 안 왔으면 오늘까지)
     const start = pr.start || bip.PlanStart || "";
-    const end = pr.end || today();
+    const end = pr.end || (bip.PlanEnd && bip.PlanEnd < today() ? bip.PlanEnd : today());
     const secs: Record<string, string> = pr.sections || {};
     const setP = (patch: any) => setBip({ ...bip, ProgressReport: JSON.stringify({ ...pr, ...patch }) });
     const [rows, setRows] = useState<BehaviorSummary[]>([]);
@@ -376,16 +460,19 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
         };
     }, [logs, start, end]);
 
-    const autoText = () => {
-        const lines = rows.map(r => `- [${r.type}] ${r.label}: 중재 전 ${r.preN ? Math.round((r.preMean || 0) * 10) / 10 : (r.baseline || "기록 없음")} → 중재 중 ${r.postN ? Math.round((r.postMean || 0) * 10) / 10 : "기록 없음"}(${r.unit}), 실행충실도 ${r.fidelity === null ? "기록 없음" : r.fidelity + "%"}`);
-        lines.push(`- 위기행동 기록: 중재 전 같은 기간 ${crisis.pre}건 → 중재 중 ${crisis.post}건`);
-        setP({ sections: { ...secs, "중재 실행 현황": lines.join("\n") } });
-    };
+    // 수치 줄(AI 없이 계산). '초안 받기'를 누르면 '중재 실행 현황'이 비어 있을 때 먼저 이것으로 채운다.
+    const fid = planFidelity(bip, start, end);
+    const numberLines = () => [
+        ...rows.map(r => `- [${r.type}] ${r.label}: 중재 전 ${r.preN ? Math.round((r.preMean || 0) * 10) / 10 : (r.baseline || "기록 없음")} → 중재 중 ${r.postN ? Math.round((r.postMean || 0) * 10) / 10 : "기록 없음"}(${r.unit}), 실행충실도 ${r.fidelity === null ? "기록 없음" : r.fidelity + "%"}`),
+        `- 위기행동 기록: 중재 전 같은 기간 ${crisis.pre}건 → 중재 중 ${crisis.post}건`,
+        ...(fid.text ? [`- ${fid.text}`] : []),
+    ];
     const runAI = async () => {
+        setP({ sections: mergeInto(secs, { "중재 실행 현황": numberLines().join("\n") }, "empty") });
         setAi({ loading: true, text: "" });
         try {
-            const ctx = ["[중재 전·후 수치]", ...rows.map(r => `- [${r.type}] ${r.label}: 중재 전 ${r.preN ? Math.round((r.preMean || 0) * 10) / 10 : (r.baseline || "기록 없음")} → 중재 중 ${r.postN ? Math.round((r.postMean || 0) * 10) / 10 : "기록 없음"}(${r.unit}), 실행충실도 ${r.fidelity === null ? "기록 없음" : r.fidelity + "%"}`),
-                `- 위기행동 기록: 중재 전 같은 기간 ${crisis.pre}건 → 중재 중 ${crisis.post}건`,
+            const ctx = [`[보고 대상] ${info.label} ${bip.PlanName || ""} (${kDate(start)} ~ ${kDate(end)})`, pr.decision?.choice ? `[의사결정] ${pr.decision.choice} — ${pr.decision.rationale || ""}` : "",
+                "[중재 전·후 수치]", ...numberLines(),
                 ...["Antecedents", "Consequences", "Hypothesis", "Goals", "PreventionStrategies", "TeachingStrategies", "ReinforcementStrategies", "AdditionalSupport", "EvaluationPlan"].map(k => bip[k] ? `${k}: ${bip[k]}` : "")].filter(Boolean).join("\n");
             const r = await axios.post(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/ai-document-draft`,
                 { kind: "progress", context: ctx, start_date: start || undefined, end_date: end }, { timeout: 240000 });
@@ -397,9 +484,25 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
         if (!Object.keys(parsed).length) { alert("AI 결과를 절별로 나누지 못했습니다."); return; }
         setP({ sections: mergeInto(secs, parsed, mode) });
     };
-    const printMeta: [string, string][] = [["중재계획명", bip.PlanName || ""], ["보고 기간", `${kDate(start)} ~ ${kDate(end)}`], ["작성일", kDate(pr.date || today())], ["작성자", pr.author || bip.Teacher || ""]];
+    const planName = `${info.label} ${bip.PlanName || ""}`.trim();
+    // 계획 마무리: 종결은 보관만, 수정·일반화는 보관 뒤 다음 계획을 만들어 ④로 간다.
+    const [closing, setClosing] = useState(false);
+    const finish = async () => {
+        const next = outcome === "수정" || outcome === "일반화";
+        if (!confirm(next ? `${info.label}을 종결 보관하고, 내용을 옮겨 행동중재계획${info.no + 1}${outcome === "일반화" ? "(일반화)" : ""}을 만듭니다. 결과 보고서를 먼저 저장했는지 확인해 주세요. 진행할까요?`
+            : `${info.label}을 종결 보관합니다. 결과 보고서를 먼저 저장했는지 확인해 주세요. 진행할까요?`)) return;
+        setClosing(true);
+        try {
+            const cur = { ...bip, ProgressReport: JSON.stringify({ ...pr, start, end, date: pr.date || today() }) };
+            await archivePlan(head.code, cur, { rows, crisis });
+            if (next) { await save(nextPlan(cur, outcome === "일반화" ? "일반화" : "")); goStep("bip"); }
+            else await save({ ...cur, ProgressReport: JSON.stringify({ ...parseJson<any>(cur.ProgressReport, {}), planStatus: "종결" }) });
+        } catch (e) { alert("종결하지 못했습니다: " + err(e)); }
+        finally { setClosing(false); }
+    };
+    const printMeta: [string, string][] = [["중재계획명", planName], ["보고 기간", `${kDate(start)} ~ ${kDate(end)}`], ["작성일", kDate(pr.date || today())], ["작성자", pr.author || bip.Teacher || ""]];
     const meta: [string, React.ReactNode][] = [
-        ["중재계획명", bip.PlanName || ""],
+        ["중재계획명", planName],
         ["보고 기간", <DateRange key="p" a={start} b={end} onA={v => setP({ start: v })} onB={v => setP({ end: v })} />],
         ["작성일", <Inp key="d" type="date" value={pr.date || today()} onChange={v => setP({ date: v })} />],
         ["작성자", <Inp key="a" value={pr.author ?? bip.Teacher ?? ""} onChange={v => setP({ author: v })} />],
@@ -410,14 +513,19 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs }: {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={card}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button className="btn btn-secondary" onClick={autoText}>📊 수치로 &lsquo;중재 실행 현황&rsquo; 채우기</button>
                     <button className="btn btn-ai" onClick={runAI} disabled={ai.loading}>🤖 보고서 초안 받기(실행 현황·종합 의견·향후 계획)</button>
-                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "progress", s: head, meta: printMeta, sections: PROGRESS_SECTIONS.map(t => [t, secs[t] || ""]), rows, crisis })}>🖨️ 미리보기·인쇄</button>
+                    <button className="btn btn-secondary" onClick={() => openPrint({ doc: "progress", s: head, meta: printMeta, sections: PROGRESS_SECTIONS.map(t => [t, secs[t] || ""]), rows, crisis, limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     <button className="btn btn-primary" onClick={() => save({ ...bip, ProgressReport: JSON.stringify({ ...pr, start, end, date: pr.date || today() }) })}>💾 저장</button>
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>표의 중재 전·후 수치는 ⑤ 모니터링 자료에서 자동으로 계산됩니다.</div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 6 }}>{planName} 보고서입니다. 표의 수치는 ⑤ 모니터링 자료로 계산하고, &lsquo;중재 실행 현황&rsquo;이 비어 있으면 초안을 받을 때 수치로 먼저 채웁니다.</div>
                 <AIBox text={ai.text} loading={ai.loading} onApply={apply} />
             </div>
+            {!info.closed && (outcome === "종결" || outcome === "수정" || outcome === "일반화") && (
+                <div style={{ ...card, border: "1px solid #fca5a5", background: "#fff7f7", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ flex: 1, minWidth: 220, fontSize: "0.84rem" }}>⑥ 의사결정: <b>{outcome}</b>. 보고서를 저장한 뒤 계획을 마무리하세요.</span>
+                    <button className="btn btn-primary" onClick={finish} disabled={closing}>{closing ? "처리 중…" : outcome === "종결" ? `🏁 ${info.label} 종결` : `🏁 ${info.label} 종결하고 행동중재계획${info.no + 1}${outcome === "일반화" ? "(일반화)" : ""} 만들기`}</button>
+                </div>
+            )}
             <div style={sheetBox}><SectionSheet heading="개별학생 행동중재 결과 보고서" s={head} meta={meta} sections={sections} extra={<SummaryTable rows={rows} crisis={crisis} />} /></div>
         </div>
     );
