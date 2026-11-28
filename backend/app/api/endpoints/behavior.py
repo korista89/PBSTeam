@@ -588,3 +588,42 @@ def remove_no_incident(student_code: str, date_str: str, current_user: Dict[str,
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
+
+
+CRISIS_DRAFT_KEYS = ["보고사유", "날짜", "시간대", "장소", "행동유형", "강도", "기능", "발생횟수", "배경사건", "선행사건", "후속결과", "특기사항",
+                     "개별학생교육지원_시간", "개별학생교육지원_장소", "A", "B", "C", "경위", "관찰기록"]
+
+
+@router.post("/ai-crisis-report-draft")
+def ai_crisis_report_draft(payload: dict = Body(...), current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """위기행동 지원 및 개별학생교육지원 보고서 초안(A·B·C·경위·관찰기록). 교사가 고른 입력만 쓰고, 화면에서 확인한 뒤 반영한다.
+    학생 이름은 받지 않는다(학생코드만, _call_llm이 '학생A'로 바꿔 보낸다)."""
+    code = str(payload.get("학생코드") or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="학생을 먼저 고르세요.")
+    check_student_scope(code, current_user)
+    from app.services.ai_insight import _call_llm, COMMON_BCBA_SYSTEM_PROMPT
+    facts = "\n".join(f"- {k}: {v if isinstance(v, str) else ', '.join(map(str, v))}" for k in CRISIS_DRAFT_KEYS
+                      if (v := payload.get(k)) and (str(v).strip() if isinstance(v, str) else any(v)))
+    prompt = f"""[교사가 입력한 이번 위기행동 기록 — 학생코드 {code}]
+{facts or '- (입력 없음)'}
+
+[지시사항]
+학교 '위기행동 지원 및 개별학생교육지원 보고서'의 A·B·C·경위·관찰기록 칸 초안을 쓴다. 위 입력에 있는 사실만 쓰고, 없는 사실·시각·인원·부상은 만들지 않는다.
+- A(배경·선행사건): 행동 직전 상황 한 문장(언제·무엇이 있었나).
+- B(나타난 위기행동): 학생이 보인 행동만, 모양·횟수·지속 시간을 관찰 가능한 말로 한두 문장.
+- C(후속결과): 행동 직후 바뀐 것 한 문장(교사 대응 과정은 경위에).
+- 경위: 교사 대응을 시간순으로 한 줄씩. 학생 행동은 '위기행동 발생(B 참조)'처럼 줄인다. 2~5줄.
+- 관찰기록: 분리·개별학생교육지원 장소에서 보인 모습과 진정·복귀 과정을 한 줄씩. 입력에 근거가 없으면 '-' 한 줄.
+- 시각은 입력에 적힌 것만 'HH:MM '으로 줄 앞에 쓰고, 없으면 시각 없이 쓴다.
+- '흥분함·난동·공격적·고집' 같은 해석 낱말 대신 보인 행동을 쓴다. 문체는 '~함'. 학생 이름 대신 '학생'.
+
+[출력 형식 — 이 다섯 머리말만, 다른 말 없이]
+A: ...
+B: ...
+C: ...
+경위:
+...
+관찰기록:
+..."""
+    return {"draft": _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1500)}

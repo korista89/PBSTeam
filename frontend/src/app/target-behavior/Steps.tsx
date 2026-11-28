@@ -10,7 +10,7 @@ import ReadableAIResult from "../components/ReadableAIResult";
 import { parseBIPAIResult } from "../utils";
 import {
     Bip, FBA_SECTIONS, PROGRESS_SECTIONS, BehaviorSummary, StudentHead, PLAN_KEYS,
-    parseJson, splitNumbered, today, kDate, Inp, Area, DateRange, BipSheet, SectionSheet, SummaryTable, sheetBox, planInfo, outcomeOf, planFidelity,
+    parseJson, splitNumbered, today, kDate, Inp, BankArea, DateRange, BipSheet, SectionSheet, SummaryTable, sheetBox, planInfo, outcomeOf, planFidelity,
 } from "./shared";
 import DayCalendar from "./DayCalendar";
 
@@ -291,7 +291,7 @@ export function FbaStep({ head, bip, setBip, save }: { head: StudentHead; bip: B
         ["작성일", <Inp key="d" type="date" value={fba.date || today()} onChange={v => setF({ date: v })} />],
         ["작성자", <Inp key="a" value={fba.author || ""} onChange={v => setF({ author: v })} />],
     ];
-    const sections: [string, React.ReactNode][] = FBA_SECTIONS.map((t, i) => [`${i + 1}. ${t}`, <Area key={t} value={secs[t] || ""} onChange={v => setSec(t, v)} rows={4} />]);
+    const sections: [string, React.ReactNode][] = FBA_SECTIONS.map((t, i) => [`${i + 1}. ${t}`, <BankArea key={t} bank={`fba:${t}`} value={secs[t] || ""} onChange={v => setSec(t, v)} rows={4} />]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -507,7 +507,7 @@ export function ProgressStep({ head, bip, setBip, save, behaviors, logs, goStep 
         ["작성일", <Inp key="d" type="date" value={pr.date || today()} onChange={v => setP({ date: v })} />],
         ["작성자", <Inp key="a" value={pr.author ?? bip.Teacher ?? ""} onChange={v => setP({ author: v })} />],
     ];
-    const sections: [string, React.ReactNode][] = PROGRESS_SECTIONS.map(t => [t, <Area key={t} value={secs[t] || ""} onChange={v => setP({ sections: { ...secs, [t]: v } })} rows={4} />]);
+    const sections: [string, React.ReactNode][] = PROGRESS_SECTIONS.map(t => [t, <BankArea key={t} bank={`progress:${t}`} value={secs[t] || ""} onChange={v => setP({ sections: { ...secs, [t]: v } })} rows={4} />]);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

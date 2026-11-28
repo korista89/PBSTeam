@@ -126,3 +126,17 @@ console.log(JSON.stringify({A: a.A, B: a.B, C: a.C, s: a.경위[0].s, start: STO
     assert out["B"] == "물건파괴행동 (강도 3) — 의자 2회 던짐"
     assert out["C"] == "교실 밖 공간 이동" and out["s"] == out["start"] and out["keptA"] == "직접 쓴 A"
     assert out["dup"] is True and out["nodup"] is False
+
+
+def test_ai_draft_parse_fills_only_empty():
+    """AI 초안은 머리말(A·B·C·경위·관찰기록)로 나누고, 이미 쓴 칸은 건드리지 않는다."""
+    if not shutil.which("node"):
+        pytest.skip("node 없음")
+    js = """import {parseCrisisDraft, applyCrisisDraft, emptyReport} from './frontend/src/app/crisisReport.ts';
+const d = parseCrisisDraft('A: 과제 지시 직후임.\\nB: 책상을 3회 침.\\nC: 과제가 미뤄짐.\\n경위:\\n10:20 위기행동 발생(B 참조)\\n- 쉬기 카드를 보여 줌\\n관찰기록:\\n-\\n');
+const r = applyCrisisDraft({...emptyReport(), B: '이미 씀'}, d);
+console.log(JSON.stringify({A: r.A, B: r.B, g: r.경위, o: d.관찰기록.length}));"""
+    out = json.loads(subprocess.run(["node", "--no-warnings", "--experimental-strip-types", "--input-type=module", "-e", js],
+                                    cwd=ROOT, capture_output=True, text=True, check=True).stdout)
+    assert out["A"] == "과제 지시 직후임." and out["B"] == "이미 씀" and out["o"] == 0
+    assert out["g"] == [{"t": "10:20", "s": "위기행동 발생(B 참조)"}, {"t": "", "s": "쉬기 카드를 보여 줌"}]

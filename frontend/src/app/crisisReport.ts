@@ -92,6 +92,16 @@ export const NOT_APPLICABLE = "해당 없음";
 export const VAGUE = ["흥분", "화가 나", "짜증", "기분이", "통제 불능", "난동", "폭력적", "공격적", "고집", "떼를", "말을 안 들", "이상한"];
 export const vagueIn = (text: string) => VAGUE.filter(w => text.includes(w));
 
+// 조치사항 칸 예시(고르면 들어가고 고쳐 쓴다)
+export const FOLLOWUP_EXAMPLES: Record<string, string[]> = {
+  부상자_치료: ["보건실에서 찰과상 소독·밴드 처치", "부상 없음 확인(보건교사)", "얼음찜질 후 경과 관찰", "보호자 동의로 병원 진료 안내"],
+  관리자_보고: ["교감에게 구두 보고", "교장·교감에게 보고서 제출", "행동중재전문교사와 함께 교감에게 보고"],
+  학부모_알림: ["어머니께 전화로 경위 안내", "아버지께 전화로 부상 여부와 경위 안내", "알림장으로 경위 안내 후 전화 상담 약속", "하교 때 직접 만나 경위 안내"],
+  학생_상담: ["진정 후 그림 카드로 일어난 일 돌아보기", "쉬기 요청 카드 쓰는 방법 다시 연습", "다음에 할 행동을 교사와 함께 고르기"],
+  학부모_상담: ["전화 상담: 가정 수면·식사·약 복용 확인", "대면 상담: 행동중재계획 안내와 가정 연계 협의", "보호자 요청으로 상담 일정 조정"],
+  긴급회의: ["학교행동중재지원팀 긴급회의: 예방 전략 점검", "담임·행동중재전문교사 협의: 다음 날 등교 지원 방법 결정", "개별화교육지원팀 협의 일정 결정"],
+};
+
 export const STORY_EXAMPLES: { label: string; items: string[] }[] = [
   { label: "발생(학생 행동은 B에)", items: [
     STORY_START,
@@ -103,11 +113,24 @@ export const STORY_EXAMPLES: { label: string; items: string[] }[] = [
     "주변 학생을 교실 뒤쪽으로 이동시켜 안전을 확보함",
     "다른 학생 안전 확보가 어려워 교실 밖 분리를 결정함",
     "교무실(지원팀)에 무전으로 지원을 요청함",
+    "요구를 줄이고 쉬기 카드를 보여 주며 2m 거리에서 기다림",
+    "위험 물건(가위·의자)을 치우고 출입문 쪽을 막지 않게 자리를 비움",
+    "수업 중 교실 내 분리: 교실 뒤 안정 공간으로 이동하도록 안내함",
+    "수업 시간 외 특정 장소 분리: 점심시간에 상담실에서 지원하기로 함",
   ] },
   { label: "이동·제지", items: [
     "지원 교사 도착, 학생과 함께 걸어서 심리안정실로 이동함",
     "머리 박기가 계속되어 두 교사가 양 손목을 잡아 제지함(약 30초)",
     "제지 해제 후 학생이 바닥에 앉아 때리기를 멈춤",
+    "또래를 향해 의자를 들어 올려 한 교사가 의자를 잡고 내려놓게 함",
+    "교실 밖으로 뛰어나가 지원 교사가 함께 걸으며 계단 앞에서 멈추게 함",
+    "물기가 계속되어 쿠션을 팔 앞에 대어 막음",
+  ] },
+  { label: "부상·연락", items: [
+    "보건실에서 부상 부위(○○)를 확인하고 처치함",
+    "교감에게 구두로 보고함",
+    "보호자에게 전화로 경위와 부상 여부를 알림",
+    "행동중재전문교사와 사안을 공유하고 다음 날 협의하기로 함",
   ] },
 ];
 
@@ -115,6 +138,11 @@ export const OBSERVE_EXAMPLES: { label: string; items: string[] }[] = [
   { label: "도착", items: [
     "심리안정실 도착. 바닥에 누워 소리를 지르고 발로 벽을 참",
     "도착 후 의자에 앉아 울며 손으로 얼굴을 가림",
+  ] },
+  { label: "개별학생교육지원", items: [
+    "심리안정실에서 그림 과제(색칠·퍼즐)로 수업을 이어 감",
+    "지원 교사와 1:1로 남은 과제를 짧게 나누어 함",
+    "교실 뒤 안정 공간에서 감각 교구(○○)를 쓰며 쉼",
   ] },
   { label: "진정 지원", items: [
     "감정 카드 제시, '쉬고 싶어요' 카드를 가리킴",
@@ -126,5 +154,33 @@ export const OBSERVE_EXAMPLES: { label: string; items: string[] }[] = [
     "그림 일정표에서 다음 활동 '교실' 카드를 고름",
     "교실로 복귀해 남은 활동에 참여함",
     "복귀를 거부해 보호자에게 연락하고 조기 귀가함",
+    "다음 교시부터 교실로 돌아가 자기 자리에 앉음",
+    "점심 후 다시 같은 행동이 나타나 지원을 이어 감",
   ] },
 ];
+
+// AI 초안('A: …' 'B: …' 'C: …' '경위:' 줄들 '관찰기록:' 줄들) → 보고서 칸. 비어 있는 칸만 채운다(경위는 첫 줄 자동 문장만 있으면 빈 것으로 본다).
+export function parseCrisisDraft(text: string): { A: string; B: string; C: string; 경위: Line[]; 관찰기록: Line[] } {
+  const out = { A: "", B: "", C: "", 경위: [] as Line[], 관찰기록: [] as Line[] };
+  let cur = "";
+  for (const raw of text.replace(/\*\*/g, "").split("\n")) {
+    const h = raw.match(/^\s*(A|B|C|경위|관찰기록)\s*(?:\([^)]*\))?\s*[:：]\s*(.*)$/);
+    if (h) cur = h[1];
+    const body = (h ? h[2] : raw).replace(/^\s*[-•·]\s*/, "").trim();
+    if (!body || body === "-") continue;
+    if (cur === "A" || cur === "B" || cur === "C") { out[cur] = [out[cur], body].filter(Boolean).join(" "); continue; }
+    if (cur === "경위" || cur === "관찰기록") {
+      const m = body.match(/^(\d{1,2}:\d{2})\s+(.+)$/);
+      out[cur].push(m ? { t: m[1], s: m[2].trim() } : { t: "", s: body });
+    }
+  }
+  return out;
+}
+export function applyCrisisDraft(r: Report, d: ReturnType<typeof parseCrisisDraft>): Report {
+  const blank = (rows: Line[]) => !rows.some(x => x.s.trim() && x.s.trim() !== STORY_START);
+  return {
+    ...r, A: r.A.trim() ? r.A : d.A, B: r.B.trim() ? r.B : d.B, C: r.C.trim() ? r.C : d.C,
+    경위: blank(r.경위) && d.경위.length ? d.경위 : r.경위,
+    관찰기록: blank(r.관찰기록) && d.관찰기록.length ? d.관찰기록 : r.관찰기록,
+  };
+}

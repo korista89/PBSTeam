@@ -7,7 +7,7 @@ import { useAuth } from './AuthProvider';
 import DropdownTextarea from './DropdownTextarea';
 import { maskName, todayStr } from '../utils';
 import ReportSheet from './ReportSheet';
-import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES, autoFill, duplicatesB, OPTIONAL_FOLLOWUPS, NOT_APPLICABLE } from '../crisisReport';
+import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES, autoFill, duplicatesB, OPTIONAL_FOLLOWUPS, NOT_APPLICABLE, FOLLOWUP_EXAMPLES, linesText, parseCrisisDraft, applyCrisisDraft } from '../crisisReport';
 
 const TIME_SLOTS = [
   "1구간: 등교시간", "2구간: 1교시", "3구간: 2교시", "4구간: 3교시",
@@ -166,6 +166,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
 
   const [report, setReport] = useState<Report>(emptyReport);
   const upd = (patch: Partial<Report>) => setReport(prev => ({ ...prev, ...patch }));
+  // AI 초안: 결과를 먼저 보여 주고 '빈 칸에만 반영'을 눌러야 들어간다. 학생 이름은 보내지 않는다.
+  const [aiDraft, setAiDraft] = useState({ loading: false, text: '' });
 
   const [message, setMessage] = useState('');
   const setMode = (m: 'data' | 'report') => setModeState(m);
@@ -417,7 +419,28 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
               style={{ padding: '9px 16px', fontWeight: 700, border: 'none', borderRadius: 8, background: '#b91c1c', color: '#fff', cursor: 'pointer' }}>
               ⬇️ 위 내용 자동 반영
             </button>
-            <span style={{ fontSize: '0.8rem', color: '#7f1d1d' }}>배경·선행 → A, 행동유형·강도·특기사항 → B, 후속결과 → C, 경위 첫 줄을 채웁니다. <b>비어 있는 칸만</b> 채우니, 반영 뒤 고쳐 쓰고 제출하세요.</span>
+            <button type="button" disabled={aiDraft.loading || !studentId} onClick={async () => {
+              setAiDraft({ loading: true, text: '' });
+              try {
+                const r = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/ai-crisis-report-draft`, {
+                  학생코드: studentId, 보고사유: report.사유, 날짜: formData.행동발생날짜, 시간대: formData.시간대, 장소: formData.장소 === '기타' ? formData.장소기타 : formData.장소,
+                  행동유형: formData.행동유형, 강도: formData.강도, 기능: formData.기능, 발생횟수: formData.발생횟수, 배경사건, 선행사건, 후속결과, 특기사항: formData.특기사항,
+                  개별학생교육지원_시간: report.지원시간, 개별학생교육지원_장소: report.지원장소, A: report.A, B: report.B, C: report.C, 경위: linesText(report.경위), 관찰기록: linesText(report.관찰기록),
+                }, { timeout: 120000 });
+                setAiDraft({ loading: false, text: r.data?.draft || '' });
+              } catch (e: any) { setAiDraft({ loading: false, text: '⚠️ ' + (e?.response?.data?.detail || e?.message || '요청 실패') }); }
+            }} style={{ padding: '9px 16px', fontWeight: 700, border: 'none', borderRadius: 8, background: '#7c3aed', color: '#fff', cursor: 'pointer' }}>
+              {aiDraft.loading ? '⏳ 초안 작성 중…' : '🤖 AI 초안 받기(A·B·C·경위·관찰기록)'}
+            </button>
+            <span style={{ fontSize: '0.8rem', color: '#7f1d1d' }}>자동 반영: 배경·선행 → A, 행동유형·강도·특기사항 → B, 후속결과 → C, 경위 첫 줄. AI 초안: 위 입력으로 다섯 칸 문장을 써 보여 줍니다. 둘 다 <b>비어 있는 칸만</b> 채웁니다.</span>
+            {aiDraft.text && (
+              <div style={{ width: '100%', background: '#faf9ff', border: '1px solid #ede9fe', borderRadius: 8, padding: 10 }}>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.84rem', marginBottom: 8 }}>{aiDraft.text}</div>
+                {!aiDraft.text.startsWith('⚠️') && <button type="button" onClick={() => { setReport(applyCrisisDraft(report, parseCrisisDraft(aiDraft.text))); setAiDraft({ loading: false, text: '' }); }}
+                  style={{ padding: '6px 14px', fontWeight: 700, border: 'none', borderRadius: 6, background: '#4f46e5', color: '#fff', cursor: 'pointer' }}>✅ 빈 칸에만 반영</button>}
+                <button type="button" onClick={() => setAiDraft({ loading: false, text: '' })} style={{ marginLeft: 6, padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#fff', cursor: 'pointer' }}>닫기</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -473,7 +496,8 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                           <input type="checkbox" checked={na} onChange={() => setRow(na ? { 내용: '' } : { 일시: '', 내용: NOT_APPLICABLE })} /> 해당 없음</label>}
                         {na
                           ? <span style={{ fontSize: '9.5pt' }}>{NOT_APPLICABLE}</span>
-                          : <input value={v.내용} onChange={e => setRow({ 내용: e.target.value })} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : '해당 있을 때만'} style={{ ...cell, flex: 1 }} />}
+                          : <><input value={v.내용} onChange={e => setRow({ 내용: e.target.value })} list={`fu-${k}`} placeholder={구분 === '관리자 보고' ? '교감에게 구두 보고' : 구분 === '학부모 알림' ? '어머니께 전화로 경위 안내' : '해당 있을 때만(눌러서 예시 고르기)'} style={{ ...cell, flex: 1 }} />
+                            <datalist id={`fu-${k}`}>{(FOLLOWUP_EXAMPLES[k] || []).map(x => <option key={x} value={x} />)}</datalist></>}
                       </div>,
                     };
                   }),

@@ -4,6 +4,9 @@
 // 행동중재계획은 학교 '행동중재계획서' 양식(2026-2)과 같은 칸·순서로 그린다.
 import React from "react";
 
+import type { BankGroup } from "./profileBank";
+import { DOC_BANK } from "./docBank";
+
 export type Bip = Record<string, string>;
 
 // 지금 지원 단계(TierStatus 거울) 한 줄: 예) Tier3 · Tier2(CICO)
@@ -111,6 +114,37 @@ export function Inp({ value, onChange, type = "text", placeholder, width }: { va
 export function Area({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
     return <textarea value={value || ""} placeholder={placeholder} onChange={e => onChange(e.target.value)} rows={Math.max(rows, (value || "").split("\n").length + 1)} style={{ ...cellBox, resize: "vertical", lineHeight: 1.6 }} />;
 }
+// 예시 문장 고르기(작성 도우미): 체크하면 칸 끝에 붙고, 끄면 그 문장을 뺀다. 학생정보는 문단(sep " "), 다른 문서는 줄(sep "\n").
+export function SentencePicker({ value, onChange, groups, sep = " " }: { value: string; onChange: (v: string) => void; groups: BankGroup[]; sep?: string }) {
+    value = value || "";
+    const has = (t: string) => value.includes(t);
+    const toggle = (t: string) => onChange(has(t)
+        ? value.replace(t, "").replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim()
+        : [value.trimEnd(), t].filter(Boolean).join(sep));
+    const n = groups.reduce((k, g) => k + g.items.filter(has).length, 0);
+    return (
+        <details className="no-print" style={{ marginTop: 4, fontSize: "8.5pt" }}>
+            <summary style={{ cursor: "pointer", color: "#4338ca", fontWeight: 700 }}>＋ 예시 문장 고르기{n ? ` (${n}개 넣음)` : ""}</summary>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "4px 14px", padding: "6px 2px" }}>
+                {groups.map(g => (
+                    <div key={g.group}>
+                        <div style={{ fontWeight: 700, color: "#475569", margin: "4px 0 2px" }}>{g.group}</div>
+                        {g.items.map(t => (
+                            <label key={t} style={{ display: "flex", gap: 4, alignItems: "flex-start", cursor: "pointer", lineHeight: 1.45, padding: "1px 0" }}>
+                                <input type="checkbox" checked={has(t)} onChange={() => toggle(t)} style={{ marginTop: 2 }} />
+                                <span style={{ color: has(t) ? "#1e293b" : "#475569" }}>{t}</span>
+                            </label>
+                        ))}
+                    </div>
+                ))}
+            </div>
+        </details>
+    );
+}
+// 입력 칸 + 그 칸의 예시 문장(DOC_BANK['문서:칸']이 있을 때)
+export function BankArea({ bank, value, onChange, placeholder, rows = 3 }: { bank: string; value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+    return <><Area value={value} onChange={onChange} placeholder={placeholder} rows={rows} />{DOC_BANK[bank] && <SentencePicker value={value} onChange={onChange} groups={DOC_BANK[bank]} sep={"\n"} />}</>;
+}
 export function Sel({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
     return <select value={value || ""} onChange={e => onChange(e.target.value)} style={cellBox}><option value="">선택</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>;
 }
@@ -124,7 +158,7 @@ export type BipEdit = { set: (k: string, v: string) => void; extra?: (key: strin
 
 export function BipSheet({ s, b, behaviors, edit }: { s: StudentHead; b: Bip; behaviors: any[]; edit?: BipEdit }) {
     const F = (k: string, ph?: string, type = "text") => (edit ? <Inp type={type} value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} /> : type === "date" ? kDate(b[k]) : b[k]);
-    const A = (k: string, ph?: string, rows = 2) => (edit ? <Area value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} rows={rows} /> : b[k]);
+    const A = (k: string, ph?: string, rows = 2) => (edit ? <BankArea bank={`bip:${k}`} value={b[k]} onChange={v => edit.set(k, v)} placeholder={ph} rows={rows} /> : b[k]);
     const tb = behaviors.filter(x => x.Status !== "삭제");
     const legacy = BIP_LEGACY.filter(([k]) => (b[k] || "").trim());
     const showEtc = !!(edit || (b.CrisisPlan || "").trim());

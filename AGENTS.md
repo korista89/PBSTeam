@@ -95,6 +95,15 @@ npm run dev                            # next dev
 - BIP를 못 불러온 상태(`_loadError`)·불러오기 전에는 저장을 막는다(BIP 행 전체를 덮어써 기존 계획이 지워진다).
 - `save_bip`은 제자리 덮어쓰기이고, `_keep_documents`로 시트에만 있는 문서(ProgressReport 각 문서·FBAReport)는 남긴다(서버 인스턴스별 캐시 30초 때문에 오래된 화면 저장이 생긴다).
 
+## 행동중재 순환·문서 (2026-11-28)
+
+- 메뉴는 이해(⓪①)·평가(②FBA 자료 분석·③)·중재(④계획·⑤모니터링·⑥의사결정·⑦결과 보고서)·연계(⑧추가지원·⑨의료협력 모니터링 자료·⑩인수인계) 네 묶음.
+- BIP 행은 **지금 계획** 하나다. 번호·종류·상태는 ProgressReport `planNo`·`planKind`('일반화')·`planStatus`('종결'). 종결한 계획은 숨김 탭 `BIP_종결계획`에 덧붙이기만 한다(`archive_closed_plan`). 새 계획으로 저장하면 `_keep_documents`가 `PLAN_SCOPED_KEYS`(의사결정·결과 보고서)를 되살리지 않는다.
+- ⑥ 결정 = 계획 결정 하나(종결·일반화·유지·수정) + 추가 조치(추가 지원 신청·의료협력). 유지 = 기간 4주 연장, 종결 = ⑦ 뒤 보관, 수정·일반화 = ⑦ 뒤 보관 + 다음 계획(내용 복사, 8주).
+- 실행충실도는 계획 단위로 날마다 O/X(ProgressReport `fidelity.days`), 무발생일은 달력에서 고른 뒤 반영(`dates` 목록).
+- AI 문서는 기본 A4 1쪽(BIP 제외): `ai_insight.PAGE_BUDGET`·`fit_one_page`. 모델명 꼬리말은 붙이지 않는다.
+- **모든 문서에 예시 문장 고르기와 AI 초안을 함께 둔다.** 예시는 `target-behavior/docBank.ts`의 `DOC_BANK['문서:칸']`(칸은 `BankArea`), 위기행동 보고서는 `crisisReport.ts`. 자료로 계산되는 칸(수치·학생정보 건강)은 따로 버튼을 두지 않고 'AI 초안 받기'를 누를 때 빈 칸에 먼저 채운다.
+
 ## 학생 이름
 
 시트(Log_Main·TierStatus·월별 탭·PW_어휘데이터 등)에는 실명이 아니라 **별칭**(김O준, 이O, 겹치면 김O준-1011)만 저장한다.

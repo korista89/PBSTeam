@@ -6,8 +6,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../constants";
 import MeetingNotesSection from "./MeetingNotes";
-import { Bip, StudentHead, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, DateRange, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth, planInfo, outcomeOf, planFidelity } from "./shared";
+import { Bip, StudentHead, SentencePicker, BankArea, parseJson, splitNumbered, today, kDate, Inp, Area, Sel, DateRange, SectionSheet, sheetBox, HandoverCharts, HandoverChartData, TierMonth, planInfo, outcomeOf, planFidelity } from "./shared";
 import { PROFILE_BANK, PROFILE_FLAGS, BankGroup } from "./profileBank";
+import { DOC_BANK } from "./docBank";
 import { AIBox, ApplyMode, AutoArea, card, dOf, err, fetchBehaviorSummaries, mergeInto, openPrint } from "./Steps";
 
 type Log = Record<string, any>;
@@ -100,8 +101,8 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors, goStep 
             <div className="no-print" style={{ display: "flex", gap: 12, marginTop: 4, fontSize: "9pt" }}>추가 조치:
                 {EXTRAS.map(([x]) => <label key={x} style={{ cursor: "pointer" }}><input type="checkbox" checked={extras.includes(x)} onChange={() => toggleExtra(x)} /> {x}</label>)}</div>
         </div>],
-        ["판단 근거", <Area key="r" value={cur.rationale || ""} onChange={v => set({ rationale: v })} placeholder="자료의 어느 수치를 보고 결정했는지" rows={4} />],
-        ["후속 조치", <Area key="x" value={cur.actions || ""} onChange={v => set({ actions: v })} placeholder="누가·언제·무엇을" rows={3} />],
+        ["판단 근거", <BankArea key="r" bank="decision:rationale" value={cur.rationale || ""} onChange={v => set({ rationale: v })} placeholder="자료의 어느 수치를 보고 결정했는지" rows={4} />],
+        ["후속 조치", <BankArea key="x" bank="decision:actions" value={cur.actions || ""} onChange={v => set({ actions: v })} placeholder="누가·언제·무엇을" rows={3} />],
     ];
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -144,15 +145,14 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors, goStep 
                     <b style={{ flex: 1, minWidth: 200 }}>🤝 개별화교육지원팀 협의록 초안 <span style={{ fontWeight: 500, fontSize: "0.78rem", color: "#64748b" }}>협의회 전에 지금까지 자료로 안건·현황·결정(안)을 미리 채웁니다</span></b>
                     <button className="btn btn-ai" onClick={runMinutes} disabled={minutes.loading}>{minutes.loading ? "초안 작성 중..." : "✨ 협의록 초안 만들기"}</button>
                 </div>
-                {minutes.text && (
-                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                        <AutoArea value={minutes.text} onChange={v => setMinutes({ loading: false, text: v })} rows={12} />
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button className="btn btn-primary" onClick={saveMinutes}>💾 사례 협의 기록에 저장</button>
-                            <button className="btn btn-secondary" onClick={() => openPrint({ doc: "sections", heading: "개별화교육지원팀 협의록", s: head, meta: [["협의일", kDate(today())]], sections: [["협의 내용", minutes.text]], limit: 1 })}>🖨️ 미리보기·인쇄</button>
-                        </div>
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <AutoArea value={minutes.text} onChange={v => setMinutes({ loading: false, text: v })} rows={minutes.text ? 12 : 3} placeholder="직접 쓰거나 초안을 받아 고쳐 쓰세요." />
+                    <SentencePicker value={minutes.text} onChange={v => setMinutes({ loading: false, text: v })} groups={DOC_BANK["minutes:text"]} sep={"\n"} />
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button className="btn btn-primary" onClick={saveMinutes} disabled={!minutes.text.trim()}>💾 사례 협의 기록에 저장</button>
+                        <button className="btn btn-secondary" disabled={!minutes.text.trim()} onClick={() => openPrint({ doc: "sections", heading: "개별화교육지원팀 협의록", s: head, meta: [["협의일", kDate(today())]], sections: [["협의 내용", minutes.text]], limit: 1 })}>🖨️ 미리보기·인쇄</button>
                     </div>
-                )}
+                </div>
             </div>
             <MeetingNotesSection key={notesKey} apiUrl={API_BASE_URL} meetingType="tier3" title="이 학생 사례 협의 기록 (누적)" studentCode={head.code} />
         </div>
@@ -275,7 +275,7 @@ export function ReferralStep({ kind, head, bip, setBip, save, logs, behaviors }:
     const meta: [string, React.ReactNode][] = d.meta.map(([k, f]) => [k,
         f === "period" && kind === "medical" ? <DateRange key={f} a={from} b={to} onA={v => set({ from: v })} onB={v => set({ to: v })} />
             : <Inp key={f} type={f === "date" || f === "change" ? "date" : "text"} value={f === "date" ? dateVal : f === "author" ? author : cur[f] || ""} onChange={v => set({ [f]: v })} />]);
-    const sections: [string, React.ReactNode][] = d.sections.map(([t, f, ph]) => [t, <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={kind === "medical" ? 2 : 3} />]);
+    const sections: [string, React.ReactNode][] = d.sections.map(([t, f, ph]) => [t, <BankArea key={f} bank={`${kind}:${f}`} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={kind === "medical" ? 2 : 3} />]);
     const footer = kind === "medical" ? "※ 학교 교실 관찰 자료이며 진단·처방을 대신하지 않는다. 수치 변화는 약물과의 관련 가능성을 살피는 참고 자료이며 원인을 뜻하지 않는다." : undefined;
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -507,7 +507,7 @@ export function HandoverStep({ head, bip, setBip, save, logs, behaviors }: {
     const auto: [string, string][] = [["표적행동(BIP)", bip.TargetBehavior || "행동중재계획에 없음"]];
     const printMeta: [string, string][] = [...metaDef.map(([k, f, v]): [string, string] => [k, f === "date" ? kDate(v) : v]), ...auto];
     const meta: [string, React.ReactNode][] = [...metaDef.map(([k, f, v]): [string, React.ReactNode] => [k, <Inp key={f} type={f === "date" ? "date" : "text"} value={v} onChange={x => set({ [f]: x })} />]), ...auto];
-    const area = ([, f, ph]: Row) => <Area key={f} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={2} />;
+    const area = ([, f, ph]: Row) => <BankArea key={f} bank={`handover:${f}`} value={cur[f] || ""} onChange={v => set({ [f]: v })} placeholder={ph} rows={2} />;
     const sections = handoverLines<React.ReactNode>(area);
     const printSections = handoverLines<string>(([, f]) => cur[f] || "");
     const footer = "※ 표적행동 정의·기능 가설·예방·교수·강화 전략과 위기대응 절차는 행동중재계획(BIP)을 함께 인계한다.";
@@ -657,28 +657,3 @@ export const prose = (v: string) => v.replace(/\r/g, "").split("\n").reduce<stri
 }, []).join("\n");
 
 // 예시 문장 고르기: 체크하면 칸 끝에 문장을 이어 쓰고, 끄면 그 문장을 뺀다. 고쳐 쓴 문장은 체크가 풀린다.
-function SentencePicker({ value, onChange, groups }: { value: string; onChange: (v: string) => void; groups: BankGroup[] }) {
-    const has = (t: string) => value.includes(t);
-    const toggle = (t: string) => onChange(has(t)
-        ? value.replace(t, "").replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").trim()
-        : [value.trimEnd(), t].filter(Boolean).join(" "));
-    const n = groups.reduce((k, g) => k + g.items.filter(has).length, 0);
-    return (
-        <details className="no-print" style={{ marginTop: 4, fontSize: "8.5pt" }}>
-            <summary style={{ cursor: "pointer", color: "#4338ca", fontWeight: 700 }}>＋ 예시 문장 고르기{n ? ` (${n}개 넣음)` : ""}</summary>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "4px 14px", padding: "6px 2px" }}>
-                {groups.map(g => (
-                    <div key={g.group}>
-                        <div style={{ fontWeight: 700, color: "#475569", margin: "4px 0 2px" }}>{g.group}</div>
-                        {g.items.map(t => (
-                            <label key={t} style={{ display: "flex", gap: 4, alignItems: "flex-start", cursor: "pointer", lineHeight: 1.45, padding: "1px 0" }}>
-                                <input type="checkbox" checked={has(t)} onChange={() => toggle(t)} style={{ marginTop: 2 }} />
-                                <span style={{ color: has(t) ? "#1e293b" : "#475569" }}>{t}</span>
-                            </label>
-                        ))}
-                    </div>
-                ))}
-            </div>
-        </details>
-    );
-}
