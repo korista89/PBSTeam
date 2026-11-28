@@ -222,7 +222,8 @@ def ai_fba_report(
     if not gate["eligible"]:
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    return {"analysis": generate_fba_report(student_info, evidence, req.teacher_context, len(norm_logs)), **gate}
+    ctx = "\n".join(x for x in (_attendance(student_code, raw_logs, req.start_date, req.end_date), req.teacher_context) if x)
+    return {"analysis": generate_fba_report(student_info, evidence, ctx, len(norm_logs)), **gate}
 
 
 class AIDocumentDraftRequest(BaseModel):
@@ -254,7 +255,7 @@ def ai_document_draft(
     if not gate["eligible"] and req.kind != "handover":  # 인수인계는 기능 추정이 아니라서 Tier2(기록 적음) 학생도 쓴다
         return {"analysis": gate["notice"], **gate}
     evidence = build_fba_evidence_summary(student_info, norm_logs)
-    context = req.context
+    context = "\n".join(x for x in (_attendance(student_code, raw_logs, req.start_date, req.end_date), req.context) if x)
     if req.kind == "handover":
         context = _handover_extra_context(student_code) + "\n" + context
     return {"analysis": generate_document_draft(req.kind, student_info, evidence, context, len(norm_logs)), **gate}
@@ -288,6 +289,14 @@ def _tier2_year_lines(student_code: str) -> list:
         lines.append(f"[CICO 기록 — {sum(1 for m in year if m.get('cico'))}개월]")
         lines += [f"- {k} ({v['type']}, 목표 {v['criteria']}): {', '.join(v['rates'])} / 최근 판정: {v.get('decision', '')}" for k, v in goals.items()]
     return lines
+
+
+def _attendance(student_code: str, raw_logs: list, start: Optional[str], end: Optional[str]) -> str:
+    """AI 근거에 붙이는 출결·기록 확인 한 줄(결석·위기행동 없음·기록 안 함, 2026-11-28)."""
+    from app.services.attendance import attendance_line
+    from app.services.sheets import normalize_date_string
+    days = {normalize_date_string(r.get("행동발생날짜") or r.get("발생날짜") or r.get("date") or "") for r in raw_logs}
+    return attendance_line(student_code, normalize_date_string(start) if start else "", normalize_date_string(end) if end else "", days)
 
 
 def _handover_extra_context(student_code: str) -> str:
@@ -416,6 +425,7 @@ def _decision_context(student_code: str, req: AIDecisionRecommendationRequest):
         "metrics": evidence_summary["deterministic_metrics"],
         "narrative_coverage": evidence_summary["narrative_and_abc_coverage"],
         "representative_evidence": evidence_summary["representative_evidence_samples"],
+        "attendance": _attendance(student_code, raw_logs, req.start_date, req.end_date),
     }, ensure_ascii=False, separators=(",", ":"))
 
     bip = get_bip(student_code) or {}
