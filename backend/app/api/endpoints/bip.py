@@ -420,12 +420,12 @@ def _decision_context(student_code: str, req: AIDecisionRecommendationRequest):
     norm_logs = [normalize_behavior_log(r, {student_code: student_info}) for r in raw_logs]
     gate = fba_data_gate(len(norm_logs))
     evidence_summary = build_fba_evidence_summary(student_info, norm_logs)
-    period_data = json.dumps({
+    attendance = _attendance(student_code, raw_logs, req.start_date, req.end_date)
+    period_data = (attendance + "\n" if attendance else "") + json.dumps({
         "period": f"{req.start_date or '전체'} ~ {req.end_date or '전체'}",
         "metrics": evidence_summary["deterministic_metrics"],
         "narrative_coverage": evidence_summary["narrative_and_abc_coverage"],
         "representative_evidence": evidence_summary["representative_evidence_samples"],
-        "attendance": _attendance(student_code, raw_logs, req.start_date, req.end_date),
     }, ensure_ascii=False, separators=(",", ":"))
 
     bip = get_bip(student_code) or {}
