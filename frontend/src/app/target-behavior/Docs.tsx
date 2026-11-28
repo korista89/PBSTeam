@@ -47,7 +47,16 @@ export function DecisionStep({ head, bip, setBip, save, logs, behaviors, goStep 
     const info = planInfo(bip);
     const planEnd = bip.PlanEnd && bip.PlanEnd < today() ? bip.PlanEnd : today();  // 이 계획 기간 자료로 판단한다
     const fid = planFidelity(bip, bip.PlanStart, planEnd);
-    const summary = useMemo(() => [dataSummary(logs, behaviors, bip.PlanStart || ""), fid.text && `- ${fid.text}`].filter(Boolean).join("\n"), [logs, behaviors, bip.PlanStart, fid.text]);
+    // 출결·기록 확인: AI 근거와 같은 줄(등교일·결석·위기행동 있는 날·없음 확인·기록 안 한 날)
+    const [attendance, setAttendance] = useState("");
+    useEffect(() => {
+        let alive = true;
+        setAttendance("");
+        axios.get(`${API_BASE_URL}/api/v1/bip/students/${encodeURIComponent(head.code)}/attendance`, { params: { start_date: bip.PlanStart || undefined, end_date: planEnd } })
+            .then(r => { if (alive) setAttendance(String(r.data?.line || "").replace(/ 건수·빈도 비교와[^]*$/, "")); }).catch(() => {});
+        return () => { alive = false; };
+    }, [head.code, bip.PlanStart, planEnd]);
+    const summary = useMemo(() => [attendance && `- ${attendance.replace(/^\[([^\]]+)\]\s*/, "$1: ")}`, dataSummary(logs, behaviors, bip.PlanStart || ""), fid.text && `- ${fid.text}`].filter(Boolean).join("\n"), [attendance, logs, behaviors, bip.PlanStart, fid.text]);
     const outcome = outcomeOf(cur.choice);
     const extras = (cur.extra || "").split(",").filter(Boolean);
     const toggleExtra = (x: string) => set({ extra: (extras.includes(x) ? extras.filter(e => e !== x) : [...extras, x]).join(",") });

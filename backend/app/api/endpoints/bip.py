@@ -134,6 +134,16 @@ def save_student_bip(
     return result
 
 
+@router.get("/students/{student_code}/attendance")
+def get_attendance(student_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None,
+                   current_user: Dict[str, Any] = Depends(require_authenticated_user)):
+    """AI 근거와 같은 출결·기록 확인 한 줄(⑥ 자료 요약에 보여 준다)."""
+    check_student_scope(student_code, current_user)
+    from app.services.sheets import fetch_all_records
+    logs = _filter_student_logs(fetch_all_records(), student_code, _resolve_beable_code(student_code))
+    return {"line": _attendance(student_code, logs, start_date, end_date)}
+
+
 @router.get("/students/{student_code}/plans")
 def get_closed_plans(student_code: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     """종결한 행동중재계획 목록(계획1·계획2…) — 계획 칸·의사결정·결과 보고서."""
