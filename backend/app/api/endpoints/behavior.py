@@ -542,8 +542,9 @@ def expand_school_days(start: str, end: str, today: datetime.date) -> List[str]:
 @router.get("/no-incident/{student_code}")
 def list_no_incident(student_code: str, current_user: Dict[str, Any] = Depends(require_authenticated_user)):
     check_student_scope(student_code, current_user)
-    from app.services.sheets import get_no_incident_dates
-    return {"dates": get_no_incident_dates(student_code)}
+    from app.services.sheets import get_day_marks, ABSENT
+    marks = get_day_marks(student_code)
+    return {"dates": sorted(d for d, t in marks.items() if t != ABSENT), "absent": sorted(d for d, t in marks.items() if t == ABSENT)}
 
 
 @router.post("/no-incident/{student_code}")
@@ -552,7 +553,7 @@ def add_no_incident(
     payload: dict = Body(...),
     current_user: Dict[str, Any] = Depends(require_authenticated_user),
 ):
-    """'이 기간에는 위기행동이 없었다'를 평일 단위로 기록한다. 위기행동이 기록된 날은 건너뛴다."""
+    """'이 기간에는 위기행동이 없었다'(type '결석'이면 결석한 날)를 평일 단위로 기록한다. 위기행동이 기록된 날은 건너뛴다."""
     check_student_scope(student_code, current_user)
     picked = payload.get("dates")  # 달력에서 고른 날짜들(2026-11-28). 없으면 예전처럼 기간
     if isinstance(picked, list) and picked:
@@ -574,7 +575,8 @@ def add_no_incident(
     }
     skipped = [d for d in days if d in with_incident]
     ok = [d for d in days if d not in with_incident]
-    result = add_no_incident_dates(clean, ok, current_user.get("name") or current_user.get("id") or "") if ok else {"added": [], "existing": []}
+    kind = "결석" if str(payload.get("type") or "").strip() == "결석" else ""
+    result = add_no_incident_dates(clean, ok, current_user.get("name") or current_user.get("id") or "", kind) if ok else {"added": [], "existing": []}
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return {"added": result["added"], "already": result["existing"], "skipped_has_incident": skipped}

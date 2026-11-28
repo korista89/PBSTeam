@@ -23,7 +23,7 @@ def test_add_skips_days_with_incident(monkeypatch):
     monkeypatch.setattr(bh, "today_kst", lambda: TODAY)
     monkeypatch.setattr(bh, "fetch_all_records", lambda force_refresh=False: [{"학생코드": "S01", "행동발생날짜": "2026-11-10"}])
     got = {}
-    monkeypatch.setattr(sh, "add_no_incident_dates", lambda c, d, by="": got.update(c=c, d=d) or {"added": d, "existing": []})
+    monkeypatch.setattr(sh, "add_no_incident_dates", lambda c, d, by="", kind="": got.update(c=c, d=d, kind=kind) or {"added": d, "existing": []})
     r = bh.add_no_incident("S01", {"start_date": "2026-11-09", "end_date": "2026-11-11"}, {"name": "t"})
     assert r["skipped_has_incident"] == ["2026-11-10"]
     assert got["d"] == ["2026-11-09", "2026-11-11"]

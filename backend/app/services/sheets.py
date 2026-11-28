@@ -4317,8 +4317,8 @@ def ensure_no_incident_sheet():
         try:
             return _with_retry(lambda: sheet.worksheet(NO_INCIDENT_SHEET), stop_on=(gspread.WorksheetNotFound,))
         except gspread.WorksheetNotFound:
-            ws = sheet.add_worksheet(title=NO_INCIDENT_SHEET, rows=2000, cols=4)
-            ws.append_row(["StudentCode", "Date", "RecordedBy", "UUID"])
+            ws = sheet.add_worksheet(title=NO_INCIDENT_SHEET, rows=2000, cols=5)
+            ws.append_row(["StudentCode", "Date", "RecordedBy", "UUID", "Type"])
             return ws
     except SheetUnavailable:
         raise
@@ -4327,30 +4327,44 @@ def ensure_no_incident_sheet():
         return None
 
 
-def get_no_incident_dates(student_code: str) -> list:
+ABSENT = "결석"  # 위기행동_없음 탭 Type 칸: 비어 있으면 '위기행동 없음', '결석'이면 결석한 날(2026-11-28)
+
+
+def get_day_marks(student_code: str) -> dict:
+    """{날짜: '' 또는 '결석'} — 위기행동 없음·결석으로 확인한 날."""
     ws = ensure_no_incident_sheet()
-    if not ws: return []
+    if not ws: return {}
     clean = str(student_code).strip()
     try:
-        return sorted({str(r.get("Date", "")).strip() for r in safe_get_all_records(ws)
-                       if str(r.get("StudentCode", "")).strip() == clean and str(r.get("Date", "")).strip()})
+        return {str(r.get("Date", "")).strip(): str(r.get("Type", "") or "").strip()
+                for r in safe_get_all_records(ws)
+                if str(r.get("StudentCode", "")).strip() == clean and str(r.get("Date", "")).strip()}
     except SheetUnavailable:
         raise
     except Exception as e:
         logger.error(f"Error getting no-incident dates: {e}")
-        return []
+        return {}
 
 
-def add_no_incident_dates(student_code: str, dates: list, recorded_by: str = "") -> dict:
-    """이미 있는 날짜는 건너뛰고 새 날짜만 한 번에 추가한다."""
+def get_no_incident_dates(student_code: str) -> list:
+    """위기행동이 없었던 날만(결석한 날은 빼고)."""
+    return sorted(d for d, t in get_day_marks(student_code).items() if t != ABSENT)
+
+
+def add_no_incident_dates(student_code: str, dates: list, recorded_by: str = "", kind: str = "") -> dict:
+    """이미 표시한 날짜(없음·결석 모두)는 건너뛰고 새 날짜만 한 번에 추가한다. kind='결석'이면 결석한 날."""
     ws = ensure_no_incident_sheet()
     if not ws: return {"error": "Sheet access failed"}
     try:
         import uuid
-        have = set(get_no_incident_dates(student_code))
+        have = set(get_day_marks(student_code))
         new = [d for d in dates if d not in have]
         if new:
-            ws.append_rows([[str(student_code).strip(), d, recorded_by, str(uuid.uuid4())] for d in new])
+            if kind and "Type" not in ws.row_values(1):  # 예전 탭(4칸)에 Type 칸을 더한다
+                if ws.col_count < 5:
+                    ws.resize(cols=5)
+                ws.update_cell(1, 5, "Type")
+            ws.append_rows([[str(student_code).strip(), d, recorded_by, str(uuid.uuid4())] + ([kind] if kind else []) for d in new])
         return {"added": new, "existing": [d for d in dates if d in have]}
     except SheetUnavailable:
         raise

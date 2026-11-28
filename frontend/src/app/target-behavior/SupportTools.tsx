@@ -265,30 +265,36 @@ function EBPRecommendationSection({ studentCode, functionCode, settingEvents, cu
 const kd = (iso: string) => { const [, m, d] = iso.split("-"); return `${+m}. ${+d}.`; };
 const todayIso = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-// ⑤ 위기행동이 없었던 날: 달력에서 날짜를 골라 ✓한 뒤 '반영'. 위기행동이 기록된 날은 고를 수 없다.
+// ⑤ 위기행동이 없었던 날·결석한 날: 달력에서 날짜를 눌러 ✓(위기행동 없음)·결석을 고른 뒤 '반영'.
+// 위기행동이 기록된 날은 고를 수 없다. 결석은 '없었던 날'로 세지 않는다(기록 없음의 이유를 구분).
+const ABSENT = "결석";
 export function CalmDays({ studentCode, yearStart, incidentDays }: { studentCode: string; yearStart: string; incidentDays: string[] }) {
   const [days, setDays] = useState<string[]>([]);
+  const [absent, setAbsent] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const enc = encodeURIComponent(studentCode);
   const load = useCallback(async () => {
     try {
       const r = await axios.get(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}`);
-      setDays((r.data?.dates || []) as string[]);
-    } catch { setDays([]); }
+      setDays((r.data?.dates || []) as string[]); setAbsent((r.data?.absent || []) as string[]);
+    } catch { setDays([]); setAbsent([]); }
   }, [enc]);
   useEffect(() => { setMsg(""); void load(); }, [load]);
-  const marks = useMemo(() => Object.fromEntries(days.map(d => [d, "✓"])), [days]);
+  const marks = useMemo(() => ({ ...Object.fromEntries(days.map(d => [d, "✓"])), ...Object.fromEntries(absent.map(d => [d, ABSENT])) }), [days, absent]);
   const blocked = useMemo(() => Object.fromEntries(incidentDays.map(d => [d, "위기행동이 기록된 날"])), [incidentDays]);
   const apply = async (next: Record<string, string>, changed: string[]) => {
-    const add = changed.filter(d => next[d]), del = changed.filter(d => !next[d]);
     try {
-      let n = 0, skip = 0;
-      if (add.length) {
-        const r = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}`, { dates: add });
-        n = (r.data?.added || []).length; skip = (r.data?.skipped_has_incident || []).length;
+      // 바뀐 날은 먼저 지우고(표시를 바꾼 날 포함) 새 표시를 종류별로 한 번에 넣는다
+      for (const d of changed.filter(d => marks[d])) await axios.delete(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}/${d}`);
+      let skip = 0;
+      for (const [type, mark] of [["", "✓"], [ABSENT, ABSENT]]) {
+        const add = changed.filter(d => next[d] === mark);
+        if (!add.length) continue;
+        const r = await axios.post(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}`, { dates: add, type });
+        skip += (r.data?.skipped_has_incident || []).length;
       }
-      for (const d of del) await axios.delete(`${API_BASE_URL}/api/v1/behavior-log/no-incident/${enc}/${d}`);
-      setMsg(`${n}일 기록${del.length ? `, ${del.length}일 취소` : ""}했습니다.${skip ? ` 위기행동이 기록된 ${skip}일은 뺐습니다.` : ""}`);
+      const n = (m: string) => changed.filter(d => next[d] === m).length, del = changed.filter(d => !next[d]).length;
+      setMsg(`위기행동 없음 ${n("✓")}일, 결석 ${n(ABSENT)}일 반영${del ? `, ${del}일 취소` : ""}했습니다.${skip ? ` 위기행동이 기록된 ${skip}일은 뺐습니다.` : ""}`);
     } catch (e: any) {
       setMsg(e?.response?.data?.detail || "반영하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
@@ -296,9 +302,9 @@ export function CalmDays({ studentCode, yearStart, incidentDays }: { studentCode
   };
   return (
     <div className="card" style={{ padding: 16 }}>
-      <div style={{ fontWeight: 800, fontSize: "1rem" }}>✅ 위기행동이 없었던 날 <span style={{ fontWeight: 500, fontSize: "0.8rem", color: "#64748b" }}>올해 {days.filter(d => d >= yearStart).length}일</span></div>
-      <p style={{ margin: "4px 0 10px", fontSize: "0.8rem", color: "#94a3b8" }}>기록이 없는 날이 &lsquo;없었음&rsquo;인지 &lsquo;기록 안 함&rsquo;인지 구분하는 근거가 됩니다. 날짜를 눌러 ✓한 뒤 &lsquo;반영&rsquo;을 누르세요.</p>
-      <DayCalendar marks={marks} cycle={["", "✓"]} blocked={blocked} onApply={apply} legend={<>⚠는 위기행동이 기록된 날입니다.</>} />
+      <div style={{ fontWeight: 800, fontSize: "1rem" }}>✅ 위기행동이 없었던 날·결석한 날 <span style={{ fontWeight: 500, fontSize: "0.8rem", color: "#64748b" }}>올해 위기행동 없음 {days.filter(d => d >= yearStart).length}일 · 결석 {absent.filter(d => d >= yearStart).length}일</span></div>
+      <p style={{ margin: "4px 0 10px", fontSize: "0.8rem", color: "#94a3b8" }}>기록이 없는 날이 &lsquo;위기행동 없음&rsquo;인지 &lsquo;결석&rsquo;인지 &lsquo;기록 안 함&rsquo;인지 구분하는 근거가 됩니다. 날짜를 눌러 표시를 고른 뒤 &lsquo;반영&rsquo;을 누르세요.</p>
+      <DayCalendar marks={marks} cycle={["", "✓", ABSENT]} blocked={blocked} onApply={apply} legend={<>✓는 위기행동 없음, 결석은 결석한 날, ⚠는 위기행동이 기록된 날입니다.</>} />
       {msg && <p style={{ margin: "8px 0 0", fontSize: "0.82rem", color: "#475569" }}>{msg}</p>}
     </div>
   );

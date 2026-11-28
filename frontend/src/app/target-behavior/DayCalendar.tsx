@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { addDays, today } from "./shared";
 
-const COLORS: Record<string, [string, string]> = { "✓": ["#dcfce7", "#15803d"], O: ["#dbeafe", "#1d4ed8"], X: ["#fee2e2", "#b91c1c"] };
+const COLORS: Record<string, [string, string]> = { "✓": ["#dcfce7", "#15803d"], O: ["#dbeafe", "#1d4ed8"], X: ["#fee2e2", "#b91c1c"], 결석: ["#e2e8f0", "#475569"] };
 const monthOf = (iso: string) => iso.slice(0, 7);
 
 export default function DayCalendar({ marks, cycle, blocked = {}, range, onApply, legend }: {
@@ -63,7 +63,7 @@ export default function DayCalendar({ marks, cycle, blocked = {}, range, onApply
                             outline: (marks[d] || "") !== v ? "2px dashed #f59e0b" : inRange ? "2px solid #c7d2fe" : "none", outlineOffset: -2,
                         }}>
                             <span>{+d.slice(8)}</span>
-                            <b style={{ fontSize: "0.85rem", lineHeight: 1 }}>{block ? "⚠" : v}</b>
+                            <b style={{ fontSize: v.length > 1 ? "0.72rem" : "0.85rem", lineHeight: 1 }}>{block ? "⚠" : v}</b>
                         </div>
                     );
                 })}
