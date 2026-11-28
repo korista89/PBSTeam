@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import { useAuth } from './AuthProvider';
-import DropdownTextarea from './DropdownTextarea';
+import { SentencePicker } from '../target-behavior/shared';
 import { maskName, todayStr } from '../utils';
 import ReportSheet from './ReportSheet';
 import { ACTION_HEADER, NO_REPORT, REASONS, FOLLOWUPS, Line, Report, emptyReport, reportColumns, vagueIn, STORY_EXAMPLES, OBSERVE_EXAMPLES, autoFill, duplicatesB, OPTIONAL_FOLLOWUPS, NOT_APPLICABLE, FOLLOWUP_EXAMPLES, linesText, parseCrisisDraft, applyCrisisDraft } from '../crisisReport';
@@ -111,7 +111,7 @@ function CheckboxGroup({ options, selected, onToggle }: { options: string[]; sel
   );
 }
 
-// 경위·관찰기록: '시각 + 한 일' 한 줄씩 시간순으로 쌓는다. 예시 문장을 고르면 그 줄에 들어가고 그대로 고쳐 쓴다.
+// 경위·관찰기록: '시각 + 한 일' 한 줄씩 시간순으로 쌓는다. 예시 문장을 체크하면 새 줄(빈 줄이 있으면 그 줄)로 들어가고, 끄면 그 줄을 뺀다.
 function LinesInput({ rows, onChange, examples }: { rows: Line[]; onChange: (v: Line[]) => void; examples: { label: string; items: string[] }[] }) {
   const set = (i: number, patch: Partial<Line>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
@@ -121,14 +121,17 @@ function LinesInput({ rows, onChange, examples }: { rows: Line[]; onChange: (v: 
           <input value={r.t} onChange={e => set(i, { t: e.target.value })} onBlur={e => set(i, { t: e.target.value.replace(/^(\d{1,2})(\d{2})$/, '$1:$2') })} inputMode="numeric" maxLength={5} placeholder="10:20" aria-label={`${i + 1}번째 줄 시각`} style={{ width: 58, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4 }} />
           <textarea value={r.s} rows={1} onChange={e => set(i, { s: e.target.value })} aria-label={`${i + 1}번째 줄 내용`}
             placeholder="보인 행동 또는 교사가 한 일" style={{ flex: 1, minWidth: 0, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', resize: 'vertical', fieldSizing: 'content' } as React.CSSProperties} />
-          <select value="" onChange={e => e.target.value && set(i, { s: e.target.value })} aria-label="예시 문장 고르기" style={{ width: 62, padding: 4, fontSize: '0.75rem' }}>
-            <option value="">예시</option>
-            {examples.map(g => <optgroup key={g.label} label={g.label}>{g.items.map(x => <option key={x} value={x}>{x}</option>)}</optgroup>)}
-          </select>
           {rows.length > 1 && <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label="줄 지우기" style={{ padding: '4px 7px', border: '1px solid #cbd5e1', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>✕</button>}
         </div>
       ))}
       <button type="button" onClick={() => onChange([...rows, { t: '', s: '' }])} style={{ padding: '4px 10px', fontSize: '0.8rem', border: '1px dashed #64748b', borderRadius: 4, background: '#f8fafc', cursor: 'pointer' }}>＋ 줄 추가</button>
+      <SentencePicker value="" onChange={() => {}} groups={examples.map(g => ({ group: g.label, items: g.items }))}
+        isOn={t => rows.some(r => r.s.trim() === t)}
+        onToggle={t => {
+          if (rows.some(r => r.s.trim() === t)) { const left = rows.filter(r => r.s.trim() !== t); onChange(left.length ? left : [{ t: '', s: '' }]); return; }
+          const last = rows[rows.length - 1];
+          onChange(last && !last.s.trim() ? [...rows.slice(0, -1), { ...last, s: t }] : [...rows, { t: '', s: t }]);
+        }} />
     </div>
   );
 }
@@ -448,8 +451,9 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
         {mode === 'report' && (() => {
           const cell: React.CSSProperties = { width: '100%', padding: '3px 4px', boxSizing: 'border-box' };
           const tip = (t: string) => <div style={{ fontSize: '0.72rem', color: '#64748b', margin: '0 0 3px' }}>{t}</div>;
-          const area = (key: 'A' | 'B' | 'C', examples: string[]) => (
-            <>{tip({ A: '행동 직전 상황 한 줄(언제·무엇이 있었나)', B: '학생이 보인 행동만: 모양·횟수·지속 시간', C: '행동 직후 바뀐 것 한 줄(교사 대응 과정은 경위에)' }[key])}<DropdownTextarea name={key} value={report[key]} onChange={e => upd({ [key]: e.target.value } as Partial<Report>)} examples={examples} /><VagueHint text={report[key]} /></>
+          const area = (key: 'A' | 'B' | 'C', examples: { group: string; items: string[] }[]) => (
+            <>{tip({ A: '행동 직전 상황 한 줄(언제·무엇이 있었나)', B: '학생이 보인 행동만: 모양·횟수·지속 시간', C: '행동 직후 바뀐 것 한 줄(교사 대응 과정은 경위에)' }[key])}<textarea name={key} value={report[key]} rows={2} onChange={e => upd({ [key]: e.target.value } as Partial<Report>)} style={{ width: '100%', boxSizing: 'border-box', padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical' }} />
+              <SentencePicker value={report[key]} onChange={v => upd({ [key]: v } as Partial<Report>)} groups={examples} /><VagueHint text={report[key]} /></>
           );
           const seed = (a: string[], b: string[], tail: string) => (a.length || b.length ? [`${[...a, ...b].join(', ')} ${tail}`] : []);
           const mirror = (v: string) => <span style={{ color: v ? '#0f172a' : '#94a3b8', fontSize: '9.5pt' }}>{v || '위 입력란에서 선택'}</span>;
@@ -475,9 +479,9 @@ export default function BehaviorForm({ studentId, studentName, onLogSubmitted, d
                   지원시간: <input value={report.지원시간} onChange={e => upd({ 지원시간: e.target.value })} placeholder="11:30~12:10 (40분)" style={cell} />,
                   지원장소: <input value={report.지원장소} onChange={e => upd({ 지원장소: e.target.value })} placeholder="심리안정실" style={cell} />,
                   지원교사: <input value={report.지원교사} onChange={e => upd({ 지원교사: e.target.value })} placeholder="교사명(시간)" style={cell} />,
-                  A: area('A', [...seed(배경사건, 선행사건, '상황에서 발생함'), ...EXAMPLE_ANTECEDENTS]),
-                  B: area('B', EXAMPLE_BEHAVIORS),
-                  C: area('C', [...seed(후속결과, [], '이(가) 이어짐'), ...EXAMPLE_CONSEQUENCES]),
+                  A: area('A', [{ group: '위 입력에서', items: seed(배경사건, 선행사건, '상황에서 발생함') }, { group: '예시', items: EXAMPLE_ANTECEDENTS.filter(x => x !== '직접 입력') }].filter(g => g.items.length)),
+                  B: area('B', [{ group: '예시', items: EXAMPLE_BEHAVIORS.filter(x => x !== '직접 입력') }]),
+                  C: area('C', [{ group: '위 입력에서', items: seed(후속결과, [], '이(가) 이어짐') }, { group: '예시', items: EXAMPLE_CONSEQUENCES.filter(x => x !== '직접 입력') }].filter(g => g.items.length)),
                   경위: <>{tip('교사 대응을 시간순으로: 누가 언제 무엇을 결정·이동·제지했나. 학생 행동은 B에 쓰고 여기서는 "B 참조"로')}<LinesInput rows={report.경위} onChange={v => upd({ 경위: v })} examples={STORY_EXAMPLES} /><VagueHint text={report.경위.map(r => r.s).join(' ')} />
                     {duplicatesB(report.경위, report.B) && <div style={{ fontSize: '0.75rem', color: '#b45309', marginTop: 3 }}>💡 B(나타난 위기행동)와 같은 문장이 있습니다. 경위에는 &lsquo;위기행동 발생(B 참조)&rsquo;처럼 줄이고 교사가 한 일을 쓰세요.</div>}</>,
                   관찰기록: <><LinesInput rows={report.관찰기록} onChange={v => upd({ 관찰기록: v })} examples={OBSERVE_EXAMPLES} /><VagueHint text={report.관찰기록.map(r => r.s).join(' ')} /></>,
