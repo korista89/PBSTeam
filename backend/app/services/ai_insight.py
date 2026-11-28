@@ -1513,7 +1513,7 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 1. 자료에 없는 사실·수치·진단명·약물명은 만들지 않고 '확인 필요'로 쓴다.
 2. 행동은 관찰·측정 가능한 용어와 숫자(건수, 기간, 강도)로 쓴다.
 3. {extra}
-4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
+4. 학생 이름은 쓰지 말고 '대상 학생'으로, 교직원·보호자 이름은 역할(담임, 보호자 등)로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
     text = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000 if kind == "handover" else 2000)
     # 인수인계 자료는 절마다 2줄(꼭 해주세요·피해주세요는 쉼표로 이은 1줄), 차트 4개와 함께 A4 1쪽
     return cap_sections(tidy_document(text, secs[0]), secs, PAGE_LINES.get(kind, 2))

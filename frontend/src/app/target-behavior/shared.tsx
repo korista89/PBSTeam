@@ -116,14 +116,14 @@ export function Area({ value, onChange, placeholder, rows = 3 }: { value: string
 }
 // 예시 문장 고르기(작성 도우미): 체크하면 칸 끝에 붙고, 끄면 그 문장을 뺀다. 학생정보는 문단(sep " "), 다른 문서는 줄(sep "\n").
 // isOn·onToggle을 주면 글 칸이 아닌 곳(위기행동 보고서 경위의 줄 목록 등)에도 같은 모양으로 쓴다.
-export function SentencePicker({ value, onChange, groups, sep = " ", isOn, onToggle }: {
-    value: string; onChange: (v: string) => void; groups: BankGroup[]; sep?: string; isOn?: (t: string) => boolean; onToggle?: (t: string) => void;
+export function SentencePicker({ value, onChange, groups, sep = " ", prefix = "", isOn, onToggle }: {
+    value: string; onChange: (v: string) => void; groups: BankGroup[]; sep?: string; prefix?: string; isOn?: (t: string) => boolean; onToggle?: (t: string) => void;
 }) {
     value = value || "";
     const has = isOn || ((t: string) => value.includes(t));
     const toggle = onToggle || ((t: string) => onChange(has(t)
-        ? value.replace(t, "").replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim()
-        : [value.trimEnd(), t].filter(Boolean).join(sep)));
+        ? value.replace(prefix && value.includes(prefix + t) ? prefix + t : t, "").replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim()
+        : [value.trimEnd(), prefix + t].filter(Boolean).join(sep)));
     const n = groups.reduce((k, g) => k + g.items.filter(has).length, 0);
     return (
         <details className="no-print" style={{ marginTop: 4, fontSize: "8.5pt" }}>
@@ -144,9 +144,9 @@ export function SentencePicker({ value, onChange, groups, sep = " ", isOn, onTog
         </details>
     );
 }
-// 입력 칸 + 그 칸의 예시 문장(DOC_BANK['문서:칸']이 있을 때)
+// 입력 칸 + 그 칸의 예시 문장(DOC_BANK['문서:칸']이 있을 때). AI 초안처럼 '- ' 한 줄 한 문장으로 넣는다.
 export function BankArea({ bank, value, onChange, placeholder, rows = 3 }: { bank: string; value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
-    return <><Area value={value} onChange={onChange} placeholder={placeholder} rows={rows} />{DOC_BANK[bank] && <SentencePicker value={value} onChange={onChange} groups={DOC_BANK[bank]} sep={"\n"} />}</>;
+    return <><Area value={value} onChange={onChange} placeholder={placeholder} rows={rows} />{DOC_BANK[bank] && <SentencePicker value={value} onChange={onChange} groups={DOC_BANK[bank]} sep={"\n"} prefix="- " />}</>;
 }
 export function Sel({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
     return <select value={value || ""} onChange={e => onChange(e.target.value)} style={cellBox}><option value="">선택</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>;
