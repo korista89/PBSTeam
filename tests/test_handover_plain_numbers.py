@@ -79,3 +79,5 @@ def test_cap_sections_reads_titles_with_extra_words():
     out = cap_sections(text, titles, 2).splitlines()
     assert out == ["1) 데이터-BIP 일치도 판단", "- 건수가 줄었음.", "2) 원인 분석", "- 실행충실도 85%임.", "- 둘째", "4) 제안", "- 4주 연장함."]
     assert cap_sections("제목 없는 글\n둘째 줄", titles, 2) == "제목 없는 글\n둘째 줄"
+    # 번호를 빼고 쓴 응답도 절로 나눈다
+    assert cap_sections("원인 분석 (전략 한계 vs 실행충실도)\n- a\n- b\n- c\n제안 (다음 조치)\n- d", titles, 2).splitlines() == ["2. 원인 분석", "- a", "- b", "4. 제안", "- d"]

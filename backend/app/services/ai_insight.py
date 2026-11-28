@@ -1549,13 +1549,15 @@ def cap_sections(text: str, titles: list, per_section: int) -> str:
         line = raw.strip()
         if not line:
             continue
-        head = re.match(r"^(\d{1,2}\s*[.)])\s*(.+)$", line)
-        title = next((t for t in titles if head and 0 <= head.group(2).find(t) <= 3), None) if head else None
+        head = re.match(r"^(\d{1,2}\s*[.)])?\s*(.+)$", line)
+        # 번호가 있으면 제목 뒤 내용이 길어도 제목 줄, 번호가 없으면 제목으로 시작하는 짧은 줄만 제목 줄
+        title = next((t for t in titles if 0 <= head.group(2).find(t) <= 3 and (head.group(1) or len(head.group(2)) <= len(t) + 25)), None)
         if title:
             found, inside, count = True, True, 0
             rest = head.group(2)[head.group(2).find(title) + len(title):]
             rest = re.sub(r"^\s*\([^)]*\)", "", rest).strip()
-            out.append(f"{head.group(1)} {title}")
+            number = head.group(1) or f"{titles.index(title) + 1}{')' if ')' in (head.group(1) or '') else '.'}"
+            out.append(f"{number} {title}")
             body = re.split(r"[:：]", rest, maxsplit=1)[1].strip() if re.search(r"[:：]", rest) else (rest if len(rest) > 25 else "")
             if body:
                 out.append(shorten_line("- " + body.lstrip("-· ")))
