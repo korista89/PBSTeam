@@ -311,11 +311,7 @@ export function FbaStep({ head, bip, setBip, save }: { head: StudentHead; bip: B
 }
 
 // ④ 행동중재계획 ─────────────────────────────────────────
-const EBP_COLS: [string, string, string[]][] = [
-    ["PreventionStrategies", "예방", ["ANTECEDENT", "SETTING_EVENT"]],
-    ["TeachingStrategies", "교수", ["TEACHING"]],
-    ["ReinforcementStrategies", "강화", ["REINFORCEMENT", "CONSEQUENCE"]],
-];
+// Be-Able EBP는 예시 문장 앞 (FCT)·(DR-A) 표시로 고른다(2026-11-28, 드롭다운 없앰).
 
 export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
     head: StudentHead; bip: Bip; setBip: (b: Bip) => void; save: (b: Bip) => Promise<void>; behaviors: any[]; goTracker: () => void;
@@ -324,8 +320,6 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
     const info = planInfo(bip);
     const plans = useClosedPlans(head.code, info.no + (info.closed ? 0.5 : 0));
     const newPlan = () => confirm(`${info.label}의 내용을 옮겨 행동중재계획${info.no + 1}을 만듭니다(기간 오늘부터 ${PLAN_WEEKS}주). 만들까요?`) && save(nextPlan(bip, ""));
-    const [catalog, setCatalog] = useState<any[]>([]);
-    useEffect(() => { axios.get(`${API_BASE_URL}/api/v1/ebp/catalog`).then(r => setCatalog(r.data.strategies || [])).catch(() => {}); }, []);
     const set = (k: string, v: string) => setBip({ ...bip, [k]: v });
 
     const runAI = async () => {
@@ -338,7 +332,10 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
         } catch (e) { setAi({ loading: false, text: "⚠️ " + err(e) }); }
     };
     const apply = (mode: ApplyMode) => {
-        const parsed = parseBIPAIResult(ai.text);
+        // 양식 칸에는 예시 문장과 같은 모양('- (FCT) …')만 넣는다: 'EBP 추가' 소제목·마크다운은 뺀다
+        const parsed = Object.fromEntries(Object.entries(parseBIPAIResult(ai.text)).map(([k, v]) => [k, v.split("\n")
+            .filter(l => !/📚|EBP 추가/.test(l)).map(l => l.replace(/\*\*/g, "").replace(/^\s*#{1,6}\s*/, "").replace(/^\s*[*•·]\s+/, "- ").replace(/^\s{2,}-\s+/, "- "))
+            .join("\n").replace(/\n{3,}/g, "\n\n").trim()]));
         delete parsed.MedicationStatus; // 약물 정보는 교사 입력만 쓴다
         if (parsed.TargetBehavior) { parsed.OperationalDefinition = parsed.TargetBehavior; delete parsed.TargetBehavior; }
         // 학교 양식에는 평가 계획·기타 칸이 없어 '추가 지원 사항'으로 모은다
@@ -348,21 +345,7 @@ export function BipStep({ head, bip, setBip, save, behaviors, goTracker }: {
         if (!Object.keys(parsed).length) { alert("AI 결과를 칸별로 나누지 못했습니다. 필요한 부분을 복사해 넣어 주세요."); return; }
         setBip(mergeInto(bip, parsed, mode));
     };
-    const addEbp = (key: string, code: string) => {
-        const s = catalog.find(c => c.code === code);
-        if (!s) return;
-        const line = `- [${s.name}] `;
-        set(key, (bip[key] || "").trim() ? `${bip[key].trim()}\n${line}` : line);
-    };
     const extra = (key: string) => {
-        const ebp = EBP_COLS.find(c => c[0] === key);
-        if (ebp) return (
-            <select style={{ marginTop: 4, fontSize: "8.5pt", padding: "2px 4px", maxWidth: 320 }} value="" onChange={e => addEbp(key, e.target.value)}>
-                <option value="">＋ Be-Able EBP 넣기 ({ebp[1]})</option>
-                {catalog.filter(c => ebp[2].includes(c.category)).sort((x, y) => (x.official_no || 99) - (y.official_no || 99))
-                    .map(c => <option key={c.code} value={c.code}>{c.official_no ? `${c.official_no}. ` : ""}{c.name}</option>)}
-            </select>
-        );
         if (key === "MeasurementMethod") return <button className="btn btn-secondary no-print" style={{ marginTop: 6, fontSize: "0.76rem", padding: "4px 10px" }} onClick={goTracker}>＋ 표적행동·모니터링 지표 추가하러 가기</button>;
         return null;
     };

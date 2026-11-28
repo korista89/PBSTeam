@@ -36,16 +36,26 @@ def test_handover_sections_match_frontend_order():
     assert -1 not in pos and pos == sorted(pos)
 
 
-def test_handover_long_draft_is_shrunk_once(monkeypatch):
-    """1쪽을 넘길 분량이면 한 번 더 줄인 결과를 쓰고, 꼬리말·통계 표기도 정리한다."""
+def test_ai_documents_are_capped_to_one_page(monkeypatch):
+    """모델이 길게 써도(제목줄·마크다운·하위 목록·통계) 다시 부르지 않고 절마다 줄 수·길이를 잘라 1쪽에 맞춘다(2026-11-28 실측)."""
     from app.services import ai_insight
-    long = "1. 한눈에 보는 학생\n- " + "가" * 1200 + "\n6. 꼭 해주세요\n- 전조 | 확인 필요 | 쉬기\n\n---\n> ☁️ AI 모델: x"
-    short = "1. 한눈에 보는 학생\n- 짧음(42.1%, n=24/57)\n6. 꼭 해주세요\n- 전조 | 확인 필요 | 쉬기"
+    raw = ("## 경은학교 S01 추가 지원 신청서 초안\n**보고일:** 2026년 12월 1일 (가정)\n### 1. 신청 사유\n"
+           + "".join(f"*   **사유{i}**: 교실에서 방해행동(77.8%, n=7/9)이 관찰됨. 둘째 문장은 길어서 버림.\n" for i in range(6))
+           + "### 2. 행동 요약\n" + "가" * 300 + "함. 뒤\n")
     calls = []
-    monkeypatch.setattr(ai_insight, "_call_llm", lambda s, p, n: (calls.append(p), long if len(calls) == 1 else short)[1])
-    out = ai_insight.generate_document_draft("handover", {"code": "S01"}, {}, "", 50)
-    assert len(calls) == 2 and "1,200" not in calls[1] and out.startswith("1. 한눈에 보는 학생\n- 짧음(57번 중 24번)")
-    assert ai_insight.handover_lengths(long.split("\n\n---")[0]) == (1202, len("- 전조 | 확인 필요 | 쉬기"))
+    monkeypatch.setattr(ai_insight, "_call_llm", lambda s, p, n: (calls.append(p), raw)[1])
+    out = ai_insight.generate_document_draft("support", {"code": "S01"}, {}, "", 50)
+    lines = out.splitlines()
+    assert len(calls) == 1 and lines[0] == "1. 신청 사유" and "보고일" not in out and "**" not in out
+    assert lines[1:4] == [f"- 사유{i}: 교실에서 방해행동(9번 중 7번)이 관찰됨. 둘째 문장은 길어서 버림." for i in range(3)]  # 절마다 3줄
+    assert lines[4] == "2. 행동 요약" and lines[5].endswith("…") and len(lines[5]) <= ai_insight.LINE_MAX + 25
+
+
+def test_minutes_keep_next_check_line():
+    from app.services.ai_insight import cap_lines
+    text = "\n".join(["■ 협의록"] + [f"- 줄{i}" for i in range(40)] + ["Ⅲ. 다음 점검일(안): 12월 12일"])
+    out = cap_lines(text, 24, keep_last="Ⅲ").splitlines()
+    assert len(out) == 24 and out[-1].startswith("Ⅲ.")
 
 
 def test_student_year_months_in_school_order(monkeypatch):

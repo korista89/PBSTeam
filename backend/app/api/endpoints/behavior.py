@@ -602,7 +602,7 @@ def ai_crisis_report_draft(payload: dict = Body(...), current_user: Dict[str, An
     if not code:
         raise HTTPException(status_code=400, detail="학생을 먼저 고르세요.")
     check_student_scope(code, current_user)
-    from app.services.ai_insight import _call_llm, COMMON_BCBA_SYSTEM_PROMPT
+    from app.services.ai_insight import _call_llm, COMMON_BCBA_SYSTEM_PROMPT, tidy_document
     facts = "\n".join(f"- {k}: {v if isinstance(v, str) else ', '.join(map(str, v))}" for k in CRISIS_DRAFT_KEYS
                       if (v := payload.get(k)) and (str(v).strip() if isinstance(v, str) else any(v)))
     prompt = f"""[교사가 입력한 이번 위기행동 기록 — 학생코드 {code}]
@@ -626,4 +626,4 @@ C: ...
 ...
 관찰기록:
 ..."""
-    return {"draft": _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1500)}
+    return {"draft": tidy_document(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1500), "A:")}

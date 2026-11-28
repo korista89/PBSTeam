@@ -1290,6 +1290,11 @@ def generate_full_bip(
 4. 예방→대체행동 교수→강화가 동일한 잠정 기능에 연결되게 한다. 의사소통 방식이 미상이면 그림·몸짓·AAC·말 중 학생이 가장 쉽고 빠르게 사용할 방식을 평가하도록 쓴다.
 5. 자해·공격·물건파괴 위험에는 소거 단독을 제안하지 않는다. 최고조에서는 안전 확보와 자극 축소를 우선한다.
 6. 약물은 사용자가 입력한 사실만 옮기고 조정·중단을 제안하지 않는다.
+7. 4~6절(예방·교수·강화)과 📚 EBP 추가의 각 줄은 '- (EBP 코드) 교사가 할 일' 한 문장으로 쓴다. 코드는 아래 Be-Able EBP 목록의 코드만 쓴다.
+   예: '- (VS) 그림 일정표로 하루 일과를 아침마다 함께 확인함.' '- (FCT) '쉬고 싶어요' 카드로 쉬기를 요청하게 가르침.' '- (DR-A) 카드로 요청하면 바로 쉬기를 허락하고 칭찬함.'
+   문체는 '~함', 마크다운 굵게(**)와 통계 표기(%, n=)는 쓰지 않는다.
+[Be-Able EBP 목록(번호 영역 코드 이름)]
+{_ebp_catalog_reference_block()}
 
 [분량 규칙]
 {depth_rules}
@@ -1381,20 +1386,19 @@ def generate_iep_team_minutes_draft(
 
 [지시사항]
 개별화교육지원팀(담임·부담임·교과·지원인력·보호자·관리자) 협의회를 열기 전에 미리 읽을 협의록 초안을 작성하라.
-형식(개조식 '~함', 한 줄 55자 이내, ** 금지):
+형식(A4 1쪽, 개조식 '~함', 한 줄은 한 문장 60자 이내, ** ·표·하위 목록 금지, 아래 줄 수를 넘기지 않음):
 ■ 개별화교육지원팀 협의록(초안) — 학생코드
 - 일시·장소·참석자: 빈칸(회의에서 기입)
-Ⅰ. 현재까지 자료 요약(수치 인용 5줄 이하, 지난 협의 이후 변화 포함)
+Ⅰ. 현재까지 자료 요약
+- (수치 인용 3줄 이하, 지난 협의 이후 변화 포함)
 Ⅱ. 협의 안건
- 1. 중재 효과 판단(자료-BIP 일치 여부)
- 2. 실행충실도와 장애 요인
- 3. 다음 단계 결정(유지·수정·단계 조정·의뢰)
- 4. 가정 연계와 구성원별 역할
- 각 안건: 가. 현황 / 나. 협의할 점(질문 1~2개) / 다. 결정(안) [협의 필요] / 라. 담당·기한
-Ⅲ. 다음 점검일(안)
-자료에 없는 사실·수치는 만들지 말고 '확인 필요'로 쓴다. 지난 협의에서 정한 사항이 지켜졌는지 확인 항목을 넣는다.
-분량은 A4 1쪽이다(본문 합계 {PAGE_BUDGET['minutes']}자 이내)."""
-    return fit_one_page((_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500) or "").replace("**", ""), "개별화교육지원팀 협의록", PAGE_BUDGET["minutes"], "Ⅱ")
+1. 중재 효과와 실행충실도
+2. 다음 단계 결정(종결·일반화·유지·수정, 추가 지원·의료협력)
+3. 가정 연계와 구성원별 역할
+각 안건 아래 세 줄만: 가. 현황 / 나. 결정(안) [협의 필요] / 다. 담당·기한
+Ⅲ. 다음 점검일(안): 한 줄
+자료에 없는 사실·수치는 만들지 말고 '확인 필요'로 쓴다. 지난 협의에서 정한 사항이 지켜졌는지 1안건 현황에 넣는다."""
+    return cap_lines(tidy_document(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500) or "", "■"), 24, keep_last="Ⅲ")
 
 
 def generate_data_based_decision_recommendation(
@@ -1433,13 +1437,13 @@ def generate_data_based_decision_recommendation(
 5. 다음 개별화교육지원팀 회의에서 바로 결정할 수 있도록 실행 가능한 조치 3개 이하로 압축하라.
 
 [출력 형식]
-소제목 없이 다음 4개 항목만 순서대로, 각 항목 1~2문장으로 작성하라(합계 {PAGE_BUDGET['decision']}자 이내, 결정 기록 1쪽에 들어가게):
+소제목 없이 다음 4개 항목만 순서대로 쓴다. 항목 제목 줄 아래에 '- '로 시작하는 한 문장 줄 1~2개(한 문장 60자 이내). 굵게(**)·통계 표기(%, n=) 금지. 결정 기록 1쪽에 들어가게 짧게:
 1) 데이터-BIP 일치도 판단
 2) 원인 분석 (전략 한계 vs 실행충실도)
 3) 팀 협의와의 정합성
 4) 제안 (다음 조치)"""
 
-    return fit_one_page(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800), "데이터 기반 의사결정 의견", PAGE_BUDGET["decision"])
+    return cap_sections(tidy_document(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800), "데이터-BIP"), ["데이터-BIP", "원인 분석", "팀 협의", "제안"], 2)
 
 
 # ------------------------------------------------------------------------------
@@ -1501,8 +1505,8 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 [교사가 입력한 계획·수치·맥락] {context[:14000 if kind == 'handover' else 9000] or '없음'}
 
 [지시사항]
-위 자료만으로 '{title}' 초안을 작성하라. 아래 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 {'1~3' if kind == 'handover' else '1~3'}줄로 쓴다.
-분량은 A4 1쪽이다{'' if kind == 'handover' else f'(절 제목을 뺀 본문 합계 {PAGE_BUDGET[kind]}자 이내)'}.
+위 자료만으로 '{title}' 초안을 작성하라. 첫 줄부터 '1. 절 제목'으로 시작한다(문서 제목·작성일·인사말 금지). 아래 절 제목을 번호와 함께 그대로 쓴다.
+각 절은 '- '로 시작하는 한 문장 줄 {PAGE_LINES.get(kind, 2)}개 이하, 한 줄 60자 이내로 쓴다(A4 1쪽). 하위 목록·굵게(**)·표·통계 표기(%, n=) 금지, 숫자는 '9번 중 7번'처럼 쓴다.
 {sections}
 
 [작성 규칙]
@@ -1511,69 +1515,83 @@ def generate_document_draft(kind: str, student_info: dict, evidence_summary: dic
 3. {extra}
 4. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
     text = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 6000 if kind == "handover" else 2000)
-    if kind != "handover":
-        return fit_one_page(text, title, PAGE_BUDGET[kind], secs[0])
-    # 인수인계 자료는 새 담임에게 그대로 전달하므로 통계 표기를 쉬운 말로 바꾼다
-    clean = lambda t: plain_numbers(t.rstrip())
-    text = clean(text)
-    # 모델이 글자 수 지시를 잘 안 지키므로, A4 1쪽(차트 4개 포함, 본문 약 1,000자)을 넘길 분량이면 한 번 더 줄이게 한다
-    for _ in range(2):  # 줄이기는 최대 두 번
-        p1, p2 = handover_lengths(text)
-        if p1 + p2 <= 1000:
-            break
-        shrink = f"""아래 '{title}' 초안을 줄여라. 절 번호·제목·순서는 그대로 둔다.
-각 절은 '- '로 시작하는 줄 1~2개, 한 줄은 한 문장 45자 이내로 다시 쓴다.
-지금 본문은 {p1 + p2}자다. 목표는 900자 이하다.
-중복된 내용과 꾸밈말부터 지우고, 안전 정보와 '확인 필요' 표시는 남긴다. 새로운 사실·수치를 더하지 않는다. 문체는 '~함', '~임'.
-
-[초안]
-{text}"""
-        short = clean(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, shrink, 6000))
-        q1, q2 = handover_lengths(short)
-        if not (q1 + q2 and q1 + q2 < p1 + p2 and "한눈에 보는 학생" in short):
-            break
-        text = short
-    return text
+    # 인수인계 자료는 절마다 2줄(꼭 해주세요·피해주세요는 쉼표로 이은 1줄), 차트 4개와 함께 A4 1쪽
+    return cap_sections(tidy_document(text, secs[0]), secs, PAGE_LINES.get(kind, 2))
 
 
-# AI로 쓰는 문서는 기본 A4 1쪽(2026-11-28). 양식 칸·표를 빼고 남는 본문 글자 수(공백 포함) 권장치.
-PAGE_BUDGET = {"fba": 1400, "progress": 900, "support": 1300, "medical": 800, "decision": 600, "minutes": 1400}
+# AI로 쓰는 문서는 기본 A4 1쪽(2026-11-28). 모델에게 줄이라고 다시 시켜도 거의 안 줄어서(실측), 절마다 줄 수와 줄 길이를 코드로 자른다.
+# 절당 줄 수는 인쇄 미리보기에서 실제 원자료로 잰 값으로 정했다(인쇄 칸 한 줄 ≈ 55자).
+PAGE_LINES = {"fba": 3, "progress": 4, "support": 3, "medical": 3}
+LINE_MAX = 70
 
 
-def body_length(text: str) -> int:
-    return sum(len(l.strip()) for l in (text or "").splitlines() if l.strip())
+def shorten_line(line: str, limit: int = LINE_MAX) -> str:
+    """긴 줄은 첫 문장만 남긴다. 첫 문장도 너무 길면 쉼표·띄어쓰기 앞에서 끊는다."""
+    if len(line) <= limit:
+        return line
+    m = re.search(r"^(.{15,}?(?:함|음|임|됨|다|요|함\))\.)(?:\s|$)", line)
+    first = m.group(1) if m else line
+    if len(first) <= limit + 30:
+        return first
+    cut = first[:limit + 20]
+    pos = max(cut.rfind(","), cut.rfind(" "))
+    return (cut[:pos] if pos > limit // 2 else cut).rstrip(" ,") + "…"
 
 
-def fit_one_page(text: str, title: str, limit: int, must: str = "") -> str:
-    """모델이 글자 수 지시를 잘 안 지키므로, 1쪽 권장치를 넘으면 최대 두 번 줄이게 한다. 실패·오류 응답은 그대로 둔다."""
-    for _ in range(2):
-        n = body_length(text)
-        if n <= limit or text.startswith("⚠️"):
-            break
-        shrink = f"""아래 '{title}' 초안을 A4 1쪽에 들어가게 줄여라. 절 번호·제목·순서는 그대로 둔다.
-지금 본문은 {n}자다. 목표는 {int(limit * 0.9)}자 이하다.
-중복된 내용과 꾸밈말부터 지우고, 수치·안전 정보와 '확인 필요' 표시는 남긴다. 새로운 사실·수치를 더하지 않는다. 문체는 그대로 둔다.
+def cap_sections(text: str, titles: list, per_section: int) -> str:
+    """절 제목 줄은 두고, 절마다 내용 줄을 per_section개까지·한 줄 LINE_MAX자 안팎으로 자른다."""
+    if not text or text.lstrip().startswith("⚠"):
+        return text
+    out, count, inside = [], 0, False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        head = re.match(r"^\d{1,2}\s*[.)]\s*(.+)$", line)
+        if head and any(t in head.group(1) for t in titles) and len(head.group(1)) <= max(len(t) for t in titles) + 12:
+            out.append(line)
+            count, inside = 0, True
+            continue
+        if not inside or count >= per_section:
+            continue
+        out.append(shorten_line(line if line.startswith("- ") else "- " + line.lstrip("-· ")))
+        count += 1
+    return "\n".join(out)
 
-[초안]
-{text}"""
-        short = _call_llm(COMMON_BCBA_SYSTEM_PROMPT, shrink, 4000) or ""
-        if short.startswith("⚠️") or not (0 < body_length(short) < n) or (must and must not in short):
-            break
-        text = short
-    return text
+
+def cap_lines(text: str, max_lines: int, keep_last: str = "") -> str:
+    """줄 수 상한(협의록처럼 절 구조가 깊은 문서). keep_last로 시작하는 마지막 부분은 남긴다."""
+    if not text or text.lstrip().startswith("⚠"):
+        return text
+    lines = [shorten_line(l.strip()) for l in text.splitlines() if l.strip()]
+    if len(lines) <= max_lines:
+        return "\n".join(lines)
+    tail_at = next((i for i, l in enumerate(lines) if keep_last and l.startswith(keep_last)), None)
+    tail = lines[tail_at:tail_at + 2] if tail_at is not None else []
+    head = lines[:tail_at] if tail_at is not None else lines
+    return "\n".join(head[:max_lines - len(tail)] + tail)
 
 
-def handover_lengths(text: str) -> tuple:
-    """인수인계 초안 본문 글자 수: (1~5절 학생 이해, 6~10절 지원 방법)."""
-    parts = re.split(r"(?m)^\s*(?:#{1,6}\s*)?\**\[?(\d{1,2})\s*[.)][^\n]*$", text)
-    p1 = p2 = 0
-    for num, body in zip(parts[1::2], parts[2::2]):
-        n = len(body.strip())
-        if int(num) <= 5:
-            p1 += n
-        else:
-            p2 += n
-    return p1, p2
+def tidy_document(text: str, first_title: str = "") -> str:
+    """AI 문서 공통 다듬기(2026-11-28): 첫 절 앞의 제목·작성일 같은 군더더기, 마크다운(**·###·*), 통계 표기(%·n=)를 지운다.
+    문서 칸에 그대로 넣어도 예시 문장과 같은 모양('- ' 줄, '~함')이 되게 한다. 오류 응답은 그대로 둔다."""
+    if not text or text.lstrip().startswith("⚠"):
+        return text
+    lines = text.replace("**", "").splitlines()
+    if first_title:  # 첫 절 제목 앞(문서 제목·보고일 등)은 버린다
+        idx = next((i for i, l in enumerate(lines) if first_title in l), None)
+        if idx:
+            lines = lines[idx:]
+    out = []
+    for l in lines:
+        l = re.sub(r"^\s*#{1,6}\s*", "", l)
+        l = re.sub(r"^\s*[*•·]\s+", "- ", l)
+        l = re.sub(r"^\s{2,}-\s+", "- ", l)
+        if re.fullmatch(r"\s*-{3,}\s*", l):
+            continue
+        out.append(l.rstrip())
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+    return plain_numbers(text)
 
 
 def plain_numbers(text: str) -> str:
@@ -1598,8 +1616,8 @@ def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_cont
 [교사가 입력한 기존 계획·맥락] {teacher_context[:3000] or '없음'}
 
 [지시사항]
-위 자료만으로 기능적 행동평가(FBA) 결과 보고서 초안을 작성하라. 아래 6개 절 제목을 번호와 함께 그대로 쓰고, 각 절은 개조식 2~3줄로 쓴다.
-분량은 A4 1쪽이다(절 제목을 뺀 본문 합계 {PAGE_BUDGET['fba']}자 이내).
+위 자료만으로 기능적 행동평가(FBA) 결과 보고서 초안을 작성하라. 첫 줄부터 '1. 절 제목'으로 시작한다(문서 제목 금지). 아래 6개 절 제목을 번호와 함께 그대로 쓴다.
+각 절은 '- '로 시작하는 한 문장 줄 {PAGE_LINES['fba']}개 이하, 한 줄 60자 이내(A4 1쪽). 하위 목록·굵게(**)·통계 표기(%, n=) 금지.
 {sections}
 
 [작성 규칙]
@@ -1609,4 +1627,4 @@ def generate_fba_report(student_info: dict, evidence_summary: dict, teacher_cont
 4. 자료에 없는 선행사건·후속결과·진단명은 만들지 말고 '별도 기록 없음'으로 쓴다.
 5. 6절에는 경기 Be-Able EBP 이름으로 예방·교수·강화 방향을 1줄씩 제시하고, 확인 관찰 방법 1개를 쓴다.
 6. 학생 이름은 쓰지 말고 '대상 학생'으로 쓴다. 문체는 '~함', '~임'으로 끝낸다."""
-    return fit_one_page(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500), "FBA 결과 보고서", PAGE_BUDGET["fba"], FBA_REPORT_SECTIONS[0])
+    return cap_sections(tidy_document(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 2500), FBA_REPORT_SECTIONS[0]), FBA_REPORT_SECTIONS, PAGE_LINES["fba"])
