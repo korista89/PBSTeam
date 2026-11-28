@@ -8,51 +8,44 @@ import {
 } from "recharts";
 import { API_BASE_URL } from "../constants";
 import ReadableAIResult from "../components/ReadableAIResult";
-import DropdownTextarea from "../components/DropdownTextarea";
+import { SentencePicker } from "./shared";
+import { DOC_BANK } from "./docBank";
 import { phaseEffect } from "../lib/progress";
 
 const AUTO_CRISIS = "위기행동 기록(자동)";  // 별도 입력 없이 위기행동 기록(Log_Main)을 표적행동 자료로 쓴다
 const MEASUREMENT_TYPES = ["빈도", "지속시간", "강도", "퍼센트", AUTO_CRISIS];
 
-// 측정유형별 기저선/조작적 정의 작성 예시 — BehaviorForm의 DropdownTextarea 패턴 재사용.
+// 측정유형별 기저선/조작적 정의 작성 예시 — 다른 문서와 같은 체크 목록(SentencePicker)으로 고른다.
 const EXAMPLE_DEFINITIONS: Record<string, string[]> = {
     빈도: [
-        "직접 입력",
         "교사의 지시 후 10초 이내에 착석하지 않고 자리를 이탈하는 행동",
         "수업 중 허락 없이 큰 소리로 말하거나 소리를 지르는 행동",
         "또래를 밀거나 때리는 등 신체적으로 접촉하는 행동",
     ],
     지속시간: [
-        "직접 입력",
         "과제 지시 후 착석하여 과제에 참여하지 않고 멍하니 있는 시간",
         "울음이나 짜증을 시작한 시점부터 스스로 진정할 때까지의 시간",
     ],
     강도: [
-        "직접 입력",
         "행동의 격렬함을 1(경미)~5(심각, 신체적 상해 위험) 척도로 관찰자가 평정",
     ],
     퍼센트: [
-        "직접 입력",
         "주어진 과제(전체 문항 수 대비) 중 스스로 완료한 문항의 비율",
         "하루 일과 시간 중 자리 이탈 없이 참여한 시간의 비율",
     ],
 };
 const EXAMPLE_BASELINES: Record<string, string[]> = {
     빈도: [
-        "직접 입력",
         "최근 2주간 관찰 결과 평균 주 5회 발생",
         "하루 평균 3회, 등교 직후 및 전환 시간에 집중 발생",
     ],
     지속시간: [
-        "직접 입력",
         "1회 발생 시 평균 8분 지속(최근 2주 관찰 평균)",
     ],
     강도: [
-        "직접 입력",
         "최근 2주간 평균 강도 3(위기행동 수준)",
     ],
     퍼센트: [
-        "직접 입력",
         "최근 2주간 평균 과제 완료율 40%",
     ],
 };
@@ -314,23 +307,13 @@ export default function Tracker({ studentCode, behaviors, refresh, defaultStart 
                                             </div>
                                             <div>
                                                 <label style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 4 }}>기저선</label>
-                                                <DropdownTextarea
-                                                    name="baseline"
-                                                    value={newForm.baseline}
-                                                    onChange={e => setNewForm({ ...newForm, baseline: e.target.value })}
-                                                    examples={EXAMPLE_BASELINES[newForm.measurement_type] || EXAMPLE_BASELINES.빈도}
-                                                    placeholder="예: 주 5회"
-                                                />
+                                                <textarea name="baseline" rows={2} value={newForm.baseline} onChange={e => setNewForm({ ...newForm, baseline: e.target.value })} placeholder="예: 주 5회" style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.8rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                                                <SentencePicker value={newForm.baseline} onChange={v => setNewForm({ ...newForm, baseline: v })} groups={[{ group: `${newForm.measurement_type} 기저선 예시`, items: EXAMPLE_BASELINES[newForm.measurement_type] || EXAMPLE_BASELINES.빈도 }]} />
                                             </div>
                                             <div>
                                                 <label style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 4 }}>표적행동 조작적 정의</label>
-                                                <DropdownTextarea
-                                                    name="definition"
-                                                    value={newForm.definition}
-                                                    onChange={e => setNewForm({ ...newForm, definition: e.target.value })}
-                                                    examples={EXAMPLE_DEFINITIONS[newForm.measurement_type] || EXAMPLE_DEFINITIONS.빈도}
-                                                    placeholder="관찰·측정 가능하게 서술"
-                                                />
+                                                <textarea name="definition" rows={2} value={newForm.definition} onChange={e => setNewForm({ ...newForm, definition: e.target.value })} placeholder="관찰·측정 가능하게 서술" style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.8rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                                                <SentencePicker value={newForm.definition} onChange={v => setNewForm({ ...newForm, definition: v })} groups={[{ group: `${newForm.measurement_type} 정의 예시`, items: EXAMPLE_DEFINITIONS[newForm.measurement_type] || EXAMPLE_DEFINITIONS.빈도 }, ...DOC_BANK["fba:표적행동 정의"]]} />
                                             </div>
                                             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                                                 <label style={{ fontSize: '0.76rem', color: '#64748b' }}>BIP 적용기간</label>
