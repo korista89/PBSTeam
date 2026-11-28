@@ -69,3 +69,13 @@ def test_student_year_months_in_school_order(monkeypatch):
     out = tm.student_year("S01")
     assert [m["month"] for m in out] == [3, 4, 5]
     assert out[0]["cico"] and out[1]["sst"] == ["사회성"] and out[2]["t3"] == "Tier3+"
+
+
+def test_cap_sections_reads_titles_with_extra_words():
+    """'2) 원인 분석 (전략 한계 vs 실행충실도)'·'1) 제목: 내용'도 제목으로 알아보고, 제목을 못 찾으면 비우지 않는다(실제 의사결정 응답이 빈 칸이 됐던 문제)."""
+    from app.services.ai_insight import cap_sections
+    titles = ["데이터-BIP 일치도 판단", "원인 분석", "팀 협의와의 정합성", "제안"]
+    text = "1) 데이터-BIP 일치도 판단: 건수가 줄었음.\n2) 원인 분석 (전략 한계 vs 실행충실도)\n- 실행충실도 85%임.\n- 둘째\n- 셋째\n4) 제안 (다음 조치)\n- 4주 연장함."
+    out = cap_sections(text, titles, 2).splitlines()
+    assert out == ["1) 데이터-BIP 일치도 판단", "- 건수가 줄었음.", "2) 원인 분석", "- 실행충실도 85%임.", "- 둘째", "4) 제안", "- 4주 연장함."]
+    assert cap_sections("제목 없는 글\n둘째 줄", titles, 2) == "제목 없는 글\n둘째 줄"

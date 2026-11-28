@@ -1443,7 +1443,7 @@ def generate_data_based_decision_recommendation(
 3) 팀 협의와의 정합성
 4) 제안 (다음 조치)"""
 
-    return cap_sections(tidy_document(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800), "데이터-BIP"), ["데이터-BIP", "원인 분석", "팀 협의", "제안"], 2)
+    return cap_sections(tidy_document(_call_llm(COMMON_BCBA_SYSTEM_PROMPT, prompt, 1800), "데이터-BIP"), ["데이터-BIP 일치도 판단", "원인 분석", "팀 협의와의 정합성", "제안"], 2)
 
 
 # ------------------------------------------------------------------------------
@@ -1539,24 +1539,33 @@ def shorten_line(line: str, limit: int = LINE_MAX) -> str:
 
 
 def cap_sections(text: str, titles: list, per_section: int) -> str:
-    """절 제목 줄은 두고, 절마다 내용 줄을 per_section개까지·한 줄 LINE_MAX자 안팎으로 자른다."""
+    """절 제목 줄은 두고, 절마다 내용 줄을 per_section개까지·한 줄 LINE_MAX자 안팎으로 자른다.
+    제목 뒤에 덧붙인 말('2) 원인 분석 (전략 vs 실행)')이나 같은 줄 내용('1. 신청 사유: …')도 제목으로 알아본다.
+    제목을 하나도 못 찾으면 비우지 않고 줄 수만 자른다."""
     if not text or text.lstrip().startswith("⚠"):
         return text
-    out, count, inside = [], 0, False
+    out, count, inside, found = [], 0, False, False
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
-        head = re.match(r"^\d{1,2}\s*[.)]\s*(.+)$", line)
-        if head and any(t in head.group(1) for t in titles) and len(head.group(1)) <= max(len(t) for t in titles) + 12:
-            out.append(line)
-            count, inside = 0, True
+        head = re.match(r"^(\d{1,2}\s*[.)])\s*(.+)$", line)
+        title = next((t for t in titles if head and 0 <= head.group(2).find(t) <= 3), None) if head else None
+        if title:
+            found, inside, count = True, True, 0
+            rest = head.group(2)[head.group(2).find(title) + len(title):]
+            rest = re.sub(r"^\s*\([^)]*\)", "", rest).strip()
+            out.append(f"{head.group(1)} {title}")
+            body = re.split(r"[:：]", rest, maxsplit=1)[1].strip() if re.search(r"[:：]", rest) else (rest if len(rest) > 25 else "")
+            if body:
+                out.append(shorten_line("- " + body.lstrip("-· ")))
+                count = 1
             continue
         if not inside or count >= per_section:
             continue
         out.append(shorten_line(line if line.startswith("- ") else "- " + line.lstrip("-· ")))
         count += 1
-    return "\n".join(out)
+    return "\n".join(out) if found else cap_lines(text, per_section * len(titles) + len(titles))
 
 
 def cap_lines(text: str, max_lines: int, keep_last: str = "") -> str:
